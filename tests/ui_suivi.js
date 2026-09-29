@@ -188,24 +188,6 @@ function openPage(file, user, boot, extraScript) {
   await mw.until(() => mw.text('panel-workspace').includes('En service'));
   check(!mw.doc.getElementById('ws-sync') && /Seuls le chef de projet/.test(mw.text('panel-workspace')), 'un membre voit les liens sans pouvoir synchroniser');
 
-  // ---------------------------------------------------------------- mes notifications
-  p.click(p.doc.getElementById('notif-btn'));
-  await p.until(() => p.doc.getElementById('notif').open);
-  check(p.doc.querySelector('input[name=freq][value="Quotidien"]').checked, 'fréquence par défaut : quotidien');
-  const weekly = p.doc.querySelector('input[name=freq][value="Hebdomadaire"]');
-  weekly.checked = true; weekly.dispatchEvent(new p.win.Event('change'));
-  await p.until(() => p.text('notif-state') === 'Réglage enregistré.');
-  check(c.repoList('UserSetting').find((s) => s.user_email === CP).notify_frequency === 'Hebdomadaire', 'fréquence enregistrée');
-  p.click(p.doc.getElementById('preview-btn'));
-  await p.until(() => !p.doc.getElementById('preview').hidden);
-  check(/Bonjour Carla/.test(p.doc.getElementById('preview').getAttribute('srcdoc')) && /rien à signaler/.test(p.text('preview-note')),
-    'aperçu du récapitulatif dans un cadre isolé : ' + p.text('preview-note'));
-  check(p.doc.getElementById('preview').getAttribute('sandbox') === '', 'cadre sans script');
-  c.SENT_MAILS.length = 0;
-  p.click(p.doc.getElementById('send-btn'));
-  await p.until(() => /Envoyé/.test(p.text('preview-note')));
-  check(c.SENT_MAILS.length === 1 && c.SENT_MAILS[0].to === CP, 'récapitulatif d’essai envoyé à soi-même');
-
   // ---------------------------------------------------------------- Gantt : baseline en fantôme
   console.log('\nGantt : baseline (jsdom)');
   const g = openPage('Gantt.html', CP, {}, fs.readFileSync(frappePath, 'utf8'));

@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.5.1">
+<meta name="ppm-version" content="0.6.0">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -84,6 +84,8 @@
     border: 0; border-radius: 50%; background: transparent; color: #fff; cursor: pointer; }
   .ppm-icon:hover { background: rgba(255, 255, 255, .12); }
   .ppm-icon svg { width: 20px; height: 20px; }
+  a.ppm-icon { text-decoration: none; }
+  .ppm-icon[aria-current="page"] { background: rgba(255, 255, 255, .18); }
 
   /* ---- en-tête de page ---- */
   header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 16px 24px 12px; background: var(--paper); }
@@ -197,7 +199,13 @@
     select { min-width: 0; width: 100%; }
     .controls { width: 100%; }
   }
-  @media (max-width: 520px) { .ppm-brand .ppm-name { display: none; } .ppm-brand img { height: 18px; } }
+  /* Petit écran : la bannière passe sur deux lignes (marque et boutons, puis navigation) au lieu de couper le menu. */
+  @media (max-width: 640px) {
+    .ppm-bar { flex-wrap: wrap; height: auto; padding: 0 8px 0 12px; gap: 0 8px; }
+    .ppm-brand { flex: 1; min-height: 44px; }
+    .ppm-icon { align-self: center; }
+    .ppm-nav { order: 3; flex: 1 0 100%; height: 40px; margin: 0 -8px 0 -12px; padding: 0 8px; }
+  }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 <style>
@@ -259,6 +267,8 @@
     <a id="nav-suivi" data-view="suivi" href="#">Suivi</a>
     <a id="nav-copilot" data-view="copilote" href="#">Copilote</a>
   </nav>
+  <a class="ppm-icon" id="ppm-account" data-view="compte" href="#" aria-label="Mon compte" title="Mon compte"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></a>
+  <a class="ppm-icon" id="ppm-admin" data-view="admin" href="#" aria-label="Administration" title="Administration" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></a>
   <button type="button" class="ppm-icon" id="ppm-theme" aria-label="Thème nuit" title="Thème nuit"></button>
 </div>
 <script>
@@ -302,6 +312,24 @@
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !pop.hidden) { close(); btn.focus(); } });
   };
 
+  /** Message lisible pour une erreur du serveur : le détail des champs refusés quand il existe. */
+  var FIELD_LABELS = { job_function: 'Fonction', organization: 'Organisation', name: 'Nom', email: 'Adresse', country: 'Pays', supplier: 'Fournisseur', capacity_days_month: 'Capacité' };
+  window.ppmErrorText = function (err) {
+    if (err && Array.isArray(err.details) && err.details.length) {
+      return err.details.map(function (d) { return (FIELD_LABELS[d.field] || d.field) + ' : ' + d.issue; }).join(' ; ');
+    }
+    return (err && err.message) || 'Opération impossible.';
+  };
+
+  /** Applique un thème choisi ailleurs (page Mon compte) ; « auto » revient au réglage de l'ordinateur. */
+  window.ppmSetTheme = function (mode) {
+    if (mode === 'dark' || mode === 'light') root.setAttribute('data-theme', mode); else root.removeAttribute('data-theme');
+    applyClass();
+    var b = document.getElementById('ppm-theme');
+    if (b) paint(b);
+    document.dispatchEvent(new CustomEvent('ppm-theme', { detail: mode }));
+  };
+
   function applyClass() { root.classList.toggle('dark', effective() === 'dark'); }
   function effective() {
     var t = root.getAttribute('data-theme');
@@ -339,9 +367,14 @@
       document.dispatchEvent(new CustomEvent('ppm-theme', { detail: next }));
       try { google.script.run.withFailureHandler(function () {}).uiCall('ui.set', { theme: next }, null); } catch (e) { /* hors web app */ }
     });
-    var here = document.querySelector('.ppm-nav a[data-view="' + (B.view || '') + '"]');
+    // Adresses par défaut (les pages qui ont un projet courant les complètent) ; l'administration n'est proposée qu'aux administrateurs.
+    Array.prototype.forEach.call(document.querySelectorAll('.ppm-bar [data-view]'), function (a) {
+      if (!a.getAttribute('href') || a.getAttribute('href') === '#') a.setAttribute('href', base + '?view=' + a.getAttribute('data-view'));
+    });
+    document.getElementById('ppm-admin').hidden = !B.isAdmin;
+    var here = document.querySelector('.ppm-bar [data-view="' + (B.view || '') + '"]');
     if (here) here.setAttribute('aria-current', 'page');
-    document.getElementById('ppm-brand').setAttribute('href', base + '?view=gantt');
+    document.getElementById('ppm-brand').setAttribute('href', base + '?view=' + (B.home || 'gantt'));
     if (B.logoUrl) {
       var img = document.getElementById('ppm-logo');
       img.src = B.logoUrl;

@@ -43,8 +43,11 @@ function continueNightly() {
   if (!state) return 'Aucun traitement en cours.';
   var deadline = nowMs() + JOB_SLICE_MS - 30000;
   try {
+    state.times = state.times || {};
     while (state.step < NIGHTLY_STEPS.length) {
-      var done = runNightlyStep(NIGHTLY_STEPS[state.step], state, deadline);
+      var stepName = NIGHTLY_STEPS[state.step], t0 = nowMs();
+      var done = runNightlyStep(stepName, state, deadline);
+      state.times[stepName] = (state.times[stepName] || 0) + (nowMs() - t0);
       if (!done) {
         setProp(PROP.JOB_STATE, JSON.stringify(state));
         if (typeof ScriptApp !== 'undefined') {
@@ -55,15 +58,26 @@ function continueNightly() {
       state.step++;
       state.cursor = null;
     }
+    recordNightly_(state, true, '', '');
     deleteProp(PROP.JOB_STATE);
     return 'Traitement nocturne terminé.';
   } catch (err) {
+    recordNightly_(state, false, NIGHTLY_STEPS[state.step], err && err.message ? err.message : err);
     deleteProp(PROP.JOB_STATE);
     adminEmails().forEach(function (a) {
       notifyUser(a, 'Échec du traitement nocturne', String(err && err.stack ? err.stack : err));
     });
     throw err;
   }
+}
+
+/** Garde le résultat du dernier traitement de nuit (affiché par la page Administration). */
+function recordNightly_(state, ok, failedStep, error) {
+  setProp(PROP.LAST_NIGHTLY, JSON.stringify({
+    startedAt: state.startedAt || '', endedAt: nowIso(), ok: ok, failedStep: failedStep || '',
+    error: error ? truncate(String(error), 300) : '',
+    steps: NIGHTLY_STEPS.map(function (n) { return { name: n, ms: (state.times || {})[n] || 0 }; })
+  }));
 }
 
 function runNightlyStep(name, state, deadline) {

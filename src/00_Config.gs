@@ -5,7 +5,7 @@
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.5.1';
+var PPM_VERSION = '0.6.0';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -84,7 +84,9 @@ var PROP = {
   GEMINI_KEY: 'PPM_GEMINI_API_KEY',
   GEMINI_MODEL: 'PPM_GEMINI_MODEL',
   AI_QUOTA: 'PPM_AI_DAILY_QUOTA',
-  LOGO_URL: 'PPM_LOGO_URL'
+  LOGO_URL: 'PPM_LOGO_URL',
+  LAST_NIGHTLY: 'PPM_LAST_NIGHTLY',
+  LAST_DIGEST: 'PPM_LAST_DIGEST'
 };
 
 /** Surcharge des propriétés pour les tests hors ligne. */

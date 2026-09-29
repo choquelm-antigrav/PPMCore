@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="<?= theme ?>">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="ppm-version" content="0.6.0">
+<?!= include('Style') ?>
+<style>
+  .panel { padding: 8px 24px 32px; max-width: 880px; }
+  .panel[hidden] { display: none; }
+  .box { margin: 0 0 20px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .box h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
+  .note { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+  .muted { color: var(--muted); }
+  .who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin: 0 0 12px; }
+  .who strong { font-size: 18px; }
+  .form { display: grid; gap: 12px; max-width: 460px; }
+  .form label.lbl { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
+  .form input[type=text] { padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; color: var(--ink); }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .opt { display: flex; align-items: flex-start; gap: 8px; margin: 6px 0; cursor: pointer; }
+  fieldset { margin: 0 0 12px; padding: 0; border: 0; }
+  legend { margin: 0 0 4px; font-weight: 600; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12.5px; background: var(--tint); color: var(--ink); white-space: nowrap; }
+  #preview { width: 100%; height: 320px; margin-top: 12px; border: 1px solid var(--rule); border-radius: 6px; background: #FFFFFF; }
+  select.wide { min-width: 220px; }
+  @media (max-width: 700px) { .panel { padding: 8px 12px 24px; } .status .seg { display: grid; grid-template-columns: 1fr 1fr 1fr; width: 100%; } }
+</style>
+</head>
+<body>
+<?!= include('Header') ?>
+<header>
+  <div class="title"><h1 id="title">Mon compte</h1></div>
+  <div class="controls"><span id="admin-chip" class="badge" hidden>Administrateur de l’outil</span></div>
+</header>
+
+<div class="status">
+  <div class="seg" role="tablist" aria-label="Rubriques">
+    <button type="button" data-tab="fiche" aria-pressed="true">Ma fiche</button>
+    <button type="button" data-tab="notifications" aria-pressed="false">Notifications</button>
+    <button type="button" data-tab="affichage" aria-pressed="false">Affichage</button>
+  </div>
+</div>
+
+<section class="panel" id="panel-fiche" aria-label="Ma fiche"></section>
+<section class="panel" id="panel-notifications" aria-label="Notifications" hidden></section>
+<section class="panel" id="panel-affichage" aria-label="Affichage" hidden></section>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+var BOOT = <?!= boot ?>;
+</script>
+<script>
+(function () {
+  'use strict';
+
+  var state = { tab: 'fiche', acct: null, suggestions: null };
+  var $ = function (id) { return document.getElementById(id); };
+  var HOMES = [['gantt', 'Planning'], ['structure', 'Structure'], ['suivi', 'Suivi'], ['copilote', 'Copilote']];
+
+  // ------------------------------------------------------------ outils
+  function el(tag, attrs, children) {
+    var n = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (k === 'text') n.textContent = attrs[k];
+      else if (k === 'class') n.className = attrs[k];
+      else if (k.indexOf('on') === 0) n.addEventListener(k.slice(2), attrs[k]);
+      else n.setAttribute(k, attrs[k]);
+    });
+    (children || []).forEach(function (c) { if (c !== null && c !== undefined) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return n;
+  }
+  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+  function uuid() { return window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2); }
+  var toastTimer = null;
+  function toast(msg, isError) {
+    var t = $('toast');
+    t.textContent = msg; t.className = 'toast' + (isError ? ' error' : ''); t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.hidden = true; }, isError ? 7000 : 3500);
+  }
+  function call(action, params, write) {
+    var pre = window.ppmPreloaded && window.ppmPreloaded(action, params, write);
+    if (pre) return pre;
+    return new Promise(function (resolve, reject) {
+      document.body.classList.add('busy');
+      google.script.run
+        .withSuccessHandler(function (res) {
+          document.body.classList.remove('busy');
+          if (res && res.ok) resolve(res.data); else reject(res && res.error ? res.error : { code: 'INTERNAL', message: 'Réponse inattendue du serveur.' });
+        })
+        .withFailureHandler(function (err) {
+          document.body.classList.remove('busy');
+          reject({ code: 'NETWORK', message: 'Le serveur ne répond pas. Vérifiez la connexion puis rechargez la page.', details: String(err) });
+        })
+        .uiCall(action, params || {}, write ? uuid() : null);
+    });
+  }
+  function frDate(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+  function box(title, children) { return el('div', { class: 'box' }, [el('h2', { text: title })].concat(children)); }
+
+  // ------------------------------------------------------------ navigation
+  function syncTabs() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-tab') === state.tab)); });
+    ['fiche', 'notifications', 'affichage'].forEach(function (t) { $('panel-' + t).hidden = t !== state.tab; });
+    try { google.script.history.replace(null, { view: 'compte', tab: state.tab }); } catch (e) { /* hors web app */ }
+  }
+  function setTab(t) { state.tab = t; syncTabs(); render(); }
+
+  // ------------------------------------------------------------ Ma fiche
+  function ensureSuggestions() {
+    if (state.suggestions) return Promise.resolve(state.suggestions);
+    return call('resources.list', { limit: 500 }).then(function (rows) {
+      var f = {}, o = {};
+      rows.forEach(function (r) { if (r.job_function) f[r.job_function] = true; if (r.organization) o[r.organization] = true; });
+      state.suggestions = { functions: Object.keys(f).sort(), organizations: Object.keys(o).sort() };
+      return state.suggestions;
+    }).catch(function () { return { functions: [], organizations: [] }; });
+  }
+
+  function renderFiche() {
+    var panel = $('panel-fiche'), a = state.acct, p = a.person;
+    clear(panel);
+    if (!p) {
+      panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucune fiche à votre adresse.' }),
+        el('span', { text: 'Demandez à votre chef de projet, à votre DPL ou à un Program Leader de créer votre fiche. Vos rôles s’afficheront ensuite ici.' })]));
+      return;
+    }
+    var fn = el('input', { type: 'text', id: 'edit-function', maxlength: '80', list: 'dl-functions', value: p.job_function });
+    var org = el('input', { type: 'text', id: 'edit-org', maxlength: '80', list: 'dl-orgs', value: p.organization });
+    var dlF = el('datalist', { id: 'dl-functions' }), dlO = el('datalist', { id: 'dl-orgs' });
+    ensureSuggestions().then(function (s) {
+      s.functions.forEach(function (v) { dlF.appendChild(el('option', { value: v })); });
+      s.organizations.forEach(function (v) { dlO.appendChild(el('option', { value: v })); });
+    });
+    var save = el('button', { type: 'submit', class: 'btn primary', id: 'save-person', text: 'Enregistrer' });
+    var form = el('form', { class: 'form', onsubmit: function (e) {
+      e.preventDefault();
+      save.disabled = true;
+      call('resources.update', { id: p.resource_id, version: p.version, patch: { job_function: fn.value, organization: org.value } }, true)
+        .then(function (r) { p.job_function = r.job_function || ''; p.organization = r.organization || ''; p.version = r.version; state.suggestions = null; toast('Fiche enregistrée.'); renderFiche(); })
+        .catch(function (err) {
+          save.disabled = false;
+          toast(err.code === 'CONFLICT' ? 'Votre fiche a été modifiée entre-temps : rechargez la page puis recommencez.' : ppmErrorText(err), true);
+        });
+    } }, [el('label', { class: 'lbl' }, ['Fonction', fn]), el('label', { class: 'lbl' }, ['Organisation', org]), dlF, dlO, el('div', { class: 'row' }, [save])]);
+    var facts = [['Nom', p.name], ['Adresse', p.email || a.email], ['Équipe', p.team], ['Pays', p.country], ['Statut', p.resource_type]].filter(function (x) { return x[1]; });
+    panel.appendChild(box('Mes informations', [
+      el('p', { class: 'who' }, [el('strong', { text: p.name }), el('span', { class: 'muted', text: p.email || a.email })]),
+      el('dl', {}, facts.slice(2).map(function (x) { return [el('dt', { text: x[0] }), el('dd', { text: x[1] })]; }).reduce(function (acc, x) { return acc.concat(x); }, [])),
+      form,
+      el('p', { class: 'note', text: 'Seules la fonction et l’organisation se modifient ici. Le nom, l’équipe et le pays sont gérés par votre chef de projet, votre DPL ou votre Program Leader.' })
+    ]));
+    var rolesBox = box('Mes rôles', []);
+    if (!a.roles.length) rolesBox.appendChild(el('p', { class: 'note', text: 'Aucun rôle attribué pour le moment.' }));
+    else rolesBox.appendChild(el('div', { class: 'table-wrap' }, [el('table', { id: 'roles-table' }, [
+      el('thead', {}, [el('tr', {}, ['Rôle', 'Périmètre', 'Depuis'].map(function (h) { return el('th', { scope: 'col', text: h }); }))]),
+      el('tbody', {}, a.roles.map(function (r) { return el('tr', {}, [el('td', { text: r.role_label }), el('td', { text: r.scope_label }), el('td', { text: r.since ? frDate(r.since) : '—' })]); }))
+    ])]));
+    rolesBox.appendChild(el('p', { class: 'note', text: 'Les rôles sont attribués par vos responsables : ils se lisent ici sans se modifier.' }));
+    panel.appendChild(rolesBox);
+  }
+
+  // ------------------------------------------------------------ Notifications
+  function radio(name, value, label, checked, onchange) {
+    var i = el('input', { type: 'radio', name: name, value: value });
+    i.checked = checked;
+    i.addEventListener('change', function () { if (i.checked) onchange(value); });
+    return el('label', { class: 'opt' }, [i, el('span', { text: label })]);
+  }
+  function saveSetting(patch) {
+    call('settings.set', patch, true).then(function () { $('notif-state').textContent = 'Réglage enregistré.'; toast('Réglage enregistré.'); })
+      .catch(function (e) { toast(e.message || 'Enregistrement impossible.', true); });
+  }
+  function preview(send) {
+    call('digest.preview', { send: !!send }, !!send).then(function (p) {
+      var note = $('preview-note'), f = $('preview');
+      note.hidden = false;
+      if (p.reason) { note.textContent = p.reason; f.hidden = true; return; }
+      note.textContent = (p.sent ? 'Envoyé à votre adresse. ' : '') + 'Objet : « ' + p.subject + ' »' + (p.empty ? ' — rien à signaler aujourd’hui.' : '');
+      f.hidden = false;
+      f.setAttribute('srcdoc', p.html);
+    }).catch(function (e) { toast(e.message || 'Aperçu impossible.', true); });
+  }
+  function renderNotifications() {
+    var panel = $('panel-notifications'), s = state.acct.settings;
+    clear(panel);
+    var invites = el('input', { type: 'checkbox', id: 'invites' });
+    invites.checked = !!s.calendar_invites;
+    invites.addEventListener('change', function () { saveSetting({ calendar_invites: invites.checked }); });
+    panel.appendChild(box('Mail récapitulatif', [
+      el('fieldset', {}, [el('legend', { text: 'Fréquence' }),
+        radio('freq', 'Quotidien', 'Chaque matin de semaine', s.notify_frequency === 'Quotidien', function (v) { saveSetting({ notify_frequency: v }); }),
+        radio('freq', 'Hebdomadaire', 'Le lundi seulement', s.notify_frequency === 'Hebdomadaire', function (v) { saveSetting({ notify_frequency: v }); }),
+        radio('freq', 'Aucun', 'Jamais', s.notify_frequency === 'Aucun', function (v) { saveSetting({ notify_frequency: v }); })]),
+      el('label', { class: 'opt' }, [invites, el('span', { text: 'Mettre les échéances de mes livrables et jalons dans mon agenda (le projet doit avoir son agenda).' })]),
+      el('p', { class: 'note', id: 'notif-state', role: 'status' }),
+      el('div', { class: 'row', style: 'margin-top:12px' }, [
+        el('button', { type: 'button', class: 'btn', id: 'preview-btn', text: 'Voir mon récapitulatif', onclick: function () { preview(false); } }),
+        el('button', { type: 'button', class: 'btn', id: 'send-btn', text: 'Me l’envoyer maintenant', onclick: function () { preview(true); } })]),
+      el('p', { class: 'note', id: 'preview-note', hidden: 'hidden' }),
+      el('iframe', { id: 'preview', title: 'Aperçu du récapitulatif', sandbox: '', hidden: 'hidden' })
+    ]));
+  }
+
+  // ------------------------------------------------------------ Affichage
+  function saveUi(patch) {
+    return call('ui.set', patch, true).then(function (ui) { state.acct.ui = ui; toast('Choix enregistré.'); })
+      .catch(function (e) { toast(e.message || 'Enregistrement impossible.', true); });
+  }
+  function renderAffichage() {
+    var panel = $('panel-affichage'), ui = state.acct.ui;
+    clear(panel);
+    var home = el('select', { id: 'home', class: 'wide', 'aria-label': 'Page d’accueil' }, HOMES.map(function (h) { return el('option', { value: h[0], text: h[1] }); }));
+    home.value = ui.home;
+    home.addEventListener('change', function () { saveUi({ home: home.value }); });
+    var setTheme = function (mode) { if (window.ppmSetTheme) window.ppmSetTheme(mode); saveUi({ theme: mode }); };
+    panel.appendChild(box('Thème', [
+      el('fieldset', {}, [
+        radio('theme', 'auto', 'Automatique : suit le réglage de mon ordinateur', ui.theme === 'auto', setTheme),
+        radio('theme', 'light', 'Jour', ui.theme === 'light', setTheme),
+        radio('theme', 'dark', 'Nuit', ui.theme === 'dark', setTheme)]),
+      el('p', { class: 'note', text: 'Le bouton en haut à droite de chaque page bascule aussi entre jour et nuit.' })
+    ]));
+    panel.appendChild(box('Page d’accueil', [
+      el('label', { class: 'lbl' }, ['Page ouverte en cliquant sur « PPM »', home]),
+      el('p', { class: 'note', text: 'Vos choix d’attributs affichés dans les organigrammes se règlent depuis la page Structure.' })
+    ]));
+  }
+
+  function render() {
+    if (!state.acct) return;
+    if (state.tab === 'fiche') renderFiche();
+    else if (state.tab === 'notifications') renderNotifications();
+    else renderAffichage();
+  }
+
+  // ------------------------------------------------------------ démarrage
+  Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) { b.addEventListener('click', function () { setTab(b.getAttribute('data-tab')); }); });
+  state.tab = BOOT.tab || 'fiche';
+  syncTabs();
+  call('account.get', {}).then(function (a) {
+    state.acct = a;
+    $('admin-chip').hidden = !a.isAdmin;
+    render();
+  }).catch(function (e) {
+    var p = $('panel-fiche'); clear(p);
+    p.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Chargement impossible.' }), el('span', { text: e.message || 'Erreur inconnue.' })]));
+  });
+
+  window.__ppm = { state: state, setTab: setTab };
+})();
+</script>
+</body>
+</html>

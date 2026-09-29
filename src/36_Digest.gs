@@ -154,10 +154,10 @@ function renderDigest_(person, sections, opts) {
     html.push('</ul>');
     text.push('');
   });
-  var foot = 'Ce récapitulatif remplace les notifications une à une. Fréquence : page Suivi, « Mes notifications ».';
+  var foot = 'Ce récapitulatif remplace les notifications une à une. Fréquence : Mon compte, onglet Notifications.';
   text.push(foot);
   html.push('<p style="margin-top:22px;font-size:12px;color:#5B6B7A">' + escHtml_(foot) +
-    (opts.baseUrl ? ' <a href="' + escHtml_(opts.baseUrl + '?view=suivi') + '" style="color:#5B6B7A">Ouvrir</a>' : '') + '</p></div>');
+    (opts.baseUrl ? ' <a href="' + escHtml_(opts.baseUrl + '?view=compte&tab=notifications') + '" style="color:#5B6B7A">Ouvrir</a>' : '') + '</p></div>');
   return { text: text.join('\n'), html: html.join('') };
 }
 
@@ -197,6 +197,7 @@ function sendDigests() {
       notifyUser(a, 'Récapitulatifs non envoyés', skipped + ' récapitulatif(s) non envoyé(s) : quota de mails du jour atteint.');
     });
   }
+  setProp(PROP.LAST_DIGEST, JSON.stringify({ at: nowIso(), sent: sent, skipped: skipped }));
   var msg = sent + ' récapitulatif(s) envoyé(s)' + (skipped ? ', ' + skipped + ' reporté(s) (quota).' : '.');
   console.log(msg);
   return msg;

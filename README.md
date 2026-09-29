@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.5.1)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.6.0)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -9,7 +9,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | Dossier | Rôle |
 | --- | --- |
 | `src/` | Les sources, modulaires : un fichier par sujet. C'est ici qu'on modifie le code. |
-| `dist/` | La version à installer, fabriquée depuis `src/` par `node tools/build.js` : **6 fichiers** (`PPM_Core.gs`, quatre pages, le manifeste). Ne jamais la modifier à la main. |
+| `dist/` | La version à installer, fabriquée depuis `src/` par `node tools/build.js` : **8 fichiers** (`PPM_Core.gs`, six pages, le manifeste). Ne jamais la modifier à la main. |
 | `tools/` | `build.js`, qui fabrique `dist/` |
 | `PREMIERS_PAS.md` | Installation et premiers essais, pas à pas |
 | `tests/` | Tests hors ligne (Node 18+) : `node tests/run.js` |
@@ -37,11 +37,14 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `35_Workspace.gs` | Lot 2 : agenda Google et dossier Drive par projet, annuaire, import de personnes depuis une feuille |
 | `36_Digest.gs` | Lot 2 : mail récapitulatif (un par personne, quotidien ou hebdomadaire), réglages personnels |
 | `37_Simulation.gs` | Lot 4 : simulation « et si… », synthèse chiffrée d'un projet, signaux faibles (sans IA) |
+| `39_Account.gs` | 0.6.0 : Mon compte (`account.get`) et Administration (`admin.*` : réglages validés, santé, journaux, jours fériés) |
 | `38_Copilot.gs` | Lot 4 : copilote (modes off, manual, api), garde-fou des chiffres, journal AiLog, quota, questions, décisions sur les suggestions |
 | `40_Jobs.gs` | Traitement nocturne par tranches (journal, règles, agenda et Drive, annuaire, sauvegardes), récapitulatif de 7 h |
 | `Gantt.html` | Page du planning (Frappe Gantt 0.6.1, chargé depuis jsDelivr) |
 | `Structure.html` | Page Structure : OBS et WBS dessinés en SVG, sans bibliothèque externe |
 | `Suivi.html` | Page Suivi : écarts à la baseline, changements à valider, baselines, agenda et Drive, mes notifications |
+| `Compte.html` | Page Mon compte : fiche, rôles en lecture seule, notifications, affichage (thème, page d'accueil) |
+| `Admin.html` | Page Administration (réservée aux administrateurs) : réglages, santé, jours fériés, journaux |
 | `Copilote.html` | Page Copilote : synthèse, simulation, questions, suggestions |
 | `Header.html` | Bannière commune (navigation, bouton jour/nuit), données préchargées et fenêtres d'information (inclus par `include('Header')`) |
 | `Style.html` | Charte graphique commune, thèmes jour et nuit (inclus par `include('Style')`) |
@@ -52,11 +55,11 @@ Le pas à pas détaillé est dans `PREMIERS_PAS.md`. En résumé :
 
 1. **Ranger dans un Drive partagé** : créer un Drive partagé « PPM » et y placer le projet Apps Script, les classeurs, les sauvegardes et un dossier « PPM Sources ». L'outil n'est alors pas lié à un compte personnel.
 2. **Créer le projet** : sur script.google.com, *Nouveau projet* nommé **PPM Core**, puis cocher « Afficher le fichier manifeste » dans *Paramètres du projet*.
-3. **Copier les 6 fichiers de `dist/`** : `PPM_Core.gs` (à la place de `Code.gs`), les pages `Gantt`, `Structure`, `Suivi`, `Copilote` (fichiers *HTML*, sans l'extension) et `appsscript.json` (il active le service avancé « Google Calendar API », qui sert à partager l'agenda d'un projet à ses membres). Ou bien les envoyer d'un coup avec `clasp` (voir `PREMIERS_PAS.md`).
+3. **Copier les 8 fichiers de `dist/`** : `PPM_Core.gs` (à la place de `Code.gs`), les pages `Gantt`, `Structure`, `Suivi`, `Copilote`, `Compte`, `Admin` (fichiers *HTML*, sans l'extension) et `appsscript.json` (il active le service avancé « Google Calendar API », qui sert à partager l'agenda d'un projet à ses membres). Ou bien les envoyer d'un coup avec `clasp` (voir `PREMIERS_PAS.md`).
 4. **Installer** : exécuter `installerPpm` et accepter les autorisations. Il règle le domaine et l'administrateur d'après ton compte (propriétés `PPM_DOMAIN`, `PPM_ADMINS`, sans rien écraser s'ils existent), crée les classeurs **PPM Données** et **PPM Historique**, installe les déclencheurs (nuit à 2 h, récapitulatif à 7 h) et vérifie l'installation. Ajouter ensuite un second administrateur dans `PPM_ADMINS` (adresses séparées par des virgules) et déplacer les classeurs dans le Drive partagé.
 5. **Données d'essai** (facultatif) : exécuter `seedDemo`.
 6. **Publier** : *Déployer → Nouveau déploiement → Application Web*, « Exécuter en tant que : moi », « Accès : tous les utilisateurs du domaine ». Noter l'URL `/exec`.
-7. **Ouvrir les pages** : `<URL /exec>?view=gantt`, `?view=structure`, `?view=suivi`, `?view=copilote` (avec `&project=<id>` pour un projet précis ; `&tab=…` pour un onglet).
+7. **Ouvrir les pages** : `<URL /exec>?view=gantt`, `?view=structure`, `?view=suivi`, `?view=copilote`, `?view=compte`, `?view=admin` (avec `&project=<id>` pour un projet précis ; `&tab=…` pour un onglet).
 8. **AppSheet** : suivre `appsheet/APPSHEET_SETUP.md` (sections 1 à 9, puis 10 et 11 pour le lot 1, 12 pour le lot 2). `PPM_APPSHEET_URL` (propriété facultative) = l'URL de l'application, une fois créée.
 
 **Pourquoi un fichier unique ?** Apps Script n'a pas de modules : tous les fichiers `.gs` partagent le même espace et sont chargés dans l'ordre où ils apparaissent dans l'éditeur. Réunir les sources dans `PPM_Core.gs` ne change rien au fonctionnement (la suite de tests tourne à l'identique sur les deux : `PPM_BUNDLE=dist/PPM_Core.gs node tests/run.js`), supprime le risque d'un mauvais ordre de fichiers (qui empêche tout le script de se charger) et ramène l'installation à 6 copier-coller. La modularité reste entière dans `src/`, où l'on travaille.
@@ -78,9 +81,9 @@ Le dépôt Git est la référence du code ; Apps Script n'en est que le lieu d'e
 
 1. Travailler sur une branche : `git switch -c ma-modification`.
 2. Modifier `src/`, tester hors ligne : `node tests/run.js` doit rester entièrement vert.
-3. Changer `PPM_VERSION` (`00_Config.gs`) et la balise `ppm-version` des quatre pages, puis fabriquer : `node tools/build.js` (il refuse une page dont la version ne correspond pas). `dist/` est versionné : il doit toujours correspondre aux sources.
+3. Changer `PPM_VERSION` (`00_Config.gs`) et la balise `ppm-version` des six pages, puis fabriquer : `node tools/build.js` (il refuse une page dont la version ne correspond pas). `dist/` est versionné : il doit toujours correspondre aux sources.
 4. Valider et pousser : `git add -A && git commit -m "…" && git push`, puis fusionner la branche.
-5. Mettre en production : remplacer le contenu des 6 fichiers du dossier `dist/` dans le projet Apps Script (ou `clasp push -f` depuis `dist/`), puis exécuter `installerPpm`.
+5. Mettre en production : remplacer le contenu des 8 fichiers du dossier `dist/` dans le projet Apps Script (ou `clasp push -f` depuis `dist/`), puis exécuter `installerPpm`.
 6. *Déployer → Gérer les déploiements → Modifier (crayon) → Version : nouvelle version*. L'URL `/exec` ne change pas, AppSheet continue de fonctionner.
 7. Poser une étiquette sur la version publiée : `git tag v0.5.1 && git push --tags`. Elle remplace l'archive déposée dans « PPM Sources » (on peut en garder une copie).
 8. Retour arrière : même écran Apps Script, choisir la version précédente ; côté code, `git revert`.
@@ -113,15 +116,16 @@ Actions disponibles :
 | Fil des changements (lot 2) | `changes.feed`, `changes.ack` |
 | Workspace (lot 2) | `workspace.status`, `workspace.enable`, `workspace.sync` |
 | Notifications (lot 2) | `settings.get`, `settings.set`, `digest.preview` |
+| Compte et administration (0.6.0) | `account.get`, `ui.set` ; réservées aux administrateurs : `admin.get`, `admin.set`, `admin.health`, `admin.logs`, `admin.holidays`, `admin.holidays.seed`, `admin.holidays.set` |
 | Copilote (lot 4) | `copilot.status`, `copilot.brief`, `simulations.run`, `copilot.ask`, `copilot.feedback`, `copilot.suggestions`, `insights.decide` |
 
 ## Tests
 
 ```bash
-node tests/run.js                    # 99 tests : calendriers, graphe, droits, journal, règles, API, marges, vues, personnes, OBS, WBS,
+node tests/run.js                    # 115 tests : calendriers, graphe, droits, journal, règles, API, marges, vues, personnes, OBS, WBS,
                                      # préférences, baselines, écarts, fil des changements, agenda, Drive, annuaire, récapitulatif,
                                      # simulation, synthèse, copilote (faux modèle), signaux faibles, fabrication, installation
-node tools/build.js                  # fabrique dist/ (6 fichiers)
+node tools/build.js                  # fabrique dist/ (8 fichiers)
 PPM_BUNDLE=dist/PPM_Core.gs node tests/run.js   # la même suite, sur le fichier unique
 node tests/gen_appsheet_columns.js   # régénère appsheet/COLONNES.md après une évolution du schéma
 
@@ -131,12 +135,26 @@ node tests/ui_smoke.js        # page Gantt
 node tests/ui_structure.js    # page Structure
 node tests/ui_suivi.js        # page Suivi et baseline du Gantt
 node tests/ui_copilote.js     # page Copilote, dans les trois modes
+node tests/ui_compte.js       # pages Mon compte et Administration
 
 # Aperçu visuel des pages avec un jeu de données fourni, Agenda et Drive simulés (hors production) :
 node tests/preview_server.js 8123   # puis http://localhost:8123/?view=suivi&project=p1 (ou view=gantt, view=structure)
 ```
 
 Les tests chargent les fichiers `.gs` tels quels, avec des tables en mémoire à la place de Sheets et de faux services Agenda, Drive et annuaire. Tout changement du Core doit les garder verts.
+
+## Mon compte et Administration (0.6.0)
+
+**Mon compte** (`?view=compte`, icône de personne dans la bannière) : sa fiche (fonction et organisation modifiables ; le reste est géré par le chef de projet, le DPL ou le Program Leader), ses rôles en lecture seule, ses notifications (fréquence du récapitulatif, échéances dans son agenda, aperçu et envoi d'essai), son affichage (thème automatique, jour ou nuit ; page ouverte en cliquant sur « PPM »).
+
+**Administration** (`?view=admin`, icône d'engrenage, visible des seuls administrateurs de `PPM_ADMINS`) :
+
+- **Réglages** : administrateurs, mode du copilote, modèle, quota, clé Gemini, adresses AppSheet et logo, dossier des projets. Tout est validé avant écriture et chaque changement est tracé dans le journal. La clé se saisit mais ne se relit jamais ; on ne peut pas se retirer soi-même des administrateurs ; le mode `api` demande une clé et un modèle.
+- **Santé** : vérification de l'installation (dont la version de chaque page), déclencheurs, résultat et durée de chaque étape de la dernière nuit, dernier récapitulatif, usage du copilote, quota de mails, volumes.
+- **Jours fériés** : liste par pays et année, ajout d'années, ajustement par site (ponts, fermetures) ; les projets en tiennent compte aussitôt.
+- **Journaux** : derniers changements de données et de réglages, échanges avec le copilote.
+
+Ne se règlent toujours que dans l'éditeur Apps Script : le manifeste, les autorisations, le déploiement et les déclencheurs (`installTriggers`). Le créateur du projet est le premier administrateur : nommer un second administrateur depuis l'onglet Réglages évite que l'outil dépende d'une seule personne (décision H16).
 
 ## Performance (0.5.1)
 

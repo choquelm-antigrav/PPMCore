@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.5.1">
+<meta name="ppm-version" content="0.6.0">
 <?!= include('Style') ?>
 <style>
   .panel { padding: 16px 24px 32px; }
@@ -43,8 +43,6 @@
   dialog fieldset { margin: 0 0 12px; padding: 0; border: 0; }
   dialog legend { margin: 0 0 4px; font-weight: 600; }
   dialog .opt { display: flex; align-items: flex-start; gap: 8px; margin: 4px 0; cursor: pointer; }
-  #notif { max-width: 640px; width: calc(100% - 32px); }
-  #preview { width: 100%; height: 320px; border: 1px solid var(--rule); border-radius: 4px; background: #fff; }
   .th-check { width: 32px; }
   @media (max-width: 700px) {
     .panel { padding: 12px; }
@@ -67,7 +65,6 @@
   </div>
   <div class="controls">
     <select id="picker" aria-label="Projet"></select>
-    <button type="button" class="btn" id="notif-btn">Mes notifications</button>
   </div>
 </header>
 
@@ -95,25 +92,6 @@
     <button type="button" class="btn" id="form-cancel">Annuler</button>
     <button type="button" class="btn primary" id="form-ok">Valider</button>
   </div>
-</dialog>
-
-<dialog id="notif">
-  <h2>Mes notifications</h2>
-  <fieldset>
-    <legend>Mail récapitulatif</legend>
-    <label class="opt"><input type="radio" name="freq" value="Quotidien"> <span>Chaque matin de semaine</span></label>
-    <label class="opt"><input type="radio" name="freq" value="Hebdomadaire"> <span>Le lundi seulement</span></label>
-    <label class="opt"><input type="radio" name="freq" value="Aucun"> <span>Jamais</span></label>
-  </fieldset>
-  <label class="opt"><input type="checkbox" id="invites"> <span>Mettre les échéances de mes livrables et jalons dans mon agenda (le projet doit avoir son agenda)</span></label>
-  <p class="note" id="notif-state" role="status"></p>
-  <div class="links">
-    <button type="button" class="btn" id="preview-btn">Voir mon récapitulatif</button>
-    <button type="button" class="btn" id="send-btn">Me l’envoyer maintenant</button>
-  </div>
-  <p class="note" id="preview-note" hidden></p>
-  <iframe id="preview" title="Aperçu du récapitulatif" sandbox="" hidden></iframe>
-  <div class="actions"><button type="button" class="btn primary" id="notif-close">Fermer</button></div>
 </dialog>
 
 <div class="toast" id="toast" role="status" hidden></div>
@@ -589,32 +567,6 @@ var BOOT = <?!= boot ?>;
     }).catch(function (e) { if (btn) btn.disabled = false; toast(e.message || 'Opération impossible.', true); });
   }
 
-  // ------------------------------------------------------------ mes notifications
-  function openNotif() {
-    $('preview').hidden = true; $('preview-note').hidden = true; $('notif-state').textContent = '';
-    call('settings.get', {}).then(function (s) {
-      Array.prototype.forEach.call(document.querySelectorAll('input[name=freq]'), function (r) { r.checked = r.value === s.notify_frequency; });
-      $('invites').checked = s.calendar_invites;
-      var d = $('notif');
-      if (d.showModal) d.showModal(); else d.setAttribute('open', '');
-    }).catch(function (e) { toast(e.message || 'Réglages indisponibles.', true); });
-  }
-  function saveNotif(patch) {
-    call('settings.set', patch, true).then(function () { $('notif-state').textContent = 'Réglage enregistré.'; })
-      .catch(function (e) { toast(e.message || 'Enregistrement impossible.', true); });
-  }
-  function preview(send) {
-    call('digest.preview', { send: !!send }, !!send).then(function (p) {
-      var note = $('preview-note');
-      note.hidden = false;
-      if (p.reason) { note.textContent = p.reason; $('preview').hidden = true; return; }
-      note.textContent = (p.sent ? 'Envoyé à votre adresse. ' : '') + 'Objet : « ' + p.subject + ' »' + (p.empty ? ' — rien à signaler aujourd’hui.' : '');
-      var f = $('preview');
-      f.hidden = false;
-      f.setAttribute('srcdoc', p.html);
-    }).catch(function (e) { toast(e.message || 'Aperçu impossible.', true); });
-  }
-
   // ------------------------------------------------------------ événements
   Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) {
     b.addEventListener('click', function () { setTab(b.getAttribute('data-tab')); });
@@ -624,14 +576,6 @@ var BOOT = <?!= boot ?>;
   $('form-ok').addEventListener('click', submitForm);
   $('form-cancel').addEventListener('click', closeForm);
   $('form').addEventListener('cancel', function (e) { e.preventDefault(); closeForm(); });
-  $('notif-btn').addEventListener('click', openNotif);
-  $('notif-close').addEventListener('click', function () { var d = $('notif'); if (d.close) d.close(); else d.removeAttribute('open'); });
-  Array.prototype.forEach.call(document.querySelectorAll('input[name=freq]'), function (r) {
-    r.addEventListener('change', function () { if (r.checked) saveNotif({ notify_frequency: r.value }); });
-  });
-  $('invites').addEventListener('change', function () { saveNotif({ calendar_invites: this.checked }); });
-  $('preview-btn').addEventListener('click', function () { preview(false); });
-  $('send-btn').addEventListener('click', function () { preview(true); });
 
   // ------------------------------------------------------------ démarrage
   state.tab = BOOT.tab || 'ecarts';

@@ -468,9 +468,10 @@ function uiCall(action, params, requestId) {
     currentUserEmail_());
 }
 
-var PAGES = { gantt: 'Gantt', structure: 'Structure', suivi: 'Suivi', copilote: 'Copilote' };
-var PAGE_TITLES = { gantt: 'PPM — Planning', structure: 'PPM — Structure', suivi: 'PPM — Suivi', copilote: 'PPM — Copilote' };
-var PAGE_TABS = { gantt: [''], structure: ['obs', 'wbs'], suivi: ['ecarts', 'changes', 'baselines', 'workspace'], copilote: ['synthese', 'simulation', 'questions', 'suggestions'] };
+var PAGES = { gantt: 'Gantt', structure: 'Structure', suivi: 'Suivi', copilote: 'Copilote', compte: 'Compte', admin: 'Admin' };
+var PAGE_TITLES = { gantt: 'PPM — Planning', structure: 'PPM — Structure', suivi: 'PPM — Suivi', copilote: 'PPM — Copilote', compte: 'PPM — Mon compte', admin: 'PPM — Administration' };
+var PAGE_TABS = { gantt: [''], structure: ['obs', 'wbs'], suivi: ['ecarts', 'changes', 'baselines', 'workspace'], copilote: ['synthese', 'simulation', 'questions', 'suggestions'],
+  compte: ['fiche', 'notifications', 'affichage'], admin: ['reglages', 'sante', 'feries', 'journaux'] };
 
 /** JSON à clés triées : la page et le serveur calculent la même clé pour les mêmes paramètres. */
 function stableJson_(v) {
@@ -493,6 +494,8 @@ function preloadFor_(view, boot, email) {
     pre[action + '|' + stableJson_(params)] = res;
     return res;
   };
+  if (view === 'compte') { put('account.get', {}); return pre; }
+  if (view === 'admin') { if (boot.isAdmin) put('admin.get', {}); return pre; }
   var cat = put('planning.catalog', {});
   if (!cat.ok) return pre;
   var open = cat.data.projects.filter(function (p) { return p.status !== 'Clos'; })[0] || cat.data.projects[0] || {};
@@ -554,9 +557,11 @@ function renderPage_(e) {
     view: view,
     version: PPM_VERSION
   };
-  var theme = '';
-  try { theme = loadPrefs_(currentUserEmail_()).ui.theme; } catch (err) { theme = ''; }
+  var theme = '', home = 'gantt';
+  try { var ui = loadPrefs_(currentUserEmail_()).ui; theme = ui.theme; home = ui.home; } catch (err) { theme = ''; }
   t.theme = theme === 'dark' || theme === 'light' ? theme : 'auto';
+  boot.home = home;
+  boot.isAdmin = adminEmails().indexOf(currentUserEmail_()) >= 0;
   var t0 = Date.now();
   try {
     boot.preload = preloadFor_(view, boot, currentUserEmail_());

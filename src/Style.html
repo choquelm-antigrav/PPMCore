@@ -77,6 +77,8 @@
     border: 0; border-radius: 50%; background: transparent; color: #fff; cursor: pointer; }
   .ppm-icon:hover { background: rgba(255, 255, 255, .12); }
   .ppm-icon svg { width: 20px; height: 20px; }
+  a.ppm-icon { text-decoration: none; }
+  .ppm-icon[aria-current="page"] { background: rgba(255, 255, 255, .18); }
 
   /* ---- en-tête de page ---- */
   header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 16px 24px 12px; background: var(--paper); }
@@ -190,6 +192,12 @@
     select { min-width: 0; width: 100%; }
     .controls { width: 100%; }
   }
-  @media (max-width: 520px) { .ppm-brand .ppm-name { display: none; } .ppm-brand img { height: 18px; } }
+  /* Petit écran : la bannière passe sur deux lignes (marque et boutons, puis navigation) au lieu de couper le menu. */
+  @media (max-width: 640px) {
+    .ppm-bar { flex-wrap: wrap; height: auto; padding: 0 8px 0 12px; gap: 0 8px; }
+    .ppm-brand { flex: 1; min-height: 44px; }
+    .ppm-icon { align-self: center; }
+    .ppm-nav { order: 3; flex: 1 0 100%; height: 40px; margin: 0 -8px 0 -12px; padding: 0 8px; }
+  }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>

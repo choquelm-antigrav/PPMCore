@@ -151,7 +151,8 @@ function loadHolidayMap(country) {
 }
 
 /** Contrôle de l'installation : feuilles, en-têtes, propriétés. */
-function selfCheck() {
+/** Liste des problèmes d'installation (vide = conforme) : sert à selfCheck et à la page Administration. */
+function checkInstall_() {
   var problems = [];
   [PROP.DATA_ID, PROP.HISTORY_ID, PROP.DOMAIN, PROP.ADMINS].forEach(function (k) {
     if (!getProp(k, '')) problems.push('Propriété manquante : ' + k);
@@ -168,7 +169,11 @@ function selfCheck() {
       }
     });
   }
-  problems = problems.concat(checkPageVersions_());
+  return problems.concat(checkPageVersions_());
+}
+
+function selfCheck() {
+  var problems = checkInstall_();
   var msg = problems.length ? 'À corriger :\n- ' + problems.join('\n- ') : 'Installation conforme (PPM Core ' + PPM_VERSION + ').';
   console.log(msg);
   return msg;

@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="<?= theme ?>">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="ppm-version" content="0.6.0">
+<?!= include('Style') ?>
+<style>
+  .panel { padding: 8px 24px 32px; max-width: 1100px; }
+  .panel[hidden] { display: none; }
+  .box { margin: 0 0 20px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .box h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
+  .note { margin: 8px 0 0; color: var(--muted); font-size: 14px; max-width: 72ch; }
+  .muted { color: var(--muted); }
+  .late { color: var(--red); font-weight: 500; }
+  .form { display: grid; gap: 12px; max-width: 560px; }
+  .grp { display: grid; gap: 12px; margin: 0; padding: 0; border: 0; min-width: 0; }
+  .grp h3 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
+  .grp + .grp { padding-top: 16px; border-top: 1px solid var(--rule); }
+  .form label.lbl { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
+  .form input[type=text], .form input[type=password], .form input[type=number], .form textarea, .editor textarea, .inline input {
+    padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; color: var(--ink); background: var(--surface); }
+  .form textarea { min-height: 84px; resize: vertical; font-family: inherit; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .opt { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
+  .readonly { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; font-size: 14px; }
+  .readonly dd { overflow-wrap: anywhere; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 0 0 16px; }
+  .card { padding: 12px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); }
+  .card .k { margin: 0; color: var(--muted); font-size: 13px; }
+  .card .v { margin: 2px 0 0; font-size: 20px; font-weight: 600; }
+  .card .s { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+  .card.alert .v { color: var(--red); }
+  .card.ok .v { color: var(--green); }
+  .checks { margin: 0 0 16px; padding-left: 20px; }
+  .checks li { margin: 4px 0; color: var(--alert-ink); }
+  .editor { margin-top: 16px; }
+  .editor textarea { width: 100%; min-height: 220px; font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12.5px; background: var(--tint); color: var(--ink); white-space: nowrap; }
+  .badge.alert { background: var(--alert-bg); color: var(--alert-ink); }
+  .badge.ok { background: var(--ok-bg); color: var(--ok-ink); }
+  .badge.warn { background: var(--warn-bg); color: var(--warn-ink); }
+  @media (max-width: 700px) { .panel { padding: 8px 12px 24px; } .status .seg { display: grid; grid-template-columns: 1fr 1fr; width: 100%; } }
+</style>
+</head>
+<body>
+<?!= include('Header') ?>
+<header>
+  <div class="title"><h1 id="title">Administration</h1></div>
+</header>
+
+<div class="status">
+  <div class="seg" role="tablist" aria-label="Rubriques" id="tabs">
+    <button type="button" data-tab="reglages" aria-pressed="true">Réglages</button>
+    <button type="button" data-tab="sante" aria-pressed="false">Santé</button>
+    <button type="button" data-tab="feries" aria-pressed="false">Jours fériés</button>
+    <button type="button" data-tab="journaux" aria-pressed="false">Journaux</button>
+  </div>
+</div>
+
+<section class="panel" id="panel-reglages" aria-label="Réglages"></section>
+<section class="panel" id="panel-sante" aria-label="Santé" hidden></section>
+<section class="panel" id="panel-feries" aria-label="Jours fériés" hidden></section>
+<section class="panel" id="panel-journaux" aria-label="Journaux" hidden></section>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+var BOOT = <?!= boot ?>;
+</script>
+<script>
+(function () {
+  'use strict';
+
+  var TABS = ['reglages', 'sante', 'feries', 'journaux'];
+  var state = { tab: 'reglages', cfg: null, health: null, holidays: null, logs: null, editing: '' };
+  var $ = function (id) { return document.getElementById(id); };
+  var COUNTRY_NAMES = { FR: 'France', DE: 'Allemagne', UK: 'Royaume-Uni', IN: 'Inde' };
+  var STEP_LABELS = { reconcile: 'Réconciliation du journal', rules: 'Moteur de règles', workspace: 'Agenda et Drive', directory: 'Annuaire', backup: 'Sauvegarde des classeurs' };
+  var MODES = [['off', 'Désactivé'], ['manual', 'Texte à coller dans Gemini'], ['api', 'Appel direct à Gemini (accord de la DSI requis)']];
+
+  // ------------------------------------------------------------ outils
+  function el(tag, attrs, children) {
+    var n = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (k === 'text') n.textContent = attrs[k];
+      else if (k === 'class') n.className = attrs[k];
+      else if (k.indexOf('on') === 0) n.addEventListener(k.slice(2), attrs[k]);
+      else n.setAttribute(k, attrs[k]);
+    });
+    (children || []).forEach(function (c) { if (c !== null && c !== undefined) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return n;
+  }
+  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+  function uuid() { return window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2); }
+  var toastTimer = null;
+  function toast(msg, isError) {
+    var t = $('toast');
+    t.textContent = msg; t.className = 'toast' + (isError ? ' error' : ''); t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.hidden = true; }, isError ? 8000 : 3500);
+  }
+  function call(action, params, write) {
+    var pre = window.ppmPreloaded && window.ppmPreloaded(action, params, write);
+    if (pre) return pre;
+    return new Promise(function (resolve, reject) {
+      document.body.classList.add('busy');
+      google.script.run
+        .withSuccessHandler(function (res) {
+          document.body.classList.remove('busy');
+          if (res && res.ok) resolve(res.data); else reject(res && res.error ? res.error : { code: 'INTERNAL', message: 'Réponse inattendue du serveur.' });
+        })
+        .withFailureHandler(function (err) {
+          document.body.classList.remove('busy');
+          reject({ code: 'NETWORK', message: 'Le serveur ne répond pas. Vérifiez la connexion puis rechargez la page.', details: String(err) });
+        })
+        .uiCall(action, params || {}, write ? uuid() : null);
+    });
+  }
+  function loading(p) { clear(p); p.appendChild(el('p', { class: 'loading', text: 'Chargement…' })); }
+  function empty(p, title, text) { clear(p); p.appendChild(el('div', { class: 'empty' }, [el('strong', { text: title }), el('span', { text: text || '' })])); }
+  function plural(n, one, many) { return n + ' ' + (Math.abs(n) > 1 ? many : one); }
+  function frDateTime(s) {
+    if (!s) return '—';
+    var d = new Date(s);
+    if (isNaN(d.getTime())) return String(s);
+    var z = function (n) { return (n < 10 ? '0' : '') + n; };
+    return z(d.getDate()) + '/' + z(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + z(d.getHours()) + ':' + z(d.getMinutes());
+  }
+  function frDate(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+  function seconds(ms) { return ms < 1000 ? '< 1 s' : Math.round(ms / 100) / 10 + ' s'; }
+  function box(title, children) { return el('div', { class: 'box' }, [el('h2', { text: title })].concat(children)); }
+  function card(k, v, s, tone) { return el('div', { class: 'card' + (tone ? ' ' + tone : '') }, [el('p', { class: 'k', text: k }), el('p', { class: 'v', text: v }), s ? el('p', { class: 's', text: s }) : null]); }
+  function table(head, rows) {
+    return el('div', { class: 'table-wrap' }, [el('table', {}, [
+      el('thead', {}, [el('tr', {}, head.map(function (h) { return el('th', { scope: 'col', text: h }); }))]), el('tbody', {}, rows)])]);
+  }
+  function field(label, input) { return el('label', { class: 'lbl' }, [label, input]); }
+
+  // ------------------------------------------------------------ navigation
+  function syncTabs() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-tab') === state.tab)); });
+    TABS.forEach(function (t) { $('panel-' + t).hidden = t !== state.tab; });
+    try { google.script.history.replace(null, { view: 'admin', tab: state.tab }); } catch (e) { /* hors web app */ }
+  }
+  function setTab(t) { state.tab = t; syncTabs(); render(); }
+  function render() {
+    if (state.tab === 'reglages') renderSettings();
+    else if (state.tab === 'sante') loadHealth();
+    else if (state.tab === 'feries') loadHolidays();
+    else loadLogs();
+  }
+  function failed(p, e) { empty(p, 'Chargement impossible.', (e && e.message) || 'Erreur inconnue.'); }
+
+  // ------------------------------------------------------------ Réglages
+  function renderSettings() {
+    var panel = $('panel-reglages'), c = state.cfg;
+    clear(panel);
+    var admins = el('textarea', { id: 'f-admins', 'aria-label': 'Administrateurs' });
+    admins.value = c.admins.join('\n');
+    var mode = el('select', { id: 'f-mode', 'aria-label': 'Mode du copilote' }, MODES.map(function (m) { return el('option', { value: m[0], text: m[1] }); }));
+    mode.value = c.ai_mode;
+    var model = el('input', { type: 'text', id: 'f-model', maxlength: '80', value: c.ai_model, placeholder: 'nom du modèle validé' });
+    var quota = el('input', { type: 'number', id: 'f-quota', min: '1', max: '500', step: '1', value: String(c.ai_quota) });
+    var key = el('input', { type: 'password', id: 'f-key', autocomplete: 'new-password', placeholder: c.gemini_key_set ? '•••• clé enregistrée (laisser vide pour la garder)' : 'coller la clé ici' });
+    var clearKey = el('input', { type: 'checkbox', id: 'f-clear-key' });
+    var appsheet = el('input', { type: 'text', id: 'f-appsheet', value: c.appsheet_url, placeholder: 'https://…' });
+    var logo = el('input', { type: 'text', id: 'f-logo', value: c.logo_url, placeholder: 'https://… (logo officiel, portail de marque)' });
+    var folder = el('input', { type: 'text', id: 'f-folder', value: c.projects_folder_id, placeholder: 'identifiant du dossier Drive' });
+    var save = el('button', { type: 'submit', class: 'btn primary', id: 'save-cfg', text: 'Enregistrer les réglages' });
+    var form = el('form', { class: 'form', onsubmit: function (e) {
+      e.preventDefault();
+      var values = {
+        admins: admins.value.split(/[\s,;]+/).filter(Boolean), ai_mode: mode.value, ai_model: model.value, ai_quota: Number(quota.value),
+        appsheet_url: appsheet.value, logo_url: logo.value, projects_folder_id: folder.value
+      };
+      if (key.value.trim()) values.gemini_key = key.value.trim();
+      if (clearKey.checked) values.clear_gemini_key = true;
+      save.disabled = true;
+      call('admin.set', { values: values }, true).then(function (r) {
+        state.cfg = r;
+        toast(r.changed.length ? plural(r.changed.length, 'réglage enregistré', 'réglages enregistrés') + '.' : 'Aucun changement.');
+        renderSettings();
+      }).catch(function (err) {
+        save.disabled = false;
+        var m = $('cfg-error'); m.textContent = err.message || 'Enregistrement impossible.'; m.hidden = false;
+        toast(err.message || 'Enregistrement impossible.', true);
+      });
+    } }, [
+      el('p', { class: 'late', id: 'cfg-error', role: 'alert', hidden: 'hidden' }),
+      el('section', { class: 'grp' }, [el('h3', { text: 'Administrateurs' }), field('Une adresse par ligne ; vous devez rester dans la liste', admins)]),
+      el('section', { class: 'grp' }, [el('h3', { text: 'Copilote IA' }),
+        field('Mode', mode), field('Modèle Gemini', model), field('Quota : demandes par personne et par jour', quota),
+        field('Clé Gemini (jamais réaffichée)', key),
+        el('label', { class: 'opt' }, [clearKey, el('span', { text: 'Supprimer la clé enregistrée' })])]),
+      el('section', { class: 'grp' }, [el('h3', { text: 'Adresses (facultatives)' }),
+        field('Application AppSheet', appsheet), field('Logo Airbus', logo), field('Dossier Drive des projets', folder)]),
+      el('div', { class: 'row' }, [save])
+    ]);
+    panel.appendChild(box('Réglages de l’outil', [form,
+      el('p', { class: 'note', text: 'Le mode « api » envoie des données de projet à Gemini : ne l’activez qu’avec l’accord de la DSI. La clé n’est stockée que dans les propriétés du script.' })]));
+    var ro = el('dl', { class: 'readonly' });
+    [['Domaine autorisé', c.domain], ['Adresse de l’application', c.webapp_url || 'inconnue : ouvrir l’application une fois'], ['Dossier des sauvegardes', c.backup_folder_id || 'pas encore créé']].forEach(function (x) {
+      ro.appendChild(el('dt', { class: 'muted', text: x[0] })); ro.appendChild(el('dd', { text: x[1] }));
+    });
+    panel.appendChild(box('Lecture seule', [ro, el('p', { class: 'note', text: 'Le manifeste, le déploiement et les autorisations se gèrent dans l’éditeur Apps Script.' })]));
+  }
+
+  // ------------------------------------------------------------ Santé
+  function loadHealth() {
+    var panel = $('panel-sante');
+    loading(panel);
+    call('admin.health', {}).then(function (h) { state.health = h; renderHealth(); }).catch(function (e) { failed(panel, e); });
+  }
+  function renderHealth() {
+    var panel = $('panel-sante'), h = state.health, n = h.night;
+    clear(panel);
+    var cards = el('div', { class: 'cards' });
+    cards.appendChild(card('Installation', h.ok ? 'Conforme' : plural(h.checks.length, 'point à corriger', 'points à corriger'), 'version ' + h.version, h.ok ? 'ok' : 'alert'));
+    cards.appendChild(card('Dernière nuit', n ? (n.ok ? 'Réussie' : 'Échec') : 'Jamais exécutée', n ? frDateTime(n.endedAt) : 'lancer nightlyRun ou installTriggers', n && !n.ok ? 'alert' : (n ? 'ok' : '')));
+    cards.appendChild(card('Dernier récapitulatif', h.digest ? plural(h.digest.sent, 'mail', 'mails') : '—', h.digest ? frDateTime(h.digest.at) + (h.digest.skipped ? ', ' + h.digest.skipped + ' reporté(s)' : '') : 'pas encore envoyé'));
+    cards.appendChild(card('Copilote', h.ai.mode === 'api' ? h.ai.used_today + ' demandes' : 'IA ' + (h.ai.mode === 'off' ? 'désactivée' : 'en copier-coller'), h.ai.mode === 'api' ? 'aujourd’hui, limite ' + h.ai.per_person_limit + ' par personne' : ''));
+    if (h.mail_quota !== null) cards.appendChild(card('Mails restants', String(h.mail_quota), 'quota du jour', h.mail_quota < 50 ? 'alert' : ''));
+    cards.appendChild(card('Cache des lectures', h.cache ? 'Actif' : 'Inactif', h.cache ? 'les tables ne sont relues que si elles ont changé' : 'chaque page relit les feuilles'));
+    cards.appendChild(card('Données', plural(h.counts.projects, 'projet', 'projets') + ', ' + plural(h.counts.items, 'élément', 'éléments'), plural(h.counts.people, 'personne', 'personnes') + ', ' + plural(h.counts.administrators, 'administrateur', 'administrateurs')));
+    panel.appendChild(cards);
+    if (h.checks.length) panel.appendChild(el('ul', { class: 'checks', id: 'checks' }, h.checks.map(function (c) { return el('li', { text: c }); })));
+    if (h.running) panel.appendChild(el('p', { class: 'note', text: 'Un traitement de nuit est en cours (étape « ' + (STEP_LABELS[h.running.step] || h.running.step) + ' »).' }));
+    if (h.triggers) {
+      panel.appendChild(el('p', { class: 'note', id: 'triggers', text: 'Déclencheurs : nuit ' + h.triggers.nightlyRun + ', récapitulatif de 7 h ' + h.triggers.sendDigests + (h.triggers.continueNightly ? ', reprise en cours ' + h.triggers.continueNightly : '') + '.' }));
+    }
+    if (n) {
+      panel.appendChild(el('h2', { style: 'font-size:16px;margin:20px 0 8px', text: 'Étapes de la dernière nuit' }));
+      panel.appendChild(table(['Étape', 'Durée', 'Résultat'], n.steps.map(function (s) {
+        var bad = !n.ok && n.failedStep === s.name;
+        return el('tr', {}, [el('td', { text: STEP_LABELS[s.name] || s.name }), el('td', { text: seconds(s.ms) }),
+          el('td', {}, [el('span', { class: 'badge ' + (bad ? 'alert' : 'ok'), text: bad ? 'Échec : ' + n.error : 'Terminée' })])]);
+      })));
+    }
+    panel.appendChild(el('div', { class: 'row', style: 'margin-top:16px' }, [el('button', { type: 'button', class: 'btn', id: 'health-reload', text: 'Vérifier à nouveau', onclick: loadHealth })]));
+  }
+
+  // ------------------------------------------------------------ Jours fériés
+  function loadHolidays() {
+    var panel = $('panel-feries');
+    loading(panel);
+    call('admin.holidays', {}).then(function (r) { state.holidays = r; renderHolidays(); }).catch(function (e) { failed(panel, e); });
+  }
+  function renderHolidays() {
+    var panel = $('panel-feries'), r = state.holidays;
+    clear(panel);
+    var years = el('input', { type: 'text', id: 'hol-years', placeholder: 'ex. 2029, 2030', 'aria-label': 'Années à ajouter', style: 'padding:8px 10px;border:1px solid var(--rule);border-radius:6px;width:180px' });
+    panel.appendChild(box('Ajouter des années', [el('div', { class: 'row' }, [years,
+      el('button', { type: 'button', class: 'btn', id: 'hol-add', text: 'Ajouter', onclick: function () {
+        var list = years.value.split(/[\s,;]+/).filter(Boolean).map(Number);
+        call('admin.holidays.seed', { years: list }, true).then(function (res) { state.holidays = res; toast('Années ajoutées : jours fériés calculés pour les 4 pays.'); renderHolidays(); })
+          .catch(function (e) { toast(e.message || 'Ajout impossible.', true); });
+      } })]),
+      el('p', { class: 'note', text: 'Les jours fériés se calculent automatiquement. Ajustez-les ici pour un site (pont, fermeture) ou pour compléter l’Inde, dont seuls les jours nationaux sont fournis. Les projets en tiennent compte aussitôt.' })]));
+    var rows = r.sets.map(function (s) {
+      return el('tr', { 'data-set': s.id }, [el('td', { text: (COUNTRY_NAMES[s.country] || s.country) + ' (' + s.country + ')' }), el('td', { text: String(s.year) }), el('td', { class: 'num', text: String(s.count) }),
+        el('td', {}, [el('button', { type: 'button', class: 'btn', text: 'Modifier', onclick: function () { state.editing = s.id; renderHolidays(); } })])]);
+    });
+    panel.appendChild(table(['Pays', 'Année', 'Jours', ''], rows));
+    var set = r.sets.filter(function (s) { return s.id === state.editing; })[0];
+    if (set) {
+      var ta = el('textarea', { id: 'hol-text', 'aria-label': 'Jours fériés de ' + set.id });
+      ta.value = set.dates.map(function (d) { return d.date + (d.name ? ' ' + d.name : ''); }).join('\n');
+      panel.appendChild(el('div', { class: 'editor box' }, [
+        el('h2', { text: 'Jours fériés ' + (COUNTRY_NAMES[set.country] || set.country) + ' ' + set.year }),
+        el('p', { class: 'note', text: 'Une date par ligne : AAAA-MM-JJ, puis un nom facultatif.' }), ta,
+        el('div', { class: 'row', style: 'margin-top:12px' }, [
+          el('button', { type: 'button', class: 'btn primary', id: 'hol-save', text: 'Enregistrer', onclick: function () {
+            var dates = ta.value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean).map(function (l) {
+              var i = l.search(/\s/);
+              return i < 0 ? { date: l, name: '' } : { date: l.slice(0, i), name: l.slice(i).trim() };
+            });
+            call('admin.holidays.set', { id: set.id, version: set.version, dates: dates }, true).then(function () { toast('Jours fériés enregistrés.'); state.editing = ''; loadHolidays(); })
+              .catch(function (e) { toast(e.code === 'CONFLICT' ? 'Ce jeu a été modifié entre-temps : rechargez puis recommencez.' : (e.message || 'Enregistrement impossible.'), true); });
+          } }),
+          el('button', { type: 'button', class: 'btn', text: 'Annuler', onclick: function () { state.editing = ''; renderHolidays(); } })])]));
+    }
+  }
+
+  // ------------------------------------------------------------ Journaux
+  function loadLogs() {
+    var panel = $('panel-journaux');
+    loading(panel);
+    call('admin.logs', {}).then(function (l) { state.logs = l; renderLogs(); }).catch(function (e) { failed(panel, e); });
+  }
+  function renderLogs() {
+    var panel = $('panel-journaux'), l = state.logs;
+    clear(panel);
+    panel.appendChild(el('h2', { style: 'font-size:16px;margin:8px 0', text: 'Derniers changements' }));
+    if (!l.changes.length) panel.appendChild(el('p', { class: 'note', text: 'Aucun changement enregistré.' }));
+    else panel.appendChild(table(['Quand', 'Qui', 'Quoi', 'Champ', 'Avant → Après', 'Origine'], l.changes.map(function (e) {
+      return el('tr', {}, [el('td', { text: frDateTime(e.at) }), el('td', { text: e.actor }), el('td', { text: e.what }), el('td', { text: e.field }),
+        el('td', { text: (e.old_value || '∅') + ' → ' + (e.new_value || '∅') }), el('td', { text: e.source })]);
+    })));
+    panel.appendChild(el('h2', { style: 'font-size:16px;margin:24px 0 8px', text: 'Échanges avec le copilote' }));
+    if (!l.ai.length) panel.appendChild(el('p', { class: 'note', text: 'Aucun échange enregistré.' }));
+    else panel.appendChild(table(['Quand', 'Qui', 'Objet', 'Mode', 'Chiffres non vérifiés', 'Avis', 'Extrait'], l.ai.map(function (x) {
+      return el('tr', {}, [el('td', { text: frDateTime(x.at) }), el('td', { text: x.actor }), el('td', { text: x.purpose }), el('td', { text: x.mode }),
+        el('td', {}, [x.unverified ? el('span', { class: 'badge warn', text: x.unverified }) : '—']), el('td', { text: x.feedback || '—' }), el('td', { text: x.excerpt })]);
+    })));
+  }
+
+  // ------------------------------------------------------------ démarrage
+  Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) { b.addEventListener('click', function () { setTab(b.getAttribute('data-tab')); }); });
+  state.tab = TABS.indexOf(BOOT.tab) >= 0 ? BOOT.tab : 'reglages';
+  syncTabs();
+  if (!BOOT.isAdmin) {
+    $('tabs').hidden = true;
+    TABS.forEach(function (t) { $('panel-' + t).hidden = t !== 'reglages'; });
+    empty($('panel-reglages'), 'Réservé aux administrateurs.', 'Vos réglages personnels sont dans « Mon compte ».');
+  } else {
+    call('admin.get', {}).then(function (c) { state.cfg = c; render(); }).catch(function (e) { failed($('panel-' + state.tab), e); });
+  }
+
+  window.__ppm = { state: state, setTab: setTab };
+})();
+</script>
+</body>
+</html>

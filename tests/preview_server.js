@@ -74,10 +74,15 @@ call('ines@entreprise.com', 'baselines.request', { projectId: p1.id, justificati
 call('fay@entreprise.com', 'progress.declare', { planItemId: byName('Note de calcul primaire').id, progressPct: 35, comment: 'Calculs en cours, mais en attente fournisseur pour les données matière' });
 c.setProp(c.PROP.AI_MODE, process.env.AI_MODE || 'off');
 c.runRules();
+c.backupBooks_ = () => {};
+c.setProp(c.PROP.DATA_ID, 'donnees'); c.setProp(c.PROP.HISTORY_ID, 'historique');
+c.TRIGGER_LIST = () => ['nightlyRun', 'sendDigests'];
+c.nightlyRun();
+call('admin@entreprise.com', 'admin.set', { values: { ai_quota: 40, logo_url: 'https://exemple.test/logo.svg' } });
 
 const src = (f) => fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8');
 const deps = process.env.UI_DEPS || path.join(__dirname, '..', 'node_modules');
-const pages = { structure: 'Structure.html', suivi: 'Suivi.html', gantt: 'Gantt.html', copilote: 'Copilote.html' };
+const pages = { structure: 'Structure.html', suivi: 'Suivi.html', gantt: 'Gantt.html', copilote: 'Copilote.html', compte: 'Compte.html', admin: 'Admin.html' };
 function template(view) {
   let html = src(pages[view] || 'Structure.html').replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Header') ?>", src('Header.html'));
   if (view === 'gantt') {
@@ -99,8 +104,8 @@ const server = http.createServer((req, res) => {
     }); return;
   }
   const view = url.searchParams.get('view') || 'structure';
-  const defTab = { structure: 'obs', suivi: 'ecarts', gantt: '', copilote: 'synthese' }[view];
-  const boot = { project: url.searchParams.get('project') === 'p1' ? p1.id : (url.searchParams.get('project') || ''), program: '', tab: url.searchParams.get('tab') || defTab, mode: url.searchParams.get('mode') || '', baseUrl: '', appsheetUrl: '', version: 'preview', view: view };
+  const defTab = { structure: 'obs', suivi: 'ecarts', gantt: '', copilote: 'synthese', compte: 'fiche', admin: 'reglages' }[view];
+  const boot = { project: url.searchParams.get('project') === 'p1' ? p1.id : (url.searchParams.get('project') || ''), program: '', tab: url.searchParams.get('tab') || defTab, mode: url.searchParams.get('mode') || '', baseUrl: '', appsheetUrl: '', version: 'preview', view: view, home: 'gantt', isAdmin: (url.searchParams.get('as') || user) === 'admin@entreprise.com' };
   if (url.searchParams.get('program')) boot.program = prog.id;
   const as = url.searchParams.get('as');
   const rpc = as ? '/rpc?as=' + encodeURIComponent(as) : '/rpc';

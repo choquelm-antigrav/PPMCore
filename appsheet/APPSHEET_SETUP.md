@@ -304,7 +304,7 @@ Les colonnes `Project.calendar_id` et `Project.drive_folder_id` sont remplies pa
 - **Changements à valider** (chef de projet, DPL) : chaque modification des dates, responsables, budget ou périmètre depuis la baseline active, avec son auteur. On valide une sélection ou tout d'un coup ; l'historique reste consultable. L'avancement déclaré n'y figure pas : ce n'est pas une donnée figée.
 - **Baselines** : liste, demandes en attente (Figer ou Refuser, avec motif), réactivation d'une ancienne baseline (avec motif).
 - **Agenda et Drive** : création de l'agenda et du dossier du projet, liens, synchronisation immédiate.
-- **Mes notifications** (bouton en haut) : fréquence du récapitulatif (chaque matin de semaine, le lundi, jamais), échéances personnelles dans son agenda, aperçu du récapitulatif et envoi d'essai.
+- **Notifications** (déplacées dans la page **Mon compte**, icône de personne en haut à droite) : fréquence du récapitulatif (chaque matin de semaine, le lundi, jamais), échéances personnelles dans son agenda, aperçu du récapitulatif et envoi d'essai.
 
 Le Gantt montre la baseline active sous forme d'un trait gris sous chaque barre (case « Baseline » pour le masquer) ; le détail d'un élément indique son glissement.
 
@@ -316,5 +316,5 @@ Le Gantt montre la baseline active sous forme d'un trait gris sous chaque barre 
 4. En tant que simple membre (autre compte) : demander une baseline depuis la page Suivi ou AppSheet. Le chef de projet reçoit un mail ; il la refuse avec un motif.
 5. Onglet Agenda et Drive : **Créer l'agenda et le dossier du projet**. Ouvrir l'agenda : un événement par jalon et par échéance. Ouvrir le dossier : un sous-dossier par workpackage.
 6. Déplacer un jalon dans le Gantt : son événement change de date dans la minute.
-7. Mes notifications : **Voir mon récapitulatif**, puis **Me l'envoyer maintenant** : le mail arrive, avec des liens vers les pages.
+7. Mon compte, onglet Notifications : **Voir mon récapitulatif**, puis **Me l'envoyer maintenant** : le mail arrive, avec des liens vers les pages.
 8. Le lendemain matin (jour de semaine) : chaque membre concerné reçoit un seul récapitulatif.

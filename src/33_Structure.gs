@@ -93,7 +93,8 @@ function loadPrefs_(email) {
   var row = userSettingRow_(email);
   var saved = row ? parseJsonSafe(row.view_prefs_json, {}) : {};
   var theme = saved.ui && ['light', 'dark', 'auto'].indexOf(saved.ui.theme) >= 0 ? saved.ui.theme : 'auto';
-  return { obs: normalizePrefs_('obs', saved.obs), wbs: normalizePrefs_('wbs', saved.wbs), ui: { theme: theme } };
+  var home = saved.ui && HOME_VIEWS.indexOf(saved.ui.home) >= 0 ? saved.ui.home : 'gantt';
+  return { obs: normalizePrefs_('obs', saved.obs), wbs: normalizePrefs_('wbs', saved.wbs), ui: { theme: theme, home: home } };
 }
 
 // ---------------------------------------------------------------- personnes
@@ -418,13 +419,17 @@ defineAction('prefs.set', function (p, ctx) {
 
 /** Réglages d'interface de l'utilisateur (thème jour, nuit ou celui de l'ordinateur). */
 defineAction('ui.set', function (p, ctx) {
-  if (['light', 'dark', 'auto'].indexOf(p.theme) < 0) throw new PpmError('VALIDATION', 'Thème attendu : light, dark ou auto.');
+  if (p.theme === undefined && p.home === undefined) throw new PpmError('VALIDATION', 'Rien à enregistrer.');
+  if (p.theme !== undefined && ['light', 'dark', 'auto'].indexOf(p.theme) < 0) throw new PpmError('VALIDATION', 'Thème attendu : light, dark ou auto.');
+  if (p.home !== undefined && HOME_VIEWS.indexOf(p.home) < 0) throw new PpmError('VALIDATION', 'Page d’accueil inconnue.');
   var row = userSettingRow_(ctx.email);
   var saved = row ? parseJsonSafe(row.view_prefs_json, {}) : {};
-  saved.ui = { theme: p.theme };
+  saved.ui = Object.assign({}, saved.ui || {});
+  if (p.theme !== undefined) saved.ui.theme = p.theme;
+  if (p.home !== undefined) saved.ui.home = p.home;
   if (row) repoUpdate('UserSetting', row.id, { view_prefs_json: JSON.stringify(saved) }, null, ctx.actx);
   else repoInsert('UserSetting', { user_email: ctx.email, view_prefs_json: JSON.stringify(saved) }, ctx.actx);
-  return saved.ui;
+  return loadPrefs_(ctx.email).ui;
 });
 
 defineAction('obs.tree', function (p, ctx) {
