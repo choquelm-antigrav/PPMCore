@@ -1,0 +1,5875 @@
+/**
+ * PPM Core 0.5.1 — fichier unique à installer (fabriqué par tools/build.js, empreinte 90f26da9f7e7).
+ * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
+ * Contient, dans cet ordre : 00_Config.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 30_Api.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 40_Jobs.gs.
+ */
+
+// ======================================================================
+// 00_Config.gs
+// ======================================================================
+
+/**
+ * PPM Core — configuration générale.
+ *
+ * Les valeurs métier paramétrables sont ici. Les identifiants d'environnement
+ * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
+ */
+
+var PPM_VERSION = '0.5.1';
+var PPM_API_VERSION = '1.0';
+
+/** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
+var TECH_COLS = ['created_at', 'created_by', 'updated_at', 'updated_by', 'version', 'deleted'];
+
+/** Seuils par défaut (sections 5 et 9 de la spécification). */
+var THRESHOLDS = {
+  staleProgressDays: 30,
+  dueSoonDays: 7,
+  criticalSlipDays: 5,
+  cpiWarn: 0.95,
+  cpiAlert: 0.90,
+  riskLowMax: 6,
+  riskHighMin: 15
+};
+
+/** Conversion probabilité 1–5 → pourcentage (section 5.7). */
+var PROBABILITY_MAP = { 1: 0.1, 2: 0.3, 3: 0.5, 4: 0.7, 5: 0.9 };
+
+/** Rang des rôles : on ne peut attribuer qu'un rôle de rang égal ou inférieur au sien. */
+var ROLE_RANK = { PL: 0, DPL: 1, CP: 2, RWP: 3, MEMBER: 4 };
+
+/** Rôles (section 7). MEMBER = membre affecté (affectation explicite ou ligne budgétaire). */
+var ROLES = ['PL', 'DPL', 'CP', 'RWP', 'MEMBER'];
+
+var ROLE_LABELS = {
+  PL: 'Program Leader',
+  DPL: 'Domain Program Leader',
+  CP: 'Chef de projet',
+  RWP: 'Responsable de workpackage',
+  MEMBER: 'Membre affecté'
+};
+
+/**
+ * Matrice des droits d'écriture (section 7).
+ * '*' = tout utilisateur authentifié. L'administrateur plateforme a tous les droits.
+ * Les actions de portée « global » (rate card, création de programme) sont accordées
+ * si l'utilisateur détient le rôle sur n'importe quel périmètre.
+ */
+var PERMISSIONS = {
+  'program.create':   ['PL'],
+  'project.create':   ['PL', 'DPL'],
+  'wbs.edit':         ['PL', 'DPL', 'CP', 'RWP'],
+  'progress.declare': ['DPL', 'CP', 'RWP', 'MEMBER'],
+  'baseline.manage':  ['DPL', 'CP'],
+  'baseline.request': ['PL', 'DPL', 'CP', 'RWP', 'MEMBER'],
+  'budget.edit':      ['PL', 'DPL', 'CP', 'RWP'],
+  'ratecard.manage':  ['DPL', 'CP'],
+  'actuals.manage':   ['DPL', 'CP'],
+  'roles.assign':     ['PL', 'DPL', 'CP'],
+  'resource.edit':    ['PL', 'DPL', 'CP'],
+  'risk.create':      ['PL', 'DPL', 'CP', 'RWP', 'MEMBER'],
+  'risk.edit':        ['PL', 'DPL', 'CP'],
+  'changes.ack':      ['DPL', 'CP'],
+  'workspace.manage': ['PL', 'DPL', 'CP'],
+  'insight.decide':   ['PL', 'DPL', 'CP'],
+  'addon.install':    ['*']
+};
+
+/** Durée d'une tranche de traitement planifié (plafond Apps Script : 6 min par exécution). */
+var JOB_SLICE_MS = 5 * 60 * 1000;
+
+/** Clés des propriétés du script. */
+var PROP = {
+  DATA_ID: 'PPM_DATA_ID',
+  HISTORY_ID: 'PPM_HISTORY_ID',
+  DOMAIN: 'PPM_DOMAIN',
+  ADMINS: 'PPM_ADMINS',
+  BACKUP_FOLDER: 'PPM_BACKUP_FOLDER_ID',
+  JOB_STATE: 'PPM_JOB_STATE',
+  GEMINI_KEY: 'PPM_GEMINI_API_KEY',
+  APPSHEET_URL: 'PPM_APPSHEET_URL',
+  WEBAPP_URL: 'PPM_WEBAPP_URL',
+  PROJECTS_FOLDER: 'PPM_PROJECTS_FOLDER_ID',
+  AI_MODE: 'PPM_AI_MODE',
+  GEMINI_KEY: 'PPM_GEMINI_API_KEY',
+  GEMINI_MODEL: 'PPM_GEMINI_MODEL',
+  AI_QUOTA: 'PPM_AI_DAILY_QUOTA',
+  LOGO_URL: 'PPM_LOGO_URL'
+};
+
+/** Surcharge des propriétés pour les tests hors ligne. */
+var PROPERTY_OVERRIDES = null;
+
+function getProp(key, fallback) {
+  if (PROPERTY_OVERRIDES) {
+    return Object.prototype.hasOwnProperty.call(PROPERTY_OVERRIDES, key) ? PROPERTY_OVERRIDES[key] : fallback;
+  }
+  // Toutes les propriétés sont lues en une fois par exécution (chaque lecture isolée coûte un appel au serveur).
+  if (!_propsMemo) _propsMemo = PropertiesService.getScriptProperties().getProperties() || {};
+  return Object.prototype.hasOwnProperty.call(_propsMemo, key) ? _propsMemo[key] : fallback;
+}
+var _propsMemo = null;
+
+function setProp(key, value) {
+  if (PROPERTY_OVERRIDES) { PROPERTY_OVERRIDES[key] = value; return; }
+  PropertiesService.getScriptProperties().setProperty(key, String(value));
+  if (_propsMemo) _propsMemo[key] = String(value);
+}
+
+function deleteProp(key) {
+  if (PROPERTY_OVERRIDES) { delete PROPERTY_OVERRIDES[key]; return; }
+  PropertiesService.getScriptProperties().deleteProperty(key);
+  if (_propsMemo) delete _propsMemo[key];
+}
+
+/** Adresses des administrateurs plateforme (propriété PPM_ADMINS, séparées par des virgules). */
+function adminEmails() {
+  return String(getProp(PROP.ADMINS, ''))
+    .split(',')
+    .map(function (s) { return s.trim().toLowerCase(); })
+    .filter(function (s) { return s.length > 0; });
+}
+
+/** Domaine autorisé (propriété PPM_DOMAIN, ex. « entreprise.com »). */
+function allowedDomain() {
+  return String(getProp(PROP.DOMAIN, '')).trim().toLowerCase();
+}
+
+// ======================================================================
+// 01_Schema.gs
+// ======================================================================
+
+/**
+ * PPM Core — schéma des tables (section 4 de la spécification).
+ *
+ * Une feuille par table, ligne 1 = noms de colonnes, colonne A = id (clé AppSheet).
+ * book : 'data' (classeur Données, source AppSheet) ou 'history' (classeur Historique).
+ * tech : false = table en ajout seul, sans colonnes techniques.
+ * log  : false = modifications non journalisées dans ChangeEvent.
+ *
+ * Règle d'évolution (section 11) : on ajoute des colonnes EN FIN de liste,
+ * on ne renomme ni ne supprime jamais sans script de migration approuvé.
+ */
+
+var COUNTRIES = ['FR', 'DE', 'UK', 'IN'];
+
+var SCHEMA = {
+  // ---------- Classeur Données : structure (WBS) ----------
+  Program: {
+    book: 'data',
+    cols: ['id', 'code', 'name', 'leader_resource_id', 'status', 'description'],
+    required: ['code', 'name'],
+    enums: { status: ['Actif', 'En pause', 'Clos'] }
+  },
+  Project: {
+    book: 'data',
+    cols: ['id', 'code', 'name', 'program_id', 'manager_resource_id', 'status', 'holiday_country',
+      'start_date', 'end_date', 'active_baseline_id', 'drive_folder_id', 'calendar_id'],
+    required: ['code', 'name'],
+    enums: { status: ['Préparation', 'Actif', 'En pause', 'Clos'], holiday_country: COUNTRIES }
+  },
+  WorkPackage: {
+    book: 'data',
+    cols: ['id', 'project_id', 'parent_wp_id', 'wbs_code', 'name', 'owner_resource_id', 'charge_code'],
+    required: ['project_id', 'name']
+  },
+  PlanItem: {
+    book: 'data',
+    cols: ['id', 'project_id', 'wp_id', 'item_type', 'name', 'owner_resource_id', 'planned_start',
+      'planned_finish', 'actual_finish', 'progress_pct', 'status', 'milestone_category', 'drive_url',
+      'calendar_event_id', 'last_progress_at'],
+    required: ['project_id', 'item_type', 'name'],
+    enums: {
+      item_type: ['Livrable', 'Jalon'],
+      status: ['À faire', 'En cours', 'Terminé'],
+      milestone_category: ['Revue', 'Client', 'Interne']
+    }
+  },
+  MilestoneRequirement: {
+    book: 'data',
+    cols: ['id', 'milestone_id', 'deliverable_id'],
+    required: ['milestone_id', 'deliverable_id']
+  },
+  Dependency: {
+    book: 'data',
+    cols: ['id', 'predecessor_id', 'successor_id', 'dep_type', 'lag_days'],
+    required: ['predecessor_id', 'successor_id', 'dep_type'],
+    enums: { dep_type: ['FS', 'SS', 'FF', 'SF'] }
+  },
+
+  // ---------- Classeur Données : personnes et OBS ----------
+  Resource: {
+    book: 'data',
+    cols: ['id', 'resource_type', 'name', 'email', 'team_id', 'rate_profile', 'supplier',
+      'capacity_days_month', 'country', 'job_function', 'organization'],
+    required: ['resource_type', 'name'],
+    enums: { resource_type: ['Interne', 'Externe'], country: COUNTRIES }
+  },
+  HierarchicalTeam: {
+    book: 'data',
+    cols: ['id', 'name', 'parent_team_id', 'manager_resource_id', 'cost_center'],
+    required: ['name']
+  },
+  HolidaySet: {
+    book: 'data',
+    cols: ['id', 'country', 'year', 'label', 'dates_json'],
+    required: ['country', 'year'],
+    enums: { country: COUNTRIES }
+  },
+  Role: {
+    book: 'data',
+    cols: ['id', 'code', 'label', 'scope_level'],
+    required: ['code']
+  },
+  RoleAssignment: {
+    book: 'data',
+    cols: ['id', 'resource_id', 'role_code', 'scope_type', 'scope_id', 'start_date', 'end_date'],
+    required: ['resource_id', 'role_code', 'scope_type', 'scope_id'],
+    enums: { role_code: ROLES, scope_type: ['program', 'project', 'workpackage'] }
+  },
+
+  // ---------- Classeur Données : budget ----------
+  RateCard: {
+    book: 'data',
+    cols: ['id', 'profile', 'country', 'daily_rate', 'effective_date'],
+    required: ['profile', 'country', 'daily_rate'],
+    enums: { country: COUNTRIES }
+  },
+  BudgetLine: {
+    book: 'data',
+    cols: ['id', 'deliverable_id', 'resource_id', 'cost_type', 'planned_days', 'frozen_rate',
+      'fixed_amount', 'planned_amount'],
+    required: ['deliverable_id', 'resource_id', 'cost_type'],
+    enums: { cost_type: ['TJM', 'Forfait'] }
+  },
+  BudgetPhasing: {
+    book: 'data',
+    cols: ['id', 'budget_line_id', 'month', 'amount'],
+    required: ['budget_line_id', 'month']
+  },
+  ProgressUpdate: {
+    book: 'data',
+    cols: ['id', 'deliverable_id', 'resource_id', 'declared_at', 'progress_pct', 'comment'],
+    required: ['deliverable_id', 'progress_pct']
+  },
+  ActualImport: {
+    book: 'data',
+    cols: ['id', 'period', 'source_file_id', 'mapping_json', 'status', 'imported_by'],
+    enums: { status: ['Brouillon', 'Contrôlé', 'Publié', 'Remplacé'] }
+  },
+
+  // ---------- Classeur Données : risques, baselines, IA ----------
+  RiskOpportunity: {
+    book: 'data',
+    cols: ['id', 'project_id', 'kind', 'title', 'description', 'linked_item_id', 'financial_value',
+      'probability', 'impact', 'score', 'owner_resource_id', 'strategy', 'review_date',
+      'treatment_due', 'status'],
+    required: ['project_id', 'kind', 'title'],
+    enums: {
+      kind: ['Risque', 'Opportunité'],
+      status: ['Ouvert', 'En traitement', 'Clos'],
+      strategy: ['Éviter', 'Réduire', 'Transférer', 'Accepter', 'Exploiter', 'Partager', 'Améliorer']
+    }
+  },
+  Baseline: {
+    book: 'data',
+    cols: ['id', 'project_id', 'number', 'label', 'justification', 'requested_by', 'status',
+      'decided_by', 'decided_at'],
+    required: ['project_id', 'justification'],
+    enums: { status: ['Demandée', 'Active', 'Archivée', 'Refusée'] }
+  },
+  Insight: {
+    book: 'data',
+    log: false,
+    cols: ['id', 'project_id', 'rule_code', 'severity', 'target_type', 'target_id', 'message',
+      'suggestion', 'status', 'generated_on', 'decided_by', 'decided_at', 'decision_note'],
+    enums: { severity: ['Info', 'Vigilance', 'Alerte'], status: ['Nouveau', 'Accepté', 'Ignoré'] }
+  },
+
+  // ---------- Classeur Données : addons et préférences ----------
+  Addon: {
+    book: 'data',
+    cols: ['id', 'name', 'url', 'manifest_json', 'author_email', 'visibility', 'review_status'],
+    required: ['name', 'url', 'manifest_json'],
+    enums: { visibility: ['Privé', 'Partagé', 'Catalogue'], review_status: ['Non revu', 'Approuvé', 'Refusé'] }
+  },
+  AddonInstallation: {
+    book: 'data',
+    cols: ['id', 'addon_id', 'user_email', 'enabled'],
+    required: ['addon_id', 'user_email']
+  },
+  AddonRecord: {
+    book: 'data',
+    cols: ['id', 'addon_id', 'collection', 'entity_type', 'entity_id', 'data_json'],
+    required: ['addon_id', 'collection', 'entity_type', 'entity_id']
+  },
+  UserSetting: {
+    book: 'data',
+    cols: ['id', 'user_email', 'language', 'notify_frequency', 'view_prefs_json', 'calendar_invites'],
+    enums: { language: ['FR', 'EN', 'DE'], notify_frequency: ['Quotidien', 'Hebdomadaire', 'Aucun'] }
+  },
+
+  // ---------- Classeur Historique (ajout seul) ----------
+  ChangeEvent: {
+    book: 'history', tech: false,
+    cols: ['id', 'at', 'table_name', 'entity_id', 'project_id', 'field', 'old_value', 'new_value',
+      'actor', 'source', 'acknowledged', 'acknowledged_by', 'acknowledged_at']
+  },
+  BaselineItem: {
+    book: 'history', tech: false,
+    cols: ['id', 'baseline_id', 'entity_type', 'entity_id', 'snapshot_json']
+  },
+  ActualLine: {
+    book: 'history', tech: false,
+    cols: ['id', 'import_id', 'month', 'charge_code', 'resource_ref', 'cost_center', 'days', 'amount',
+      'matched_wp_id', 'matched_deliverable_id', 'match_status']
+  },
+  EvmSnapshot: {
+    book: 'history', tech: false,
+    cols: ['id', 'scope_type', 'scope_id', 'status_date', 'bac', 'pv', 'ev', 'ac', 'cpi', 'spi', 'eac']
+  },
+  /** Journal du copilote (section 9, garde-fous) : chaque demande à l'IA, sa réponse et l'avis de l'utilisateur. */
+  AiLog: {
+    book: 'history', tech: false,
+    cols: ['id', 'at', 'actor', 'project_id', 'purpose', 'mode', 'prompt', 'response', 'unverified', 'feedback', 'feedback_at']
+  },
+  /** Liens vers les objets Workspace (événement d'agenda, dossier Drive) : identifiant externe et empreinte du dernier envoi. */
+  SyncLink: {
+    book: 'history', tech: false,
+    cols: ['id', 'kind', 'entity_id', 'project_id', 'container_id', 'external_id', 'hash', 'synced_at']
+  },
+  _Snapshot: {
+    book: 'history', tech: false,
+    cols: ['id', 'table_name', 'entity_id', 'hash', 'json', 'updated_at']
+  }
+};
+
+/** Colonnes de référence → table cible (types Ref dans AppSheet). */
+var REF_TARGETS = {
+  program_id: 'Program', project_id: 'Project', wp_id: 'WorkPackage', parent_wp_id: 'WorkPackage',
+  leader_resource_id: 'Resource', manager_resource_id: 'Resource', owner_resource_id: 'Resource',
+  resource_id: 'Resource', team_id: 'HierarchicalTeam', parent_team_id: 'HierarchicalTeam',
+  milestone_id: 'PlanItem', deliverable_id: 'PlanItem', predecessor_id: 'PlanItem',
+  successor_id: 'PlanItem', linked_item_id: 'PlanItem', budget_line_id: 'BudgetLine',
+  active_baseline_id: 'Baseline', baseline_id: 'Baseline', addon_id: 'Addon', import_id: 'ActualImport'
+};
+
+var DATE_COLS = ['start_date', 'end_date', 'planned_start', 'planned_finish', 'actual_finish',
+  'review_date', 'treatment_due', 'effective_date', 'generated_on'];
+
+/** Longueur maximale des libellés libres (fonction, organisation). */
+var TEXT_MAX_LENGTH = { job_function: 80, organization: 80 };
+
+var NUMBER_RULES = {
+  progress_pct: { min: 0, max: 100 },
+  probability: { min: 1, max: 5, integer: true },
+  impact: { min: 1, max: 5, integer: true },
+  lag_days: { integer: true },
+  planned_days: { min: 0 },
+  daily_rate: { min: 0 },
+  capacity_days_month: { min: 0 },
+  fixed_amount: { min: 0 },
+  financial_value: {}
+};
+
+function isLiveTable(table) {
+  return SCHEMA[table] && SCHEMA[table].tech !== false;
+}
+
+function isLoggedTable(table) {
+  return isLiveTable(table) && SCHEMA[table].log !== false;
+}
+
+/** Colonnes physiques d'une table (métier + techniques le cas échéant). */
+function tableColumns(table) {
+  var def = SCHEMA[table];
+  if (!def) throw new PpmError('NOT_FOUND', 'Table inconnue : ' + table);
+  return def.tech === false ? def.cols.slice() : def.cols.concat(TECH_COLS);
+}
+
+/** Champs suivis par le journal : colonnes métier hors id, plus l'indicateur de suppression. */
+function businessFields(table) {
+  var def = SCHEMA[table];
+  var fields = def.cols.filter(function (c) { return c !== 'id'; });
+  if (def.tech !== false) fields.push('deleted');
+  return fields;
+}
+
+/** Champs calculés par le Core (section 5). */
+function applyComputed(table, rec) {
+  if (table === 'Resource') {
+    // Fonction et organisation : espaces superflus retirés, pour que « Alpha » et « Alpha  » ne fassent pas deux valeurs.
+    ['job_function', 'organization'].forEach(function (c) {
+      if (typeof rec[c] === 'string') rec[c] = rec[c].replace(/\s+/g, ' ').trim();
+    });
+  }
+  if (table === 'RiskOpportunity') {
+    var p = Number(rec.probability), i = Number(rec.impact);
+    rec.score = (p >= 1 && i >= 1) ? p * i : '';
+  }
+  if (table === 'BudgetLine') {
+    if (rec.cost_type === 'TJM') {
+      var days = Number(rec.planned_days || 0), rate = Number(rec.frozen_rate || 0);
+      rec.planned_amount = round2(days * rate);
+    } else if (rec.cost_type === 'Forfait') {
+      rec.planned_amount = round2(Number(rec.fixed_amount || 0));
+    }
+  }
+  if (table === 'PlanItem' && rec.item_type === 'Jalon' && !isBlank(rec.planned_finish) && isBlank(rec.planned_start)) {
+    rec.planned_start = rec.planned_finish;
+  }
+  return rec;
+}
+
+/** Contrôle d'un enregistrement complet. Lève PpmError('VALIDATION') avec la liste des problèmes. */
+function validateRecord(table, rec) {
+  var def = SCHEMA[table];
+  var problems = [];
+  (def.required || []).forEach(function (c) {
+    if (isBlank(rec[c])) problems.push({ field: c, issue: 'obligatoire' });
+  });
+  Object.keys(def.enums || {}).forEach(function (c) {
+    var v = rec[c];
+    if (!isBlank(v) && def.enums[c].indexOf(String(v)) < 0) {
+      problems.push({ field: c, issue: 'valeur non autorisée : ' + v });
+    }
+  });
+  def.cols.forEach(function (c) {
+    var v = rec[c];
+    if (isBlank(v)) return;
+    if (DATE_COLS.indexOf(c) >= 0 && !/^\d{4}-\d{2}-\d{2}$/.test(String(v))) {
+      problems.push({ field: c, issue: 'date attendue au format AAAA-MM-JJ' });
+    }
+    if (TEXT_MAX_LENGTH[c] && String(v).length > TEXT_MAX_LENGTH[c]) {
+      problems.push({ field: c, issue: 'maximum ' + TEXT_MAX_LENGTH[c] + ' caractères' });
+    }
+    var rule = NUMBER_RULES[c];
+    if (rule) {
+      var n = Number(v);
+      if (isNaN(n)) { problems.push({ field: c, issue: 'nombre attendu' }); return; }
+      if (rule.integer && Math.floor(n) !== n) problems.push({ field: c, issue: 'entier attendu' });
+      if (rule.min !== undefined && n < rule.min) problems.push({ field: c, issue: 'minimum ' + rule.min });
+      if (rule.max !== undefined && n > rule.max) problems.push({ field: c, issue: 'maximum ' + rule.max });
+    }
+  });
+  if (table === 'Dependency' && !isBlank(rec.predecessor_id) && rec.predecessor_id === rec.successor_id) {
+    problems.push({ field: 'successor_id', issue: 'un élément ne peut pas dépendre de lui-même' });
+  }
+  if (problems.length) {
+    throw new PpmError('VALIDATION', 'Données invalides pour ' + table, problems);
+  }
+  return true;
+}
+
+// ======================================================================
+// 02_Util.gs
+// ======================================================================
+
+/**
+ * PPM Core — utilitaires communs.
+ * Aucune dépendance aux services Apps Script au chargement : ces fonctions
+ * sont aussi exécutées par la suite de tests hors ligne (Node).
+ */
+
+/** Erreur métier typée, renvoyée telle quelle par l'API. */
+function PpmError(code, message, details) {
+  this.name = 'PpmError';
+  this.code = code;
+  this.message = message;
+  this.details = details || null;
+}
+PpmError.prototype = Object.create(Error.prototype);
+PpmError.prototype.constructor = PpmError;
+
+/** Horloge surchargeable pour les tests. */
+var CLOCK = null;
+
+function nowMs() {
+  return CLOCK ? CLOCK() : Date.now();
+}
+
+function nowIso() {
+  return new Date(nowMs()).toISOString();
+}
+
+/** Date du jour AAAA-MM-JJ, dans le fuseau du script en production. */
+function todayStr() {
+  if (!CLOCK && typeof Utilities !== 'undefined' && typeof Session !== 'undefined') {
+    return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  return new Date(nowMs()).toISOString().slice(0, 10);
+}
+
+function newId() {
+  if (typeof Utilities !== 'undefined' && Utilities.getUuid) return Utilities.getUuid();
+  var s = '';
+  for (var i = 0; i < 32; i++) s += Math.floor(Math.random() * 16).toString(16);
+  return s.slice(0, 8) + '-' + s.slice(8, 12) + '-4' + s.slice(13, 16) + '-a' + s.slice(17, 20) + '-' + s.slice(20, 32);
+}
+
+function isBlank(v) {
+  return v === null || v === undefined || (typeof v === 'string' && v.trim() === '');
+}
+
+function isTrue(v) {
+  return v === true || String(v).toUpperCase() === 'TRUE';
+}
+
+function round2(n) {
+  return Math.round(Number(n) * 100) / 100;
+}
+
+/**
+ * Normalise une valeur lue dans Sheets : dates → AAAA-MM-JJ (ou ISO si heure non nulle),
+ * vide → ''. Garantit des comparaisons stables entre lectures.
+ */
+function normalizeValue(v) {
+  if (v === null || v === undefined) return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    if (isNaN(v.getTime())) return '';
+    if (typeof Utilities !== 'undefined' && typeof Session !== 'undefined') {
+      var tz = Session.getScriptTimeZone();
+      var hms = Utilities.formatDate(v, tz, 'HH:mm:ss');
+      return hms === '00:00:00' ? Utilities.formatDate(v, tz, 'yyyy-MM-dd') : v.toISOString();
+    }
+    var iso = v.toISOString();
+    return iso.slice(11, 19) === '00:00:00' ? iso.slice(0, 10) : iso;
+  }
+  return v;
+}
+
+/** Forme texte canonique d'une valeur, pour comparer et journaliser. */
+function canonical(v) {
+  v = normalizeValue(v);
+  if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
+  if (typeof v === 'number') return String(v);
+  var s = String(v);
+  if (s === 'true' || s === 'false') return s.toUpperCase();
+  return s;
+}
+
+function pickFields(obj, fields) {
+  var out = {};
+  fields.forEach(function (f) { out[f] = obj[f] === undefined ? '' : obj[f]; });
+  return out;
+}
+
+/** JSON stable (ordre des champs imposé) des champs donnés. */
+function stableJson(obj, fields) {
+  var out = {};
+  fields.forEach(function (f) { out[f] = canonical(obj[f]); });
+  return JSON.stringify(out);
+}
+
+/** Empreinte de 16 caractères hexadécimaux (djb2 + sdbm), suffisante pour détecter un changement. */
+function hashString(s) {
+  var h1 = 5381, h2 = 0;
+  for (var i = 0; i < s.length; i++) {
+    var c = s.charCodeAt(i);
+    h1 = ((h1 << 5) + h1 + c) | 0;
+    h2 = (c + (h2 << 6) + (h2 << 16) - h2) | 0;
+  }
+  return ('00000000' + (h1 >>> 0).toString(16)).slice(-8) + ('00000000' + (h2 >>> 0).toString(16)).slice(-8);
+}
+
+function parseJsonSafe(s, fallback) {
+  if (isBlank(s)) return fallback;
+  try { return JSON.parse(s); } catch (e) { return fallback; }
+}
+
+function truncate(s, max) {
+  s = String(s);
+  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+}
+
+/** Envoi d'un mail simple ; en l'absence de MailApp (tests), trace dans la console. */
+var SENT_MAILS = null;
+function notifyUser(email, subject, body) {
+  if (isBlank(email) || String(email).indexOf('@') < 0) return false;
+  if (SENT_MAILS) { SENT_MAILS.push({ to: email, subject: subject, body: body }); return true; }
+  if (typeof MailApp === 'undefined') { console.log('[mail] ' + email + ' — ' + subject); return false; }
+  MailApp.sendEmail({ to: email, subject: '[PPM] ' + subject, body: body });
+  return true;
+}
+
+// ======================================================================
+// 03_Calendar.gs
+// ======================================================================
+
+/**
+ * PPM Core — calendriers de jours ouvrés (H8 : France, Allemagne, Royaume-Uni, Inde).
+ *
+ * Toutes les dates sont des chaînes AAAA-MM-JJ, calculées en UTC pour éviter
+ * tout décalage de fuseau. Les jours fériés sont calculés (Pâques par l'algorithme
+ * grégorien anonyme), pas saisis à la main.
+ *
+ * Périmètre volontairement national :
+ *  - FR : fériés légaux nationaux (hors Alsace-Moselle). Le lundi de Pentecôte est inclus ;
+ *         si l'entreprise en fait sa journée de solidarité travaillée, le retirer du HolidaySet.
+ *  - DE : fériés fédéraux uniquement (les fériés des Länder sont à ajouter par site).
+ *  - UK : Angleterre et Pays de Galles, avec reports quand un férié tombe un week-end.
+ *         Les fériés exceptionnels (événements royaux) sont à ajouter à la main.
+ *  - IN : les trois fériés nationaux ; le reste varie selon l'État et se complète par site.
+ */
+
+var DAY_MS = 86400000;
+
+function parseYmd(s) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s));
+  if (!m) throw new PpmError('VALIDATION', 'Date invalide : ' + s);
+  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+}
+
+function fmtYmd(ms) {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+function addCalendarDays(s, n) {
+  return fmtYmd(parseYmd(s) + n * DAY_MS);
+}
+
+/** 0 = dimanche … 6 = samedi. */
+function weekdayOf(s) {
+  return new Date(parseYmd(s)).getUTCDay();
+}
+
+function ymd(year, month, day) {
+  return fmtYmd(Date.UTC(year, month - 1, day));
+}
+
+/** Dimanche de Pâques (algorithme grégorien anonyme). */
+function easterSunday(year) {
+  var a = year % 19;
+  var b = Math.floor(year / 100), c = year % 100;
+  var d = Math.floor(b / 4), e = b % 4;
+  var f = Math.floor((b + 8) / 25);
+  var g = Math.floor((b - f + 1) / 3);
+  var h = (19 * a + b - d - g + 15) % 30;
+  var i = Math.floor(c / 4), k = c % 4;
+  var l = (32 + 2 * e + 2 * i - h - k) % 7;
+  var m = Math.floor((a + 11 * h + 22 * l) / 451);
+  var month = Math.floor((h + l - 7 * m + 114) / 31);
+  var day = ((h + l - 7 * m + 114) % 31) + 1;
+  return ymd(year, month, day);
+}
+
+/** n-ième jour de semaine du mois (n = -1 : le dernier). weekday : 0 = dimanche. */
+function nthWeekdayOfMonth(year, month, weekday, n) {
+  if (n > 0) {
+    var first = ymd(year, month, 1);
+    var offset = (weekday - weekdayOf(first) + 7) % 7;
+    return addCalendarDays(first, offset + (n - 1) * 7);
+  }
+  var last = fmtYmd(Date.UTC(year, month, 0));
+  var back = (weekdayOf(last) - weekday + 7) % 7;
+  return addCalendarDays(last, -back);
+}
+
+function isWeekend(s) {
+  var d = weekdayOf(s);
+  return d === 0 || d === 6;
+}
+
+/**
+ * Applique la règle britannique de report : un férié tombant un week-end passe
+ * au premier jour de semaine libre suivant (en tenant compte des autres fériés).
+ */
+function withUkSubstitutes(list) {
+  var taken = {};
+  list.forEach(function (h) { if (!isWeekend(h.date)) taken[h.date] = true; });
+  return list.map(function (h) {
+    if (!isWeekend(h.date)) return h;
+    var d = h.date;
+    do { d = addCalendarDays(d, 1); } while (isWeekend(d) || taken[d]);
+    taken[d] = true;
+    return { date: d, label: h.label + ' (report)' };
+  });
+}
+
+/** Liste des fériés d'un pays pour une année : [{date, label}], triée. */
+function holidaysFor(country, year) {
+  var E = easterSunday(year);
+  var list;
+  switch (country) {
+    case 'FR':
+      list = [
+        { date: ymd(year, 1, 1), label: 'Jour de l’an' },
+        { date: addCalendarDays(E, 1), label: 'Lundi de Pâques' },
+        { date: ymd(year, 5, 1), label: 'Fête du Travail' },
+        { date: ymd(year, 5, 8), label: 'Victoire 1945' },
+        { date: addCalendarDays(E, 39), label: 'Ascension' },
+        { date: addCalendarDays(E, 50), label: 'Lundi de Pentecôte' },
+        { date: ymd(year, 7, 14), label: 'Fête nationale' },
+        { date: ymd(year, 8, 15), label: 'Assomption' },
+        { date: ymd(year, 11, 1), label: 'Toussaint' },
+        { date: ymd(year, 11, 11), label: 'Armistice 1918' },
+        { date: ymd(year, 12, 25), label: 'Noël' }
+      ];
+      break;
+    case 'DE':
+      list = [
+        { date: ymd(year, 1, 1), label: 'Neujahr' },
+        { date: addCalendarDays(E, -2), label: 'Karfreitag' },
+        { date: addCalendarDays(E, 1), label: 'Ostermontag' },
+        { date: ymd(year, 5, 1), label: 'Tag der Arbeit' },
+        { date: addCalendarDays(E, 39), label: 'Christi Himmelfahrt' },
+        { date: addCalendarDays(E, 50), label: 'Pfingstmontag' },
+        { date: ymd(year, 10, 3), label: 'Tag der Deutschen Einheit' },
+        { date: ymd(year, 12, 25), label: '1. Weihnachtstag' },
+        { date: ymd(year, 12, 26), label: '2. Weihnachtstag' }
+      ];
+      break;
+    case 'UK':
+      list = withUkSubstitutes([
+        { date: ymd(year, 1, 1), label: 'New Year’s Day' },
+        { date: addCalendarDays(E, -2), label: 'Good Friday' },
+        { date: addCalendarDays(E, 1), label: 'Easter Monday' },
+        { date: nthWeekdayOfMonth(year, 5, 1, 1), label: 'Early May bank holiday' },
+        { date: nthWeekdayOfMonth(year, 5, 1, -1), label: 'Spring bank holiday' },
+        { date: nthWeekdayOfMonth(year, 8, 1, -1), label: 'Summer bank holiday' },
+        { date: ymd(year, 12, 25), label: 'Christmas Day' },
+        { date: ymd(year, 12, 26), label: 'Boxing Day' }
+      ]);
+      break;
+    case 'IN':
+      list = [
+        { date: ymd(year, 1, 26), label: 'Republic Day' },
+        { date: ymd(year, 8, 15), label: 'Independence Day' },
+        { date: ymd(year, 10, 2), label: 'Gandhi Jayanti' }
+      ];
+      break;
+    default:
+      throw new PpmError('VALIDATION', 'Pays sans calendrier : ' + country);
+  }
+  return list.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+}
+
+/** Transforme une liste de dates (ou de {date}) en dictionnaire de recherche. */
+function holidayMap(list) {
+  var map = {};
+  (list || []).forEach(function (h) { map[typeof h === 'string' ? h : h.date] = true; });
+  return map;
+}
+
+function isWorkingDay(s, hol) {
+  return !isWeekend(s) && !(hol && hol[s]);
+}
+
+/** Premier jour ouvré à partir de s (s inclus). */
+function nextWorkingDay(s, hol) {
+  var d = s;
+  while (!isWorkingDay(d, hol)) d = addCalendarDays(d, 1);
+  return d;
+}
+
+/**
+ * Avance (ou recule si n < 0) de n jours ouvrés. n = 0 renvoie s inchangé.
+ */
+function addWorkingDays(s, n, hol) {
+  var step = n < 0 ? -1 : 1, count = Math.abs(n), d = s;
+  while (count > 0) {
+    d = addCalendarDays(d, step);
+    if (isWorkingDay(d, hol)) count--;
+  }
+  return d;
+}
+
+/**
+ * Nombre de jours ouvrés entre a et b, bornes incluses (négatif si b < a).
+ */
+function workingDaysBetween(a, b, hol) {
+  if (a === b) return isWorkingDay(a, hol) ? 1 : 0;
+  var sign = b < a ? -1 : 1;
+  var from = sign > 0 ? a : b, to = sign > 0 ? b : a;
+  var n = 0;
+  for (var d = from; d <= to; d = addCalendarDays(d, 1)) {
+    if (isWorkingDay(d, hol)) n++;
+  }
+  return sign * n;
+}
+
+// ======================================================================
+// 04_Graph.gs
+// ======================================================================
+
+/**
+ * PPM Core — graphe des dépendances (section 5.2).
+ * Fonctions pures : aucun accès aux classeurs.
+ */
+
+/** Construit la liste d'adjacence { from: [to, …] } à partir d'arêtes {from, to}. */
+function adjacency(edges) {
+  var adj = {};
+  edges.forEach(function (e) {
+    if (!adj[e.from]) adj[e.from] = [];
+    adj[e.from].push(e.to);
+  });
+  return adj;
+}
+
+/** Existe-t-il un chemin de start à target ? (parcours en largeur, itératif) */
+function hasPath(adj, start, target) {
+  if (start === target) return true;
+  var seen = {}, queue = [start];
+  seen[start] = true;
+  while (queue.length) {
+    var node = queue.shift();
+    var next = adj[node] || [];
+    for (var i = 0; i < next.length; i++) {
+      if (next[i] === target) return true;
+      if (!seen[next[i]]) { seen[next[i]] = true; queue.push(next[i]); }
+    }
+  }
+  return false;
+}
+
+/** Ajouter newEdge fermerait-il un cycle ? (vrai aussi pour une auto-dépendance) */
+function wouldCreateCycle(edges, newEdge) {
+  if (newEdge.from === newEdge.to) return true;
+  return hasPath(adjacency(edges), newEdge.to, newEdge.from);
+}
+
+/** Renvoie un cycle existant (liste de nœuds) ou null. */
+function findCycle(edges) {
+  var adj = adjacency(edges);
+  var state = {}, stack = [];
+  var nodes = Object.keys(adj);
+  for (var n = 0; n < nodes.length; n++) {
+    if (state[nodes[n]]) continue;
+    var work = [{ node: nodes[n], i: 0 }];
+    state[nodes[n]] = 1; stack.push(nodes[n]);
+    while (work.length) {
+      var top = work[work.length - 1];
+      var next = adj[top.node] || [];
+      if (top.i < next.length) {
+        var child = next[top.i++];
+        if (state[child] === 1) return stack.slice(stack.indexOf(child)).concat([child]);
+        if (!state[child]) { state[child] = 1; stack.push(child); work.push({ node: child, i: 0 }); }
+      } else {
+        state[top.node] = 2; stack.pop(); work.pop();
+      }
+    }
+  }
+  return null;
+}
+
+function itemStart(item) {
+  return !isBlank(item.planned_start) ? item.planned_start : item.planned_finish;
+}
+
+function itemFinish(item) {
+  return !isBlank(item.planned_finish) ? item.planned_finish : item.planned_start;
+}
+
+/**
+ * Violations de dépendances sur les dates prévisionnelles.
+ *   items : PlanItem[] ; deps : Dependency[] ;
+ *   holFor(projectId) → dictionnaire des fériés du calendrier du successeur.
+ * Conventions (jours ouvrés, décalage = lag_days) :
+ *   FS : le successeur commence au plus tôt le jour ouvré suivant la fin du prédécesseur
+ *        (le jour même si le prédécesseur est un jalon), + décalage ;
+ *   SS : début ≥ début du prédécesseur + décalage ;
+ *   FF : fin ≥ fin du prédécesseur + décalage ;
+ *   SF : fin ≥ début du prédécesseur + décalage.
+ * Renvoie [{ dependency_id, dep_type, predecessor_id, successor_id, field, required, actual, gap_days }].
+ */
+function dependencyViolations(items, deps, holFor) {
+  var byId = {};
+  items.forEach(function (it) { if (!isTrue(it.deleted)) byId[it.id] = it; });
+  var out = [];
+  deps.forEach(function (d) {
+    if (isTrue(d.deleted)) return;
+    var p = byId[d.predecessor_id], s = byId[d.successor_id];
+    if (!p || !s) return;
+    var lag = Math.round(Number(d.lag_days || 0));
+    var hol = holFor ? holFor(s.project_id) : null;
+    var ref, required, actual, field;
+    switch (d.dep_type) {
+      case 'FS':
+        ref = itemFinish(p); actual = itemStart(s); field = 'planned_start';
+        if (isBlank(ref) || isBlank(actual)) return;
+        var offset = (p.item_type === 'Jalon' ? 0 : 1) + lag;
+        required = offset === 0 ? nextWorkingDay(ref, hol) : addWorkingDays(ref, offset, hol);
+        break;
+      case 'SS':
+        ref = itemStart(p); actual = itemStart(s); field = 'planned_start';
+        if (isBlank(ref) || isBlank(actual)) return;
+        required = addWorkingDays(ref, lag, hol);
+        break;
+      case 'FF':
+        ref = itemFinish(p); actual = itemFinish(s); field = 'planned_finish';
+        if (isBlank(ref) || isBlank(actual)) return;
+        required = addWorkingDays(ref, lag, hol);
+        break;
+      case 'SF':
+        ref = itemStart(p); actual = itemFinish(s); field = 'planned_finish';
+        if (isBlank(ref) || isBlank(actual)) return;
+        required = addWorkingDays(ref, lag, hol);
+        break;
+      default:
+        return;
+    }
+    if (actual < required) {
+      out.push({
+        dependency_id: d.id, dep_type: d.dep_type, predecessor_id: p.id, successor_id: s.id,
+        field: field, required: required, actual: actual,
+        gap_days: workingDaysBetween(actual, required, hol) - (isWorkingDay(actual, hol) ? 1 : 0)
+      });
+    }
+  });
+  return out;
+}
+
+// ======================================================================
+// 05_Rbac.gs
+// ======================================================================
+
+/**
+ * PPM Core — droits contextualisés (section 7).
+ *
+ * Un droit détenu sur un périmètre vaut pour tout ce qu'il contient :
+ *   programme ⊃ projet ⊃ workpackage (⊃ sous-WP) ⊃ livrable/jalon.
+ * Les rôles se cumulent. Un « membre affecté » (MEMBER) l'est par affectation
+ * explicite ou par une ligne budgétaire sur le livrable.
+ *
+ * Toutes les fonctions reçoivent un objet lookup, ce qui les rend testables :
+ *   lookup.planitem(id), lookup.workpackage(id), lookup.project(id), lookup.risk(id)
+ *   lookup.budgetMember(resourceId, planItemId) → booléen
+ */
+
+/**
+ * Chaîne des périmètres englobants, du plus précis au plus large.
+ * scope : { type: 'planitem'|'workpackage'|'project'|'program'|'risk'|'global', id }
+ */
+function scopeAncestors(scope, lookup) {
+  var chain = [];
+  var guard = 0;
+  var cur = scope;
+  while (cur && guard++ < 20) {
+    chain.push(cur);
+    cur = parentScope(cur, lookup);
+  }
+  return chain;
+}
+
+function parentScope(scope, lookup) {
+  var rec;
+  switch (scope.type) {
+    case 'planitem':
+      rec = lookup.planitem(scope.id);
+      if (!rec) return null;
+      return !isBlank(rec.wp_id) ? { type: 'workpackage', id: rec.wp_id } : { type: 'project', id: rec.project_id };
+    case 'risk':
+      rec = lookup.risk(scope.id);
+      return rec ? { type: 'project', id: rec.project_id } : null;
+    case 'workpackage':
+      rec = lookup.workpackage(scope.id);
+      if (!rec) return null;
+      return !isBlank(rec.parent_wp_id) ? { type: 'workpackage', id: rec.parent_wp_id } : { type: 'project', id: rec.project_id };
+    case 'project':
+      rec = lookup.project(scope.id);
+      return rec && !isBlank(rec.program_id) ? { type: 'program', id: rec.program_id } : null;
+    default:
+      return null;
+  }
+}
+
+/** Affectations actives d'une ressource à une date donnée. */
+function activeAssignments(resourceId, assignments, today) {
+  return (assignments || []).filter(function (a) {
+    if (isTrue(a.deleted) || a.resource_id !== resourceId) return false;
+    if (!isBlank(a.start_date) && String(a.start_date) > today) return false;
+    if (!isBlank(a.end_date) && String(a.end_date) < today) return false;
+    return true;
+  });
+}
+
+/**
+ * L'utilisateur peut-il faire action sur scope ?
+ * ctx : { resourceId, isAdmin, assignments (actives), lookup }
+ */
+function can(ctx, action, scope) {
+  var allowed = PERMISSIONS[action];
+  if (!allowed) throw new PpmError('CONFIG', 'Action sans règle de droits : ' + action);
+  if (ctx.isAdmin) return true;
+  if (allowed.indexOf('*') >= 0) return true;
+  if (!ctx.resourceId) return false;
+
+  var roles = ctx.assignments || [];
+
+  if (!scope || scope.type === 'global') {
+    return roles.some(function (a) { return allowed.indexOf(a.role_code) >= 0; });
+  }
+
+  var chain = scopeAncestors(scope, ctx.lookup);
+  var granted = roles.some(function (a) {
+    if (allowed.indexOf(a.role_code) < 0) return false;
+    return chain.some(function (s) { return s.type === a.scope_type && String(s.id) === String(a.scope_id); });
+  });
+  if (granted) return true;
+
+  // Membre affecté par une ligne budgétaire sur le livrable visé.
+  if (allowed.indexOf('MEMBER') >= 0 && scope.type === 'planitem' && ctx.lookup.budgetMember) {
+    return ctx.lookup.budgetMember(ctx.resourceId, scope.id) === true;
+  }
+  return false;
+}
+
+/** Variante qui lève FORBIDDEN au lieu de renvoyer faux. */
+function requireCan(ctx, action, scope) {
+  if (!can(ctx, action, scope)) {
+    throw new PpmError('FORBIDDEN', 'Droit insuffisant pour « ' + action + ' »', { scope: scope });
+  }
+}
+
+// ======================================================================
+// 06_Rules.gs
+// ======================================================================
+
+/**
+ * PPM Core — moteur de règles déterministe (section 9).
+ *
+ * Produit des constats chiffrés et rattachés à une entité. Aucune IA ici :
+ * Gemini ne fera que hiérarchiser et expliquer ces constats (lot 4), et
+ * l'IA ne fait jamais d'action directe (H7).
+ *
+ * evaluateRules(data, today, holFor) → Insight[] (sans id ni statut)
+ *   data : { projects, workpackages, planitems, dependencies, requirements, risks,
+ *            baselineFinish?: { planItemId: date figée }, critical?: { planItemId: true } }
+ */
+
+function evaluateRules(data, today, holFor) {
+  var out = [];
+  var live = function (r) { return !isTrue(r.deleted); };
+  var projects = (data.projects || []).filter(live);
+  var activeProject = {};
+  projects.forEach(function (p) { if (p.status !== 'Clos') activeProject[p.id] = p; });
+  var items = (data.planitems || []).filter(function (i) { return live(i) && activeProject[i.project_id]; });
+  var itemById = {};
+  items.forEach(function (i) { itemById[i.id] = i; });
+
+  function push(projectId, rule, severity, targetType, targetId, message, suggestion) {
+    out.push({
+      project_id: projectId, rule_code: rule, severity: severity, target_type: targetType,
+      target_id: targetId, message: message, suggestion: suggestion, generated_on: today
+    });
+  }
+
+  items.forEach(function (it) {
+    var done = it.status === 'Terminé' || Number(it.progress_pct) >= 100;
+    var label = (it.item_type === 'Jalon' ? 'Le jalon' : 'Le livrable') + ' « ' + it.name + ' »';
+
+    if (!done && !isBlank(it.planned_finish) && it.planned_finish < today) {
+      push(it.project_id, 'LATE_ITEM', 'Alerte', 'PlanItem', it.id,
+        label + ' devait être terminé le ' + it.planned_finish + ' (avancement ' + (Number(it.progress_pct) || 0) + ' %).',
+        'Déclarer l’avancement ou mettre à jour la prévision ; si le retard est confirmé, vérifier l’impact sur les successeurs.');
+    }
+    if (isBlank(it.owner_resource_id)) {
+      push(it.project_id, 'MISSING_OWNER', 'Vigilance', 'PlanItem', it.id,
+        label + ' n’a pas de responsable.', 'Désigner un responsable.');
+    }
+    if (isBlank(it.planned_finish)) {
+      push(it.project_id, 'MISSING_DATE', 'Vigilance', 'PlanItem', it.id,
+        label + ' n’a pas de date prévue.', 'Renseigner la date de fin prévue.');
+    }
+    if (it.item_type === 'Livrable' && !done && Number(it.progress_pct) > 0) {
+      var last = !isBlank(it.last_progress_at) ? String(it.last_progress_at).slice(0, 10)
+        : (!isBlank(it.created_at) ? String(it.created_at).slice(0, 10) : '');
+      if (last && addCalendarDays(last, THRESHOLDS.staleProgressDays) < today) {
+        push(it.project_id, 'STALE_PROGRESS', 'Vigilance', 'PlanItem', it.id,
+          label + ' n’a pas été mis à jour depuis le ' + last + '.',
+          'Relancer le responsable pour une déclaration d’avancement.');
+      }
+    }
+  });
+
+  // Glissement critique (section 9) : prévision au-delà de la baseline de plus de N jours ouvrés, sur le chemin critique.
+  var baseFinish = data.baselineFinish || {}, critical = data.critical || {};
+  items.forEach(function (it) {
+    var bf = baseFinish[it.id];
+    if (!bf || isBlank(it.planned_finish) || !critical[it.id] || it.status === 'Terminé' || Number(it.progress_pct) >= 100) return;
+    var slip = workingDayOffset(bf, it.planned_finish, holFor(it.project_id));
+    if (slip > THRESHOLDS.criticalSlipDays) {
+      push(it.project_id, 'CRITICAL_SLIP', 'Alerte', 'PlanItem', it.id,
+        (it.item_type === 'Jalon' ? 'Le jalon' : 'Le livrable') + ' « ' + it.name + ' », sur le chemin critique, finit le ' + it.planned_finish +
+        ' : ' + slip + ' jours ouvrés après la baseline (' + bf + ').',
+        'Chercher à rattraper le retard (renfort, re-séquencement) ou, s’il est acté, demander une nouvelle baseline.');
+    }
+  });
+
+  // Signaux faibles : un commentaire d'avancement récent annonce un blocage avant que la date ne glisse.
+  weakSignals_(data.progressUpdates || [], items.filter(function (i) { return activeProject[i.project_id]; }),
+    addCalendarDays(today, -THRESHOLDS.staleProgressDays)).forEach(function (sig) {
+    push(sig.item.project_id, 'WEAK_SIGNAL', 'Vigilance', 'PlanItem', sig.item.id,
+      'Signal faible sur « ' + sig.item.name + ' » : le commentaire d’avancement du ' + sig.date + ' dit « ' + sig.comment + ' ».',
+      'Vérifier avec le responsable si la date de fin tient toujours.');
+  });
+
+  // Projet actif, planifié, sans baseline : les écarts ne peuvent pas être mesurés.
+  projects.forEach(function (p) {
+    if (p.status !== 'Actif' || !isBlank(p.active_baseline_id)) return;
+    var dated = items.some(function (i) { return i.project_id === p.id && !isBlank(i.planned_finish); });
+    if (dated) {
+      push(p.id, 'NO_BASELINE', 'Info', 'Project', p.id,
+        'Le projet « ' + p.name + ' » n’a pas de baseline : ses écarts ne sont pas mesurés.',
+        'Figer la baseline B0 depuis la page Suivi, une fois le planning validé.');
+    }
+  });
+
+  dependencyViolations(items, (data.dependencies || []).filter(live), holFor).forEach(function (v) {
+    var s = itemById[v.successor_id], p = itemById[v.predecessor_id];
+    push(s.project_id, 'DEPENDENCY_VIOLATION', 'Alerte', 'Dependency', v.dependency_id,
+      '« ' + s.name + ' » (' + v.actual + ') est placé avant la date permise par « ' + p.name + ' » (' +
+      v.required + ', lien ' + v.dep_type + ').',
+      'Décaler « ' + s.name + ' » de ' + v.gap_days + ' jour(s) ouvré(s) ou revoir la dépendance ; décision du chef de projet.');
+  });
+
+  (data.requirements || []).filter(live).forEach(function (r) {
+    var ms = itemById[r.milestone_id], dl = itemById[r.deliverable_id];
+    if (!ms || !dl) return;
+    var dlDone = dl.status === 'Terminé' || Number(dl.progress_pct) >= 100;
+    if (dlDone) return;
+    if (!isBlank(ms.actual_finish)) {
+      push(ms.project_id, 'MILESTONE_INCOMPLETE', 'Alerte', 'PlanItem', ms.id,
+        'Le jalon « ' + ms.name + ' » est marqué atteint alors que « ' + dl.name + ' » n’est pas terminé.',
+        'Vérifier le passage du jalon ou terminer le livrable requis.');
+    } else if (!isBlank(dl.planned_finish) && !isBlank(ms.planned_finish) && dl.planned_finish > ms.planned_finish) {
+      push(ms.project_id, 'MILESTONE_THREATENED', 'Alerte', 'PlanItem', ms.id,
+        'Le jalon « ' + ms.name + ' » (' + ms.planned_finish + ') est menacé : « ' + dl.name + ' » finit le ' + dl.planned_finish + '.',
+        'Accélérer le livrable, décaler le jalon ou retirer le livrable des prérequis.');
+    }
+  });
+
+  (data.risks || []).filter(function (r) { return live(r) && activeProject[r.project_id] && r.status !== 'Clos'; })
+    .forEach(function (r) {
+      var late = [];
+      if (!isBlank(r.review_date) && r.review_date < today) late.push('revue prévue le ' + r.review_date);
+      if (!isBlank(r.treatment_due) && r.treatment_due < today) late.push('traitement attendu le ' + r.treatment_due);
+      if (late.length) {
+        push(r.project_id, 'RISK_OVERDUE', 'Vigilance', 'RiskOpportunity', r.id,
+          (r.kind === 'Opportunité' ? 'L’opportunité' : 'Le risque') + ' « ' + r.title + ' » est en retard : ' + late.join(', ') + '.',
+          'Revoir la fiche avec son responsable et mettre à jour les dates.');
+      }
+    });
+
+  var wpHasContent = {};
+  items.forEach(function (i) { if (!isBlank(i.wp_id)) wpHasContent[i.wp_id] = true; });
+  (data.workpackages || []).filter(live).forEach(function (w) {
+    if (!isBlank(w.parent_wp_id)) wpHasContent[w.parent_wp_id] = true;
+  });
+  (data.workpackages || []).filter(function (w) { return live(w) && activeProject[w.project_id]; }).forEach(function (w) {
+    if (!wpHasContent[w.id]) {
+      push(w.project_id, 'EMPTY_WP', 'Info', 'WorkPackage', w.id,
+        'Le workpackage « ' + w.name + ' » ne contient aucun livrable ni jalon.',
+        'Ajouter ses livrables ou le supprimer.');
+    }
+  });
+
+  return out;
+}
+
+/**
+ * Fusionne les constats du jour avec les Insights existants.
+ * Clé = rule_code + target_id.
+ *   - un constat déjà « Ignoré » ou « Accepté » n'est pas recréé ;
+ *   - un « Nouveau » existant est mis à jour (même id) ;
+ *   - un « Nouveau » qui n'est plus constaté disparaît (le problème est résolu).
+ * Renvoie la liste complète à écrire.
+ */
+function mergeInsights(existing, fresh, actor) {
+  var byKey = {};
+  var kept = [];
+  (existing || []).forEach(function (e) {
+    if (isTrue(e.deleted)) return;
+    if (e.status === 'Nouveau') byKey[e.rule_code + '|' + e.target_id] = e;
+    else kept.push(e);
+  });
+  var closedKeys = {};
+  kept.forEach(function (e) { closedKeys[e.rule_code + '|' + e.target_id] = true; });
+  var now = nowIso();
+  var result = kept.slice();
+  fresh.forEach(function (f) {
+    var key = f.rule_code + '|' + f.target_id;
+    if (closedKeys[key]) return;
+    var prev = byKey[key];
+    var rec = Object.assign({}, f, {
+      id: prev ? prev.id : newId(),
+      status: 'Nouveau',
+      created_at: prev ? prev.created_at : now,
+      created_by: prev ? prev.created_by : actor,
+      updated_at: now,
+      updated_by: actor,
+      version: prev ? Number(prev.version || 1) + 1 : 1,
+      deleted: false
+    });
+    result.push(rec);
+  });
+  return result;
+}
+
+// ======================================================================
+// 07_Schedule.gs
+// ======================================================================
+
+/**
+ * PPM Core — marges et chemin critique (section 5.2, lot 1).
+ * Fonctions pures : aucun accès aux classeurs.
+ *
+ * Le planning n'est jamais recalculé (H7) : on part des dates saisies et on calcule,
+ * pour chaque élément, la date de fin au plus tard qui ne retarde ni un successeur
+ * ni la fin du plan. La marge totale est l'écart, en jours ouvrés, entre la fin
+ * prévue et cette fin au plus tard.
+ *   marge > 0 : l'élément peut glisser d'autant sans rien décaler ;
+ *   marge = 0 : il est sur le chemin critique ;
+ *   marge < 0 : il retarde déjà un successeur (dépendance violée).
+ *
+ * Conventions de dépendance identiques à dependencyViolations (04_Graph.gs).
+ */
+
+/** Nombre de pas en jours ouvrés pour aller de a à b (0 si a = b, négatif si b < a). */
+function workingDayOffset(a, b, hol) {
+  if (a === b) return 0;
+  var sign = b > a ? 1 : -1;
+  var n = 0;
+  var d = a;
+  while (d !== b) {
+    d = addCalendarDays(d, sign);
+    if (isWorkingDay(d, hol)) n++;
+  }
+  return sign * n;
+}
+
+/** Durée en jours ouvrés, bornes incluses ; 0 pour un jalon. */
+function itemDuration(item, hol) {
+  if (item.item_type === 'Jalon') return 0;
+  var s = itemStart(item), f = itemFinish(item);
+  if (isBlank(s) || isBlank(f)) return 0;
+  return Math.max(1, workingDaysBetween(s, f, hol));
+}
+
+/** Début au plus tard correspondant à une fin au plus tard, pour une durée donnée. */
+function lateStartFrom(lf, dur, hol) {
+  return dur <= 1 ? lf : addWorkingDays(lf, -(dur - 1), hol);
+}
+
+/** Fin au plus tard correspondant à un début au plus tard. */
+function lateFinishFrom(ls, dur, hol) {
+  return dur <= 1 ? ls : addWorkingDays(ls, dur - 1, hol);
+}
+
+/**
+ * items  : PlanItem[] du périmètre (projet ou programme), plus d'éventuels voisins
+ *          d'autres projets marqués external: true (leurs dates sont des contraintes fixes).
+ * deps   : Dependency[] ;
+ * holFor(projectId) → fériés du calendrier du projet de l'élément ;
+ * opts.anchor : date de fin de référence (par défaut la fin prévue la plus tardive du périmètre).
+ *
+ * Renvoie { anchor, byId: { id: { lateFinish, lateStart, float, critical } }, criticalIds }.
+ * Les éléments sans dates, terminés ou externes n'ont pas de marge (float null).
+ */
+function computeFloats(items, deps, holFor, opts) {
+  opts = opts || {};
+  var byId = {}, list = [];
+  items.forEach(function (it) {
+    if (isTrue(it.deleted)) return;
+    byId[it.id] = it;
+    list.push(it);
+  });
+  var dated = function (it) { return !isBlank(itemStart(it)) && !isBlank(itemFinish(it)); };
+
+  var anchor = opts.anchor || '';
+  if (!anchor) {
+    list.forEach(function (it) {
+      if (!it.external && dated(it) && itemFinish(it) > anchor) anchor = itemFinish(it);
+    });
+  }
+
+  // Successeurs de chaque élément (dépendances entre éléments connus seulement).
+  var succ = {}, indeg = {};
+  list.forEach(function (it) { succ[it.id] = []; indeg[it.id] = 0; });
+  (deps || []).forEach(function (d) {
+    if (isTrue(d.deleted) || !byId[d.predecessor_id] || !byId[d.successor_id]) return;
+    succ[d.predecessor_id].push(d);
+    indeg[d.successor_id]++;
+  });
+
+  // Ordre topologique (Kahn), puis parcours à rebours.
+  var order = [], queue = [];
+  list.forEach(function (it) { if (indeg[it.id] === 0) queue.push(it.id); });
+  var remaining = {};
+  Object.keys(indeg).forEach(function (k) { remaining[k] = indeg[k]; });
+  while (queue.length) {
+    var id = queue.shift();
+    order.push(id);
+    succ[id].forEach(function (d) {
+      if (--remaining[d.successor_id] === 0) queue.push(d.successor_id);
+    });
+  }
+  // Un cycle résiduel (normalement impossible) : ses éléments restent sans marge.
+
+  var late = {};
+  for (var k = order.length - 1; k >= 0; k--) {
+    var it = byId[order[k]];
+    if (!dated(it)) continue;
+    var hol = holFor ? holFor(it.project_id) : null;
+    var dur = itemDuration(it, hol);
+
+    if (it.external) {
+      late[it.id] = { lateStart: itemStart(it), lateFinish: itemFinish(it) };
+      continue;
+    }
+
+    var lf = anchor || itemFinish(it);
+    succ[it.id].forEach(function (d) {
+      var s = late[d.successor_id];
+      if (!s) return; // successeur sans dates : pas de contrainte
+      var shol = holFor ? holFor(byId[d.successor_id].project_id) : null;
+      var lag = Math.round(Number(d.lag_days || 0));
+      var limit;
+      switch (d.dep_type) {
+        case 'FS':
+          var offset = (it.item_type === 'Jalon' ? 0 : 1) + lag;
+          limit = offset === 0 ? s.lateStart : addWorkingDays(s.lateStart, -offset, shol);
+          break;
+        case 'SS':
+          limit = lateFinishFrom(addWorkingDays(s.lateStart, -lag, shol), dur, hol);
+          break;
+        case 'FF':
+          limit = addWorkingDays(s.lateFinish, -lag, shol);
+          break;
+        case 'SF':
+          limit = lateFinishFrom(addWorkingDays(s.lateFinish, -lag, shol), dur, hol);
+          break;
+        default:
+          return;
+      }
+      if (limit < lf) lf = limit;
+    });
+    late[it.id] = { lateStart: lateStartFrom(lf, dur, hol), lateFinish: lf };
+  }
+
+  var result = {}, criticalIds = [];
+  list.forEach(function (it) {
+    var l = late[it.id];
+    var done = it.status === 'Terminé' || Number(it.progress_pct) >= 100;
+    if (!l || it.external || done) {
+      result[it.id] = { lateStart: l ? l.lateStart : null, lateFinish: l ? l.lateFinish : null, float: null, critical: false };
+      return;
+    }
+    var hol = holFor ? holFor(it.project_id) : null;
+    var fl = workingDayOffset(itemFinish(it), l.lateFinish, hol);
+    var critical = fl <= 0;
+    result[it.id] = { lateStart: l.lateStart, lateFinish: l.lateFinish, float: fl, critical: critical };
+    if (critical) criticalIds.push(it.id);
+  });
+  return { anchor: anchor || null, byId: result, criticalIds: criticalIds };
+}
+
+// ======================================================================
+// 10_Repository.gs
+// ======================================================================
+
+/**
+ * PPM Core — accès aux données.
+ *
+ * Un « adaptateur de table » cache Sheets derrière une interface simple :
+ *   headers(), readAll(), findRow(id) → n° de ligne (≥ 2) ou -1,
+ *   readRow(n), writeRow(n, obj), appendRows(objs), replaceAll(objs)
+ * Les tests remplacent l'adaptateur par une version en mémoire (TABLE_PROVIDER).
+ *
+ * Toute écriture du Core passe par repoInsert / repoUpdate : verrou, version
+ * (verrouillage optimiste), champs calculés, contrôle, journal et crochets métier.
+ */
+
+var TABLE_PROVIDER = null;
+var _tableCache = {};
+var _bookCache = {};
+
+function getTable(name) {
+  return cachedTable_(name, function () {
+    if (TABLE_PROVIDER) return TABLE_PROVIDER(name);
+    if (!_tableCache[name]) _tableCache[name] = sheetTable_(name);
+    return _tableCache[name];
+  });
+}
+
+// ---------------------------------------------------------------- cache des lectures (performance)
+//
+// Lire une table dans Sheets coûte 2 à 3 appels au serveur (0,1 à 0,3 s chacun). Deux niveaux évitent de relire :
+//   - mémoire de l'exécution : une table n'est lue qu'une fois par requête ;
+//   - cache du script (CacheService), partagé entre requêtes : la table y est rangée par morceaux, sous un
+//     numéro de génération. Toute écriture par le Core change la génération (la table sera relue) ;
+//     une saisie AppSheet fait de même via onRowChanged. Par sécurité, rien n'y reste plus de 5 minutes.
+// Les lectures ponctuelles (findRow, readRow) vont toujours dans Sheets.
+
+var CACHE_PROVIDER = null;      // tests : faux cache { get, getAll, put, putAll }
+var CACHE_TTL_S = 300;
+var CACHE_CHUNK = 90000;        // un élément du cache est limité à 100 Ko
+var CACHE_MAX_CHUNKS = 20;      // au-delà (~1,8 Mo), la table n'est pas mise en cache
+var _rowsMemo = {};
+
+function scriptCache_() {
+  if (CACHE_PROVIDER) return CACHE_PROVIDER;
+  if (TABLE_PROVIDER || typeof CacheService === 'undefined') return null;
+  try { return CacheService.getScriptCache(); } catch (e) { return null; }
+}
+
+/** Début d'une exécution (requête, page, déclencheur) : on oublie ce qui a été lu par la précédente. */
+function resetExecution_() {
+  _rowsMemo = {};
+  _propsMemo = null;
+}
+
+function cachedTable_(name, base) {
+  var touched = function () { invalidateTable_(name); };
+  return {
+    name: name,
+    headers: function () { return base().headers(); },
+    readAll: function () { return readAllCached_(name, base); },
+    findRow: function (id) { return base().findRow(id); },
+    readRow: function (n) { return base().readRow(n); },
+    writeRow: function (n, o) { base().writeRow(n, o); touched(); },
+    appendRows: function (objs) { base().appendRows(objs); touched(); },
+    updateRows: function (list) { base().updateRows(list); touched(); },
+    replaceAll: function (objs) { base().replaceAll(objs); touched(); },
+    get _rows() { return base()._rows; } // tests : accès direct aux lignes en mémoire
+  };
+}
+
+function newGen_() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function readAllCached_(name, base) {
+  // Tests sans faux cache : lecture directe (ils modifient parfois les lignes en mémoire sans passer par le Core).
+  if (TABLE_PROVIDER && !CACHE_PROVIDER) return base().readAll();
+  if (_rowsMemo[name] !== undefined) return JSON.parse(_rowsMemo[name]);
+  var cache = scriptCache_();
+  var json = cache ? cacheGetRows_(cache, name) : null;
+  if (json === null) {
+    json = JSON.stringify(base().readAll());
+    if (cache) cachePutRows_(cache, name, json);
+  }
+  _rowsMemo[name] = json;
+  return JSON.parse(json);
+}
+
+/** Valeur « génération|nombre de morceaux » ; nombre -1 = table à relire. */
+function parseGen_(v) {
+  if (!v) return null;
+  var i = String(v).lastIndexOf('|');
+  return { gen: String(v).slice(0, i), n: Number(String(v).slice(i + 1)) };
+}
+
+function chunkKeys_(name, gen, n) {
+  var keys = [];
+  for (var i = 0; i < n; i++) keys.push('rows:' + name + ':' + gen + ':' + i);
+  return keys;
+}
+
+function cacheGetRows_(cache, name) {
+  try {
+    var g = parseGen_(cache.get('gen:' + name));
+    if (!g || !(g.n > 0)) return null;
+    var keys = chunkKeys_(name, g.gen, g.n);
+    var parts = cache.getAll(keys);
+    var out = '';
+    for (var i = 0; i < keys.length; i++) {
+      if (parts[keys[i]] === undefined || parts[keys[i]] === null) return null;
+      out += parts[keys[i]];
+    }
+    return out;
+  } catch (e) {
+    return null;
+  }
+}
+
+function cachePutRows_(cache, name, json) {
+  try {
+    var n = Math.max(1, Math.ceil(json.length / CACHE_CHUNK));
+    if (n > CACHE_MAX_CHUNKS) return;
+    var g = parseGen_(cache.get('gen:' + name));
+    var gen = g ? g.gen : newGen_();
+    var values = {};
+    chunkKeys_(name, gen, n).forEach(function (k, i) { values[k] = json.slice(i * CACHE_CHUNK, (i + 1) * CACHE_CHUNK); });
+    cache.putAll(values, CACHE_TTL_S);
+    cache.put('gen:' + name, gen + '|' + n, CACHE_TTL_S);
+  } catch (e) {
+    /* le cache est une optimisation : une panne ne doit jamais bloquer une lecture */
+  }
+}
+
+/** Après une écriture : la table sera relue dans Sheets, par cette exécution comme par les suivantes. */
+function invalidateTable_(name) {
+  delete _rowsMemo[name];
+  var cache = scriptCache_();
+  if (!cache) return;
+  try { cache.put('gen:' + name, newGen_() + '|-1', CACHE_TTL_S); } catch (e) { /* voir cachePutRows_ */ }
+}
+
+/** Invalide toutes les tables (réconciliation nocturne, restauration, installation). */
+function invalidateAllTables_() {
+  Object.keys(SCHEMA).forEach(invalidateTable_);
+}
+
+/**
+ * Remplit la mémoire de l'exécution avec les tables déjà en cache, en deux appels au lieu de deux par table.
+ * Les tables absentes du cache seront lues dans Sheets au premier usage.
+ */
+function prefetchTables_(names) {
+  var cache = scriptCache_();
+  if (!cache) return;
+  try {
+    var todo = names.filter(function (n) { return _rowsMemo[n] === undefined && SCHEMA[n]; });
+    if (!todo.length) return;
+    var gens = cache.getAll(todo.map(function (n) { return 'gen:' + n; }));
+    var want = {}, keys = [];
+    todo.forEach(function (n) {
+      var g = parseGen_(gens['gen:' + n]);
+      if (!g || !(g.n > 0)) return;
+      want[n] = chunkKeys_(n, g.gen, g.n);
+      keys = keys.concat(want[n]);
+    });
+    if (!keys.length) return;
+    var parts = cache.getAll(keys);
+    Object.keys(want).forEach(function (n) {
+      var out = '';
+      for (var i = 0; i < want[n].length; i++) {
+        var v = parts[want[n][i]];
+        if (v === undefined || v === null) return;
+        out += v;
+      }
+      _rowsMemo[n] = out;
+    });
+  } catch (e) {
+    /* voir cachePutRows_ */
+  }
+}
+
+/** Tables lues par presque toutes les requêtes des pages. */
+var HOT_TABLES = ['Program', 'Project', 'WorkPackage', 'PlanItem', 'Dependency', 'Resource', 'RoleAssignment',
+  'HierarchicalTeam', 'HolidaySet', 'UserSetting', 'Baseline', 'Insight', 'MilestoneRequirement', 'RiskOpportunity',
+  'Role', 'BudgetLine', 'BaselineItem'];
+
+function bookId_(book) {
+  var id = getProp(book === 'data' ? PROP.DATA_ID : PROP.HISTORY_ID, '');
+  if (!id) throw new PpmError('CONFIG', 'Classeurs non initialisés : exécuter setupPpm().');
+  return id;
+}
+
+function openBook_(book) {
+  if (!_bookCache[book]) _bookCache[book] = SpreadsheetApp.openById(bookId_(book));
+  return _bookCache[book];
+}
+
+function sheetTable_(name) {
+  var def = SCHEMA[name];
+  if (!def) throw new PpmError('NOT_FOUND', 'Table inconnue : ' + name);
+  var sh = openBook_(def.book).getSheetByName(name);
+  if (!sh) throw new PpmError('CONFIG', 'Feuille manquante : ' + name + ' (relancer setupPpm).');
+  var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+
+  function toObj(row) {
+    var o = {};
+    headers.forEach(function (h, i) { o[h] = normalizeValue(row[i]); });
+    return o;
+  }
+  function toRow(obj) {
+    return headers.map(function (h) { return obj[h] === undefined || obj[h] === null ? '' : obj[h]; });
+  }
+  function dataRows() { return Math.max(0, sh.getLastRow() - 1); }
+
+  return {
+    name: name,
+    headers: function () { return headers.slice(); },
+    readAll: function () {
+      var n = dataRows();
+      if (n === 0) return [];
+      return sh.getRange(2, 1, n, headers.length).getValues().map(toObj);
+    },
+    findRow: function (id) {
+      if (isBlank(id) || dataRows() === 0) return -1;
+      var cell = sh.getRange(2, 1, dataRows(), 1).createTextFinder(String(id)).matchEntireCell(true).findNext();
+      return cell ? cell.getRow() : -1;
+    },
+    readRow: function (r) { return toObj(sh.getRange(r, 1, 1, headers.length).getValues()[0]); },
+    writeRow: function (r, obj) { sh.getRange(r, 1, 1, headers.length).setValues([toRow(obj)]); },
+    appendRows: function (objs) {
+      if (!objs.length) return;
+      sh.getRange(sh.getLastRow() + 1, 1, objs.length, headers.length).setValues(objs.map(toRow));
+    },
+    /** Réécrit plusieurs lignes ; les lignes consécutives partent en une seule écriture. */
+    updateRows: function (list) {
+      var sorted = list.slice().sort(function (a, b) { return a.row - b.row; });
+      var i = 0;
+      while (i < sorted.length) {
+        var j = i;
+        while (j + 1 < sorted.length && sorted[j + 1].row === sorted[j].row + 1) j++;
+        var chunk = sorted.slice(i, j + 1);
+        sh.getRange(chunk[0].row, 1, chunk.length, headers.length).setValues(chunk.map(function (c) { return toRow(c.obj); }));
+        i = j + 1;
+      }
+    },
+    replaceAll: function (objs) {
+      var n = dataRows();
+      if (n > 0) sh.getRange(2, 1, n, headers.length).clearContent();
+      if (objs.length) sh.getRange(2, 1, objs.length, headers.length).setValues(objs.map(toRow));
+    }
+  };
+}
+
+/** Verrou de script ré-entrant : une seule écriture à la fois, sans auto-blocage. */
+var _lockDepth = 0;
+function withLock(fn) {
+  if (_lockDepth > 0 || TABLE_PROVIDER || typeof LockService === 'undefined') {
+    _lockDepth++;
+    try { return fn(); } finally { _lockDepth--; }
+  }
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new PpmError('BUSY', 'Le système est occupé, réessayez dans un instant.');
+  _lockDepth++;
+  try { return fn(); } finally { _lockDepth--; lock.releaseLock(); }
+}
+
+// ---------------------------------------------------------------- lecture
+
+function repoGet(table, id) {
+  if (_rowsMemo[table] !== undefined && !isBlank(id)) {
+    var hit = JSON.parse(_rowsMemo[table]).filter(function (r) { return String(r.id) === String(id); })[0];
+    if (hit) return hit;
+  }
+  var t = getTable(table);
+  var r = t.findRow(id);
+  return r < 0 ? null : t.readRow(r);
+}
+
+function repoList(table, filter, opts) {
+  var rows = getTable(table).readAll();
+  if (isLiveTable(table) && !(opts && opts.includeDeleted)) {
+    rows = rows.filter(function (r) { return !isTrue(r.deleted); });
+  }
+  return filter ? rows.filter(filter) : rows;
+}
+
+// ---------------------------------------------------------------- écriture
+
+/** actx : { actor: e-mail, source: 'api' | 'appsheet' | 'core' | 'setup' | 'addon:<id>' } */
+function repoInsert(table, values, actx) {
+  return withLock(function () {
+    var def = SCHEMA[table];
+    if (!def) throw new PpmError('NOT_FOUND', 'Table inconnue : ' + table);
+    var rec = {};
+    tableColumns(table).forEach(function (c) { rec[c] = ''; });
+    Object.keys(values || {}).forEach(function (k) {
+      if (def.cols.indexOf(k) >= 0) rec[k] = values[k] === null || values[k] === undefined ? '' : values[k];
+    });
+    if (isBlank(rec.id)) rec.id = newId();
+    applyComputed(table, rec);
+    validateRecord(table, rec);
+    var t = getTable(table);
+    if (t.findRow(rec.id) >= 0) throw new PpmError('CONFLICT', 'Identifiant déjà utilisé : ' + rec.id);
+    if (isLiveTable(table)) {
+      var now = nowIso();
+      rec.created_at = now; rec.created_by = actx.actor;
+      rec.updated_at = now; rec.updated_by = actx.actor;
+      rec.version = 1; rec.deleted = false;
+    }
+    t.appendRows([rec]);
+    if (isLoggedTable(table)) recordChanges(table, null, rec, actx);
+    if (isLiveTable(table)) runHooks(table, null, rec, actx);
+    return rec;
+  });
+}
+
+/**
+ * Mise à jour partielle. expectedVersion (facultatif) protège contre l'écrasement
+ * d'une modification concurrente : si la ligne a changé depuis la lecture → CONFLICT.
+ */
+function repoUpdate(table, id, patch, expectedVersion, actx) {
+  return withLock(function () {
+    var def = SCHEMA[table];
+    if (!isLiveTable(table)) throw new PpmError('VALIDATION', 'Table en ajout seul : ' + table);
+    var t = getTable(table);
+    var r = t.findRow(id);
+    if (r < 0) throw new PpmError('NOT_FOUND', table + ' introuvable : ' + id);
+    var before = t.readRow(r);
+    if (expectedVersion !== undefined && expectedVersion !== null && expectedVersion !== '' &&
+        Number(expectedVersion) !== Number(before.version)) {
+      throw new PpmError('CONFLICT', 'La ligne a été modifiée entre-temps.', { currentVersion: Number(before.version) });
+    }
+    var after = Object.assign({}, before);
+    var writable = def.cols.concat(['deleted']);
+    Object.keys(patch || {}).forEach(function (k) {
+      if (k !== 'id' && writable.indexOf(k) >= 0) after[k] = patch[k] === null || patch[k] === undefined ? '' : patch[k];
+    });
+    applyComputed(table, after);
+    validateRecord(table, after);
+    if (!diffRecords(before, after, businessFields(table)).length) return before;
+    after.version = Number(before.version || 0) + 1;
+    after.updated_at = nowIso();
+    after.updated_by = actx.actor;
+    t.writeRow(r, after);
+    if (isLoggedTable(table)) recordChanges(table, before, after, actx);
+    runHooks(table, before, after, actx);
+    return after;
+  });
+}
+
+function repoSoftDelete(table, id, expectedVersion, actx) {
+  return repoUpdate(table, id, { deleted: true }, expectedVersion, actx);
+}
+
+/** Ajout en lot dans une table d'historique (sans contrôle ligne à ligne). */
+function repoAppendHistory(table, recs) {
+  if (isLiveTable(table)) throw new PpmError('VALIDATION', 'Table vivante : utiliser repoInsert.');
+  if (recs.length) getTable(table).appendRows(recs);
+}
+
+// ======================================================================
+// 11_ChangeLog.gs
+// ======================================================================
+
+/**
+ * PPM Core — traçabilité (sections 5.3 et 13).
+ *
+ * Deux chemins d'écriture existent :
+ *  1. le Core (API, traitements) : repoInsert/repoUpdate journalisent eux-mêmes ;
+ *  2. AppSheet, qui écrit directement dans le classeur : chaque bot appelle
+ *     onRowChanged(table, id, USEREMAIL()). Le Core compare la ligne à son
+ *     instantané (_Snapshot), journalise les écarts, incrémente la version et
+ *     déclenche les crochets métier. Une réconciliation nocturne rattrape les
+ *     appels manqués.
+ */
+
+function diffRecords(before, after, fields) {
+  var out = [];
+  fields.forEach(function (f) {
+    var a = canonical(before ? before[f] : ''), b = canonical(after ? after[f] : '');
+    if (a !== b) out.push({ field: f, oldValue: a, newValue: b });
+  });
+  return out;
+}
+
+/** Projet de rattachement d'une ligne, pour filtrer le fil des changements du chef de projet. */
+function projectIdOf(table, rec) {
+  if (!rec) return '';
+  try {
+    switch (table) {
+      case 'Project': return rec.id;
+      case 'WorkPackage': case 'PlanItem': case 'RiskOpportunity': case 'Baseline': case 'Insight':
+        return rec.project_id || '';
+      case 'Dependency': {
+        var s = repoGet('PlanItem', rec.successor_id);
+        return s ? s.project_id : '';
+      }
+      case 'BudgetLine': case 'ProgressUpdate': {
+        var d = repoGet('PlanItem', rec.deliverable_id);
+        return d ? d.project_id : '';
+      }
+      case 'MilestoneRequirement': {
+        var m = repoGet('PlanItem', rec.milestone_id);
+        return m ? m.project_id : '';
+      }
+      case 'RoleAssignment':
+        if (rec.scope_type === 'project') return rec.scope_id;
+        if (rec.scope_type === 'workpackage') {
+          var w = repoGet('WorkPackage', rec.scope_id);
+          return w ? w.project_id : '';
+        }
+        return '';
+      default: return '';
+    }
+  } catch (e) {
+    return '';
+  }
+}
+
+function buildChangeEvents(table, before, after, actx) {
+  var at = nowIso();
+  var ref = after || before;
+  var base = {
+    at: at, table_name: table, entity_id: ref.id, project_id: projectIdOf(table, ref),
+    actor: actx.actor, source: actx.source, acknowledged: false
+  };
+  if (!before) return [Object.assign({ id: newId(), field: '*', old_value: '', new_value: '(création)' }, base)];
+  if (!after) return [Object.assign({ id: newId(), field: '*', old_value: '(ligne)', new_value: '(suppression)' }, base)];
+  return diffRecords(before, after, businessFields(table)).map(function (d) {
+    return Object.assign({
+      id: newId(), field: d.field, old_value: truncate(d.oldValue, 500), new_value: truncate(d.newValue, 500)
+    }, base);
+  });
+}
+
+// ---------------------------------------------------------------- instantanés
+
+function snapshotKey(table, id) {
+  return table + ':' + id;
+}
+
+function snapshotGet(table, id) {
+  var row = repoGet('_Snapshot', snapshotKey(table, id));
+  return row ? parseJsonSafe(row.json, null) : null;
+}
+
+function snapshotPut(table, rec) {
+  var fields = businessFields(table);
+  var json = stableJson(rec, fields);
+  var key = snapshotKey(table, rec.id);
+  var t = getTable('_Snapshot');
+  var obj = { id: key, table_name: table, entity_id: rec.id, hash: hashString(json), json: json, updated_at: nowIso() };
+  var r = t.findRow(key);
+  if (r < 0) t.appendRows([obj]); else t.writeRow(r, obj);
+}
+
+function snapshotDelete(table, id) {
+  var t = getTable('_Snapshot');
+  var r = t.findRow(snapshotKey(table, id));
+  if (r >= 0) t.writeRow(r, { id: snapshotKey(table, id), table_name: table, entity_id: id, hash: 'DELETED', json: '', updated_at: nowIso() });
+}
+
+/** Journalise un changement et met l'instantané à jour. */
+function recordChanges(table, before, after, actx) {
+  var events = buildChangeEvents(table, before, after, actx);
+  if (events.length) repoAppendHistory('ChangeEvent', events);
+  if (after) snapshotPut(table, after); else snapshotDelete(table, before.id);
+  return events.length;
+}
+
+// ---------------------------------------------------------------- AppSheet
+
+/**
+ * Point d'entrée des bots AppSheet (tâche « Call a script »).
+ * Paramètres : nom de table, [id] de la ligne, USEREMAIL().
+ * Renvoie CREATED | UPDATED | DELETED | UNCHANGED | IGNORED.
+ */
+function onRowChanged(tableName, rowId, actorEmail) {
+  resetExecution_();
+  if (SCHEMA[tableName]) invalidateTable_(tableName); // AppSheet a écrit directement dans la feuille
+  if (!isLoggedTable(tableName)) return 'IGNORED';
+  var actx = { actor: String(actorEmail || 'appsheet').toLowerCase(), source: 'appsheet' };
+  return withLock(function () { return syncRow(tableName, rowId, actx); });
+}
+
+/** Compare une ligne à son instantané et applique journal, version et crochets. */
+function syncRow(tableName, rowId, actx) {
+  var t = getTable(tableName);
+  var r = t.findRow(rowId);
+  var current = r < 0 ? null : t.readRow(r);
+  var snap = snapshotGet(tableName, rowId);
+  var before = snap ? Object.assign({ id: rowId }, snap) : null;
+
+  if (!current && !before) return 'IGNORED';
+  if (!current) {
+    recordChanges(tableName, before, null, actx);
+    return 'DELETED';
+  }
+  if (before && !diffRecords(before, current, businessFields(tableName)).length) return 'UNCHANGED';
+
+  var now = nowIso();
+  if (isBlank(current.created_at)) { current.created_at = now; current.created_by = actx.actor; }
+  if (isBlank(current.deleted)) current.deleted = false;
+  if (tableName === 'ProgressUpdate' && isBlank(current.declared_at)) current.declared_at = now;
+  current.updated_at = now;
+  current.updated_by = actx.actor;
+  current.version = Number(current.version || 0) + 1;
+  applyComputed(tableName, current);
+  t.writeRow(r, current);
+
+  var problems = checkRecordQuietly(tableName, current);
+  recordChanges(tableName, before, current, actx);
+  runHooks(tableName, before, current, actx);
+  if (problems) {
+    notifyUser(actx.actor, 'Donnée à corriger dans ' + tableName,
+      'La ligne ' + rowId + ' contient des valeurs invalides : ' + JSON.stringify(problems));
+  }
+  return before ? 'UPDATED' : 'CREATED';
+}
+
+function checkRecordQuietly(table, rec) {
+  try { validateRecord(table, rec); return null; } catch (e) { return e.details || e.message; }
+}
+
+// ---------------------------------------------------------------- crochets métier
+
+function runHooks(table, before, rec, actx) {
+  if (isTrue(rec.deleted)) return;
+  if (table === 'Dependency') hookDependencyCycle(rec, actx);
+  if (table === 'ProgressUpdate' && !before) hookPropagateProgress(rec, actx);
+  if (table === 'Baseline' && actx.source === 'appsheet' && !hookBaselineGuard(before, rec, actx)) return;
+  if (table === 'Baseline' && !before && rec.status === 'Demandée') hookBaselineRequested(rec, actx);
+  if (table === 'RoleAssignment' && actx.source === 'appsheet') hookRoleAssignmentGuard(before, rec, actx);
+  if (table === 'Resource' && actx.source === 'appsheet') hookResourceGuard(before, rec, actx);
+  if (table === 'PlanItem') hookCalendarItem(before, rec);
+}
+
+/**
+ * Une attribution de rôle saisie dans AppSheet est revérifiée comme par l'API :
+ * droit « roles.assign » sur le périmètre et rang au plus égal au sien (section 7).
+ * Si elle n'est pas permise, elle est annulée et son auteur prévenu.
+ */
+function hookRoleAssignmentGuard(before, rec, actx) {
+  var changed = !before || before.role_code !== rec.role_code || before.scope_type !== rec.scope_type ||
+    String(before.scope_id) !== String(rec.scope_id) || before.resource_id !== rec.resource_id;
+  if (!changed) return true;
+  var ctx = buildContext(actx.actor);
+  // La ligne contrôlée ne peut pas servir à se donner raison (auto-nomination).
+  ctx.assignments = ctx.assignments.filter(function (a) { return a.id !== rec.id; });
+  var scope = { type: rec.scope_type, id: rec.scope_id };
+  var allowed = ctx.isAdmin || (can(ctx, 'roles.assign', scope) && ROLE_RANK[rec.role_code] >= bestRankOn_(ctx, scope));
+  if (allowed) return true;
+  repoUpdate('RoleAssignment', rec.id, { deleted: true }, null, { actor: 'ppm-core', source: 'core' });
+  notifyUser(actx.actor, 'Attribution de rôle annulée',
+    'Vous ne pouvez pas attribuer le rôle ' + rec.role_code + ' sur ce périmètre : il faut détenir le droit ' +
+    'd’attribuer les rôles et un rôle au moins aussi élevé. L’attribution a été annulée.');
+  return false;
+}
+
+/**
+ * Dans AppSheet, une baseline ne peut qu'être DEMANDÉE : le gel (copie figée, numéro, activation) passe
+ * par la page Suivi ou l'API, qui vérifient les droits. Une création dans un autre état est ramenée à
+ * « Demandée » ; toute autre modification des champs de décision est annulée. Renvoie false si annulée.
+ */
+var BASELINE_DECISION_FIELDS = ['project_id', 'number', 'status', 'decided_by', 'decided_at', 'requested_by'];
+function hookBaselineGuard(before, rec, actx) {
+  var core = { actor: 'ppm-core', source: 'core' };
+  if (!before) {
+    var fix = {};
+    if (rec.status !== 'Demandée') fix.status = 'Demandée';
+    if (!isBlank(rec.number)) fix.number = '';
+    if (!isBlank(rec.decided_by)) fix.decided_by = '';
+    if (!isBlank(rec.decided_at)) fix.decided_at = '';
+    if (String(rec.requested_by || '').toLowerCase() !== actx.actor) fix.requested_by = actx.actor;
+    if (Object.keys(fix).length) {
+      Object.assign(rec, repoUpdate('Baseline', rec.id, fix, null, core));
+      if (fix.status) {
+        notifyUser(actx.actor, 'Baseline enregistrée comme demande',
+          'Votre saisie a été enregistrée comme une demande de baseline. Le chef de projet ou le DPL la fige depuis la page Suivi.');
+      }
+    }
+    return true;
+  }
+  var changed = BASELINE_DECISION_FIELDS.filter(function (f) { return String(before[f] || '') !== String(rec[f] || ''); });
+  if (!changed.length) return true;
+  var restore = {};
+  changed.forEach(function (f) { restore[f] = before[f]; });
+  repoUpdate('Baseline', rec.id, restore, null, core);
+  notifyUser(actx.actor, 'Modification de baseline annulée',
+    'Les baselines se figent, se refusent et se réactivent depuis la page Suivi, qui contrôle les droits et fige la copie du projet. ' +
+    'Votre modification (' + changed.join(', ') + ') a été annulée.');
+  return false;
+}
+
+/** Toute demande de rebaselining (API ou AppSheet) prévient le chef de projet (section 5.3). */
+function hookBaselineRequested(rec, actx) {
+  var project = repoGet('Project', rec.project_id);
+  if (!project || isBlank(project.manager_resource_id)) return;
+  var manager = repoGet('Resource', project.manager_resource_id);
+  if (!manager) return;
+  notifyUser(manager.email, 'Demande de rebaselining — ' + project.code,
+    (rec.requested_by || actx.actor) + ' demande une nouvelle baseline : ' + rec.justification);
+}
+
+/** Une dépendance qui fermerait un cycle est annulée, et son auteur prévenu (section 5.2). */
+function hookDependencyCycle(dep, actx) {
+  var others = repoList('Dependency', function (d) { return d.id !== dep.id; })
+    .map(function (d) { return { from: d.predecessor_id, to: d.successor_id }; });
+  if (!wouldCreateCycle(others, { from: dep.predecessor_id, to: dep.successor_id })) return true;
+  repoUpdate('Dependency', dep.id, { deleted: true }, null, { actor: 'ppm-core', source: 'core' });
+  notifyUser(actx.actor, 'Dépendance annulée',
+    'La dépendance ' + dep.predecessor_id + ' → ' + dep.successor_id + ' fermait une boucle dans le planning. Elle a été annulée.');
+  return false;
+}
+
+/** Une déclaration d'avancement met à jour le livrable ; la dernière déclaration fait foi (H6). */
+function hookPropagateProgress(pu, actx) {
+  var item = repoGet('PlanItem', pu.deliverable_id);
+  if (!item || isTrue(item.deleted)) return;
+  var pct = Math.max(0, Math.min(100, Number(pu.progress_pct)));
+  var at = isBlank(pu.declared_at) ? nowIso() : String(pu.declared_at);
+  var patch = {
+    progress_pct: pct,
+    last_progress_at: at,
+    status: pct >= 100 ? 'Terminé' : (pct > 0 ? 'En cours' : 'À faire')
+  };
+  if (pct >= 100 && isBlank(item.actual_finish)) patch.actual_finish = at.slice(0, 10);
+  if (pct < 100 && !isBlank(item.actual_finish)) patch.actual_finish = '';
+  repoUpdate('PlanItem', item.id, patch, null, { actor: actx.actor, source: actx.source });
+}
+
+// ---------------------------------------------------------------- réconciliation
+
+/**
+ * Rattrape les écritures AppSheet non signalées. Traite les tables dans l'ordre,
+ * jusqu'à l'échéance ; state = { tableIndex } permet de reprendre à la tranche suivante.
+ * Renvoie true quand tout est traité.
+ */
+function reconcileAll(state, deadlineMs) {
+  var tables = Object.keys(SCHEMA).filter(isLoggedTable);
+  state.tableIndex = state.tableIndex || 0;
+  var actx = { actor: 'inconnu (réconciliation)', source: 'reconciliation' };
+  while (state.tableIndex < tables.length) {
+    var table = tables[state.tableIndex];
+    var snaps = {};
+    repoList('_Snapshot', function (s) { return s.table_name === table; }).forEach(function (s) { snaps[s.entity_id] = s; });
+    var fields = businessFields(table);
+    var rows = getTable(table).readAll();
+    for (var i = 0; i < rows.length; i++) {
+      if (nowMs() > deadlineMs) return false;
+      var row = rows[i];
+      var s = snaps[row.id];
+      delete snaps[row.id];
+      if (s && s.hash !== 'DELETED' && s.hash === hashString(stableJson(row, fields))) continue;
+      withLock(function () { syncRow(table, row.id, actx); });
+    }
+    Object.keys(snaps).forEach(function (id) {
+      if (snaps[id].hash !== 'DELETED') withLock(function () { syncRow(table, id, actx); });
+    });
+    state.tableIndex++;
+  }
+  return true;
+}
+
+// ======================================================================
+// 20_Setup.gs
+// ======================================================================
+
+/**
+ * PPM Core — installation et migrations additives.
+ *
+ * setupPpm() est idempotent : on peut le relancer après chaque évolution du schéma.
+ * Il crée ce qui manque (classeurs, feuilles, colonnes ajoutées en fin de ligne),
+ * pose les validations de listes, et charge les données de référence (rôles, fériés).
+ *
+ * Prérequis (propriétés du script) :
+ *   PPM_DOMAIN = entreprise.com
+ *   PPM_ADMINS = prenom.nom@entreprise.com[,autre@entreprise.com]
+ */
+
+/**
+ * Installation en une fois : à exécuter depuis l'éditeur, une seule fonction.
+ * Domaine et administrateur sont déduits du compte qui installe s'ils ne sont pas déjà réglés ;
+ * puis création des classeurs, déclencheurs (nuit, 7 h) et vérification.
+ * Relançable sans risque (après une mise à jour, elle ajoute les nouvelles colonnes).
+ */
+function installerPpm() {
+  var me = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
+  var notes = [];
+  if (!allowedDomain()) {
+    if (!me || me.indexOf('@') < 0) throw new PpmError('CONFIG', 'Adresse du compte introuvable : renseigner PPM_DOMAIN et PPM_ADMINS à la main.');
+    setProp(PROP.DOMAIN, me.split('@')[1]);
+    notes.push('Domaine réglé sur ' + me.split('@')[1] + ' (propriété PPM_DOMAIN).');
+  }
+  if (!adminEmails().length) {
+    setProp(PROP.ADMINS, me);
+    notes.push('Administrateur : ' + me + ' (propriété PPM_ADMINS ; ajoutez un second administrateur séparé par une virgule).');
+  }
+  var out = [setupPpm(), installTriggers(), selfCheck()];
+  var msg = notes.concat(out).join('\n\n') + '\n\nÉtape suivante : Déployer > Nouveau déploiement > Application Web. Pour des données d’essai : exécuter seedDemo.';
+  console.log(msg);
+  return msg;
+}
+
+function setupPpm() {
+  if (!allowedDomain()) throw new PpmError('CONFIG', 'Renseigner la propriété du script PPM_DOMAIN avant l’installation.');
+  if (!adminEmails().length) throw new PpmError('CONFIG', 'Renseigner la propriété du script PPM_ADMINS avant l’installation.');
+
+  var data = ensureBook_(PROP.DATA_ID, 'PPM Données');
+  var history = ensureBook_(PROP.HISTORY_ID, 'PPM Historique');
+  var report = [];
+
+  Object.keys(SCHEMA).forEach(function (name) {
+    var ss = SCHEMA[name].book === 'data' ? data : history;
+    report.push(ensureSheet_(ss, name));
+  });
+  [data, history].forEach(removeDefaultSheet_);
+
+  _tableCache = {};
+  seedRoles_();
+  var year = Number(todayStr().slice(0, 4));
+  seedHolidays_([year - 1, year, year + 1, year + 2]);
+
+  var msg = 'Installation terminée (PPM Core ' + PPM_VERSION + ')\n' +
+    'Classeur Données : ' + data.getUrl() + '\n' +
+    'Classeur Historique : ' + history.getUrl() + '\n' + report.join('\n');
+  console.log(msg);
+  return msg;
+}
+
+function ensureBook_(propKey, title) {
+  var id = getProp(propKey, '');
+  if (id) return SpreadsheetApp.openById(id);
+  var ss = SpreadsheetApp.create(title);
+  ss.setSpreadsheetTimeZone(Session.getScriptTimeZone());
+  setProp(propKey, ss.getId());
+  return ss;
+}
+
+function removeDefaultSheet_(ss) {
+  ss.getSheets().forEach(function (sh) {
+    if (!SCHEMA[sh.getName()] && sh.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(sh);
+  });
+}
+
+/** Crée la feuille ou ajoute les colonnes manquantes en fin de ligne (jamais de renommage). */
+function ensureSheet_(ss, name) {
+  var cols = tableColumns(name);
+  var sh = ss.getSheetByName(name);
+  var created = false;
+  if (!sh) { sh = ss.insertSheet(name); created = true; }
+
+  var existing = sh.getLastColumn() > 0 ? sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String) : [];
+  var missing = cols.filter(function (c) { return existing.indexOf(c) < 0; });
+  if (existing.length && existing[0] !== 'id') {
+    throw new PpmError('CONFIG', 'La feuille ' + name + ' doit avoir « id » en colonne A.');
+  }
+  if (missing.length) {
+    var start = existing.length + 1;
+    if (sh.getMaxColumns() < start + missing.length - 1) {
+      sh.insertColumnsAfter(sh.getMaxColumns(), start + missing.length - 1 - sh.getMaxColumns());
+    }
+    sh.getRange(1, start, 1, missing.length).setValues([missing]);
+  }
+  sh.setFrozenRows(1);
+  sh.getRange(1, 1, 1, sh.getLastColumn()).setFontWeight('bold');
+
+  var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+  var enums = SCHEMA[name].enums || {};
+  var rows = Math.max(1, sh.getMaxRows() - 1);
+  Object.keys(enums).forEach(function (c) {
+    var idx = headers.indexOf(c);
+    if (idx < 0) return;
+    var rule = SpreadsheetApp.newDataValidation().requireValueInList(enums[c], true).setAllowInvalid(false).build();
+    sh.getRange(2, idx + 1, rows, 1).setDataValidation(rule);
+  });
+  DATE_COLS.forEach(function (c) {
+    var idx = headers.indexOf(c);
+    if (idx >= 0) sh.getRange(2, idx + 1, rows, 1).setNumberFormat('yyyy-mm-dd');
+  });
+  return (created ? '+ ' : '  ') + name + (missing.length && !created ? ' (colonnes ajoutées : ' + missing.join(', ') + ')' : '');
+}
+
+var SETUP_ACTX = { actor: 'setup', source: 'setup' };
+
+function seedRoles_() {
+  var levels = { PL: 'program', DPL: 'program', CP: 'project', RWP: 'workpackage', MEMBER: 'project' };
+  ROLES.forEach(function (code) {
+    if (!repoGet('Role', code)) {
+      repoInsert('Role', { id: code, code: code, label: ROLE_LABELS[code], scope_level: levels[code] }, SETUP_ACTX);
+    }
+  });
+}
+
+/** Charge (ou met à jour) les fériés calculés ; id déterministe PAYS-ANNÉE. */
+function seedHolidays_(years) {
+  COUNTRIES.forEach(function (country) {
+    years.forEach(function (year) {
+      var id = country + '-' + year;
+      var list = holidaysFor(country, year);
+      var values = {
+        id: id, country: country, year: year,
+        label: 'Fériés ' + country + ' ' + year + (country === 'IN' ? ' (nationaux, à compléter par site)' : ''),
+        dates_json: JSON.stringify(list)
+      };
+      var existing = repoGet('HolidaySet', id);
+      if (!existing) repoInsert('HolidaySet', values, SETUP_ACTX);
+    });
+  });
+}
+
+/** Fériés d'un pays sur plusieurs années, lus dans HolidaySet (modifiable par site). */
+function loadHolidayMap(country) {
+  var map = {};
+  repoList('HolidaySet', function (h) { return h.country === country; }).forEach(function (h) {
+    parseJsonSafe(h.dates_json, []).forEach(function (d) { map[typeof d === 'string' ? d : d.date] = true; });
+  });
+  return map;
+}
+
+/** Contrôle de l'installation : feuilles, en-têtes, propriétés. */
+function selfCheck() {
+  var problems = [];
+  [PROP.DATA_ID, PROP.HISTORY_ID, PROP.DOMAIN, PROP.ADMINS].forEach(function (k) {
+    if (!getProp(k, '')) problems.push('Propriété manquante : ' + k);
+  });
+  if (!problems.length) {
+    Object.keys(SCHEMA).forEach(function (name) {
+      try {
+        var headers = getTable(name).headers();
+        tableColumns(name).forEach(function (c) {
+          if (headers.indexOf(c) < 0) problems.push(name + ' : colonne manquante ' + c);
+        });
+      } catch (e) {
+        problems.push(name + ' : ' + e.message);
+      }
+    });
+  }
+  problems = problems.concat(checkPageVersions_());
+  var msg = problems.length ? 'À corriger :\n- ' + problems.join('\n- ') : 'Installation conforme (PPM Core ' + PPM_VERSION + ').';
+  console.log(msg);
+  return msg;
+}
+
+/**
+ * Chaque page annonce sa version (balise meta ppm-version) : une page oubliée lors d'une mise à jour
+ * est repérée ici au lieu de provoquer des erreurs incompréhensibles.
+ */
+function checkPageVersions_() {
+  if (typeof HtmlService === 'undefined') return [];
+  var out = [];
+  Object.keys(PAGES).forEach(function (view) {
+    var name = PAGES[view];
+    try {
+      var html = HtmlService.createHtmlOutputFromFile(name).getContent();
+      var m = /<meta name="ppm-version" content="([^"]+)">/.exec(html);
+      if (!m) out.push('Page ' + name + ' : version inconnue (fichier d’une version antérieure ?)');
+      else if (m[1] !== PPM_VERSION) out.push('Page ' + name + ' en version ' + m[1] + ', le Core en ' + PPM_VERSION + ' : recopier la page.');
+    } catch (e) {
+      out.push('Page ' + name + ' absente : créer le fichier HTML « ' + name + ' ».');
+    }
+  });
+  return out;
+}
+
+/**
+ * Jeu de démonstration : un programme, un projet pilote, deux WP, quatre livrables,
+ * un jalon, des dépendances. Le compte qui l'exécute devient chef de projet du pilote.
+ */
+function seedDemo() {
+  var me = String(Session.getActiveUser().getEmail() || adminEmails()[0]).toLowerCase();
+  var a = { actor: me, source: 'setup' };
+  var res = findResourceByEmail(me) || repoInsert('Resource', {
+    resource_type: 'Interne', name: me.split('@')[0], email: me, country: 'FR', capacity_days_month: 18,
+    job_function: 'Chef de projet', organization: 'Bureau d’études'
+  }, a);
+  var prog = repoInsert('Program', { code: 'DEMO', name: 'Programme de démonstration', status: 'Actif', leader_resource_id: res.id }, a);
+  var proj = repoInsert('Project', {
+    code: 'PILOTE', name: 'Projet pilote', program_id: prog.id, manager_resource_id: res.id,
+    status: 'Actif', holiday_country: 'FR', start_date: todayStr()
+  }, a);
+  repoInsert('RoleAssignment', { resource_id: res.id, role_code: 'CP', scope_type: 'project', scope_id: proj.id }, a);
+  // Deux personnes fictives (sans adresse : elles ne peuvent pas se connecter) pour que l'OBS et le WBS aient du contenu.
+  var conceptrice = repoInsert('Resource', { resource_type: 'Interne', name: 'Camille Durand', country: 'FR',
+    job_function: 'Ingénieure structure', organization: 'Bureau d’études' }, a);
+  var testeur = repoInsert('Resource', { resource_type: 'Externe', name: 'Sam Weber', country: 'DE',
+    job_function: 'Responsable essais', organization: 'Sous-traitant Alpha', supplier: 'Alpha Test GmbH' }, a);
+  var wp1 = repoInsert('WorkPackage', { project_id: proj.id, wbs_code: '1', name: 'Conception', owner_resource_id: conceptrice.id, charge_code: 'PIL-001' }, a);
+  var wp2 = repoInsert('WorkPackage', { project_id: proj.id, wbs_code: '2', name: 'Validation', owner_resource_id: testeur.id, charge_code: 'PIL-002' }, a);
+  repoInsert('RoleAssignment', { resource_id: conceptrice.id, role_code: 'RWP', scope_type: 'workpackage', scope_id: wp1.id }, a);
+  repoInsert('RoleAssignment', { resource_id: testeur.id, role_code: 'RWP', scope_type: 'workpackage', scope_id: wp2.id }, a);
+  var hol = loadHolidayMap('FR');
+  var d0 = nextWorkingDay(todayStr(), hol);
+  function item(wp, name, startOffset, duration, type) {
+    var start = addWorkingDays(d0, startOffset, hol);
+    return repoInsert('PlanItem', {
+      project_id: proj.id, wp_id: wp.id, item_type: type || 'Livrable', name: name, owner_resource_id: res.id,
+      planned_start: start, planned_finish: type === 'Jalon' ? start : addWorkingDays(start, duration - 1, hol),
+      progress_pct: 0, status: 'À faire', milestone_category: type === 'Jalon' ? 'Revue' : ''
+    }, a);
+  }
+  var l1 = item(wp1, 'Spécification', 0, 10);
+  var l2 = item(wp1, 'Maquette', 10, 15);
+  var l3 = item(wp2, 'Plan de tests', 10, 5);
+  var l4 = item(wp2, 'Rapport de tests', 25, 10);
+  var j1 = item(wp2, 'Revue de conception', 35, 0, 'Jalon');
+  [[l1, l2], [l1, l3], [l2, l4], [l3, l4], [l4, j1]].forEach(function (p) {
+    repoInsert('Dependency', { predecessor_id: p[0].id, successor_id: p[1].id, dep_type: 'FS', lag_days: 0 }, a);
+  });
+  [l2, l4].forEach(function (l) { repoInsert('MilestoneRequirement', { milestone_id: j1.id, deliverable_id: l.id }, a); });
+  var msg = 'Démo créée : projet ' + proj.code + ' (' + proj.id + ')';
+  console.log(msg);
+  return msg;
+}
+
+function findResourceByEmail(email) {
+  email = String(email || '').toLowerCase();
+  if (!email) return null;
+  var found = repoList('Resource', function (r) { return String(r.email).toLowerCase() === email; });
+  return found.length ? found[0] : null;
+}
+
+// ======================================================================
+// 30_Api.gs
+// ======================================================================
+
+/**
+ * PPM Core — API JSON (section 12).
+ *
+ * Déploiement : web app, « Exécuter en tant que : moi (compte propriétaire) »,
+ * « Accès : tous les utilisateurs du domaine ».
+ * Requête : POST { action, params, apiVersion, requestId, addonId? }
+ * Réponse : { ok: true, data, cursor? } | { ok: false, error: { code, message, details } }
+ *
+ * handleRequest() est pur vis-à-vis du transport : les tests l'appellent directement.
+ */
+
+var API_ACTIONS = {};
+var IDEMPOTENCY_STORE = null; // tests : objet en mémoire ; production : CacheService
+var IDEMPOTENCY_TTL_S = 21600; // 6 h, maximum du cache Apps Script
+
+function doPost(e) {
+  var body;
+  try {
+    body = JSON.parse(e && e.postData ? e.postData.contents : '{}');
+  } catch (err) {
+    return jsonOut_({ ok: false, error: { code: 'VALIDATION', message: 'Corps JSON invalide.' } });
+  }
+  return jsonOut_(handleRequest(body, currentUserEmail_()));
+}
+
+function doGet(e) {
+  if (e && e.parameter && e.parameter.view) return renderPage_(e);
+  return jsonOut_({ ok: true, data: { service: 'ppm-core', version: PPM_VERSION, apiVersion: PPM_API_VERSION } });
+}
+
+function jsonOut_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function currentUserEmail_() {
+  return String(Session.getActiveUser().getEmail() || '').toLowerCase();
+}
+
+function handleRequest(body, actorEmail, opts) {
+  if (!(opts && opts.keepMemo)) resetExecution_();
+  try {
+    body = body || {};
+    var email = String(actorEmail || '').toLowerCase();
+    var domain = allowedDomain();
+    if (!email || !domain || email.split('@')[1] !== domain) {
+      throw new PpmError('FORBIDDEN', 'Accès réservé aux comptes du domaine.');
+    }
+    var major = String(body.apiVersion || PPM_API_VERSION).split('.')[0];
+    if (major !== PPM_API_VERSION.split('.')[0]) {
+      throw new PpmError('VALIDATION', 'Version d’API non prise en charge : ' + body.apiVersion);
+    }
+    var handler = API_ACTIONS[body.action];
+    if (!handler) throw new PpmError('NOT_FOUND', 'Action inconnue : ' + body.action);
+
+    var cacheKey = body.requestId ? 'req:' + email + ':' + body.requestId : null;
+    if (cacheKey) {
+      var cached = idempotencyGet_(cacheKey);
+      if (cached) return cached;
+    }
+    prefetchTables_(HOT_TABLES);
+    var t0 = Date.now();
+    var ctx = buildContext(email, body.addonId);
+    var result = handler(body.params || {}, ctx);
+    if (!TABLE_PROVIDER) console.log('PPM ' + body.action + ' : ' + (Date.now() - t0) + ' ms');
+    var response = { ok: true, data: result && result.__page ? result.items : result };
+    if (result && result.__page && result.cursor) response.cursor = result.cursor;
+    if (cacheKey) idempotencyPut_(cacheKey, response);
+    return response;
+  } catch (err) {
+    if (err instanceof PpmError || (err && err.name === 'PpmError')) {
+      return { ok: false, error: { code: err.code, message: err.message, details: err.details || null } };
+    }
+    console.error(err && err.stack ? err.stack : err);
+    return { ok: false, error: { code: 'INTERNAL', message: 'Erreur interne.', details: null } };
+  }
+}
+
+function idempotencyGet_(key) {
+  if (IDEMPOTENCY_STORE) return IDEMPOTENCY_STORE[key] || null;
+  var v = CacheService.getScriptCache().get(key);
+  return v ? JSON.parse(v) : null;
+}
+
+function idempotencyPut_(key, response) {
+  if (IDEMPOTENCY_STORE) { IDEMPOTENCY_STORE[key] = response; return; }
+  var s = JSON.stringify(response);
+  if (s.length < 90000) CacheService.getScriptCache().put(key, s, IDEMPOTENCY_TTL_S);
+}
+
+/** Contexte de l'appelant : ressource, rôles actifs, droits. */
+function buildContext(email, addonId) {
+  var resource = findResourceByEmail(email);
+  var today = todayStr();
+  var ctx = {
+    email: email,
+    resource: resource,
+    resourceId: resource ? resource.id : null,
+    isAdmin: adminEmails().indexOf(email) >= 0,
+    assignments: resource ? activeAssignments(resource.id, repoList('RoleAssignment'), today) : [],
+    lookup: repoLookup_(),
+    actx: { actor: email, source: addonId ? 'addon:' + addonId : 'api' }
+  };
+  return ctx;
+}
+
+function repoLookup_() {
+  var cache = {};
+  function get(table, id) {
+    var k = table + ':' + id;
+    if (!(k in cache)) cache[k] = repoGet(table, id);
+    return cache[k];
+  }
+  var lookup = {
+    planitem: function (id) { return get('PlanItem', id); },
+    workpackage: function (id) { return get('WorkPackage', id); },
+    project: function (id) { return get('Project', id); },
+    risk: function (id) { return get('RiskOpportunity', id); },
+    budgetMember: function (resourceId, itemId) {
+      var viaBudget = repoList('BudgetLine', function (b) {
+        return b.deliverable_id === itemId && b.resource_id === resourceId;
+      }).length > 0;
+      return viaBudget || activeAssignmentsFor_(resourceId, itemId, lookup);
+    }
+  };
+  return lookup;
+}
+
+/** Un MEMBER affecté explicitement sur le projet ou un WP englobant compte aussi. */
+function activeAssignmentsFor_(resourceId, itemId, lookup) {
+  var chain = scopeAncestors({ type: 'planitem', id: itemId }, lookup);
+  return repoList('RoleAssignment', function (a) {
+    return a.resource_id === resourceId && a.role_code === 'MEMBER' &&
+      chain.some(function (s) { return s.type === a.scope_type && String(s.id) === String(a.scope_id); });
+  }).length > 0;
+}
+
+// ---------------------------------------------------------------- outils
+
+function requireParam(params, name) {
+  if (isBlank(params[name])) throw new PpmError('VALIDATION', 'Paramètre obligatoire : ' + name);
+  return params[name];
+}
+
+function mustGet(table, id) {
+  var rec = repoGet(table, id);
+  if (!rec || isTrue(rec.deleted)) throw new PpmError('NOT_FOUND', table + ' introuvable : ' + id);
+  return rec;
+}
+
+/** Pagination par curseur (décalage opaque). */
+function paginate(rows, params) {
+  var limit = Math.max(1, Math.min(500, Number(params.limit) || 100));
+  var offset = Number(params.cursor) || 0;
+  var items = rows.slice(offset, offset + limit);
+  return { __page: true, items: items, cursor: offset + limit < rows.length ? String(offset + limit) : null };
+}
+
+function defineAction(name, fn) {
+  API_ACTIONS[name] = fn;
+}
+
+// ---------------------------------------------------------------- actions : général
+
+defineAction('ping', function () {
+  return { version: PPM_VERSION, apiVersion: PPM_API_VERSION, time: nowIso() };
+});
+
+defineAction('me.roles', function (p, ctx) {
+  return {
+    email: ctx.email, isAdmin: ctx.isAdmin, resource: ctx.resource,
+    assignments: ctx.assignments.map(function (a) {
+      return { role_code: a.role_code, scope_type: a.scope_type, scope_id: a.scope_id };
+    })
+  };
+});
+
+// ---------------------------------------------------------------- actions : structure
+
+defineAction('programs.list', function (p) { return paginate(repoList('Program'), p); });
+
+defineAction('programs.create', function (p, ctx) {
+  requireCan(ctx, 'program.create', { type: 'global' });
+  return repoInsert('Program', p.values || {}, ctx.actx);
+});
+
+defineAction('projects.list', function (p) {
+  return paginate(repoList('Project', function (r) { return isBlank(p.programId) || r.program_id === p.programId; }), p);
+});
+
+defineAction('projects.get', function (p) { return mustGet('Project', requireParam(p, 'id')); });
+
+defineAction('projects.create', function (p, ctx) {
+  var v = p.values || {};
+  requireCan(ctx, 'project.create', isBlank(v.program_id) ? { type: 'global' } : { type: 'program', id: v.program_id });
+  if (!isBlank(v.program_id)) mustGet('Program', v.program_id);
+  return repoInsert('Project', v, ctx.actx);
+});
+
+defineAction('projects.update', function (p, ctx) {
+  var id = requireParam(p, 'id');
+  mustGet('Project', id);
+  requireCan(ctx, 'wbs.edit', { type: 'project', id: id });
+  return repoUpdate('Project', id, p.patch || {}, p.version, ctx.actx);
+});
+
+defineAction('workpackages.list', function (p) {
+  var projectId = requireParam(p, 'projectId');
+  return paginate(repoList('WorkPackage', function (w) { return w.project_id === projectId; }), p);
+});
+
+defineAction('workpackages.create', function (p, ctx) {
+  var v = p.values || {};
+  mustGet('Project', requireParam(v, 'project_id'));
+  if (!isBlank(v.parent_wp_id)) {
+    var parent = mustGet('WorkPackage', v.parent_wp_id);
+    if (!isBlank(parent.parent_wp_id)) throw new PpmError('VALIDATION', 'Le WBS est limité à deux niveaux.');
+    if (parent.project_id !== v.project_id) throw new PpmError('VALIDATION', 'Le WP parent appartient à un autre projet.');
+  }
+  requireCan(ctx, 'wbs.edit', isBlank(v.parent_wp_id) ? { type: 'project', id: v.project_id } : { type: 'workpackage', id: v.parent_wp_id });
+  return repoInsert('WorkPackage', v, ctx.actx);
+});
+
+defineAction('workpackages.update', function (p, ctx) {
+  var id = requireParam(p, 'id');
+  mustGet('WorkPackage', id);
+  requireCan(ctx, 'wbs.edit', { type: 'workpackage', id: id });
+  var patch = Object.assign({}, p.patch || {});
+  delete patch.project_id;
+  return repoUpdate('WorkPackage', id, patch, p.version, ctx.actx);
+});
+
+defineAction('workpackages.delete', function (p, ctx) {
+  var id = requireParam(p, 'id');
+  mustGet('WorkPackage', id);
+  requireCan(ctx, 'wbs.edit', { type: 'workpackage', id: id });
+  return repoSoftDelete('WorkPackage', id, p.version, ctx.actx);
+});
+
+defineAction('planitems.list', function (p) {
+  var projectId = requireParam(p, 'projectId');
+  return paginate(repoList('PlanItem', function (i) { return i.project_id === projectId; }), p);
+});
+
+defineAction('planitems.get', function (p) { return mustGet('PlanItem', requireParam(p, 'id')); });
+
+defineAction('planitems.create', function (p, ctx) {
+  var v = p.values || {};
+  mustGet('Project', requireParam(v, 'project_id'));
+  if (!isBlank(v.wp_id) && mustGet('WorkPackage', v.wp_id).project_id !== v.project_id) {
+    throw new PpmError('VALIDATION', 'Le WP appartient à un autre projet.');
+  }
+  requireCan(ctx, 'wbs.edit', isBlank(v.wp_id) ? { type: 'project', id: v.project_id } : { type: 'workpackage', id: v.wp_id });
+  var values = Object.assign({ status: 'À faire', progress_pct: 0 }, v);
+  return repoInsert('PlanItem', values, ctx.actx);
+});
+
+defineAction('planitems.update', function (p, ctx) {
+  var id = requireParam(p, 'id');
+  mustGet('PlanItem', id);
+  requireCan(ctx, 'wbs.edit', { type: 'planitem', id: id });
+  var patch = Object.assign({}, p.patch || {});
+  ['project_id', 'progress_pct', 'status', 'last_progress_at'].forEach(function (k) { delete patch[k]; });
+  return repoUpdate('PlanItem', id, patch, p.version, ctx.actx);
+});
+
+defineAction('planitems.delete', function (p, ctx) {
+  var id = requireParam(p, 'id');
+  mustGet('PlanItem', id);
+  requireCan(ctx, 'wbs.edit', { type: 'planitem', id: id });
+  return repoSoftDelete('PlanItem', id, p.version, ctx.actx);
+});
+
+defineAction('dependencies.list', function (p) {
+  var projectId = requireParam(p, 'projectId');
+  var ids = {};
+  repoList('PlanItem', function (i) { return i.project_id === projectId; }).forEach(function (i) { ids[i.id] = true; });
+  return paginate(repoList('Dependency', function (d) { return ids[d.successor_id] || ids[d.predecessor_id]; }), p);
+});
+
+defineAction('dependencies.create', function (p, ctx) {
+  var v = p.values || {};
+  mustGet('PlanItem', requireParam(v, 'predecessor_id'));
+  mustGet('PlanItem', requireParam(v, 'successor_id'));
+  requireCan(ctx, 'wbs.edit', { type: 'planitem', id: v.successor_id });
+  var edges = repoList('Dependency').map(function (d) { return { from: d.predecessor_id, to: d.successor_id }; });
+  if (wouldCreateCycle(edges, { from: v.predecessor_id, to: v.successor_id })) {
+    throw new PpmError('VALIDATION', 'Cette dépendance fermerait une boucle dans le planning.', { rule: 'CYCLE' });
+  }
+  return repoInsert('Dependency', Object.assign({ dep_type: 'FS', lag_days: 0 }, v), ctx.actx);
+});
+
+defineAction('dependencies.delete', function (p, ctx) {
+  var id = requireParam(p, 'id');
+  var d = mustGet('Dependency', id);
+  requireCan(ctx, 'wbs.edit', { type: 'planitem', id: d.successor_id });
+  return repoSoftDelete('Dependency', id, p.version, ctx.actx);
+});
+
+// ---------------------------------------------------------------- actions : avancement, baselines
+
+defineAction('progress.declare', function (p, ctx) {
+  var itemId = requireParam(p, 'planItemId');
+  var item = mustGet('PlanItem', itemId);
+  if (item.item_type !== 'Livrable') throw new PpmError('VALIDATION', 'L’avancement se déclare sur un livrable.');
+  requireCan(ctx, 'progress.declare', { type: 'planitem', id: itemId });
+  repoInsert('ProgressUpdate', {
+    deliverable_id: itemId, resource_id: ctx.resourceId || '', declared_at: nowIso(),
+    progress_pct: requireParam(p, 'progressPct'), comment: p.comment || ''
+  }, ctx.actx);
+  return repoGet('PlanItem', itemId);
+});
+
+defineAction('baselines.request', function (p, ctx) {
+  var projectId = requireParam(p, 'projectId');
+  mustGet('Project', projectId);
+  requireCan(ctx, 'baseline.request', { type: 'project', id: projectId });
+  var rec = repoInsert('Baseline', {
+    project_id: projectId, justification: requireParam(p, 'justification'),
+    label: p.label || '', requested_by: ctx.email, status: 'Demandée'
+  }, ctx.actx);
+  return rec;
+});
+
+// ---------------------------------------------------------------- actions : traçabilité, alertes
+
+defineAction('changes.since', function (p) {
+  // Curseur « at|id » : ordre total, aucun événement perdu entre deux pages.
+  var parts = String(p.cursor || '').split('|');
+  var cAt = parts[0] || '', cId = parts[1] || '';
+  var rows = repoList('ChangeEvent', function (e) {
+    var after = String(e.at) > cAt || (String(e.at) === cAt && String(e.id) > cId);
+    return after && (isBlank(p.projectId) || e.project_id === p.projectId);
+  }).sort(function (a, b) {
+    var ka = a.at + '|' + a.id, kb = b.at + '|' + b.id;
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
+  });
+  var limit = Math.max(1, Math.min(1000, Number(p.limit) || 200));
+  var items = rows.slice(0, limit);
+  var last = items.length ? items[items.length - 1] : null;
+  return { __page: true, items: items, cursor: last ? last.at + '|' + last.id : (p.cursor || null) };
+});
+
+defineAction('insights.list', function (p) {
+  return paginate(repoList('Insight', function (i) {
+    return (isBlank(p.projectId) || i.project_id === p.projectId) && (isBlank(p.status) || i.status === p.status);
+  }), p);
+});
+
+// ======================================================================
+// 32_Views.gs
+// ======================================================================
+
+/**
+ * PPM Core — vues du lot 1 : Gantt projet, vue programme, organisation (OBS).
+ *
+ * Les tables sont lues UNE fois par requête puis traitées en mémoire : une lecture
+ * de feuille coûte cher en Apps Script, un appel par élément serait trop lent.
+ * Les fonctions build* sont pures (testées hors ligne) ; les actions de l'API les
+ * alimentent. La page web « Gantt » appelle le Core par uiCall(), donc avec
+ * exactement les mêmes contrôles de droits que l'API.
+ */
+
+// ---------------------------------------------------------------- chargement
+
+function loadPlanningData_() {
+  return {
+    programs: repoList('Program'),
+    projects: repoList('Project'),
+    workpackages: repoList('WorkPackage'),
+    planitems: repoList('PlanItem'),
+    dependencies: repoList('Dependency'),
+    resources: repoList('Resource'),
+    assignments: repoList('RoleAssignment'),
+    budgetLines: repoList('BudgetLine'),
+    holidaySets: repoList('HolidaySet')
+  };
+}
+
+function indexBy_(rows) {
+  var m = {};
+  (rows || []).forEach(function (r) { m[r.id] = r; });
+  return m;
+}
+
+/** Même interface que repoLookup_(), mais sur des données déjà chargées. */
+function memoryLookup(data) {
+  var items = indexBy_(data.planitems), wps = indexBy_(data.workpackages), projects = indexBy_(data.projects);
+  var lookup = {
+    planitem: function (id) { return items[id] || null; },
+    workpackage: function (id) { return wps[id] || null; },
+    project: function (id) { return projects[id] || null; },
+    risk: function () { return null; },
+    budgetMember: function (resourceId, itemId) {
+      if ((data.budgetLines || []).some(function (b) { return b.deliverable_id === itemId && b.resource_id === resourceId; })) return true;
+      var chain = scopeAncestors({ type: 'planitem', id: itemId }, lookup);
+      return (data.assignments || []).some(function (a) {
+        return a.resource_id === resourceId && a.role_code === 'MEMBER' &&
+          chain.some(function (s) { return s.type === a.scope_type && String(s.id) === String(a.scope_id); });
+      });
+    }
+  };
+  return lookup;
+}
+
+/** holFor(projectId) à partir des HolidaySet déjà chargés. */
+function holidayResolver(data) {
+  var byCountry = {};
+  (data.holidaySets || []).forEach(function (h) {
+    var m = byCountry[h.country] || (byCountry[h.country] = {});
+    parseJsonSafe(h.dates_json, []).forEach(function (d) { m[typeof d === 'string' ? d : d.date] = true; });
+  });
+  var projects = indexBy_(data.projects);
+  return function (projectId) {
+    var p = projects[projectId];
+    return byCountry[(p && p.holiday_country) || 'FR'] || {};
+  };
+}
+
+function resourceName_(data, id) {
+  if (isBlank(id)) return '';
+  var r = (data._resById || (data._resById = indexBy_(data.resources)))[id];
+  return r ? r.name : '';
+}
+
+function isDone_(it) {
+  return it.status === 'Terminé' || Number(it.progress_pct) >= 100;
+}
+
+/** Avancement pondéré par la durée (jours ouvrés) des livrables. */
+function weightedProgress_(items, holFor) {
+  var w = 0, acc = 0;
+  items.forEach(function (it) {
+    if (it.item_type !== 'Livrable') return;
+    var d = Math.max(1, itemDuration(it, holFor(it.project_id)));
+    w += d;
+    acc += d * Math.min(100, Math.max(0, Number(it.progress_pct) || 0));
+  });
+  return w ? Math.round(acc / w) : 0;
+}
+
+function span_(items) {
+  var s = '', f = '';
+  items.forEach(function (it) {
+    var a = itemStart(it), b = itemFinish(it);
+    if (!isBlank(a) && (!s || a < s)) s = a;
+    if (!isBlank(b) && (!f || b > f)) f = b;
+  });
+  return { start: s || null, finish: f || null };
+}
+
+function byStartThenName_(a, b) {
+  var sa = itemStart(a) || '9999', sb = itemStart(b) || '9999';
+  if (sa !== sb) return sa < sb ? -1 : 1;
+  return String(a.name).localeCompare(String(b.name));
+}
+
+function byWbs_(a, b) {
+  var ka = String(a.wbs_code || ''), kb = String(b.wbs_code || '');
+  if (ka !== kb) return ka.localeCompare(kb, undefined, { numeric: true });
+  return String(a.name).localeCompare(String(b.name));
+}
+
+// ---------------------------------------------------------------- Gantt projet
+
+/**
+ * data : loadPlanningData_() ; ctx : contexte de l'appelant (droits) ; today : AAAA-MM-JJ.
+ * Renvoie les lignes du Gantt dans l'ordre d'affichage (WP, sous-WP, éléments),
+ * les dépendances, les violations et le chemin critique.
+ */
+function buildProjectGantt(data, projectId, ctx, today) {
+  var project = indexBy_(data.projects)[projectId];
+  if (!project) throw new PpmError('NOT_FOUND', 'Projet introuvable : ' + projectId);
+  var holFor = holidayResolver(data);
+  var lookup = memoryLookup(data);
+  var uctx = Object.assign({}, ctx, { lookup: lookup });
+
+  var items = data.planitems.filter(function (i) { return i.project_id === projectId; });
+  var itemIds = {};
+  items.forEach(function (i) { itemIds[i.id] = true; });
+
+  // Dépendances touchant le projet ; voisins des autres projets en contraintes fixes.
+  var allItems = indexBy_(data.planitems), projById = indexBy_(data.projects);
+  var deps = data.dependencies.filter(function (d) { return itemIds[d.predecessor_id] || itemIds[d.successor_id]; });
+  var externals = {};
+  deps.forEach(function (d) {
+    [d.predecessor_id, d.successor_id].forEach(function (id) {
+      if (!itemIds[id] && allItems[id]) externals[id] = Object.assign({}, allItems[id], { external: true });
+    });
+  });
+  var extList = Object.keys(externals).map(function (k) { return externals[k]; });
+
+  var floats = computeFloats(items.concat(extList), deps, holFor);
+  var violations = dependencyViolations(items.concat(extList), deps, holFor);
+  var violatedDep = {}, violatedItem = {};
+  violations.forEach(function (v) { violatedDep[v.dependency_id] = true; violatedItem[v.successor_id] = true; });
+
+  // Baseline active (data.baseline = { row, snap }) : dates figées et glissement de chaque élément.
+  var base = data.baseline || null;
+  var baseItems = base ? base.snap.PlanItem : {};
+  var hol = holFor(projectId);
+  function baselineOf(it) {
+    if (!base) return {};
+    var b = baseItems[it.id];
+    if (!b) return { added: true };
+    var slip = !isBlank(b.planned_finish) && !isBlank(itemFinish(it)) ? workingDayOffset(b.planned_finish, itemFinish(it), hol) : null;
+    return { baseline_start: b.planned_start || b.planned_finish || null, baseline_finish: b.planned_finish || null, slip: slip };
+  }
+
+  function itemRow(it, level) {
+    var f = floats.byId[it.id] || {};
+    return Object.assign({
+      kind: 'item', id: it.id, name: it.name, item_type: it.item_type, wp_id: it.wp_id || '', level: level,
+      start: itemStart(it) || null, finish: itemFinish(it) || null,
+      progress: Number(it.progress_pct) || 0, status: it.status || '', owner: resourceName_(data, it.owner_resource_id),
+      critical: !!f.critical, float: f.float === undefined ? null : f.float, late_finish: f.lateFinish || null,
+      late: !isDone_(it) && !isBlank(itemFinish(it)) && itemFinish(it) < today,
+      violated: !!violatedItem[it.id], version: it.version,
+      canEdit: can(uctx, 'wbs.edit', { type: 'planitem', id: it.id }),
+      canDeclare: it.item_type === 'Livrable' && can(uctx, 'progress.declare', { type: 'planitem', id: it.id })
+    }, baselineOf(it));
+  }
+
+  // Arborescence WBS (deux niveaux).
+  var wps = data.workpackages.filter(function (w) { return w.project_id === projectId; });
+  var wpIds = {};
+  wps.forEach(function (w) { wpIds[w.id] = true; });
+  var childrenOf = {}, itemsOf = {};
+  wps.forEach(function (w) {
+    var parent = !isBlank(w.parent_wp_id) && wpIds[w.parent_wp_id] ? w.parent_wp_id : '';
+    (childrenOf[parent] = childrenOf[parent] || []).push(w);
+  });
+  items.forEach(function (it) {
+    var k = !isBlank(it.wp_id) && wpIds[it.wp_id] ? it.wp_id : '';
+    (itemsOf[k] = itemsOf[k] || []).push(it);
+  });
+
+  function deepItems(wpId) {
+    var acc = (itemsOf[wpId] || []).slice();
+    (childrenOf[wpId] || []).forEach(function (c) { acc = acc.concat(deepItems(c.id)); });
+    return acc;
+  }
+
+  var rows = [];
+  function emitWp(w, level) {
+    var all = deepItems(w.id);
+    var sp = span_(all);
+    var bsp = base ? span_(all.filter(function (i) { return baseItems[i.id]; }).map(function (i) { return baseItems[i.id]; })) : {};
+    rows.push({
+      kind: 'wp', id: 'wp:' + w.id, wp_id: w.id, name: w.name, wbs_code: w.wbs_code || '', level: level,
+      start: sp.start, finish: sp.finish, progress: weightedProgress_(all, holFor),
+      baseline_start: bsp.start || null, baseline_finish: bsp.finish || null,
+      owner: resourceName_(data, w.owner_resource_id),
+      critical: all.some(function (i) { return floats.byId[i.id] && floats.byId[i.id].critical; }),
+      late: all.some(function (i) { return !isDone_(i) && !isBlank(itemFinish(i)) && itemFinish(i) < today; })
+    });
+    (itemsOf[w.id] || []).slice().sort(byStartThenName_).forEach(function (it) { rows.push(itemRow(it, level + 1)); });
+    (childrenOf[w.id] || []).slice().sort(byWbs_).forEach(function (c) { emitWp(c, level + 1); });
+  }
+  (childrenOf[''] || []).slice().sort(byWbs_).forEach(function (w) { emitWp(w, 0); });
+  if ((itemsOf[''] || []).length) {
+    var loose = itemsOf[''];
+    var sp = span_(loose);
+    rows.push({ kind: 'wp', id: 'wp:none', wp_id: '', name: 'Hors workpackage', wbs_code: '', level: 0,
+      start: sp.start, finish: sp.finish, progress: weightedProgress_(loose, holFor), owner: '', critical: false, late: false });
+    loose.slice().sort(byStartThenName_).forEach(function (it) { rows.push(itemRow(it, 1)); });
+  }
+  extList.sort(byStartThenName_).forEach(function (it) {
+    var p = projById[it.project_id];
+    rows.push({
+      kind: 'external', id: it.id, name: it.name, item_type: it.item_type, level: 0,
+      project_code: p ? p.code : '', project_id: it.project_id,
+      start: itemStart(it) || null, finish: itemFinish(it) || null,
+      progress: Number(it.progress_pct) || 0, status: it.status || '', canEdit: false, canDeclare: false
+    });
+  });
+
+  var names = {};
+  items.concat(extList).forEach(function (i) { names[i.id] = i.name; });
+  var itemRows = rows.filter(function (r) { return r.kind === 'item'; });
+  var program = !isBlank(project.program_id) ? indexBy_(data.programs)[project.program_id] : null;
+  var baselineInfo = null;
+  if (base) {
+    var live = {};
+    items.forEach(function (i) { live[i.id] = true; });
+    var baseEnd = '';
+    Object.keys(baseItems).forEach(function (id) { var d = baseItems[id].planned_finish; if (!isBlank(d) && d > baseEnd) baseEnd = d; });
+    baselineInfo = {
+      id: base.row.id, label: base.row.label || ('B' + base.row.number), decided_at: base.row.decided_at || '',
+      slipped: itemRows.filter(function (r) { return r.slip > 0; }).length,
+      added: itemRows.filter(function (r) { return r.added; }).length,
+      removed: Object.keys(baseItems).filter(function (id) { return !live[id]; }).length,
+      end: baseEnd || null, end_slip: baseEnd && floats.anchor ? workingDayOffset(baseEnd, floats.anchor, hol) : null
+    };
+  }
+
+  return {
+    today: today,
+    anchor: floats.anchor,
+    project: {
+      id: project.id, code: project.code, name: project.name, status: project.status,
+      program_id: project.program_id || '', program_name: program ? program.name : '',
+      holiday_country: project.holiday_country || 'FR', start_date: project.start_date || '', end_date: project.end_date || '',
+      manager: resourceName_(data, project.manager_resource_id)
+    },
+    canEditProject: can(uctx, 'wbs.edit', { type: 'project', id: projectId }),
+    baseline: baselineInfo,
+    rows: rows,
+    dependencies: deps.filter(function (d) { return names[d.predecessor_id] && names[d.successor_id]; }).map(function (d) {
+      return { id: d.id, from: d.predecessor_id, to: d.successor_id, type: d.dep_type, lag: Number(d.lag_days) || 0, violated: !!violatedDep[d.id] };
+    }),
+    violations: violations.map(function (v) {
+      return Object.assign({}, v, { predecessor_name: names[v.predecessor_id], successor_name: names[v.successor_id] });
+    }),
+    stats: {
+      items: itemRows.length,
+      critical: itemRows.filter(function (r) { return r.critical; }).length,
+      late: itemRows.filter(function (r) { return r.late; }).length,
+      violations: violations.length,
+      progress: weightedProgress_(items, holFor),
+      beyondEnd: !isBlank(project.end_date) && !!floats.anchor && floats.anchor > project.end_date
+    }
+  };
+}
+
+// ---------------------------------------------------------------- vue programme
+
+/**
+ * Une ligne par projet (période, avancement, alertes, jalons) et les dépendances
+ * entre projets. Le chemin critique est calculé sur l'ensemble du programme.
+ * programId vide = projets hors programme.
+ */
+function buildProgramView(data, programId, today) {
+  var program = programId ? indexBy_(data.programs)[programId] : null;
+  if (programId && !program) throw new PpmError('NOT_FOUND', 'Programme introuvable : ' + programId);
+  var holFor = holidayResolver(data);
+  var projects = data.projects.filter(function (p) {
+    return programId ? p.program_id === programId : isBlank(p.program_id);
+  }).sort(function (a, b) { return String(a.code).localeCompare(String(b.code)); });
+  var projIds = {};
+  projects.forEach(function (p) { projIds[p.id] = true; });
+  var items = data.planitems.filter(function (i) { return projIds[i.project_id]; });
+  var itemById = indexBy_(items);
+  var deps = data.dependencies.filter(function (d) { return itemById[d.predecessor_id] && itemById[d.successor_id]; });
+  var floats = computeFloats(items, deps, holFor);
+  var violations = dependencyViolations(items, deps, holFor);
+  var violatedDep = {};
+  violations.forEach(function (v) { violatedDep[v.dependency_id] = true; });
+
+  var rows = projects.map(function (p) {
+    var its = items.filter(function (i) { return i.project_id === p.id; });
+    var sp = span_(its);
+    return {
+      id: p.id, code: p.code, name: p.name, status: p.status || '', manager: resourceName_(data, p.manager_resource_id),
+      start: sp.start || p.start_date || null, finish: sp.finish || p.end_date || null,
+      end_date: p.end_date || '', progress: weightedProgress_(its, holFor),
+      items: its.length,
+      late: its.filter(function (i) { return !isDone_(i) && !isBlank(itemFinish(i)) && itemFinish(i) < today; }).length,
+      critical: its.filter(function (i) { return floats.byId[i.id] && floats.byId[i.id].critical; }).length,
+      violations: violations.filter(function (v) { return itemById[v.successor_id].project_id === p.id; }).length,
+      milestones: its.filter(function (i) { return i.item_type === 'Jalon' && !isBlank(itemFinish(i)); })
+        .sort(byStartThenName_).map(function (m) {
+          return { id: m.id, name: m.name, date: itemFinish(m), status: m.status || '', critical: !!(floats.byId[m.id] && floats.byId[m.id].critical) };
+        })
+    };
+  });
+
+  var crossDeps = deps.filter(function (d) {
+    return itemById[d.predecessor_id].project_id !== itemById[d.successor_id].project_id;
+  }).map(function (d) {
+    var a = itemById[d.predecessor_id], b = itemById[d.successor_id];
+    return {
+      id: d.id, type: d.dep_type, from_project: a.project_id, to_project: b.project_id,
+      from_item: a.name, to_item: b.name, violated: !!violatedDep[d.id]
+    };
+  });
+
+  return {
+    today: today,
+    anchor: floats.anchor,
+    program: program ? { id: program.id, code: program.code, name: program.name, status: program.status || '',
+      leader: resourceName_(data, program.leader_resource_id) } : { id: '', code: '', name: 'Projets hors programme', status: '', leader: '' },
+    projects: rows,
+    crossDependencies: crossDeps,
+    stats: {
+      projects: rows.length,
+      late: rows.reduce(function (s, r) { return s + r.late; }, 0),
+      violations: violations.length,
+      crossDependencies: crossDeps.length
+    }
+  };
+}
+
+// ---------------------------------------------------------------- organisation (OBS)
+
+/** Rôles actifs sur un périmètre et sur ce qu'il contient (programme → projets → WP). */
+function buildObs(data, scopeType, scopeId, today) {
+  var projects = indexBy_(data.projects), wps = indexBy_(data.workpackages), programs = indexBy_(data.programs);
+  var inScope = function (a) {
+    if (a.scope_type === scopeType && String(a.scope_id) === String(scopeId)) return true;
+    if (scopeType === 'program') {
+      if (a.scope_type === 'project') return projects[a.scope_id] && projects[a.scope_id].program_id === scopeId;
+      if (a.scope_type === 'workpackage') {
+        var w = wps[a.scope_id];
+        return w && projects[w.project_id] && projects[w.project_id].program_id === scopeId;
+      }
+    }
+    if (scopeType === 'project' && a.scope_type === 'workpackage') return wps[a.scope_id] && wps[a.scope_id].project_id === scopeId;
+    if (scopeType === 'workpackage' && a.scope_type === 'workpackage') {
+      return wps[a.scope_id] && wps[a.scope_id].parent_wp_id === scopeId;
+    }
+    return false;
+  };
+  var label = function (type, id) {
+    if (type === 'program') return programs[id] ? programs[id].code + ' — ' + programs[id].name : id;
+    if (type === 'project') return projects[id] ? projects[id].code + ' — ' + projects[id].name : id;
+    if (type === 'workpackage') return wps[id] ? ((wps[id].wbs_code ? wps[id].wbs_code + ' ' : '') + wps[id].name) : id;
+    return id;
+  };
+  var rank = { program: 0, project: 1, workpackage: 2 };
+  var roleRank = { PL: 0, DPL: 1, CP: 2, RWP: 3, MEMBER: 4 };
+  return data.assignments.filter(function (a) {
+    if (isTrue(a.deleted)) return false;
+    if (!isBlank(a.start_date) && String(a.start_date) > today) return false;
+    if (!isBlank(a.end_date) && String(a.end_date) < today) return false;
+    return inScope(a);
+  }).map(function (a) {
+    return {
+      id: a.id, version: a.version, role_code: a.role_code, role_label: ROLE_LABELS[a.role_code] || a.role_code,
+      scope_type: a.scope_type, scope_id: a.scope_id, scope_label: label(a.scope_type, a.scope_id),
+      resource_id: a.resource_id, resource_name: resourceName_(data, a.resource_id),
+      start_date: a.start_date || '', end_date: a.end_date || ''
+    };
+  }).sort(function (a, b) {
+    return (rank[a.scope_type] - rank[b.scope_type]) || a.scope_label.localeCompare(b.scope_label) ||
+      (roleRank[a.role_code] - roleRank[b.role_code]) || a.resource_name.localeCompare(b.resource_name);
+  });
+}
+
+// ---------------------------------------------------------------- actions de l'API
+
+defineAction('planning.catalog', function () {
+  var projects = repoList('Project');
+  return {
+    programs: repoList('Program').map(function (p) { return { id: p.id, code: p.code, name: p.name, status: p.status || '' }; }),
+    projects: projects.map(function (p) {
+      return { id: p.id, code: p.code, name: p.name, status: p.status || '', program_id: p.program_id || '' };
+    })
+  };
+});
+
+defineAction('gantt.project', function (p, ctx) {
+  var data = loadPlanningData_();
+  var projectId = requireParam(p, 'projectId');
+  data.baseline = activeBaselineOf_(indexBy_(data.projects)[projectId]);
+  return buildProjectGantt(data, projectId, ctx, todayStr());
+});
+
+defineAction('gantt.program', function (p) {
+  return buildProgramView(loadPlanningData_(), p.programId || '', todayStr());
+});
+
+defineAction('obs.list', function (p) {
+  var type = requireParam(p, 'scopeType');
+  if (['program', 'project', 'workpackage'].indexOf(type) < 0) throw new PpmError('VALIDATION', 'Périmètre invalide : ' + type);
+  return buildObs(loadPlanningData_(), type, requireParam(p, 'scopeId'), todayStr());
+});
+
+var SCOPE_TABLE = { program: 'Program', project: 'Project', workpackage: 'WorkPackage' };
+
+defineAction('roles.assign', function (p, ctx) {
+  var v = p.values || {};
+  var type = requireParam(v, 'scope_type');
+  if (!SCOPE_TABLE[type]) throw new PpmError('VALIDATION', 'Périmètre invalide : ' + type);
+  mustGet(SCOPE_TABLE[type], requireParam(v, 'scope_id'));
+  mustGet('Resource', requireParam(v, 'resource_id'));
+  if (ROLES.indexOf(v.role_code) < 0) throw new PpmError('VALIDATION', 'Rôle inconnu : ' + v.role_code);
+  requireCan(ctx, 'roles.assign', { type: type, id: v.scope_id });
+  // On n'attribue pas un rôle plus élevé que le sien sur ce périmètre (un CP ne nomme pas un DPL).
+  if (!ctx.isAdmin && ROLE_RANK[v.role_code] < bestRankOn_(ctx, { type: type, id: v.scope_id })) {
+    throw new PpmError('FORBIDDEN', 'Vous ne pouvez pas attribuer un rôle plus élevé que le vôtre sur ce périmètre.');
+  }
+  var dup = repoList('RoleAssignment', function (a) {
+    return a.resource_id === v.resource_id && a.role_code === v.role_code && a.scope_type === type &&
+      String(a.scope_id) === String(v.scope_id) && (isBlank(a.end_date) || String(a.end_date) >= todayStr());
+  });
+  if (dup.length) throw new PpmError('VALIDATION', 'Ce rôle est déjà attribué à cette personne sur ce périmètre.');
+  return repoInsert('RoleAssignment', {
+    resource_id: v.resource_id, role_code: v.role_code, scope_type: type, scope_id: v.scope_id,
+    start_date: v.start_date || todayStr(), end_date: v.end_date || ''
+  }, ctx.actx);
+});
+
+/** Meilleur rang détenu par l'appelant sur le périmètre ou un périmètre englobant. */
+function bestRankOn_(ctx, scope) {
+  var chain = scopeAncestors(scope, ctx.lookup);
+  var best = 99;
+  ctx.assignments.forEach(function (a) {
+    var covers = chain.some(function (s) { return s.type === a.scope_type && String(s.id) === String(a.scope_id); });
+    if (covers && ROLE_RANK[a.role_code] < best) best = ROLE_RANK[a.role_code];
+  });
+  return best;
+}
+
+/** Fin d'une affectation : on renseigne la date de fin (hier), sans supprimer, pour garder l'historique. */
+defineAction('roles.end', function (p, ctx) {
+  var id = requireParam(p, 'id');
+  var a = mustGet('RoleAssignment', id);
+  requireCan(ctx, 'roles.assign', { type: a.scope_type, id: a.scope_id });
+  if (!ctx.isAdmin && ROLE_RANK[a.role_code] < bestRankOn_(ctx, { type: a.scope_type, id: a.scope_id })) {
+    throw new PpmError('FORBIDDEN', 'Vous ne pouvez pas retirer un rôle plus élevé que le vôtre.');
+  }
+  return repoUpdate('RoleAssignment', id, { end_date: addCalendarDays(todayStr(), -1) }, p.version, ctx.actx);
+});
+
+// ---------------------------------------------------------------- page web
+
+/** Appel depuis la page (google.script.run) : mêmes contrôles que l'API JSON. */
+function uiCall(action, params, requestId) {
+  return handleRequest({ action: action, params: params || {}, apiVersion: PPM_API_VERSION, requestId: requestId || null },
+    currentUserEmail_());
+}
+
+var PAGES = { gantt: 'Gantt', structure: 'Structure', suivi: 'Suivi', copilote: 'Copilote' };
+var PAGE_TITLES = { gantt: 'PPM — Planning', structure: 'PPM — Structure', suivi: 'PPM — Suivi', copilote: 'PPM — Copilote' };
+var PAGE_TABS = { gantt: [''], structure: ['obs', 'wbs'], suivi: ['ecarts', 'changes', 'baselines', 'workspace'], copilote: ['synthese', 'simulation', 'questions', 'suggestions'] };
+
+/** JSON à clés triées : la page et le serveur calculent la même clé pour les mêmes paramètres. */
+function stableJson_(v) {
+  if (Array.isArray(v)) return '[' + v.map(stableJson_).join(',') + ']';
+  if (v && typeof v === 'object') {
+    return '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + stableJson_(v[k]); }).join(',') + '}';
+  }
+  return JSON.stringify(v === undefined ? null : v);
+}
+
+/**
+ * Données du premier écran, calculées pendant la construction de la page : la page s'affiche sans
+ * attendre d'autres allers-retours. Clé = action + paramètres, exactement ceux que la page enverra.
+ * Chaque réponse garde la forme de l'API ({ ok, data } ou { ok: false, error }).
+ */
+function preloadFor_(view, boot, email) {
+  var pre = {};
+  var put = function (action, params) {
+    var res = handleRequest({ action: action, params: params, apiVersion: PPM_API_VERSION }, email, { keepMemo: true });
+    pre[action + '|' + stableJson_(params)] = res;
+    return res;
+  };
+  var cat = put('planning.catalog', {});
+  if (!cat.ok) return pre;
+  var open = cat.data.projects.filter(function (p) { return p.status !== 'Clos'; })[0] || cat.data.projects[0] || {};
+  var first = boot.project || open.id || '';
+  if (view === 'gantt') {
+    if (boot.program) put('gantt.program', { programId: boot.program === 'none' ? '' : boot.program });
+    else if (first) put('gantt.project', { projectId: first });
+  } else if (view === 'structure') {
+    var cfg = put('views.config', {});
+    if (!cfg.ok) return pre;
+    var mode = boot.mode || cfg.data.prefs.obs.mode || 'roles';
+    if (boot.program) {
+      if (mode === 'teams') put('obs.teams', { rootTeamId: '' });
+      else put('obs.tree', { scopeType: 'program', scopeId: boot.program === 'none' ? '' : boot.program });
+    } else if (first) {
+      if (boot.tab === 'wbs') put('wbs.tree', { projectId: first });
+      else if (mode === 'teams') put('obs.teams', { rootTeamId: '' });
+      else put('obs.tree', { scopeType: 'project', scopeId: first });
+    }
+  } else if (view === 'suivi' && first) {
+    var list = put('baselines.list', { projectId: first });
+    if (list.ok) {
+      if (list.data.canReadFeed) put('changes.feed', { projectId: first, limit: 1 });
+      if (boot.tab === 'ecarts' && list.data.project.active_baseline_id) put('baselines.diff', { projectId: first });
+    }
+  } else if (view === 'copilote' && first) {
+    put('copilot.status', { projectId: first });
+    if (boot.tab === 'synthese') put('copilot.brief', { projectId: first });
+  }
+  return pre;
+}
+
+/** JSON insérable dans une balise <script> : aucune séquence ne peut fermer la balise. */
+function safeJsonForScript(obj) {
+  return JSON.stringify(obj).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+}
+
+/** Identifiant venu de l'URL : caractères d'identifiant seulement. */
+function cleanId_(v) {
+  return String(v || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+}
+
+function renderPage_(e) {
+  resetExecution_();
+  var view = e.parameter.view;
+  if (!PAGES[view]) {
+    return HtmlService.createHtmlOutput('<p>Vue inconnue.</p>').setTitle('PPM');
+  }
+  var t = HtmlService.createTemplateFromFile(PAGES[view]);
+  var boot = {
+    project: cleanId_(e.parameter.project),
+    program: cleanId_(e.parameter.program),
+    tab: PAGE_TABS[view].indexOf(e.parameter.tab) >= 0 ? e.parameter.tab : PAGE_TABS[view][0],
+    mode: e.parameter.mode === 'teams' ? 'teams' : (e.parameter.mode === 'roles' ? 'roles' : ''),
+    baseUrl: webAppUrl_(),
+    appsheetUrl: getProp(PROP.APPSHEET_URL, ''),
+    logoUrl: /^https:\/\//.test(getProp(PROP.LOGO_URL, '')) ? getProp(PROP.LOGO_URL, '') : '',
+    view: view,
+    version: PPM_VERSION
+  };
+  var theme = '';
+  try { theme = loadPrefs_(currentUserEmail_()).ui.theme; } catch (err) { theme = ''; }
+  t.theme = theme === 'dark' || theme === 'light' ? theme : 'auto';
+  var t0 = Date.now();
+  try {
+    boot.preload = preloadFor_(view, boot, currentUserEmail_());
+  } catch (err) {
+    boot.preload = {}; // la page refera ses appels elle-même
+  }
+  boot.serverMs = Date.now() - t0;
+  t.boot = safeJsonForScript(boot);
+  return t.evaluate()
+    .setTitle(PAGE_TITLES[view])
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/** URL de la web app, pour les liens entre pages. Vide hors Apps Script (tests). */
+function webAppUrl_() {
+  var saved = getProp(PROP.WEBAPP_URL, '');
+  try {
+    var url = typeof ScriptApp !== 'undefined' ? String(ScriptApp.getService().getUrl() || '') : '';
+    if (url && /\/exec$/.test(url) && url !== saved) setProp(PROP.WEBAPP_URL, url);
+    return url || saved;
+  } catch (err) {
+    return saved;
+  }
+}
+
+/** Insère un fichier HTML dans un modèle : <?!= include('Style') ?> */
+function include(name) {
+  return HtmlService.createHtmlOutputFromFile(name).getContent();
+}
+
+// ======================================================================
+// 33_Structure.gs
+// ======================================================================
+
+/**
+ * PPM Core — lot 1 (suite) : personnes, OBS et WBS graphiques, préférences d'affichage.
+ *
+ *  - Une personne a une fonction (job_function) et une organisation (organization).
+ *  - L'OBS se lit de deux façons : par rôles (qui pilote quoi, du Program Leader aux
+ *    membres) ou par équipes hiérarchiques (HierarchicalTeam).
+ *  - Le WBS se lit projet par projet : projet → workpackages → sous-workpackages → livrables et jalons.
+ *  - Le serveur renvoie TOUS les attributs de chaque nœud ; le choix de ce qui est affiché est
+ *    fait dans la page et mémorisé par utilisateur (UserSetting.view_prefs_json).
+ *
+ * Les fonctions build* sont pures (données déjà chargées) : elles sont testées hors ligne.
+ */
+
+// ---------------------------------------------------------------- catalogue des attributs affichables
+
+/**
+ * Pour ajouter un attribut affichable : une ligne ici, la valeur dans build*Tree, et l'affichage
+ * dans Structure.html (fonction attrLines). Le nom (personne) et le titre du nœud sont toujours affichés.
+ */
+var VIEW_CATALOG = {
+  obs: {
+    attrs: [
+      { key: 'scope', label: 'Périmètre du rôle (en-tête)', on: true },
+      { key: 'job_function', label: 'Fonction', on: true },
+      { key: 'organization', label: 'Organisation', on: true },
+      { key: 'email', label: 'E-mail', on: false },
+      { key: 'team', label: 'Équipe hiérarchique', on: false },
+      { key: 'country', label: 'Pays', on: false },
+      { key: 'resource_type', label: 'Interne ou externe', on: false },
+      { key: 'supplier', label: 'Fournisseur', on: false },
+      { key: 'capacity', label: 'Capacité (jours par mois)', on: false },
+      { key: 'cost_center', label: 'Centre de coût (vue par équipes)', on: false },
+      { key: 'members', label: 'Membres de l’équipe (vue par équipes)', on: false }
+    ],
+    colors: [
+      { key: 'role', label: 'Rôle' },
+      { key: 'organization', label: 'Organisation' },
+      { key: 'resource_type', label: 'Interne ou externe' },
+      { key: 'none', label: 'Aucune' }
+    ],
+    modes: ['roles', 'teams'],
+    defaults: { colorBy: 'role', mode: 'roles' }
+  },
+  wbs: {
+    attrs: [
+      { key: 'wbs_code', label: 'Code WBS', on: true },
+      { key: 'owner', label: 'Responsable', on: true },
+      { key: 'owner_org', label: 'Organisation du responsable', on: false },
+      { key: 'dates', label: 'Dates prévues', on: true },
+      { key: 'progress', label: 'Avancement', on: true },
+      { key: 'status', label: 'Statut', on: false },
+      { key: 'charge_code', label: 'Code d’imputation', on: false },
+      { key: 'float', label: 'Marge et chemin critique', on: false }
+    ],
+    colors: [
+      { key: 'kind', label: 'Type de nœud' },
+      { key: 'organization', label: 'Organisation du responsable' },
+      { key: 'none', label: 'Aucune' }
+    ],
+    defaults: { colorBy: 'kind', showItems: true }
+  }
+};
+
+function defaultPrefs_(view) {
+  var cat = VIEW_CATALOG[view];
+  var prefs = Object.assign({}, cat.defaults);
+  prefs.attrs = cat.attrs.filter(function (a) { return a.on; }).map(function (a) { return a.key; });
+  return prefs;
+}
+
+/** Ramène des préférences quelconques à une forme valide : clés inconnues ignorées, manquantes par défaut. */
+function normalizePrefs_(view, raw) {
+  var cat = VIEW_CATALOG[view];
+  var out = defaultPrefs_(view);
+  raw = raw && typeof raw === 'object' ? raw : {};
+  if (Array.isArray(raw.attrs)) {
+    var wanted = {};
+    raw.attrs.forEach(function (k) { wanted[String(k)] = true; });
+    out.attrs = cat.attrs.map(function (a) { return a.key; }).filter(function (k) { return wanted[k]; });
+  }
+  if (cat.colors.some(function (c) { return c.key === raw.colorBy; })) out.colorBy = raw.colorBy;
+  if (view === 'obs' && cat.modes.indexOf(raw.mode) >= 0) out.mode = raw.mode;
+  if (view === 'wbs' && typeof raw.showItems === 'boolean') out.showItems = raw.showItems;
+  return out;
+}
+
+function userSettingRow_(email) {
+  var rows = repoList('UserSetting', function (u) { return String(u.user_email).toLowerCase() === email; });
+  return rows.length ? rows[0] : null;
+}
+
+function loadPrefs_(email) {
+  var row = userSettingRow_(email);
+  var saved = row ? parseJsonSafe(row.view_prefs_json, {}) : {};
+  var theme = saved.ui && ['light', 'dark', 'auto'].indexOf(saved.ui.theme) >= 0 ? saved.ui.theme : 'auto';
+  return { obs: normalizePrefs_('obs', saved.obs), wbs: normalizePrefs_('wbs', saved.wbs), ui: { theme: theme } };
+}
+
+// ---------------------------------------------------------------- personnes
+
+/** Champs d'une personne visibles par tous. rate_profile n'en fait pas partie (visibilité des TJM : question ouverte). */
+var RESOURCE_WRITABLE = ['resource_type', 'name', 'team_id', 'country', 'job_function', 'organization', 'supplier', 'capacity_days_month'];
+var RESOURCE_SELF_WRITABLE = ['job_function', 'organization'];
+
+function canEditResources_(ctx) {
+  return ctx.isAdmin || can(ctx, 'resource.edit', { type: 'global' });
+}
+
+function personCard_(r, teamsById, ctx, editAll) {
+  var team = !isBlank(r.team_id) ? teamsById[r.team_id] : null;
+  return {
+    resource_id: r.id, name: r.name, email: r.email || '',
+    job_function: r.job_function || '', organization: r.organization || '',
+    team: team ? team.name : '', country: r.country || '', resource_type: r.resource_type || '',
+    supplier: r.supplier || '', capacity: isBlank(r.capacity_days_month) ? '' : Number(r.capacity_days_month),
+    version: r.version, canEdit: editAll || (!!ctx.resourceId && ctx.resourceId === r.id)
+  };
+}
+
+function byName_(a, b) {
+  return String(a.name).localeCompare(String(b.name), 'fr', { sensitivity: 'base' });
+}
+
+// ---------------------------------------------------------------- OBS par rôles
+
+function scopeLabel_(data, type, id) {
+  var rec = ({ program: indexBy_(data.programs), project: indexBy_(data.projects), workpackage: indexBy_(data.workpackages) }[type] || {})[id];
+  if (!rec) return '';
+  if (type === 'workpackage') return (rec.wbs_code ? rec.wbs_code + ' ' : '') + rec.name;
+  return rec.code + ' — ' + rec.name;
+}
+
+/**
+ * Arbre des rôles autour d'un périmètre : les rôles du périmètre et de ce qu'il contient,
+ * plus ceux des périmètres qui le contiennent (pour que la hiérarchie soit complète).
+ * Un nœud = un rôle sur un périmètre, avec ses titulaires. Son parent est le rôle immédiatement
+ * supérieur qui couvre son périmètre (par exemple un chef de projet a pour parent le DPL du programme).
+ */
+function buildObsTree(data, scopeType, scopeId, today, ctx) {
+  if (!SCOPE_TABLE[scopeType]) throw new PpmError('VALIDATION', 'Périmètre invalide : ' + scopeType);
+  var rootLabel = scopeLabel_(data, scopeType, scopeId);
+  if (!rootLabel) throw new PpmError('NOT_FOUND', 'Périmètre introuvable : ' + scopeId);
+
+  var lookup = memoryLookup(data);
+  var resById = indexBy_(data.resources), teamsById = indexBy_(data.teams);
+  var editAll = canEditResources_(ctx);
+  var mine = {};
+  scopeAncestors({ type: scopeType, id: scopeId }, lookup).forEach(function (s) { mine[s.type + ':' + s.id] = true; });
+
+  var groups = {}, order = [];
+  data.assignments.forEach(function (a) {
+    if (isTrue(a.deleted)) return;
+    if (!isBlank(a.start_date) && String(a.start_date) > today) return;
+    if (!isBlank(a.end_date) && String(a.end_date) < today) return;
+    var res = resById[a.resource_id];
+    if (!res || isTrue(res.deleted)) return;
+    var label = scopeLabel_(data, a.scope_type, a.scope_id);
+    if (!label) return; // périmètre supprimé
+    var chain = scopeAncestors({ type: a.scope_type, id: a.scope_id }, lookup);
+    var below = chain.some(function (s) { return s.type === scopeType && String(s.id) === String(scopeId); });
+    if (!below && !mine[a.scope_type + ':' + a.scope_id]) return;
+
+    var key = a.role_code + '|' + a.scope_type + '|' + a.scope_id;
+    if (!groups[key]) {
+      groups[key] = {
+        id: 'role:' + key, parent: '', role_code: a.role_code, role_label: ROLE_LABELS[a.role_code] || a.role_code,
+        rank: ROLE_RANK[a.role_code], scope_type: a.scope_type, scope_id: a.scope_id, scope_label: label,
+        chain: chain, people: [], seen: {}
+      };
+      order.push(key);
+    }
+    var g = groups[key];
+    if (g.seen[res.id]) return;
+    g.seen[res.id] = true;
+    g.people.push(personCard_(res, teamsById, ctx, editAll));
+  });
+
+  var list = order.map(function (k) { return groups[k]; });
+  list.forEach(function (g) {
+    var best = null;
+    list.forEach(function (h) {
+      if (h === g || h.rank >= g.rank) return;
+      var at = -1;
+      g.chain.forEach(function (s, i) { if (at < 0 && s.type === h.scope_type && String(s.id) === String(h.scope_id)) at = i; });
+      if (at < 0) return;
+      if (!best || h.rank > best.h.rank || (h.rank === best.h.rank && at < best.at) ||
+          (h.rank === best.h.rank && at === best.at && h.id < best.h.id)) best = { h: h, at: at };
+    });
+    g.parent = best ? best.h.id : '';
+  });
+
+  list.sort(function (a, b) {
+    return (a.rank - b.rank) || a.scope_label.localeCompare(b.scope_label, 'fr') || 0;
+  });
+  var people = 0;
+  var nodes = list.map(function (g) {
+    g.people.sort(byName_);
+    people += g.people.length;
+    return {
+      id: g.id, parent: g.parent, role_code: g.role_code, role_label: g.role_label,
+      scope_type: g.scope_type, scope_id: g.scope_id, scope_label: g.scope_label, people: g.people
+    };
+  });
+  return {
+    mode: 'roles', scope: { type: scopeType, id: scopeId, label: rootLabel }, nodes: nodes,
+    canEditAll: editAll, stats: { nodes: nodes.length, people: people }
+  };
+}
+
+// ---------------------------------------------------------------- OBS par équipes
+
+/**
+ * Arbre des équipes hiérarchiques (HierarchicalTeam). rootTeamId limite à une branche.
+ * Les personnes sans équipe sont regroupées dans un nœud « Sans équipe » (vue complète seulement).
+ */
+function buildTeamTree(data, rootTeamId, ctx) {
+  var teams = data.teams.filter(function (t) { return !isTrue(t.deleted); });
+  var byId = indexBy_(teams);
+  var resources = data.resources.filter(function (r) { return !isTrue(r.deleted); });
+  var resById = indexBy_(resources);
+  var editAll = canEditResources_(ctx);
+
+  // Un cycle dans les parents est traité comme une racine, pour que l'arbre reste dessinable.
+  var parentOf = {};
+  teams.forEach(function (t) {
+    var p = !isBlank(t.parent_team_id) && byId[t.parent_team_id] ? t.parent_team_id : '';
+    var cur = p, guard = 0, cyclic = false;
+    while (cur && guard++ < 100) {
+      if (cur === t.id) { cyclic = true; break; }
+      var up = byId[cur] && !isBlank(byId[cur].parent_team_id) ? byId[cur].parent_team_id : '';
+      cur = byId[up] ? up : '';
+    }
+    parentOf[t.id] = cyclic ? '' : p;
+  });
+
+  var depthOf = function (id) { var d = 0, cur = parentOf[id]; while (cur && d < 100) { d++; cur = parentOf[cur]; } return d; };
+  var pathOf = function (id) { var names = [], cur = id, g = 0; while (cur && g++ < 100) { names.unshift(byId[cur].name); cur = parentOf[cur]; } return names.join(' / '); };
+
+  if (!isBlank(rootTeamId) && !byId[rootTeamId]) throw new PpmError('NOT_FOUND', 'Équipe introuvable : ' + rootTeamId);
+  var inBranch = function (id) {
+    if (isBlank(rootTeamId)) return true;
+    var cur = id, g = 0;
+    while (cur && g++ < 100) { if (cur === rootTeamId) return true; cur = parentOf[cur]; }
+    return false;
+  };
+
+  var membersOf = {}, unassigned = [];
+  resources.forEach(function (r) {
+    if (!isBlank(r.team_id) && byId[r.team_id]) (membersOf[r.team_id] = membersOf[r.team_id] || []).push(r);
+    else unassigned.push(r);
+  });
+  var card = function (r) { return personCard_(r, byId, ctx, editAll); };
+
+  var nodes = teams.filter(function (t) { return inBranch(t.id); }).map(function (t) {
+    var mgr = !isBlank(t.manager_resource_id) ? resById[t.manager_resource_id] : null;
+    var members = (membersOf[t.id] || []).filter(function (r) { return !mgr || r.id !== mgr.id; }).map(card).sort(byName_);
+    return {
+      id: 'team:' + t.id, parent: parentOf[t.id] && inBranch(parentOf[t.id]) && t.id !== rootTeamId ? 'team:' + parentOf[t.id] : '',
+      team_id: t.id, name: t.name, cost_center: t.cost_center || '', manager: mgr ? card(mgr) : null,
+      members: members, member_count: members.length, sort: pathOf(t.id)
+    };
+  }).sort(function (a, b) { return a.sort.localeCompare(b.sort, 'fr'); });
+  nodes.forEach(function (n) { delete n.sort; });
+
+  if (isBlank(rootTeamId) && unassigned.length) {
+    nodes.push({
+      id: 'team:none', parent: '', team_id: '', name: 'Sans équipe', cost_center: '', manager: null,
+      members: unassigned.map(card).sort(byName_), member_count: unassigned.length
+    });
+  }
+  return {
+    mode: 'teams', root_team_id: rootTeamId || '', nodes: nodes, canEditAll: editAll,
+    teams: teams.map(function (t) { return { id: t.id, name: t.name, depth: depthOf(t.id), path: pathOf(t.id) }; })
+      .sort(function (a, b) { return a.path.localeCompare(b.path, 'fr'); }),
+    stats: { nodes: nodes.length, people: resources.length }
+  };
+}
+
+// ---------------------------------------------------------------- WBS
+
+/** Marges du projet (les éléments liés d'autres projets sont des contraintes fixes). */
+function floatsForProject_(data, projectId, items, holFor) {
+  var ids = {};
+  items.forEach(function (i) { ids[i.id] = true; });
+  var all = indexBy_(data.planitems);
+  var deps = data.dependencies.filter(function (d) { return ids[d.predecessor_id] || ids[d.successor_id]; });
+  var ext = {};
+  deps.forEach(function (d) {
+    [d.predecessor_id, d.successor_id].forEach(function (id) {
+      if (!ids[id] && all[id]) ext[id] = Object.assign({}, all[id], { external: true });
+    });
+  });
+  return computeFloats(items.concat(Object.keys(ext).map(function (k) { return ext[k]; })), deps, holFor);
+}
+
+/**
+ * Arbre du WBS d'un projet : projet → WP → sous-WP → livrables et jalons.
+ * Les WP portent des valeurs de synthèse (dates, avancement pondéré, chemin critique).
+ */
+function buildWbsTree(data, projectId, today) {
+  var project = indexBy_(data.projects)[projectId];
+  if (!project) throw new PpmError('NOT_FOUND', 'Projet introuvable : ' + projectId);
+  var holFor = holidayResolver(data);
+  var resById = indexBy_(data.resources);
+  var who = function (id) { return !isBlank(id) && resById[id] ? resById[id] : null; };
+
+  var items = data.planitems.filter(function (i) { return i.project_id === projectId; });
+  var wps = data.workpackages.filter(function (w) { return w.project_id === projectId; });
+  var wpById = indexBy_(wps);
+  var floats = floatsForProject_(data, projectId, items, holFor);
+  var fl = function (id) { return floats.byId[id] || {}; };
+
+  var childrenOfWp = {}, itemsOfWp = {};
+  wps.forEach(function (w) {
+    var p = !isBlank(w.parent_wp_id) && wpById[w.parent_wp_id] ? w.parent_wp_id : '';
+    (childrenOfWp[p] = childrenOfWp[p] || []).push(w);
+  });
+  items.forEach(function (i) {
+    var k = !isBlank(i.wp_id) && wpById[i.wp_id] ? i.wp_id : '';
+    (itemsOfWp[k] = itemsOfWp[k] || []).push(i);
+  });
+  var deepItems = function (wpId) {
+    var acc = (itemsOfWp[wpId] || []).slice();
+    (childrenOfWp[wpId] || []).forEach(function (c) { acc = acc.concat(deepItems(c.id)); });
+    return acc;
+  };
+  var summary = function (its) {
+    var sp = span_(its), minFloat = null, crit = false;
+    its.forEach(function (i) {
+      var f = fl(i.id);
+      if (f.critical) crit = true;
+      if (f.float !== null && f.float !== undefined && (minFloat === null || f.float < minFloat)) minFloat = f.float;
+    });
+    return {
+      start: sp.start, finish: sp.finish, progress: weightedProgress_(its, holFor), critical: crit, float: minFloat,
+      late: its.some(function (i) { return !isDone_(i) && !isBlank(itemFinish(i)) && itemFinish(i) < today; })
+    };
+  };
+  var ownerOf = function (id) {
+    var r = who(id);
+    return { owner: r ? r.name : '', owner_org: r ? r.organization || '' : '', owner_function: r ? r.job_function || '' : '' };
+  };
+
+  var rootId = 'project:' + project.id;
+  var nodes = [Object.assign({
+    id: rootId, parent: '', kind: 'project', name: project.name, code: project.code, status: project.status || '',
+    charge_code: ''
+  }, ownerOf(project.manager_resource_id), summary(items))];
+
+  var emitWp = function (w, parentId) {
+    var all = deepItems(w.id);
+    var id = 'wp:' + w.id;
+    nodes.push(Object.assign({
+      id: id, parent: parentId, kind: 'wp', name: w.name, code: w.wbs_code || '', status: '', charge_code: w.charge_code || ''
+    }, ownerOf(w.owner_resource_id), summary(all)));
+    (childrenOfWp[w.id] || []).slice().sort(byWbs_).forEach(function (c) { emitWp(c, id); });
+    (itemsOfWp[w.id] || []).slice().sort(byStartThenName_).forEach(function (i) { emitItem(i, id); });
+  };
+  var emitItem = function (i, parentId) {
+    var f = fl(i.id);
+    nodes.push(Object.assign({
+      id: 'item:' + i.id, parent: parentId, kind: 'item', item_type: i.item_type, name: i.name, code: '',
+      status: i.status || '', charge_code: '',
+      start: itemStart(i) || null, finish: itemFinish(i) || null, progress: Number(i.progress_pct) || 0,
+      critical: !!f.critical, float: f.float === undefined ? null : f.float,
+      late: !isDone_(i) && !isBlank(itemFinish(i)) && itemFinish(i) < today
+    }, ownerOf(i.owner_resource_id)));
+  };
+  (childrenOfWp[''] || []).slice().sort(byWbs_).forEach(function (w) { emitWp(w, rootId); });
+  (itemsOfWp[''] || []).slice().sort(byStartThenName_).forEach(function (i) { emitItem(i, rootId); });
+
+  var program = !isBlank(project.program_id) ? indexBy_(data.programs)[project.program_id] : null;
+  return {
+    today: today,
+    project: { id: project.id, code: project.code, name: project.name, program_id: project.program_id || '',
+      program_name: program ? program.name : '' },
+    nodes: nodes,
+    stats: {
+      wps: wps.length, items: items.length,
+      depth: wps.some(function (w) { return !isBlank(w.parent_wp_id); }) ? 2 : (wps.length ? 1 : 0)
+    }
+  };
+}
+
+// ---------------------------------------------------------------- actions de l'API
+
+function loadObsData_() {
+  return {
+    programs: repoList('Program'), projects: repoList('Project'), workpackages: repoList('WorkPackage'),
+    resources: repoList('Resource'), assignments: repoList('RoleAssignment'), teams: repoList('HierarchicalTeam')
+  };
+}
+
+function loadWbsData_() {
+  return {
+    programs: repoList('Program'), projects: repoList('Project'), workpackages: repoList('WorkPackage'),
+    planitems: repoList('PlanItem'), dependencies: repoList('Dependency'), resources: repoList('Resource'),
+    holidaySets: repoList('HolidaySet')
+  };
+}
+
+defineAction('views.config', function (p, ctx) {
+  return { catalog: VIEW_CATALOG, prefs: loadPrefs_(ctx.email) };
+});
+
+defineAction('prefs.set', function (p, ctx) {
+  var view = requireParam(p, 'view');
+  if (!VIEW_CATALOG[view]) throw new PpmError('VALIDATION', 'Vue inconnue : ' + view);
+  var saved = {};
+  var row = userSettingRow_(ctx.email);
+  if (row) saved = parseJsonSafe(row.view_prefs_json, {});
+  saved[view] = normalizePrefs_(view, p.prefs);
+  var json = JSON.stringify(saved);
+  if (row) repoUpdate('UserSetting', row.id, { view_prefs_json: json }, null, ctx.actx);
+  else repoInsert('UserSetting', { user_email: ctx.email, view_prefs_json: json }, ctx.actx);
+  return saved[view];
+});
+
+/** Réglages d'interface de l'utilisateur (thème jour, nuit ou celui de l'ordinateur). */
+defineAction('ui.set', function (p, ctx) {
+  if (['light', 'dark', 'auto'].indexOf(p.theme) < 0) throw new PpmError('VALIDATION', 'Thème attendu : light, dark ou auto.');
+  var row = userSettingRow_(ctx.email);
+  var saved = row ? parseJsonSafe(row.view_prefs_json, {}) : {};
+  saved.ui = { theme: p.theme };
+  if (row) repoUpdate('UserSetting', row.id, { view_prefs_json: JSON.stringify(saved) }, null, ctx.actx);
+  else repoInsert('UserSetting', { user_email: ctx.email, view_prefs_json: JSON.stringify(saved) }, ctx.actx);
+  return saved.ui;
+});
+
+defineAction('obs.tree', function (p, ctx) {
+  return buildObsTree(loadObsData_(), requireParam(p, 'scopeType'), requireParam(p, 'scopeId'), todayStr(), ctx);
+});
+
+defineAction('obs.teams', function (p, ctx) {
+  return buildTeamTree(loadObsData_(), p.rootTeamId || '', ctx);
+});
+
+defineAction('wbs.tree', function (p) {
+  return buildWbsTree(loadWbsData_(), requireParam(p, 'projectId'), todayStr());
+});
+
+// ---- personnes
+
+defineAction('resources.list', function (p, ctx) {
+  var editAll = canEditResources_(ctx);
+  var q = String(p.q || '').toLowerCase();
+  var teams = indexBy_(repoList('HierarchicalTeam'));
+  var rows = repoList('Resource', function (r) {
+    return !q || [r.name, r.email, r.job_function, r.organization].some(function (v) { return String(v || '').toLowerCase().indexOf(q) >= 0; });
+  }).map(function (r) { return personCard_(r, teams, ctx, editAll); }).sort(byName_);
+  return paginate(rows, p);
+});
+
+function cleanResourceValues_(values, allowed) {
+  var out = {};
+  Object.keys(values || {}).forEach(function (k) {
+    if (allowed.indexOf(k) >= 0) out[k] = values[k];
+  });
+  return out;
+}
+
+defineAction('resources.create', function (p, ctx) {
+  requireCan(ctx, 'resource.edit', { type: 'global' });
+  var v = p.values || {};
+  var values = cleanResourceValues_(v, RESOURCE_WRITABLE.concat(['email']));
+  if (!isBlank(values.email)) {
+    values.email = String(values.email).toLowerCase();
+    if (findResourceByEmail(values.email)) throw new PpmError('VALIDATION', 'Cette adresse est déjà utilisée par une autre personne.');
+    values = fillFromDirectory_(values); // nom, fonction, organisation depuis l'annuaire s'ils manquent
+  }
+  return repoInsert('Resource', values, ctx.actx);
+});
+
+defineAction('resources.update', function (p, ctx) {
+  var id = requireParam(p, 'id');
+  var res = mustGet('Resource', id);
+  var editAll = canEditResources_(ctx);
+  var self = !!ctx.resourceId && ctx.resourceId === res.id;
+  if (!editAll && !self) throw new PpmError('FORBIDDEN', 'Vous ne pouvez modifier que votre propre fiche.');
+  var allowed = editAll ? RESOURCE_WRITABLE : RESOURCE_SELF_WRITABLE;
+  var patch = cleanResourceValues_(p.patch, allowed);
+  var refused = Object.keys(p.patch || {}).filter(function (k) { return allowed.indexOf(k) < 0; });
+  if (refused.length) {
+    throw new PpmError('FORBIDDEN', 'Champ(s) non modifiable(s) par vous : ' + refused.join(', ') +
+      (editAll ? '' : ' (vous pouvez modifier votre fonction et votre organisation).'));
+  }
+  return repoUpdate('Resource', id, patch, p.version, ctx.actx);
+});
+
+/**
+ * Fiche saisie dans AppSheet : mêmes règles que l'API. Un membre modifie sa fonction et son organisation ;
+ * PL, DPL et chef de projet modifient toute fiche. Sinon la modification est annulée et son auteur prévenu.
+ */
+function hookResourceGuard(before, rec, actx) {
+  var ctx = buildContext(actx.actor);
+  if (canEditResources_(ctx)) return true;
+  var self = !!ctx.resourceId && ctx.resourceId === rec.id;
+  var core = { actor: 'ppm-core', source: 'core' };
+  if (!before) {
+    repoUpdate('Resource', rec.id, { deleted: true }, null, core);
+    notifyUser(actx.actor, 'Création de fiche annulée',
+      'Seuls un Program Leader, un DPL ou un chef de projet peuvent ajouter une personne. La fiche « ' + rec.name + ' » a été annulée.');
+    return false;
+  }
+  var changed = diffRecords(before, rec, businessFields('Resource')).map(function (d) { return d.field; });
+  var illegal = changed.filter(function (f) { return !(self && RESOURCE_SELF_WRITABLE.indexOf(f) >= 0); });
+  if (!illegal.length) return true;
+  var restore = {};
+  illegal.forEach(function (f) { restore[f] = before[f]; });
+  repoUpdate('Resource', rec.id, restore, null, core);
+  notifyUser(actx.actor, 'Modification de fiche annulée',
+    'Vous ne pouvez pas modifier ' + (self ? 'ces champs de votre fiche' : 'la fiche de ' + rec.name) + ' (' + illegal.join(', ') + '). ' +
+    (self ? 'Votre fonction et votre organisation restent modifiables.' : 'Demandez à votre chef de projet ou DPL.'));
+  return false;
+}
+
+// ======================================================================
+// 34_Baselines.gs
+// ======================================================================
+
+/**
+ * PPM Core — lot 2 : baselines, écarts, fil des changements du chef de projet (section 5.3).
+ *
+ *  - Une baseline fige, pour un projet : dates et responsables des livrables et jalons, WP,
+ *    dépendances, budget et étalement, périmètre (liste des PlanItems). Copie dans BaselineItem.
+ *  - Tout membre du projet peut DEMANDER une baseline ; seul le chef de projet (ou le DPL) la FIGE,
+ *    avec une justification. Une seule est active ; les anciennes restent consultables et comparables.
+ *  - Les écarts se calculent à la demande, en comparant deux instantanés de même forme :
+ *    la baseline et l'état courant (ou deux baselines entre elles).
+ *  - Toute modification d'une donnée figée reste dans le fil du chef de projet jusqu'à son acquittement.
+ *
+ * Les fonctions projectSnapshot_, diffSnapshots et buildChangeFeed sont pures (testées hors ligne).
+ */
+
+/** Champs figés par table. La même liste définit ce qui entre dans le fil des changements. */
+var BASELINE_FIELDS = {
+  Project: ['start_date', 'end_date', 'holiday_country'],
+  WorkPackage: ['name', 'wbs_code', 'parent_wp_id', 'owner_resource_id', 'charge_code'],
+  PlanItem: ['name', 'item_type', 'wp_id', 'owner_resource_id', 'planned_start', 'planned_finish', 'milestone_category'],
+  Dependency: ['predecessor_id', 'successor_id', 'dep_type', 'lag_days'],
+  BudgetLine: ['deliverable_id', 'resource_id', 'cost_type', 'planned_days', 'frozen_rate', 'fixed_amount', 'planned_amount']
+};
+
+var FIELD_LABELS = {
+  start_date: 'début du projet', end_date: 'fin visée', holiday_country: 'calendrier',
+  name: 'nom', wbs_code: 'code WBS', parent_wp_id: 'WP parent', owner_resource_id: 'responsable', charge_code: 'imputation',
+  item_type: 'type', wp_id: 'workpackage', planned_start: 'début prévu', planned_finish: 'fin prévue',
+  milestone_category: 'catégorie de jalon', predecessor_id: 'prédécesseur', successor_id: 'successeur',
+  dep_type: 'type de lien', lag_days: 'décalage', deliverable_id: 'livrable', resource_id: 'ressource',
+  cost_type: 'type de coût', planned_days: 'jours prévus', frozen_rate: 'taux figé', fixed_amount: 'forfait',
+  planned_amount: 'montant prévu', deleted: 'suppression', '*': 'création ou suppression'
+};
+
+// ---------------------------------------------------------------- instantanés
+
+/** data : { projects, workpackages, planitems, dependencies, budgetLines, phasing } (lignes vivantes). */
+function projectSnapshot_(data, projectId) {
+  var snap = { Project: {}, WorkPackage: {}, PlanItem: {}, Dependency: {}, BudgetLine: {} };
+  var project = indexBy_(data.projects)[projectId];
+  if (project) snap.Project[project.id] = pickFields(project, BASELINE_FIELDS.Project);
+  data.workpackages.forEach(function (w) {
+    if (w.project_id === projectId) snap.WorkPackage[w.id] = pickFields(w, BASELINE_FIELDS.WorkPackage);
+  });
+  data.planitems.forEach(function (i) {
+    if (i.project_id === projectId) snap.PlanItem[i.id] = pickFields(i, BASELINE_FIELDS.PlanItem);
+  });
+  data.dependencies.forEach(function (d) {
+    if (snap.PlanItem[d.successor_id]) snap.Dependency[d.id] = pickFields(d, BASELINE_FIELDS.Dependency);
+  });
+  var phasing = {};
+  (data.phasing || []).forEach(function (ph) {
+    (phasing[ph.budget_line_id] = phasing[ph.budget_line_id] || []).push({ month: ph.month, amount: Number(ph.amount) || 0 });
+  });
+  (data.budgetLines || []).forEach(function (b) {
+    if (!snap.PlanItem[b.deliverable_id]) return;
+    var rec = pickFields(b, BASELINE_FIELDS.BudgetLine);
+    rec.phasing = (phasing[b.id] || []).sort(function (x, y) { return String(x.month) < String(y.month) ? -1 : 1; });
+    snap.BudgetLine[b.id] = rec;
+  });
+  return snap;
+}
+
+function snapshotToRows_(baselineId, snap) {
+  var rows = [];
+  Object.keys(snap).forEach(function (type) {
+    Object.keys(snap[type]).forEach(function (id) {
+      rows.push({ id: newId(), baseline_id: baselineId, entity_type: type, entity_id: id, snapshot_json: JSON.stringify(snap[type][id]) });
+    });
+  });
+  return rows;
+}
+
+function rowsToSnapshot_(rows) {
+  var snap = { Project: {}, WorkPackage: {}, PlanItem: {}, Dependency: {}, BudgetLine: {} };
+  rows.forEach(function (r) {
+    if (!snap[r.entity_type]) snap[r.entity_type] = {};
+    snap[r.entity_type][r.entity_id] = parseJsonSafe(r.snapshot_json, {});
+  });
+  return snap;
+}
+
+function loadSnapshotData_() {
+  return {
+    projects: repoList('Project'), workpackages: repoList('WorkPackage'), planitems: repoList('PlanItem'),
+    dependencies: repoList('Dependency'), budgetLines: repoList('BudgetLine'), phasing: repoList('BudgetPhasing')
+  };
+}
+
+function loadBaselineSnapshot_(baselineId) {
+  return rowsToSnapshot_(repoList('BaselineItem', function (r) { return r.baseline_id === baselineId; }));
+}
+
+/** Baseline active d'un projet et son instantané, ou null. */
+function activeBaselineOf_(project) {
+  if (!project || isBlank(project.active_baseline_id)) return null;
+  var b = repoGet('Baseline', project.active_baseline_id);
+  if (!b || isTrue(b.deleted) || b.status !== 'Active') return null;
+  return { row: b, snap: loadBaselineSnapshot_(b.id) };
+}
+
+// ---------------------------------------------------------------- écarts
+
+function budgetByItem_(snap) {
+  var out = {};
+  Object.keys(snap.BudgetLine || {}).forEach(function (id) {
+    var b = snap.BudgetLine[id];
+    out[b.deliverable_id] = round2((out[b.deliverable_id] || 0) + (Number(b.planned_amount) || 0));
+  });
+  return out;
+}
+
+function lastFinish_(snap) {
+  var f = '';
+  Object.keys(snap.PlanItem).forEach(function (id) {
+    var d = snap.PlanItem[id].planned_finish;
+    if (!isBlank(d) && d > f) f = d;
+  });
+  return f || null;
+}
+
+/**
+ * Compare deux instantanés de même forme. hol : fériés du calendrier du projet.
+ * Glissement en jours ouvrés : positif = plus tard que la référence.
+ */
+function diffSnapshots(base, cur, hol) {
+  var ids = {};
+  Object.keys(base.PlanItem).concat(Object.keys(cur.PlanItem)).forEach(function (id) { ids[id] = true; });
+  var bBudget = budgetByItem_(base), cBudget = budgetByItem_(cur);
+  var shift = function (a, b) { return !isBlank(a) && !isBlank(b) ? workingDayOffset(a, b, hol) : null; };
+  var items = Object.keys(ids).map(function (id) {
+    var b = base.PlanItem[id] || null, c = cur.PlanItem[id] || null;
+    var ref = c || b;
+    var row = {
+      id: id, name: ref.name, item_type: ref.item_type, wp_id: ref.wp_id || '',
+      base_start: b ? b.planned_start || null : null, base_finish: b ? b.planned_finish || null : null,
+      start: c ? c.planned_start || null : null, finish: c ? c.planned_finish || null : null,
+      base_owner: b ? b.owner_resource_id || '' : '', owner: c ? c.owner_resource_id || '' : '',
+      base_budget: bBudget[id] || 0, budget: cBudget[id] || 0
+    };
+    row.budget_delta = round2(row.budget - row.base_budget);
+    if (!b) { row.state = 'added'; row.slip = null; row.start_shift = null; return row; }
+    if (!c) { row.state = 'removed'; row.slip = null; row.start_shift = null; return row; }
+    row.slip = shift(b.planned_finish, c.planned_finish);
+    row.start_shift = shift(b.planned_start, c.planned_start);
+    row.owner_changed = row.base_owner !== row.owner;
+    row.renamed = String(b.name) !== String(c.name);
+    row.moved = String(b.wp_id || '') !== String(c.wp_id || '');
+    var datesChanged = String(b.planned_finish || '') !== String(c.planned_finish || '') ||
+      String(b.planned_start || '') !== String(c.planned_start || '');
+    row.state = datesChanged || row.owner_changed || row.renamed || row.moved || row.budget_delta !== 0 ? 'changed' : 'same';
+    return row;
+  });
+  var order = { added: 1, changed: 0, removed: 2, same: 3 };
+  items.sort(function (x, y) {
+    return (order[x.state] - order[y.state]) || ((y.slip || 0) - (x.slip || 0)) ||
+      String(x.base_finish || x.finish || '').localeCompare(String(y.base_finish || y.finish || '')) ||
+      String(x.name).localeCompare(String(y.name));
+  });
+  var endBase = lastFinish_(base), endCur = lastFinish_(cur);
+  var sum = function (m) { return round2(Object.keys(m).reduce(function (a, k) { return a + m[k]; }, 0)); };
+  var slips = items.filter(function (i) { return i.slip !== null; }).map(function (i) { return i.slip; });
+  var budgetBase = sum(bBudget), budgetCur = sum(cBudget);
+  return {
+    items: items,
+    totals: {
+      compared: items.length,
+      slipped: items.filter(function (i) { return i.slip > 0; }).length,
+      advanced: items.filter(function (i) { return i.slip < 0; }).length,
+      max_slip: slips.length ? Math.max.apply(null, slips.concat([0])) : 0,
+      added: items.filter(function (i) { return i.state === 'added'; }).length,
+      removed: items.filter(function (i) { return i.state === 'removed'; }).length,
+      owner_changes: items.filter(function (i) { return i.owner_changed; }).length,
+      end_base: endBase, end: endCur, end_slip: endBase && endCur ? workingDayOffset(endBase, endCur, hol) : null,
+      budget_base: budgetBase, budget: budgetCur, budget_delta: round2(budgetCur - budgetBase)
+    }
+  };
+}
+
+// ---------------------------------------------------------------- fil des changements
+
+/** Champs figés mais calculés : ils bougent avec le champ saisi, inutile de les montrer deux fois dans le fil. */
+var FEED_COMPUTED = { BudgetLine: ['planned_amount'] };
+
+/** Un événement entre dans le fil s'il touche une donnée figée : création, suppression ou champ figé saisi. */
+function isBaselinedEvent_(e) {
+  var fields = BASELINE_FIELDS[e.table_name];
+  if (!fields) return false;
+  if ((FEED_COMPUTED[e.table_name] || []).indexOf(e.field) >= 0) return false;
+  return e.field === '*' || e.field === 'deleted' || fields.indexOf(e.field) >= 0;
+}
+
+/**
+ * Fil d'un projet : événements sur des données figées, postérieurs à la baseline active.
+ * names : { resource: {id: nom}, item: {id: nom}, wp: {id: nom} } pour rendre les valeurs lisibles.
+ */
+function buildChangeFeed(events, projectId, since, names, opts) {
+  opts = opts || {};
+  var label = function (table, id) {
+    if (table === 'PlanItem') return names.item[id] || '(élément supprimé)';
+    if (table === 'WorkPackage') return names.wp[id] ? 'WP ' + names.wp[id] : '(WP supprimé)';
+    if (table === 'Project') return 'Projet';
+    if (table === 'Dependency') return names.dep[id] || 'Dépendance';
+    if (table === 'BudgetLine') return names.budget[id] ? 'Budget de ' + names.budget[id] : 'Ligne budgétaire';
+    return table;
+  };
+  var human = function (field, v) {
+    if (isBlank(v)) return '';
+    if (field === 'owner_resource_id' || field === 'resource_id') return names.resource[v] || v;
+    if (field === 'wp_id' || field === 'parent_wp_id') return names.wp[v] || v;
+    if (field === 'predecessor_id' || field === 'successor_id' || field === 'deliverable_id') return names.item[v] || v;
+    if (field === 'deleted') return isTrue(v) ? 'supprimé' : 'actif';
+    return String(v);
+  };
+  var rows = events.filter(function (e) {
+    return e.project_id === projectId && String(e.at) >= since && isBaselinedEvent_(e) &&
+      (opts.all || !isTrue(e.acknowledged));
+  }).sort(function (a, b) { return String(b.at).localeCompare(String(a.at)) || String(b.id).localeCompare(String(a.id)); });
+  return rows.map(function (e) {
+    var what;
+    if (e.field === '*') what = e.new_value === '(création)' ? 'ajout' : 'suppression';
+    else if (e.field === 'deleted') what = isTrue(e.new_value) ? 'suppression' : 'rétablissement';
+    else what = 'modification';
+    return {
+      id: e.id, at: e.at, actor: e.actor, actor_name: names.byEmail ? names.byEmail[String(e.actor).toLowerCase()] || '' : '', source: e.source, table: e.table_name, entity_id: e.entity_id,
+      entity: label(e.table_name, e.entity_id), what: what, field: e.field,
+      field_label: FIELD_LABELS[e.field] || e.field,
+      old_value: human(e.field, e.old_value), new_value: human(e.field, e.new_value),
+      acknowledged: isTrue(e.acknowledged), acknowledged_by: e.acknowledged_by || ''
+    };
+  });
+}
+
+function feedNames_() {
+  var names = { resource: {}, item: {}, wp: {}, dep: {}, budget: {}, byEmail: {} };
+  repoList('Resource', null, { includeDeleted: true }).forEach(function (r) {
+    names.resource[r.id] = r.name;
+    if (!isBlank(r.email)) names.byEmail[String(r.email).toLowerCase()] = r.name;
+  });
+  repoList('PlanItem', null, { includeDeleted: true }).forEach(function (i) { names.item[i.id] = i.name; });
+  repoList('WorkPackage', null, { includeDeleted: true }).forEach(function (w) { names.wp[w.id] = (w.wbs_code ? w.wbs_code + ' ' : '') + w.name; });
+  repoList('Dependency', null, { includeDeleted: true }).forEach(function (d) {
+    names.dep[d.id] = (names.item[d.predecessor_id] || '?') + ' → ' + (names.item[d.successor_id] || '?');
+  });
+  repoList('BudgetLine', null, { includeDeleted: true }).forEach(function (b) { names.budget[b.id] = names.item[b.deliverable_id] || ''; });
+  return names;
+}
+
+/** Nombre de changements à valider par projet (pour le mail récapitulatif et les compteurs). */
+function pendingChangeCounts_(projects, events) {
+  var since = {};
+  projects.forEach(function (p) {
+    if (isBlank(p.active_baseline_id)) return;
+    var b = repoGet('Baseline', p.active_baseline_id);
+    if (b && b.status === 'Active') since[p.id] = String(b.decided_at || '');
+  });
+  var counts = {};
+  events.forEach(function (e) {
+    if (!(e.project_id in since) || isTrue(e.acknowledged) || String(e.at) < since[e.project_id] || !isBaselinedEvent_(e)) return;
+    counts[e.project_id] = (counts[e.project_id] || 0) + 1;
+  });
+  return counts;
+}
+
+// ---------------------------------------------------------------- actions
+
+function baselineView_(b, counts) {
+  return {
+    id: b.id, number: b.number === '' ? null : Number(b.number), label: b.label || '', status: b.status,
+    justification: b.justification || '', requested_by: b.requested_by || '', decided_by: b.decided_by || '',
+    decided_at: b.decided_at || '', created_at: b.created_at || '', version: b.version, items: counts[b.id] || 0
+  };
+}
+
+function noteEvent_(table, id, projectId, text, ctx) {
+  repoAppendHistory('ChangeEvent', [{
+    id: newId(), at: nowIso(), table_name: table, entity_id: id, project_id: projectId, field: 'motif',
+    old_value: '', new_value: truncate(text, 500), actor: ctx.actx.actor, source: ctx.actx.source,
+    acknowledged: true, acknowledged_by: '', acknowledged_at: ''
+  }]);
+}
+
+defineAction('baselines.list', function (p, ctx) {
+  var projectId = requireParam(p, 'projectId');
+  var project = mustGet('Project', projectId);
+  var scope = { type: 'project', id: projectId };
+  var rows = repoList('Baseline', function (b) { return b.project_id === projectId; });
+  var ids = {};
+  rows.forEach(function (b) { ids[b.id] = true; });
+  var counts = {};
+  repoList('BaselineItem', function (r) { return ids[r.baseline_id] && r.entity_type === 'PlanItem'; })
+    .forEach(function (r) { counts[r.baseline_id] = (counts[r.baseline_id] || 0) + 1; });
+  var rank = { 'Demandée': 0, 'Active': 1, 'Archivée': 2, 'Refusée': 3 };
+  rows.sort(function (a, b) {
+    return (rank[a.status] - rank[b.status]) || ((Number(b.number) || -1) - (Number(a.number) || -1)) ||
+      String(b.created_at).localeCompare(String(a.created_at));
+  });
+  return {
+    project: { id: project.id, code: project.code, name: project.name, active_baseline_id: project.active_baseline_id || '',
+      calendar_id: project.calendar_id || '', drive_folder_id: project.drive_folder_id || '' },
+    baselines: rows.map(function (b) { return baselineView_(b, counts); }),
+    canManage: can(ctx, 'baseline.manage', scope),
+    canRequest: can(ctx, 'baseline.request', scope),
+    canAck: can(ctx, 'changes.ack', scope),
+    canReadFeed: can(ctx, 'changes.ack', scope) || can(ctx, 'wbs.edit', scope),
+    canWorkspace: can(ctx, 'workspace.manage', scope),
+    seeBudget: can(ctx, 'budget.edit', scope)
+  };
+});
+
+/**
+ * Fige l'état courant du projet. Avec requestId, la demande devient la baseline (sa justification est reprise
+ * si aucune n'est donnée). La baseline figée devient active ; la précédente est archivée.
+ */
+defineAction('baselines.create', function (p, ctx) {
+  var projectId = requireParam(p, 'projectId');
+  mustGet('Project', projectId);
+  requireCan(ctx, 'baseline.manage', { type: 'project', id: projectId });
+  return withLock(function () {
+    var request = null;
+    if (!isBlank(p.requestId)) {
+      request = mustGet('Baseline', p.requestId);
+      if (request.project_id !== projectId || request.status !== 'Demandée') {
+        throw new PpmError('VALIDATION', 'Cette demande n’est plus en attente.');
+      }
+    }
+    var justification = String(p.justification || (request ? request.justification : '') || '').trim();
+    if (!justification) throw new PpmError('VALIDATION', 'La justification est obligatoire.');
+    var snap = projectSnapshot_(loadSnapshotData_(), projectId);
+    if (!Object.keys(snap.PlanItem).length) {
+      throw new PpmError('VALIDATION', 'Rien à figer : le projet n’a encore aucun livrable ni jalon.');
+    }
+    var all = repoList('Baseline', function (b) { return b.project_id === projectId; });
+    var frozen = all.filter(function (b) { return b.status === 'Active' || b.status === 'Archivée'; });
+    var number = frozen.length ? Math.max.apply(null, frozen.map(function (b) { return Number(b.number) || 0; })) + 1 : 0;
+    var values = {
+      number: number, label: String(p.label || '').trim() || 'B' + number, justification: justification,
+      status: 'Active', decided_by: ctx.email, decided_at: nowIso()
+    };
+    var rec = request
+      ? repoUpdate('Baseline', request.id, values, p.version, ctx.actx)
+      : repoInsert('Baseline', Object.assign({ project_id: projectId, requested_by: ctx.email }, values), ctx.actx);
+    repoAppendHistory('BaselineItem', snapshotToRows_(rec.id, snap));
+    frozen.forEach(function (b) {
+      if (b.status === 'Active') repoUpdate('Baseline', b.id, { status: 'Archivée' }, null, ctx.actx);
+    });
+    repoUpdate('Project', projectId, { active_baseline_id: rec.id }, null, ctx.actx);
+    return baselineView_(rec, { [rec.id]: Object.keys(snap.PlanItem).length });
+  });
+});
+
+/** Réactive une baseline archivée (motif obligatoire, conservé dans le journal). */
+defineAction('baselines.activate', function (p, ctx) {
+  var b = mustGet('Baseline', requireParam(p, 'id'));
+  requireCan(ctx, 'baseline.manage', { type: 'project', id: b.project_id });
+  var reason = String(p.reason || '').trim();
+  if (!reason) throw new PpmError('VALIDATION', 'Le motif est obligatoire.');
+  if (b.status !== 'Archivée') throw new PpmError('VALIDATION', 'Seule une baseline archivée peut être réactivée.');
+  return withLock(function () {
+    repoList('Baseline', function (x) { return x.project_id === b.project_id && x.status === 'Active'; }).forEach(function (x) {
+      repoUpdate('Baseline', x.id, { status: 'Archivée' }, null, ctx.actx);
+    });
+    var rec = repoUpdate('Baseline', b.id, { status: 'Active', decided_by: ctx.email, decided_at: nowIso() }, p.version, ctx.actx);
+    repoUpdate('Project', b.project_id, { active_baseline_id: b.id }, null, ctx.actx);
+    noteEvent_('Baseline', b.id, b.project_id, 'Réactivation : ' + reason, ctx);
+    return baselineView_(rec, {});
+  });
+});
+
+/** Refuse une demande de baseline (motif obligatoire ; le demandeur le voit dans son récapitulatif). */
+defineAction('baselines.refuse', function (p, ctx) {
+  var b = mustGet('Baseline', requireParam(p, 'id'));
+  requireCan(ctx, 'baseline.manage', { type: 'project', id: b.project_id });
+  var reason = String(p.reason || '').trim();
+  if (!reason) throw new PpmError('VALIDATION', 'Le motif du refus est obligatoire.');
+  if (b.status !== 'Demandée') throw new PpmError('VALIDATION', 'Cette demande n’est plus en attente.');
+  var rec = repoUpdate('Baseline', b.id, { status: 'Refusée', decided_by: ctx.email, decided_at: nowIso() }, p.version, ctx.actx);
+  noteEvent_('Baseline', b.id, b.project_id, 'Refus : ' + reason, ctx);
+  return baselineView_(rec, {});
+});
+
+/**
+ * Écarts entre la baseline (active par défaut) et l'état courant, ou entre deux baselines (compareTo).
+ * Les montants ne sont renvoyés qu'à ceux qui ont le droit de modifier le budget du projet.
+ */
+defineAction('baselines.diff', function (p, ctx) {
+  var projectId = requireParam(p, 'projectId');
+  var project = mustGet('Project', projectId);
+  var baseId = p.baselineId || project.active_baseline_id;
+  var names = {};
+  repoList('Resource', null, { includeDeleted: true }).forEach(function (r) { names[r.id] = r.name; });
+  var wpNames = {};
+  repoList('WorkPackage', null, { includeDeleted: true }).forEach(function (w) { wpNames[w.id] = (w.wbs_code ? w.wbs_code + ' ' : '') + w.name; });
+  if (isBlank(baseId)) return { baseline: null, compareTo: null, items: [], totals: null };
+  var base = mustGet('Baseline', baseId);
+  if (base.project_id !== projectId || (base.status !== 'Active' && base.status !== 'Archivée')) {
+    throw new PpmError('VALIDATION', 'Cette baseline n’est pas figée pour ce projet.');
+  }
+  var cur, other = null;
+  if (!isBlank(p.compareTo)) {
+    other = mustGet('Baseline', p.compareTo);
+    if (other.project_id !== projectId) throw new PpmError('VALIDATION', 'Les deux baselines doivent appartenir au même projet.');
+    cur = loadBaselineSnapshot_(other.id);
+  } else {
+    cur = projectSnapshot_(loadSnapshotData_(), projectId);
+  }
+  var d = diffSnapshots(loadBaselineSnapshot_(base.id), cur, loadHolidayMap(project.holiday_country || 'FR'));
+  var seeBudget = can(ctx, 'budget.edit', { type: 'project', id: projectId });
+  d.items.forEach(function (i) {
+    i.base_owner_name = names[i.base_owner] || ''; i.owner_name = names[i.owner] || '';
+    i.wp_name = wpNames[i.wp_id] || '';
+    if (!seeBudget) { delete i.base_budget; delete i.budget; delete i.budget_delta; }
+  });
+  if (!seeBudget) { delete d.totals.budget_base; delete d.totals.budget; delete d.totals.budget_delta; }
+  d.baseline = baselineView_(base, {});
+  d.compareTo = other ? baselineView_(other, {}) : null;
+  d.seeBudget = seeBudget;
+  return d;
+});
+
+/** Fil du chef de projet : changements de données figées depuis la baseline active. */
+defineAction('changes.feed', function (p, ctx) {
+  var projectId = requireParam(p, 'projectId');
+  var project = mustGet('Project', projectId);
+  var scope = { type: 'project', id: projectId };
+  var canAck = can(ctx, 'changes.ack', scope);
+  if (!canAck && !can(ctx, 'wbs.edit', scope)) {
+    throw new PpmError('FORBIDDEN', 'Le fil des changements est réservé à l’équipe de pilotage du projet.');
+  }
+  var active = !isBlank(project.active_baseline_id) ? repoGet('Baseline', project.active_baseline_id) : null;
+  if (!active || active.status !== 'Active') return { baseline: null, canAck: canAck, items: [], pending: 0 };
+  var events = repoList('ChangeEvent', function (e) { return e.project_id === projectId; });
+  var names = feedNames_();
+  var all = buildChangeFeed(events, projectId, String(active.decided_at), names, { all: true });
+  var pending = all.filter(function (e) { return !e.acknowledged; });
+  var limit = Math.max(1, Math.min(500, Number(p.limit) || 200));
+  return {
+    baseline: baselineView_(active, {}), canAck: canAck, pending: pending.length,
+    items: (p.all ? all : pending).slice(0, limit)
+  };
+});
+
+/** Acquittement : ids (liste) ou projectId + all = true (tout le fil en attente). */
+defineAction('changes.ack', function (p, ctx) {
+  var t = getTable('ChangeEvent');
+  return withLock(function () {
+    var rows = t.readAll();
+    var wanted = {};
+    if (p.all) {
+      var projectId = requireParam(p, 'projectId');
+      var project = mustGet('Project', projectId);
+      var active = !isBlank(project.active_baseline_id) ? repoGet('Baseline', project.active_baseline_id) : null;
+      var since = active ? String(active.decided_at) : '9999';
+      rows.forEach(function (e) {
+        if (e.project_id === projectId && !isTrue(e.acknowledged) && String(e.at) >= since && isBaselinedEvent_(e)) wanted[e.id] = true;
+      });
+    } else {
+      (p.ids || []).slice(0, 1000).forEach(function (id) { wanted[String(id)] = true; });
+    }
+    var checked = {}, now = nowIso(), updates = [];
+    rows.forEach(function (e, i) {
+      if (!wanted[e.id] || isTrue(e.acknowledged)) return;
+      if (!(e.project_id in checked)) checked[e.project_id] = !!e.project_id && can(ctx, 'changes.ack', { type: 'project', id: e.project_id });
+      if (!checked[e.project_id]) throw new PpmError('FORBIDDEN', 'Seuls le chef de projet et le DPL valident les changements.');
+      updates.push({ row: i + 2, obj: Object.assign({}, e, { acknowledged: true, acknowledged_by: ctx.email, acknowledged_at: now }) });
+    });
+    if (updates.length) t.updateRows(updates);
+    return { acknowledged: updates.length };
+  });
+});
+
+// ======================================================================
+// 35_Workspace.gs
+// ======================================================================
+
+/**
+ * PPM Core — lot 2 : intégration Google Workspace (section 8).
+ *
+ *  - Agenda Google par projet : un événement « journée entière » par jalon et par échéance de livrable,
+ *    tenu à jour quand un élément est créé, déplacé ou supprimé. Partagé en lecture aux membres du projet.
+ *    Sur option, le responsable d'un livrable est invité à son échéance (réglage personnel).
+ *  - Dossier Drive par projet, un sous-dossier par WP (les sous-WP sont imbriqués), partagé aux membres.
+ *    Un WP supprimé ne supprime jamais son dossier : les fichiers restent.
+ *  - Annuaire : complète nom, fonction et organisation d'une personne à partir de son adresse ;
+ *    import d'une liste de personnes depuis une feuille Google Sheets.
+ *
+ * Tous les appels passent par l'adaptateur ws_() : en production les services Google (compte propriétaire),
+ * dans les tests un faux (variable WORKSPACE). Les identifiants externes et l'empreinte du dernier envoi
+ * sont gardés dans la table SyncLink : une mise à jour modifie l'existant au lieu de dupliquer,
+ * et rien n'est renvoyé si rien n'a changé.
+ */
+
+var WORKSPACE = null;
+
+function ws_() {
+  return WORKSPACE || realWorkspace_();
+}
+
+/** Date AAAA-MM-JJ → Date à minuit dans le fuseau du script (ce qu'attend un événement « journée entière »). */
+function localDate_(s) {
+  var p = String(s).split('-');
+  return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+}
+
+function realWorkspace_() {
+  var hasCalendar = typeof CalendarApp !== 'undefined';
+  var hasDrive = typeof DriveApp !== 'undefined';
+  return {
+    available: hasCalendar && hasDrive,
+    calendar: {
+      create: function (name) {
+        return CalendarApp.createCalendar(name, { timeZone: Session.getScriptTimeZone(), summary: 'Jalons et échéances, tenus à jour par PPM.' }).getId();
+      },
+      url: function (id) { return 'https://calendar.google.com/calendar/r?cid=' + encodeURIComponent(id); },
+      upsert: function (calId, eventId, ev) {
+        var cal = CalendarApp.getCalendarById(calId);
+        if (!cal) throw new PpmError('CONFIG', 'Agenda introuvable : ' + calId);
+        var e = eventId ? cal.getEventById(eventId) : null;
+        if (e) {
+          e.setTitle(ev.title);
+          e.setAllDayDate(localDate_(ev.date));
+          e.setDescription(ev.description);
+          var have = {};
+          e.getGuestList().forEach(function (g) { have[g.getEmail().toLowerCase()] = true; });
+          ev.guests.forEach(function (g) { if (!have[g]) e.addGuest(g); });
+          Object.keys(have).forEach(function (g) { if (ev.guests.indexOf(g) < 0) e.removeGuest(g); });
+          return e.getId();
+        }
+        return cal.createAllDayEvent(ev.title, localDate_(ev.date),
+          { description: ev.description, guests: ev.guests.join(','), sendInvites: false }).getId();
+      },
+      remove: function (calId, eventId) {
+        var cal = CalendarApp.getCalendarById(calId);
+        var e = cal ? cal.getEventById(eventId) : null;
+        if (e) e.deleteEvent();
+      },
+      /** Partage en lecture (service avancé Calendar) ; -1 si le service n'est pas activé. */
+      share: function (calId, emails) {
+        if (typeof Calendar === 'undefined' || !Calendar.Acl) return -1;
+        var have = {};
+        (Calendar.Acl.list(calId).items || []).forEach(function (r) {
+          if (r.scope && r.scope.type === 'user') have[String(r.scope.value).toLowerCase()] = true;
+        });
+        var added = 0;
+        emails.forEach(function (m) {
+          if (have[m]) return;
+          Calendar.Acl.insert({ role: 'reader', scope: { type: 'user', value: m } }, calId, { sendNotifications: false });
+          added++;
+        });
+        return added;
+      }
+    },
+    drive: {
+      root: function () {
+        var id = getProp(PROP.PROJECTS_FOLDER, '');
+        if (id) return id;
+        id = DriveApp.createFolder('PPM Projets').getId();
+        setProp(PROP.PROJECTS_FOLDER, id);
+        return id;
+      },
+      url: function (id) { return 'https://drive.google.com/drive/folders/' + id; },
+      /** Crée le dossier, ou renomme et déplace le dossier existant ; renvoie son identifiant. */
+      ensureFolder: function (parentId, name, folderId) {
+        var parent = DriveApp.getFolderById(parentId);
+        if (folderId) {
+          try {
+            var f = DriveApp.getFolderById(folderId);
+            if (!f.isTrashed()) {
+              if (f.getName() !== name) f.setName(name);
+              var inParent = false, it = f.getParents();
+              while (it.hasNext()) if (it.next().getId() === parentId) inParent = true;
+              if (!inParent) f.moveTo(parent);
+              return f.getId();
+            }
+          } catch (err) { /* dossier supprimé ou inaccessible : recréé */ }
+        }
+        return parent.createFolder(name).getId();
+      },
+      share: function (folderId, emails) {
+        var f = DriveApp.getFolderById(folderId);
+        var have = {};
+        f.getEditors().forEach(function (u) { have[u.getEmail().toLowerCase()] = true; });
+        try { have[f.getOwner().getEmail().toLowerCase()] = true; } catch (err) { /* Drive partagé : pas de propriétaire */ }
+        var missing = emails.filter(function (m) { return !have[m]; });
+        if (missing.length) f.addEditors(missing);
+        return missing.length;
+      }
+    },
+    directory: {
+      /** Annuaire du domaine (service avancé Admin SDK, facultatif) ; null si indisponible. */
+      lookup: function (email) {
+        if (typeof AdminDirectory === 'undefined') return null;
+        try {
+          var u = AdminDirectory.Users.get(email, { viewType: 'domain_public' });
+          var org = (u.organizations || [])[0] || {};
+          return { name: u.name ? u.name.fullName || '' : '', job_function: org.title || '', organization: org.department || '' };
+        } catch (err) {
+          return null;
+        }
+      }
+    }
+  };
+}
+
+// ---------------------------------------------------------------- liens (table SyncLink)
+
+function loadLinks_() {
+  var t = getTable('SyncLink');
+  var byId = {};
+  t.readAll().forEach(function (r, i) { byId[r.id] = { row: i + 2, rec: r }; });
+  return { table: t, byId: byId, dirty: {}, fresh: [] };
+}
+
+function setLink_(links, id, values) {
+  var cur = links.byId[id];
+  var rec = Object.assign({ id: id }, cur ? cur.rec : {}, values, { synced_at: nowIso() });
+  if (cur) { cur.rec = rec; links.dirty[id] = cur; } else { links.byId[id] = { row: -1, rec: rec }; links.fresh.push(rec); }
+}
+
+function saveLinks_(links) {
+  var updates = Object.keys(links.dirty).map(function (id) { return { row: links.dirty[id].row, obj: links.dirty[id].rec }; });
+  if (updates.length) links.table.updateRows(updates);
+  if (links.fresh.length) links.table.appendRows(links.fresh);
+  links.dirty = {};
+  links.fresh = [];
+}
+
+// ---------------------------------------------------------------- membres d'un projet
+
+/**
+ * Adresses du domaine qui travaillent sur le projet : chef de projet, rôles sur le projet, ses WP ou son programme,
+ * responsables de WP et de livrables. Personnes supprimées ou sans adresse du domaine exclues.
+ */
+function projectMembers_(data, projectId, today) {
+  var project = indexBy_(data.projects)[projectId];
+  if (!project) return [];
+  var wpIds = {};
+  data.workpackages.forEach(function (w) { if (w.project_id === projectId) wpIds[w.id] = true; });
+  var people = {};
+  if (!isBlank(project.manager_resource_id)) people[project.manager_resource_id] = true;
+  data.workpackages.forEach(function (w) { if (wpIds[w.id] && !isBlank(w.owner_resource_id)) people[w.owner_resource_id] = true; });
+  data.planitems.forEach(function (i) { if (i.project_id === projectId && !isBlank(i.owner_resource_id)) people[i.owner_resource_id] = true; });
+  (data.assignments || []).forEach(function (a) {
+    if (isTrue(a.deleted)) return;
+    if (!isBlank(a.end_date) && String(a.end_date) < today) return;
+    var hit = (a.scope_type === 'project' && a.scope_id === projectId) || (a.scope_type === 'workpackage' && wpIds[a.scope_id]) ||
+      (a.scope_type === 'program' && !isBlank(project.program_id) && a.scope_id === project.program_id);
+    if (hit) people[a.resource_id] = true;
+  });
+  var domain = allowedDomain();
+  var res = indexBy_(data.resources);
+  var out = {};
+  Object.keys(people).forEach(function (id) {
+    var r = res[id];
+    if (!r || isTrue(r.deleted) || isBlank(r.email)) return;
+    var m = String(r.email).toLowerCase();
+    if (!domain || m.split('@')[1] === domain) out[m] = true;
+  });
+  return Object.keys(out).sort();
+}
+
+// ---------------------------------------------------------------- agenda
+
+/** Événements voulus pour un projet : un par jalon et par échéance de livrable datés. */
+function desiredEvents_(data, project, baseUrl) {
+  var res = indexBy_(data.resources), wps = indexBy_(data.workpackages);
+  var invites = {};
+  (data.settings || []).forEach(function (s) { if (isTrue(s.calendar_invites)) invites[String(s.user_email).toLowerCase()] = true; });
+  var out = {};
+  data.planitems.forEach(function (i) {
+    if (i.project_id !== project.id || isTrue(i.deleted) || isBlank(i.planned_finish)) return;
+    var done = i.status === 'Terminé' || Number(i.progress_pct) >= 100;
+    var owner = res[i.owner_resource_id];
+    var wp = wps[i.wp_id];
+    var title = (done ? '✓ ' : '') + (i.item_type === 'Jalon' ? '◆ ' : 'Échéance · ') + project.code + ' · ' + i.name;
+    var lines = ['Projet ' + project.code + ' — ' + project.name];
+    if (wp) lines.push('Workpackage ' + (wp.wbs_code ? wp.wbs_code + ' ' : '') + wp.name);
+    if (owner) lines.push('Responsable : ' + owner.name);
+    if (i.item_type === 'Livrable' && !isBlank(i.planned_start)) lines.push('Début prévu : ' + i.planned_start);
+    if (baseUrl) lines.push('Planning : ' + baseUrl + '?view=gantt&project=' + project.id);
+    lines.push('Événement tenu à jour par PPM : les modifications faites ici seront écrasées.');
+    var guests = [];
+    if (owner && !isBlank(owner.email) && invites[String(owner.email).toLowerCase()]) guests.push(String(owner.email).toLowerCase());
+    out[i.id] = { title: title, date: i.planned_finish, description: lines.join('\n'), guests: guests };
+  });
+  return out;
+}
+
+function syncProjectCalendar_(data, project, links, report, baseUrl) {
+  if (isBlank(project.calendar_id)) return;
+  var wanted = desiredEvents_(data, project, baseUrl);
+  Object.keys(wanted).forEach(function (itemId) {
+    try {
+      syncOneEvent_(project, itemId, wanted[itemId], links, report);
+    } catch (err) {
+      report.errors.push('Agenda, « ' + wanted[itemId].title + ' » : ' + (err && err.message ? err.message : err));
+    }
+  });
+  Object.keys(links.byId).forEach(function (id) {
+    var l = links.byId[id].rec;
+    if (l.kind !== 'calendar' || l.project_id !== project.id || isBlank(l.external_id) || wanted[l.entity_id]) return;
+    try {
+      ws_().calendar.remove(l.container_id, l.external_id);
+      setLink_(links, id, { external_id: '', hash: 'REMOVED' });
+      report.removed++;
+    } catch (err) {
+      report.errors.push('Agenda, suppression : ' + (err && err.message ? err.message : err));
+    }
+  });
+}
+
+/** Crée ou met à jour un événement ; ne fait rien si son contenu n'a pas changé depuis le dernier envoi. */
+function syncOneEvent_(project, itemId, ev, links, report) {
+  var id = 'cal:' + itemId;
+  var link = links.byId[id] ? links.byId[id].rec : null;
+  var hash = hashString(project.calendar_id + '|' + JSON.stringify(ev));
+  var sameCal = link && link.container_id === project.calendar_id && !isBlank(link.external_id);
+  if (sameCal && link.hash === hash) return;
+  var eventId = ws_().calendar.upsert(project.calendar_id, sameCal ? link.external_id : '', ev);
+  setLink_(links, id, { kind: 'calendar', entity_id: itemId, project_id: project.id, container_id: project.calendar_id, external_id: eventId, hash: hash });
+  report[sameCal ? 'updated' : 'created']++;
+}
+
+/**
+ * Mise à jour immédiate de l'événement d'un élément (création ou déplacement), sans attendre la nuit.
+ * Une panne de l'agenda ne bloque jamais la saisie : la synchronisation nocturne rattrape (et gère les suppressions).
+ */
+function hookCalendarItem(before, rec) {
+  var fields = ['name', 'planned_finish', 'item_type', 'owner_resource_id', 'status', 'wp_id'];
+  if (before && !fields.some(function (f) { return String(before[f]) !== String(rec[f]); })) return;
+  try {
+    if (!ws_().available) return;
+    var project = repoGet('Project', rec.project_id);
+    if (!project || isBlank(project.calendar_id)) return;
+    var data = { planitems: [rec], resources: repoList('Resource'), workpackages: repoList('WorkPackage'), settings: repoList('UserSetting') };
+    var wanted = desiredEvents_(data, project, getProp(PROP.WEBAPP_URL, ''));
+    if (!wanted[rec.id]) return;
+    var links = loadLinks_();
+    syncOneEvent_(project, rec.id, wanted[rec.id], links, { created: 0, updated: 0 });
+    saveLinks_(links);
+  } catch (err) {
+    console.error('Agenda : ' + (err && err.message ? err.message : err));
+  }
+}
+
+// ---------------------------------------------------------------- Drive
+
+function folderName_(s) {
+  return String(s).replace(/[\/\\:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Sans nom';
+}
+
+function syncProjectDrive_(data, project, links, report) {
+  if (isBlank(project.drive_folder_id)) return;
+  var w = ws_();
+  var wps = data.workpackages.filter(function (x) { return x.project_id === project.id && !isTrue(x.deleted); });
+  var byId = indexBy_(wps);
+  var depth = function (x) { var d = 0, c = x; while (c && !isBlank(c.parent_wp_id) && byId[c.parent_wp_id] && d < 20) { d++; c = byId[c.parent_wp_id]; } return d; };
+  wps.sort(function (a, b) { return depth(a) - depth(b) || byWbs_(a, b); });
+  var folderOf = {};
+  wps.forEach(function (x) {
+    var parentFolder = !isBlank(x.parent_wp_id) && folderOf[x.parent_wp_id] ? folderOf[x.parent_wp_id] : project.drive_folder_id;
+    var name = folderName_((x.wbs_code ? x.wbs_code + ' ' : '') + x.name);
+    var id = 'drive:' + x.id;
+    var link = links.byId[id] ? links.byId[id].rec : null;
+    var hash = hashString(parentFolder + '|' + name);
+    if (link && !isBlank(link.external_id) && link.hash === hash) { folderOf[x.id] = link.external_id; return; }
+    try {
+      var fid = w.drive.ensureFolder(parentFolder, name, link ? link.external_id : '');
+      folderOf[x.id] = fid;
+      setLink_(links, id, { kind: 'drive', entity_id: x.id, project_id: project.id, container_id: parentFolder, external_id: fid, hash: hash });
+      report.folders++;
+    } catch (err) {
+      report.errors.push('Drive, « ' + name + ' » : ' + (err && err.message ? err.message : err));
+    }
+  });
+}
+
+/** Agenda, dossiers et partages d'un projet. */
+function syncProjectWorkspace_(project, data, links) {
+  var report = { created: 0, updated: 0, removed: 0, folders: 0, shared: 0, errors: [] };
+  var w = ws_();
+  if (!w.available) { report.errors.push('Services Google indisponibles.'); return report; }
+  data = data || loadWorkspaceData_();
+  var own = !links;
+  links = links || loadLinks_();
+  var baseUrl = getProp(PROP.WEBAPP_URL, '');
+  syncProjectCalendar_(data, project, links, report, baseUrl);
+  syncProjectDrive_(data, project, links, report);
+  var members = projectMembers_(data, project.id, todayStr());
+  if (!isBlank(project.calendar_id)) {
+    try {
+      var n = w.calendar.share(project.calendar_id, members);
+      if (n < 0) report.errors.push('Partage de l’agenda : activer le service avancé « Google Calendar API » (voir le README).');
+      else report.shared += n;
+    } catch (err) { report.errors.push('Partage de l’agenda : ' + (err && err.message ? err.message : err)); }
+  }
+  if (!isBlank(project.drive_folder_id)) {
+    try { report.shared += w.drive.share(project.drive_folder_id, members); } catch (err) {
+      report.errors.push('Partage du dossier : ' + (err && err.message ? err.message : err));
+    }
+  }
+  if (own) saveLinks_(links);
+  report.members = members.length;
+  return report;
+}
+
+function loadWorkspaceData_() {
+  return {
+    projects: repoList('Project'), workpackages: repoList('WorkPackage'), planitems: repoList('PlanItem'),
+    resources: repoList('Resource'), assignments: repoList('RoleAssignment'), settings: repoList('UserSetting')
+  };
+}
+
+/** Traitement nocturne : tous les projets reliés à Workspace, par tranches. */
+function syncWorkspaceAll(state, deadlineMs) {
+  if (!ws_().available) return true;
+  var data = loadWorkspaceData_();
+  var projects = data.projects.filter(function (p) {
+    return p.status !== 'Clos' && (!isBlank(p.calendar_id) || !isBlank(p.drive_folder_id));
+  }).sort(function (a, b) { return String(a.id).localeCompare(String(b.id)); });
+  state.index = state.index || 0;
+  var links = loadLinks_();
+  var errors = [];
+  while (state.index < projects.length) {
+    if (nowMs() > deadlineMs) { saveLinks_(links); return false; }
+    var r = syncProjectWorkspace_(projects[state.index], data, links);
+    r.errors.forEach(function (e) { errors.push(projects[state.index].code + ' : ' + e); });
+    state.index++;
+  }
+  saveLinks_(links);
+  if (errors.length) {
+    adminEmails().forEach(function (a) {
+      notifyUser(a, 'Synchronisation Agenda et Drive : ' + errors.length + ' erreur(s)', errors.slice(0, 50).join('\n'));
+    });
+  }
+  return true;
+}
+
+function workspaceStatus_(project, report) {
+  var w = ws_();
+  return {
+    project_id: project.id,
+    calendar_id: project.calendar_id || '', calendar_url: project.calendar_id && w.calendar.url ? w.calendar.url(project.calendar_id) : '',
+    drive_folder_id: project.drive_folder_id || '', drive_url: project.drive_folder_id && w.drive.url ? w.drive.url(project.drive_folder_id) : '',
+    report: report || null
+  };
+}
+
+defineAction('workspace.status', function (p, ctx) {
+  var project = mustGet('Project', requireParam(p, 'projectId'));
+  var st = workspaceStatus_(project, null);
+  st.canManage = can(ctx, 'workspace.manage', { type: 'project', id: project.id });
+  st.available = ws_().available;
+  return st;
+});
+
+/** Crée l'agenda et le dossier du projet s'ils n'existent pas, puis synchronise (réservé au pilotage du projet). */
+defineAction('workspace.enable', function (p, ctx) {
+  var projectId = requireParam(p, 'projectId');
+  var project = mustGet('Project', projectId);
+  requireCan(ctx, 'workspace.manage', { type: 'project', id: projectId });
+  var w = ws_();
+  if (!w.available) throw new PpmError('CONFIG', 'Les services Google Agenda et Drive ne sont pas disponibles.');
+  var patch = {};
+  if (p.calendar !== false && isBlank(project.calendar_id)) patch.calendar_id = w.calendar.create('PPM · ' + project.code + ' ' + project.name);
+  if (p.drive !== false && isBlank(project.drive_folder_id)) {
+    patch.drive_folder_id = w.drive.ensureFolder(w.drive.root(), folderName_(project.code + ' — ' + project.name), '');
+  }
+  if (Object.keys(patch).length) project = repoUpdate('Project', projectId, patch, null, ctx.actx);
+  return workspaceStatus_(project, syncProjectWorkspace_(project));
+});
+
+defineAction('workspace.sync', function (p, ctx) {
+  var project = mustGet('Project', requireParam(p, 'projectId'));
+  requireCan(ctx, 'workspace.manage', { type: 'project', id: project.id });
+  return workspaceStatus_(project, syncProjectWorkspace_(project));
+});
+
+// ---------------------------------------------------------------- annuaire et import de personnes
+
+/** Complète une fiche à partir de l'annuaire, sans jamais écraser une valeur saisie. */
+function fillFromDirectory_(values) {
+  if (isBlank(values.email)) return values;
+  var found = ws_().directory.lookup(String(values.email).toLowerCase());
+  if (!found) return values;
+  var out = Object.assign({}, values);
+  ['name', 'job_function', 'organization'].forEach(function (k) {
+    if (isBlank(out[k]) && !isBlank(found[k])) out[k] = String(found[k]).slice(0, TEXT_MAX_LENGTH[k] || 200);
+  });
+  if (isBlank(out.resource_type)) out.resource_type = 'Interne';
+  return out;
+}
+
+/** Nuit : complète les fiches incomplètes à partir de l'annuaire (au plus 200 par nuit). */
+function refreshPeopleFromDirectory() {
+  if (!WORKSPACE && typeof AdminDirectory === 'undefined') return 0;
+  var n = 0;
+  repoList('Resource', function (r) { return !isBlank(r.email) && (isBlank(r.job_function) || isBlank(r.organization)); })
+    .slice(0, 200).forEach(function (r) {
+      var filled = fillFromDirectory_(r);
+      var patch = {};
+      ['job_function', 'organization'].forEach(function (k) { if (filled[k] !== r[k]) patch[k] = filled[k]; });
+      if (Object.keys(patch).length) { repoUpdate('Resource', r.id, patch, null, { actor: 'ppm-core', source: 'annuaire' }); n++; }
+    });
+  return n;
+}
+
+var PEOPLE_HEADERS = {
+  name: ['nom', 'name', 'nom complet', 'full name', 'prenom nom', 'personne'],
+  email: ['e-mail', 'email', 'mail', 'adresse', 'adresse e-mail', 'courriel'],
+  job_function: ['fonction', 'poste', 'job', 'title', 'job title', 'metier'],
+  organization: ['organisation', 'organization', 'service', 'departement', 'department', 'societe', 'entreprise'],
+  country: ['pays', 'country'],
+  resource_type: ['type', 'interne/externe', 'interne ou externe'],
+  supplier: ['fournisseur', 'supplier'],
+  team: ['equipe', 'team']
+};
+
+function normHeader_(s) {
+  return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Fusionne une liste de personnes (tableau de lignes, la première = en-têtes) avec les fiches existantes.
+ * Clé : l'adresse e-mail, sinon le nom exact. Les fiches existantes ne sont complétées que sur les champs vides.
+ * Renvoie { create: [valeurs], update: [{ id, patch }], skipped: [motifs] }.
+ */
+function mergePeople_(rows, existing, teams) {
+  var out = { create: [], update: [], skipped: [] };
+  if (!rows || rows.length < 2) return out;
+  var col = {};
+  rows[0].forEach(function (h, i) {
+    var n = normHeader_(h);
+    Object.keys(PEOPLE_HEADERS).forEach(function (k) { if (!(k in col) && PEOPLE_HEADERS[k].indexOf(n) >= 0) col[k] = i; });
+  });
+  if (!('name' in col) && !('email' in col)) { out.skipped.push('Ni colonne « Nom » ni colonne « E-mail » en première ligne.'); return out; }
+  var byEmail = {}, byName = {}, teamByName = {};
+  existing.forEach(function (r) {
+    if (!isBlank(r.email)) byEmail[String(r.email).toLowerCase()] = r;
+    byName[normHeader_(r.name)] = r;
+  });
+  (teams || []).forEach(function (t) { teamByName[normHeader_(t.name)] = t.id; });
+  var seen = {};
+  rows.slice(1).forEach(function (row, i) {
+    var v = {};
+    Object.keys(col).forEach(function (k) { var x = row[col[k]]; if (!isBlank(x)) v[k] = String(x).replace(/\s+/g, ' ').trim(); });
+    if (isBlank(v.name) && isBlank(v.email)) return;
+    if (v.email) v.email = v.email.toLowerCase();
+    if (v.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email)) { out.skipped.push('Ligne ' + (i + 2) + ' : adresse invalide « ' + v.email + ' ».'); return; }
+    if (v.country) { v.country = v.country.toUpperCase(); if (v.country === 'GB') v.country = 'UK'; if (COUNTRIES.indexOf(v.country) < 0) delete v.country; }
+    if (v.resource_type) v.resource_type = /ext/i.test(v.resource_type) ? 'Externe' : 'Interne';
+    if (v.team) { var tid = teamByName[normHeader_(v.team)]; if (tid) v.team_id = tid; else out.skipped.push('Ligne ' + (i + 2) + ' : équipe inconnue « ' + v.team + ' » (ignorée).'); delete v.team; }
+    ['job_function', 'organization'].forEach(function (k) { if (v[k]) v[k] = v[k].slice(0, TEXT_MAX_LENGTH[k]); });
+    var key = v.email || 'nom:' + normHeader_(v.name);
+    if (seen[key]) { out.skipped.push('Ligne ' + (i + 2) + ' : doublon.'); return; }
+    seen[key] = true;
+    var cur = (v.email && byEmail[v.email]) || (!v.email && byName[normHeader_(v.name)]) || null;
+    if (cur) {
+      var patch = {};
+      Object.keys(v).forEach(function (k) { if (k !== 'email' && isBlank(cur[k])) patch[k] = v[k]; });
+      if (Object.keys(patch).length) out.update.push({ id: cur.id, patch: patch });
+      return;
+    }
+    if (isBlank(v.name)) { out.skipped.push('Ligne ' + (i + 2) + ' : nom manquant pour ' + v.email + '.'); return; }
+    if (!v.resource_type) v.resource_type = 'Interne';
+    out.create.push(v);
+  });
+  return out;
+}
+
+/**
+ * À exécuter depuis l'éditeur (administrateur) : importe les personnes d'une feuille Google Sheets.
+ * Colonnes reconnues en première ligne : Nom, E-mail, Fonction, Organisation, Pays, Type, Fournisseur, Équipe.
+ */
+function importPeopleFromSheet(url) {
+  if (!url) throw new PpmError('VALIDATION', 'Passer l’adresse de la feuille : importPeopleFromSheet("https://docs.google.com/…")');
+  var rows = SpreadsheetApp.openByUrl(url).getSheets()[0].getDataRange().getDisplayValues();
+  var m = mergePeople_(rows, repoList('Resource'), repoList('HierarchicalTeam'));
+  var actx = { actor: String(Session.getActiveUser().getEmail() || 'admin').toLowerCase(), source: 'import' };
+  m.create.forEach(function (v) { repoInsert('Resource', fillFromDirectory_(v), actx); });
+  m.update.forEach(function (u) { repoUpdate('Resource', u.id, u.patch, null, actx); });
+  var msg = m.create.length + ' personne(s) créée(s), ' + m.update.length + ' complétée(s).' +
+    (m.skipped.length ? '\nIgnoré :\n- ' + m.skipped.join('\n- ') : '');
+  console.log(msg);
+  return msg;
+}
+
+// ======================================================================
+// 36_Digest.gs
+// ======================================================================
+
+/**
+ * PPM Core — lot 2 : mail récapitulatif (section 8, Gmail).
+ *
+ * Un seul mail par personne : chaque matin de semaine (réglage « Quotidien », par défaut),
+ * le lundi seulement (« Hebdomadaire »), ou jamais (« Aucun »). Il est calculé à partir de l'état
+ * des données, sans file d'attente : ce qui est réglé depuis la veille n'y figure plus.
+ *
+ *   - Mes livrables et jalons : en retard, à échéance dans les 7 jours, avancement non déclaré depuis 30 jours ;
+ *   - Pilotage (chef de projet, DPL) : changements à valider, demandes de baseline, alertes du moteur de règles ;
+ *   - Mes demandes de baseline tranchées depuis le dernier récapitulatif.
+ *
+ * Seules les adresses du domaine reçoivent un récapitulatif. buildDigests est pure (testée hors ligne).
+ */
+
+var DIGEST_MAX_LINES = 12;
+
+function escHtml_(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function frDate_(s) {
+  if (isBlank(s)) return '';
+  var p = String(s).slice(0, 10).split('-');
+  return p[2] + '/' + p[1] + '/' + p[0];
+}
+
+/**
+ * data : { projects, planitems, resources, assignments, settings, insights, baselines, workpackages,
+ *          pendingChanges: { projectId: n } }
+ * opts : { baseUrl, weekly: true le lundi (les réglages « Hebdomadaire » reçoivent alors leur mail), onlyEmail }
+ * Renvoie [{ to, subject, text, html, counts }] ; une personne sans rien à signaler ne reçoit rien.
+ */
+function buildDigests(data, today, opts) {
+  opts = opts || {};
+  var domain = allowedDomain();
+  var projects = indexBy_(data.projects);
+  var live = function (r) { return !isTrue(r.deleted); };
+  var activeProject = function (id) { var p = projects[id]; return p && live(p) && p.status !== 'Clos'; };
+  var settings = {};
+  (data.settings || []).forEach(function (s) { settings[String(s.user_email).toLowerCase()] = s; });
+  var lookup = memoryLookup(data);
+  var soon = addCalendarDays(today, THRESHOLDS.dueSoonDays);
+  var staleLimit = addCalendarDays(today, -THRESHOLDS.staleProgressDays);
+  var link = function (view, projectId, extra) {
+    return opts.baseUrl ? opts.baseUrl + '?view=' + view + '&project=' + projectId + (extra || '') : '';
+  };
+  var out = [];
+
+  data.resources.filter(live).forEach(function (r) {
+    if (isBlank(r.email)) return;
+    var email = String(r.email).toLowerCase();
+    if (domain && email.split('@')[1] !== domain) return;
+    if (opts.onlyEmail && opts.onlyEmail !== email) return;
+    var freq = (settings[email] && settings[email].notify_frequency) || 'Quotidien';
+    if (!opts.onlyEmail) {
+      if (freq === 'Aucun') return;
+      if (freq === 'Hebdomadaire' && !opts.weekly) return;
+    }
+    var windowStart = freq === 'Hebdomadaire' ? addCalendarDays(today, -7) : addCalendarDays(today, -1);
+    var sections = [];
+
+    // 1. Mes livrables et jalons
+    var mine = data.planitems.filter(function (i) {
+      return live(i) && i.owner_resource_id === r.id && activeProject(i.project_id) && !isDone_(i);
+    });
+    var late = [], due = [], stale = [];
+    mine.forEach(function (i) {
+      var f = i.planned_finish;
+      var p = projects[i.project_id];
+      var line = { text: p.code + ' · ' + i.name, date: f, url: link('gantt', i.project_id) };
+      if (!isBlank(f) && f < today) late.push(line);
+      else if (!isBlank(f) && f <= soon) due.push(line);
+      if (i.item_type === 'Livrable' && Number(i.progress_pct) > 0) {
+        var last = !isBlank(i.last_progress_at) ? String(i.last_progress_at).slice(0, 10) : String(i.created_at || '').slice(0, 10);
+        if (last && last < staleLimit) stale.push({ text: p.code + ' · ' + i.name, date: last, url: link('gantt', i.project_id) });
+      }
+    });
+    var byDate = function (a, b) { return String(a.date).localeCompare(String(b.date)); };
+    if (late.length) sections.push({ title: 'En retard', tone: 'alert', lines: late.sort(byDate).map(function (l) { return Object.assign(l, { note: 'fin prévue le ' + frDate_(l.date) }); }) });
+    if (due.length) sections.push({ title: 'À échéance dans les ' + THRESHOLDS.dueSoonDays + ' jours', lines: due.sort(byDate).map(function (l) { return Object.assign(l, { note: 'le ' + frDate_(l.date) }); }) });
+    if (stale.length) sections.push({ title: 'Avancement à déclarer', lines: stale.sort(byDate).map(function (l) { return Object.assign(l, { note: 'dernière déclaration le ' + frDate_(l.date) }); }) });
+
+    // 2. Pilotage : projets dont la personne valide les changements (chef de projet, DPL)
+    var ctx = { resourceId: r.id, isAdmin: false, assignments: activeAssignments(r.id, data.assignments, today), lookup: lookup };
+    var pilot = data.projects.filter(function (p) {
+      return activeProject(p.id) && (p.manager_resource_id === r.id || can(ctx, 'changes.ack', { type: 'project', id: p.id }));
+    }).sort(function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); });
+    var pilotLines = [];
+    pilot.forEach(function (p) {
+      var n = (data.pendingChanges || {})[p.id] || 0;
+      if (n) pilotLines.push({ text: p.code + ' · ' + n + (n > 1 ? ' changements' : ' changement') + ' sur des données figées', note: 'à valider', url: link('suivi', p.id, '&tab=changes') });
+      (data.baselines || []).filter(function (b) { return live(b) && b.project_id === p.id && b.status === 'Demandée'; }).forEach(function (b) {
+        pilotLines.push({ text: p.code + ' · demande de baseline de ' + b.requested_by, note: truncate(b.justification, 140), url: link('suivi', p.id, '&tab=baselines') });
+      });
+      var ins = (data.insights || []).filter(function (x) { return live(x) && x.project_id === p.id && x.status === 'Nouveau'; });
+      var alerts = ins.filter(function (x) { return x.severity === 'Alerte'; });
+      alerts.slice(0, 3).forEach(function (x) { pilotLines.push({ text: p.code + ' · ' + x.message, tone: 'alert', url: link('gantt', p.id) }); });
+      var others = ins.length - Math.min(3, alerts.length);
+      if (others > 0) pilotLines.push({ text: p.code + ' · ' + others + (others > 1 ? ' autres constats' : ' autre constat') + ' du moteur de règles', url: link('suivi', p.id) });
+    });
+    if (pilotLines.length) sections.push({ title: 'Pilotage de vos projets', lines: pilotLines });
+
+    // 3. Mes demandes de baseline tranchées
+    var decided = (data.baselines || []).filter(function (b) {
+      return live(b) && String(b.requested_by).toLowerCase() === email && String(b.decided_by).toLowerCase() !== email &&
+        (b.status === 'Refusée' || b.status === 'Active' || b.status === 'Archivée') && String(b.decided_at).slice(0, 10) >= windowStart;
+    });
+    if (decided.length) {
+      sections.push({ title: 'Vos demandes de baseline', lines: decided.map(function (b) {
+        var p = projects[b.project_id] || { code: '' };
+        return { text: p.code + ' · ' + (b.status === 'Refusée' ? 'refusée' : 'acceptée : ' + (b.label || 'B' + b.number)), note: 'par ' + b.decided_by, url: link('suivi', b.project_id, '&tab=baselines') };
+      }) });
+    }
+
+    if (!sections.length && !opts.onlyEmail) return;
+    var count = sections.reduce(function (a, s) { return a + s.lines.length; }, 0);
+    var subject = (freq === 'Hebdomadaire' && !opts.onlyEmail ? 'Votre point de la semaine' : 'Votre point du ' + frDate_(today)) +
+      (count ? ' — ' + count + (count > 1 ? ' éléments' : ' élément') : '');
+    out.push(Object.assign({ to: email, subject: subject, counts: { lines: count, late: late.length } }, renderDigest_(r, sections, opts)));
+  });
+  return out;
+}
+
+/** Les constats du moteur de règles citent des dates AAAA-MM-JJ : on les écrit à la française. */
+function frDatesIn_(s) {
+  return String(s).replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, '$3/$2/$1');
+}
+
+function renderDigest_(person, sections, opts) {
+  var text = ['Bonjour ' + person.name + ',', ''];
+  var html = ['<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1F2A33;max-width:640px">',
+    '<p>Bonjour ' + escHtml_(person.name) + ',</p>'];
+  if (!sections.length) {
+    text.push('Rien à signaler aujourd’hui.');
+    html.push('<p>Rien à signaler aujourd’hui.</p>');
+  }
+  sections.forEach(function (s) {
+    text.push(s.title.toUpperCase());
+    html.push('<h3 style="font-size:15px;margin:18px 0 6px;color:' + (s.tone === 'alert' ? '#B3261E' : '#2B3A48') + '">' + escHtml_(s.title) + '</h3><ul style="margin:0;padding-left:18px">');
+    s.lines.slice(0, DIGEST_MAX_LINES).forEach(function (l) {
+      l.text = frDatesIn_(l.text);
+      text.push('- ' + l.text + (l.note ? ' (' + l.note + ')' : '') + (l.url ? '\n  ' + l.url : ''));
+      var label = escHtml_(l.text);
+      html.push('<li style="margin:3px 0' + (l.tone === 'alert' ? ';color:#B3261E' : '') + '">' +
+        (l.url ? '<a href="' + escHtml_(l.url) + '" style="color:inherit">' + label + '</a>' : label) +
+        (l.note ? ' <span style="color:#5B6B7A">— ' + escHtml_(l.note) + '</span>' : '') + '</li>');
+    });
+    if (s.lines.length > DIGEST_MAX_LINES) {
+      var more = s.lines.length - DIGEST_MAX_LINES;
+      text.push('- … et ' + more + ' autre(s)');
+      html.push('<li style="color:#5B6B7A">… et ' + more + ' autre(s)</li>');
+    }
+    html.push('</ul>');
+    text.push('');
+  });
+  var foot = 'Ce récapitulatif remplace les notifications une à une. Fréquence : page Suivi, « Mes notifications ».';
+  text.push(foot);
+  html.push('<p style="margin-top:22px;font-size:12px;color:#5B6B7A">' + escHtml_(foot) +
+    (opts.baseUrl ? ' <a href="' + escHtml_(opts.baseUrl + '?view=suivi') + '" style="color:#5B6B7A">Ouvrir</a>' : '') + '</p></div>');
+  return { text: text.join('\n'), html: html.join('') };
+}
+
+function loadDigestData_() {
+  var projects = repoList('Project');
+  return {
+    projects: projects, planitems: repoList('PlanItem'), resources: repoList('Resource'),
+    assignments: repoList('RoleAssignment'), settings: repoList('UserSetting'), insights: repoList('Insight'),
+    baselines: repoList('Baseline'), workpackages: repoList('WorkPackage'), budgetLines: repoList('BudgetLine'),
+    pendingChanges: pendingChangeCounts_(projects, repoList('ChangeEvent'))
+  };
+}
+
+/** Envoi d'un mail au format texte et HTML ; capturé dans les tests. */
+function sendMail_(to, subject, text, html) {
+  if (SENT_MAILS) { SENT_MAILS.push({ to: to, subject: subject, body: text, html: html }); return true; }
+  if (typeof MailApp === 'undefined') { console.log('[mail] ' + to + ' — ' + subject); return false; }
+  MailApp.sendEmail({ to: to, subject: '[PPM] ' + subject, body: text, htmlBody: html, name: 'PPM' });
+  return true;
+}
+
+/** Déclencheur du matin (7 h, jours de semaine) : un mail par personne concernée, dans la limite du quota du jour. */
+function sendDigests() {
+  resetExecution_();
+  var today = todayStr();
+  var wd = weekdayOf(today);
+  if (wd === 0 || wd === 6) return 'Week-end : pas de récapitulatif.';
+  var digests = buildDigests(loadDigestData_(), today, { baseUrl: getProp(PROP.WEBAPP_URL, ''), weekly: wd === 1 });
+  var quota = typeof MailApp !== 'undefined' ? MailApp.getRemainingDailyQuota() : Infinity;
+  var sent = 0, skipped = 0;
+  digests.forEach(function (d) {
+    if (sent >= quota - 20) { skipped++; return; } // garde une marge pour les alertes du jour
+    if (sendMail_(d.to, d.subject, d.text, d.html)) sent++;
+  });
+  if (skipped) {
+    adminEmails().forEach(function (a) {
+      notifyUser(a, 'Récapitulatifs non envoyés', skipped + ' récapitulatif(s) non envoyé(s) : quota de mails du jour atteint.');
+    });
+  }
+  var msg = sent + ' récapitulatif(s) envoyé(s)' + (skipped ? ', ' + skipped + ' reporté(s) (quota).' : '.');
+  console.log(msg);
+  return msg;
+}
+
+// ---------------------------------------------------------------- réglages personnels et aperçu
+
+defineAction('settings.get', function (p, ctx) {
+  var row = userSettingRow_(ctx.email);
+  return {
+    notify_frequency: (row && row.notify_frequency) || 'Quotidien',
+    calendar_invites: !!(row && isTrue(row.calendar_invites)),
+    email: ctx.email, hasResource: !!ctx.resourceId
+  };
+});
+
+defineAction('settings.set', function (p, ctx) {
+  var patch = {};
+  if (p.notify_frequency !== undefined) {
+    if (['Quotidien', 'Hebdomadaire', 'Aucun'].indexOf(p.notify_frequency) < 0) throw new PpmError('VALIDATION', 'Fréquence inconnue.');
+    patch.notify_frequency = p.notify_frequency;
+  }
+  if (p.calendar_invites !== undefined) patch.calendar_invites = !!p.calendar_invites;
+  var row = userSettingRow_(ctx.email);
+  if (row) repoUpdate('UserSetting', row.id, patch, null, ctx.actx);
+  else repoInsert('UserSetting', Object.assign({ user_email: ctx.email }, patch), ctx.actx);
+  return API_ACTIONS['settings.get']({}, ctx);
+});
+
+/** Aperçu de son propre récapitulatif ; send = true l'envoie aussitôt à soi-même (pour essayer). */
+defineAction('digest.preview', function (p, ctx) {
+  var list = buildDigests(loadDigestData_(), todayStr(), { baseUrl: getProp(PROP.WEBAPP_URL, ''), onlyEmail: ctx.email });
+  if (!list.length) {
+    return { subject: '', html: '', text: '', empty: true, sent: false,
+      reason: ctx.resourceId ? 'Votre adresse n’est pas dans le domaine.' : 'Aucune fiche de personne n’a votre adresse : créez-la dans AppSheet.' };
+  }
+  var d = list[0];
+  var sent = p.send ? sendMail_(d.to, d.subject + ' (essai)', d.text, d.html) : false;
+  return { subject: d.subject, html: d.html, text: d.text, empty: d.counts.lines === 0, sent: sent };
+});
+
+// ======================================================================
+// 37_Simulation.gs
+// ======================================================================
+
+/**
+ * PPM Core — lot 4 : simulation « et si… », synthèse chiffrée, signaux faibles (section 9).
+ *
+ * Tout ce fichier est déterministe : il ne fait jamais appel à Gemini. Il fournit les chiffres
+ * que le copilote cite (le modèle n'en invente aucun) et fonctionne même copilote désactivé.
+ * Fonctions pures, testées hors ligne.
+ */
+
+// ---------------------------------------------------------------- simulation
+
+/**
+ * Applique des hypothèses de décalage à une copie du planning et propage l'effet domino
+ * aux successeurs (mêmes conventions de dépendance que dependencyViolations).
+ *
+ *   items   : PlanItem[] du projet, plus les voisins d'autres projets marqués external: true ;
+ *   deps    : Dependency[] ;
+ *   changes : [{ itemId, shiftDays }] (jours ouvrés, négatif = avancer) ou [{ itemId, finish }] ;
+ *   opts    : { requirements, baselineFinish: { id: date }, projectId }.
+ *
+ * Un successeur n'est repoussé que si la contrainte l'exige ; rien n'est jamais avancé
+ * automatiquement (H7). Un élément d'un autre projet n'est pas déplacé : l'impact est signalé.
+ * Rien n'est écrit : le résultat décrit l'avant et l'après.
+ */
+function simulateChanges(items, deps, holFor, changes, opts) {
+  opts = opts || {};
+  var hol = function (it) { return holFor(it.project_id); };
+  var before = {}, sim = {};
+  items.forEach(function (i) {
+    if (isTrue(i.deleted)) return;
+    var rec = {
+      id: i.id, name: i.name, item_type: i.item_type, project_id: i.project_id, external: !!i.external,
+      planned_start: itemStart(i) || '', planned_finish: itemFinish(i) || '', status: i.status, progress_pct: i.progress_pct
+    };
+    before[i.id] = rec;
+    sim[i.id] = Object.assign({}, rec);
+  });
+  var shift = function (it, n) {
+    if (!n) return;
+    var h = hol(it);
+    if (!isBlank(it.planned_start)) it.planned_start = addWorkingDays(it.planned_start, n, h);
+    if (!isBlank(it.planned_finish)) it.planned_finish = addWorkingDays(it.planned_finish, n, h);
+  };
+
+  var moved = {}, queue = [], notes = [];
+  (changes || []).forEach(function (ch) {
+    var it = sim[ch.itemId];
+    if (!it) throw new PpmError('VALIDATION', 'Élément introuvable dans le périmètre simulé : ' + ch.itemId);
+    if (it.external) throw new PpmError('VALIDATION', '« ' + it.name + ' » appartient à un autre projet : simulez depuis ce projet.');
+    if (isBlank(it.planned_finish)) throw new PpmError('VALIDATION', '« ' + it.name + ' » n’a pas de date : rien à décaler.');
+    var n;
+    if (!isBlank(ch.finish)) n = workingDayOffset(it.planned_finish, String(ch.finish), hol(it));
+    else n = Math.round(Number(ch.shiftDays) || 0);
+    if (Math.abs(n) > 500) throw new PpmError('VALIDATION', 'Décalage trop grand (500 jours ouvrés au plus).');
+    shift(it, n);
+    moved[it.id] = { cause: 'hypothesis', shift: n };
+    if (n < 0) notes.push('« ' + it.name + ' » avancé : ses successeurs ne sont pas avancés automatiquement (le planning n’est jamais recalculé seul).');
+    queue.push(it.id);
+  });
+
+  var out = {};
+  deps.forEach(function (d) { if (!isTrue(d.deleted)) (out[d.predecessor_id] = out[d.predecessor_id] || []).push(d); });
+  var external = {}, guard = 0;
+  while (queue.length && guard++ < 20000) {
+    var p = sim[queue.shift()];
+    (out[p.id] || []).forEach(function (d) {
+      var s = sim[d.successor_id];
+      if (!s) return;
+      // On ne propage que le surcroît de contrainte dû à l'hypothèse : une dépendance déjà non respectée
+      // avant l'hypothèse le reste d'autant (la simulation mesure l'effet de l'hypothèse, elle ne corrige pas le plan).
+      var req = requiredDate_(d, p, s, hol(s));
+      var req0 = requiredDate_(d, before[p.id], s, hol(s));
+      if (!req) return;
+      var floor = req0 && req0.required > req.actual ? req0.required : req.actual;
+      if (floor >= req.required) return;
+      var gap = workingDayOffset(floor, req.required, hol(s));
+      if (s.external) {
+        var prev = external[s.id];
+        if (!prev || gap > prev.gap) external[s.id] = { id: s.id, name: s.name, project_id: s.project_id, gap: gap, required: req.required, actual: req.actual, because: p.name };
+        return;
+      }
+      shift(s, gap);
+      moved[s.id] = { cause: p.id, shift: ((moved[s.id] && moved[s.id].shift) || 0) + gap };
+      queue.push(s.id);
+    });
+  }
+
+  var already = dependencyViolations(Object.keys(before).map(function (k) { return before[k]; }), deps, holFor).length;
+  if (already) {
+    notes.push(already + (already > 1 ? ' dépendances étaient déjà non respectées' : ' dépendance était déjà non respectée') +
+      ' avant l’hypothèse : la simulation ne les corrige pas, elle mesure seulement l’effet de l’hypothèse.');
+  }
+
+  // Résultats : éléments déplacés, fin du plan, jalons, chemin critique.
+  var own = function (m) { return Object.keys(m).map(function (k) { return m[k]; }).filter(function (i) { return !i.external; }); };
+  var lastFinish = function (m) { var f = ''; own(m).forEach(function (i) { if (i.planned_finish > f) f = i.planned_finish; }); return f || null; };
+  var anyHol = holFor(opts.projectId || (own(before)[0] || {}).project_id);
+  var endBefore = lastFinish(before), endAfter = lastFinish(sim);
+  var baseFinish = opts.baselineFinish || {};
+  var movedList = Object.keys(moved).map(function (id) {
+    var b = before[id], a = sim[id], m = moved[id];
+    return {
+      id: id, name: a.name, item_type: a.item_type, cause: m.cause === 'hypothesis' ? 'hypothèse' : (sim[m.cause] ? sim[m.cause].name : ''),
+      hypothesis: m.cause === 'hypothesis', before_start: b.planned_start || null, before_finish: b.planned_finish,
+      start: a.planned_start || null, finish: a.planned_finish, shift: workingDayOffset(b.planned_finish, a.planned_finish, hol(a)),
+      baseline_finish: baseFinish[id] || null,
+      slip_vs_baseline: baseFinish[id] ? workingDayOffset(baseFinish[id], a.planned_finish, hol(a)) : null
+    };
+  }).sort(function (x, y) { return (y.hypothesis - x.hypothesis) || String(x.finish).localeCompare(String(y.finish)); });
+
+  var threatened = function (m) {
+    var outList = [];
+    (opts.requirements || []).forEach(function (r) {
+      if (isTrue(r.deleted)) return;
+      var ms = m[r.milestone_id], dl = m[r.deliverable_id];
+      if (!ms || !dl || ms.external || isBlank(ms.planned_finish) || isBlank(dl.planned_finish)) return;
+      if (dl.status === 'Terminé' || Number(dl.progress_pct) >= 100) return;
+      if (dl.planned_finish > ms.planned_finish) outList.push(ms.id + '|' + dl.id);
+    });
+    return outList;
+  };
+  var thrBefore = {}, thrAfter = threatened(sim);
+  threatened(before).forEach(function (k) { thrBefore[k] = true; });
+  var newlyThreatened = thrAfter.filter(function (k) { return !thrBefore[k]; }).map(function (k) {
+    var ids = k.split('|');
+    return { milestone: sim[ids[0]].name, milestone_date: sim[ids[0]].planned_finish, deliverable: sim[ids[1]].name, deliverable_finish: sim[ids[1]].planned_finish };
+  });
+
+  var listOf = function (m) { return Object.keys(m).map(function (k) { return m[k]; }); };
+  var liveDeps = deps.filter(function (d) { return !isTrue(d.deleted); });
+  var fBefore = computeFloats(listOf(before), liveDeps, holFor), fAfter = computeFloats(listOf(sim), liveDeps, holFor);
+  var critBefore = {};
+  fBefore.criticalIds.forEach(function (id) { critBefore[id] = true; });
+  var newlyCritical = fAfter.criticalIds.filter(function (id) { return !critBefore[id] && sim[id] && !sim[id].external; })
+    .map(function (id) { return sim[id].name; });
+
+  return {
+    changes: movedList.filter(function (m) { return m.hypothesis; }),
+    moved: movedList,
+    domino: movedList.filter(function (m) { return !m.hypothesis; }).length,
+    plan_end: { before: endBefore, after: endAfter, shift: endBefore && endAfter ? workingDayOffset(endBefore, endAfter, anyHol) : null },
+    milestones: movedList.filter(function (m) { return m.item_type === 'Jalon'; }),
+    newly_threatened: newlyThreatened,
+    external_impacts: Object.keys(external).map(function (k) { return external[k]; }),
+    newly_critical: newlyCritical,
+    notes: notes
+  };
+}
+
+/** Date exigée par une dépendance pour le successeur, selon les dates simulées du prédécesseur. */
+function requiredDate_(d, p, s, hol) {
+  var lag = Math.round(Number(d.lag_days || 0));
+  var ref, actual, required;
+  switch (d.dep_type) {
+    case 'FS':
+      ref = p.planned_finish; actual = s.planned_start || s.planned_finish;
+      if (isBlank(ref) || isBlank(actual)) return null;
+      var offset = (p.item_type === 'Jalon' ? 0 : 1) + lag;
+      required = offset === 0 ? nextWorkingDay(ref, hol) : addWorkingDays(ref, offset, hol);
+      break;
+    case 'SS':
+      ref = p.planned_start || p.planned_finish; actual = s.planned_start || s.planned_finish;
+      if (isBlank(ref) || isBlank(actual)) return null;
+      required = addWorkingDays(ref, lag, hol);
+      break;
+    case 'FF':
+      ref = p.planned_finish; actual = s.planned_finish;
+      if (isBlank(ref) || isBlank(actual)) return null;
+      required = addWorkingDays(ref, lag, hol);
+      break;
+    case 'SF':
+      ref = p.planned_start || p.planned_finish; actual = s.planned_finish;
+      if (isBlank(ref) || isBlank(actual)) return null;
+      required = addWorkingDays(ref, lag, hol);
+      break;
+    default:
+      return null;
+  }
+  return { required: required, actual: actual };
+}
+
+// ---------------------------------------------------------------- signaux faibles
+
+/** Mots qui annoncent souvent un glissement avant qu'il n'apparaisse dans les dates (FR, EN, DE). */
+var WEAK_SIGNAL_RE = /bloqu|en attente|attend(?:ons|re) (?:le |la |les )?(?:fournisseur|retour|validation|livraison)|pas (?:encore )?re[çc]u|non re[çc]u|manque|p[ée]nurie|rupture|probl[èe]me|difficult|retard|report[ée]|suspendu|arr[êe]t[ée]?|panne|non conforme|blocked|waiting|delay|missing|issue|verz[öo]ger|warten|fehlt/i;
+
+/**
+ * Derniers commentaires d'avancement (depuis `since`) qui contiennent un mot de blocage,
+ * sur des livrables non terminés. Un seul signal par livrable : le plus récent.
+ */
+function weakSignals_(updates, items, since) {
+  var live = {};
+  items.forEach(function (i) {
+    if (!isTrue(i.deleted) && i.item_type === 'Livrable' && i.status !== 'Terminé' && Number(i.progress_pct) < 100) live[i.id] = i;
+  });
+  var last = {};
+  (updates || []).forEach(function (u) {
+    if (isTrue(u.deleted) || !live[u.deliverable_id] || isBlank(u.comment)) return;
+    var at = String(u.declared_at || u.created_at || '');
+    if (at.slice(0, 10) < since) return;
+    if (!last[u.deliverable_id] || at > last[u.deliverable_id].at) last[u.deliverable_id] = { at: at, comment: String(u.comment) };
+  });
+  var out = [];
+  Object.keys(last).forEach(function (id) {
+    var m = WEAK_SIGNAL_RE.exec(last[id].comment);
+    if (!m) return;
+    out.push({ item: live[id], date: last[id].at.slice(0, 10), comment: truncate(last[id].comment, 200), word: m[0] });
+  });
+  return out.sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
+}
+
+// ---------------------------------------------------------------- synthèse chiffrée
+
+/**
+ * Faits chiffrés d'un projet, calculés par le Core : c'est tout ce que le copilote a le droit de citer.
+ * data : { projects, programs, workpackages, planitems, dependencies, resources, insights, risks,
+ *          requirements, progressUpdates, baseline: { row, snap } | null, pendingChanges, pendingRequests }
+ * Aucun montant ni taux journalier n'y figure (section 9, garde-fous).
+ */
+function buildProjectBrief(data, projectId, today, holFor) {
+  var project = indexBy_(data.projects)[projectId];
+  if (!project) throw new PpmError('NOT_FOUND', 'Projet introuvable : ' + projectId);
+  var hol = holFor(projectId);
+  var res = indexBy_(data.resources);
+  var name = function (id) { return !isBlank(id) && res[id] ? res[id].name : ''; };
+  var items = data.planitems.filter(function (i) { return i.project_id === projectId && !isTrue(i.deleted); });
+  var ids = {};
+  items.forEach(function (i) { ids[i.id] = true; });
+  var deps = data.dependencies.filter(function (d) { return !isTrue(d.deleted) && ids[d.predecessor_id] && ids[d.successor_id]; });
+  var floats = computeFloats(items, deps, holFor);
+  var done = function (i) { return i.status === 'Terminé' || Number(i.progress_pct) >= 100; };
+  var baseItems = data.baseline ? data.baseline.snap.PlanItem : {};
+  var dated = items.filter(function (i) { return !isBlank(i.planned_finish); });
+  var planEnd = dated.reduce(function (a, i) { return i.planned_finish > a ? i.planned_finish : a; }, '') || null;
+  var baseEnd = Object.keys(baseItems).reduce(function (a, id) { var f = baseItems[id].planned_finish; return !isBlank(f) && f > a ? f : a; }, '') || null;
+
+  var late = items.filter(function (i) { return !done(i) && !isBlank(i.planned_finish) && i.planned_finish < today; }).map(function (i) {
+    return { name: i.name, type: i.item_type, finish: i.planned_finish, days_late: workingDayOffset(i.planned_finish, today, hol), owner: name(i.owner_resource_id) };
+  }).sort(function (a, b) { return b.days_late - a.days_late; });
+
+  var horizon = addCalendarDays(today, 90);
+  var req = data.requirements || [];
+  var milestones = items.filter(function (i) { return i.item_type === 'Jalon' && !done(i) && !isBlank(i.planned_finish) && i.planned_finish >= today && i.planned_finish <= horizon; })
+    .sort(function (a, b) { return a.planned_finish.localeCompare(b.planned_finish); }).slice(0, 6).map(function (m) {
+      var b = baseItems[m.id];
+      var threats = req.filter(function (r) { return !isTrue(r.deleted) && r.milestone_id === m.id; }).map(function (r) {
+        return items.filter(function (i) { return i.id === r.deliverable_id; })[0];
+      }).filter(function (dl) { return dl && !done(dl) && !isBlank(dl.planned_finish) && dl.planned_finish > m.planned_finish; });
+      return {
+        name: m.name, date: m.planned_finish, in_days: Math.round((parseYmd(m.planned_finish) - parseYmd(today)) / DAY_MS),
+        slip_vs_baseline: b && !isBlank(b.planned_finish) ? workingDayOffset(b.planned_finish, m.planned_finish, hol) : null,
+        threatened_by: threats.map(function (t) { return t.name; })
+      };
+    });
+
+  var soon = addCalendarDays(today, 14);
+  var dueSoon = items.filter(function (i) { return i.item_type === 'Livrable' && !done(i) && !isBlank(i.planned_finish) && i.planned_finish >= today && i.planned_finish <= soon; })
+    .sort(function (a, b) { return a.planned_finish.localeCompare(b.planned_finish); }).slice(0, 8)
+    .map(function (i) { return { name: i.name, finish: i.planned_finish, progress_pct: Number(i.progress_pct) || 0, owner: name(i.owner_resource_id), critical: !!(floats.byId[i.id] || {}).critical }; });
+
+  var insights = (data.insights || []).filter(function (x) { return !isTrue(x.deleted) && x.project_id === projectId && x.status === 'Nouveau'; });
+  var sev = function (s) { return insights.filter(function (x) { return x.severity === s; }); };
+  var risks = (data.risks || []).filter(function (r) { return !isTrue(r.deleted) && r.project_id === projectId && r.status !== 'Clos' && r.kind !== 'Opportunité'; })
+    .sort(function (a, b) { return (Number(b.score) || 0) - (Number(a.score) || 0); });
+  var signals = weakSignals_(data.progressUpdates, items, addCalendarDays(today, -THRESHOLDS.staleProgressDays));
+  var violations = dependencyViolations(items, deps, holFor).length;
+  var program = !isBlank(project.program_id) ? indexBy_(data.programs || [])[project.program_id] : null;
+
+  var facts = {
+    today: today,
+    project: { code: project.code, name: project.name, status: project.status || '', manager: name(project.manager_resource_id),
+      program: program ? program.name : '', target_end: project.end_date || null },
+    baseline: data.baseline ? { label: data.baseline.row.label || 'B' + data.baseline.row.number, frozen_on: String(data.baseline.row.decided_at || '').slice(0, 10) } : null,
+    progress: {
+      weighted_pct: weightedProgress_(items, holFor), items: items.length,
+      done: items.filter(done).length, in_progress: items.filter(function (i) { return !done(i) && Number(i.progress_pct) > 0; }).length
+    },
+    schedule: {
+      plan_end: planEnd, target_end: project.end_date || null,
+      margin_to_target: planEnd && project.end_date ? workingDayOffset(planEnd, project.end_date, hol) : null,
+      baseline_end: baseEnd, slip_vs_baseline: planEnd && baseEnd ? workingDayOffset(baseEnd, planEnd, hol) : null,
+      critical_items: floats.criticalIds.length, dependency_violations: violations
+    },
+    late: late.slice(0, 8), late_count: late.length,
+    upcoming_milestones: milestones,
+    due_soon: dueSoon,
+    insights: { alerte: sev('Alerte').length, vigilance: sev('Vigilance').length, info: sev('Info').length,
+      top: sev('Alerte').concat(sev('Vigilance')).slice(0, 5).map(function (x) { return x.message; }) },
+    risks: { open: risks.length, top: risks.slice(0, 3).map(function (r) { return { title: r.title, score: Number(r.score) || null, owner: name(r.owner_resource_id) }; }) },
+    changes_pending: data.pendingChanges || 0,
+    baseline_requests_pending: data.pendingRequests || 0,
+    weak_signals: signals.slice(0, 5).map(function (s) { return { item: s.item.name, date: s.date, comment: s.comment }; })
+  };
+  return { facts: facts, lines: briefLines_(facts) };
+}
+
+/** Synthèse rédigée par le Core, sans IA : elle reprend les faits, en phrases courtes. */
+function briefLines_(f) {
+  var fr = function (s) { return s ? frDate_(s) : '—'; };
+  var pl = function (n, one, many) { return n + ' ' + (Math.abs(n) > 1 ? many : one); };
+  var out = [];
+  var st = f.schedule;
+  var head = 'Avancement ' + f.progress.weighted_pct + ' % (' + pl(f.progress.done, 'élément terminé', 'éléments terminés') + ' sur ' + f.progress.items + ').';
+  if (st.plan_end) head += ' Fin du plan le ' + fr(st.plan_end);
+  if (st.margin_to_target !== null) head += st.margin_to_target >= 0 ? ', ' + pl(st.margin_to_target, 'jour ouvré', 'jours ouvrés') + ' de marge sur la fin visée (' + fr(st.target_end) + ')' : ', ' + pl(-st.margin_to_target, 'jour ouvré', 'jours ouvrés') + ' après la fin visée (' + fr(st.target_end) + ')';
+  out.push({ tone: st.margin_to_target !== null && st.margin_to_target < 0 ? 'alert' : '', text: head + (st.plan_end ? '.' : '') });
+  if (f.baseline) {
+    out.push({ tone: st.slip_vs_baseline > 0 ? 'alert' : '', text: st.slip_vs_baseline === null ? 'Baseline ' + f.baseline.label + ' figée le ' + fr(f.baseline.frozen_on) + '.'
+      : st.slip_vs_baseline > 0 ? 'La fin du plan a glissé de ' + pl(st.slip_vs_baseline, 'jour ouvré', 'jours ouvrés') + ' depuis la baseline ' + f.baseline.label + '.'
+        : st.slip_vs_baseline < 0 ? 'La fin du plan est en avance de ' + pl(-st.slip_vs_baseline, 'jour ouvré', 'jours ouvrés') + ' sur la baseline ' + f.baseline.label + '.'
+          : 'La fin du plan tient la baseline ' + f.baseline.label + '.' });
+  } else {
+    out.push({ tone: '', text: 'Pas de baseline : les écarts ne sont pas mesurés.' });
+  }
+  if (f.late_count) out.push({ tone: 'alert', text: pl(f.late_count, 'élément en retard', 'éléments en retard') + ', dont « ' + f.late[0].name + ' » (' + pl(f.late[0].days_late, 'jour ouvré', 'jours ouvrés') + ').' });
+  if (st.dependency_violations) out.push({ tone: 'alert', text: pl(st.dependency_violations, 'dépendance non respectée', 'dépendances non respectées') + '.' });
+  f.upcoming_milestones.slice(0, 3).forEach(function (m) {
+    var t = 'Jalon « ' + m.name + ' » le ' + fr(m.date) + ' (dans ' + pl(m.in_days, 'jour', 'jours') + ')';
+    if (m.threatened_by.length) t += ', menacé par « ' + m.threatened_by[0] + ' »';
+    else if (m.slip_vs_baseline > 0) t += ', ' + pl(m.slip_vs_baseline, 'jour ouvré', 'jours ouvrés') + ' après la baseline';
+    out.push({ tone: m.threatened_by.length || m.slip_vs_baseline > 0 ? 'alert' : '', text: t + '.' });
+  });
+  if (f.weak_signals.length) out.push({ tone: 'warn', text: pl(f.weak_signals.length, 'signal faible', 'signaux faibles') + ' dans les commentaires d’avancement, dont « ' + f.weak_signals[0].item + ' » : « ' + truncate(f.weak_signals[0].comment, 90) + ' ».' });
+  if (f.risks.open) out.push({ tone: '', text: pl(f.risks.open, 'risque ouvert', 'risques ouverts') + (f.risks.top[0] ? ', le plus fort : « ' + f.risks.top[0].title + ' »' : '') + '.' });
+  if (f.changes_pending || f.baseline_requests_pending) {
+    var bits = [];
+    if (f.changes_pending) bits.push(pl(f.changes_pending, 'changement', 'changements') + ' à valider');
+    if (f.baseline_requests_pending) bits.push(pl(f.baseline_requests_pending, 'demande de baseline', 'demandes de baseline') + ' en attente');
+    out.push({ tone: '', text: bits.join(', ') + '.' });
+  }
+  return out;
+}
+
+// ======================================================================
+// 38_Copilot.gs
+// ======================================================================
+
+/**
+ * PPM Core — lot 4 : copilote (section 9).
+ *
+ * Trois modes, réglés par la propriété du script PPM_AI_MODE (H12) :
+ *   off    (par défaut) : aucune IA. Synthèse chiffrée, simulation, signaux faibles et suggestions
+ *                         du moteur de règles restent disponibles : ils ne dépendent pas de Gemini.
+ *   manual : le Core prépare un texte (consignes, faits chiffrés, question) que l'utilisateur colle
+ *            lui-même dans Gemini (Workspace). Rien ne part automatiquement.
+ *   api    : appel direct de l'API Gemini avec la clé PPM_GEMINI_API_KEY et le modèle PPM_GEMINI_MODEL,
+ *            à n'activer qu'une fois le canal validé par la DSI.
+ *
+ * Garde-fous : l'IA ne reçoit que les faits nécessaires (aucun montant, aucun taux, aucune adresse) ;
+ * elle ne lit les données que par des fonctions en lecture seule ; elle n'écrit jamais ;
+ * tout chiffre de sa réponse absent des données du Core est signalé ; chaque échange est journalisé
+ * (AiLog) avec l'avis de l'utilisateur ; un quota quotidien limite les appels par personne.
+ */
+
+var AI_PROVIDER = null; // tests : faux modèle { name, generate(req) → { text, calls, raw } }
+
+function aiMode_() {
+  var m = String(getProp(PROP.AI_MODE, 'off') || 'off').toLowerCase().trim();
+  return ['off', 'manual', 'api'].indexOf(m) >= 0 ? m : 'off';
+}
+
+function aiQuota_() {
+  var q = Number(getProp(PROP.AI_QUOTA, '30'));
+  return q > 0 ? Math.floor(q) : 30;
+}
+
+function aiProvider_() {
+  if (AI_PROVIDER) return AI_PROVIDER;
+  var key = getProp(PROP.GEMINI_KEY, ''), model = getProp(PROP.GEMINI_MODEL, '');
+  if (!key || !model) {
+    throw new PpmError('CONFIG', 'Mode « api » : renseigner PPM_GEMINI_API_KEY et PPM_GEMINI_MODEL dans les propriétés du script.');
+  }
+  return geminiRest_(key, model);
+}
+
+/** API Gemini (REST generateContent). Les parties renvoyées par le modèle sont rejouées telles quelles. */
+function geminiRest_(key, model) {
+  return {
+    name: 'gemini:' + model,
+    generate: function (req) {
+      var body = { contents: req.contents, generationConfig: { temperature: 0.2, maxOutputTokens: 2048 } };
+      if (req.system) body.systemInstruction = { parts: [{ text: req.system }] };
+      if (req.tools && req.tools.length) body.tools = [{ functionDeclarations: req.tools }];
+      var r;
+      try {
+        r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
+          method: 'post', contentType: 'application/json', headers: { 'x-goog-api-key': key },
+          payload: JSON.stringify(body), muteHttpExceptions: true
+        });
+      } catch (err) {
+        throw new PpmError('CONFIG', 'Appel à Gemini impossible (autorisation « script.external_request » ajoutée au manifeste ?) : ' + (err && err.message ? err.message : err));
+      }
+      var code = r.getResponseCode();
+      var json = parseJsonSafe(r.getContentText(), {});
+      if (code === 429) throw new PpmError('QUOTA', 'Gemini : quota atteint, réessayer plus tard.');
+      if (code >= 300) throw new PpmError('INTERNAL', 'Gemini a répondu ' + code + ' : ' + truncate((json.error && json.error.message) || r.getContentText(), 300));
+      var parts = (((json.candidates || [])[0] || {}).content || {}).parts || [];
+      return {
+        raw: parts,
+        text: parts.filter(function (x) { return x.text && !x.thought; }).map(function (x) { return x.text; }).join(''),
+        calls: parts.filter(function (x) { return x.functionCall; }).map(function (x) { return { name: x.functionCall.name, args: x.functionCall.args || {} }; })
+      };
+    }
+  };
+}
+
+// ---------------------------------------------------------------- garde-fou des chiffres
+
+function normNum_(n) {
+  var v = Number(String(n).replace(',', '.'));
+  return isNaN(v) ? String(n) : String(v);
+}
+
+/**
+ * Tout nombre du texte doit figurer dans les sources (faits du Core, résultats des fonctions, question).
+ * Les numéros de liste en début de ligne sont ignorés. Les dates JJ/MM/AAAA se vérifient composante par composante.
+ */
+function checkGrounding(text, sources) {
+  var allowed = {};
+  sources.forEach(function (s) {
+    (String(typeof s === 'string' ? s : JSON.stringify(s)).match(/\d+(?:[.,]\d+)?/g) || []).forEach(function (n) { allowed[normNum_(n)] = true; });
+  });
+  var seen = {}, unverified = [];
+  (String(text || '').replace(/^\s*(?:[-*•]\s*)?\d{1,2}[.)]\s/gm, '').match(/\d+(?:[.,]\d+)?/g) || []).forEach(function (n) {
+    var k = normNum_(n);
+    if (!allowed[k] && !seen[k]) { seen[k] = true; unverified.push(n); }
+  });
+  return { ok: !unverified.length, unverified: unverified };
+}
+
+// ---------------------------------------------------------------- journal et quota
+
+function aiUsedToday_(email) {
+  var today = todayStr();
+  return repoList('AiLog', function (l) { return l.actor === email && l.mode === 'api' && String(l.at).slice(0, 10) === today; }).length;
+}
+
+function logAi_(ctx, projectId, purpose, mode, prompt, response, unverified) {
+  var rec = {
+    id: newId(), at: nowIso(), actor: ctx.email, project_id: projectId || '', purpose: purpose, mode: mode,
+    prompt: truncate(typeof prompt === 'string' ? prompt : JSON.stringify(prompt), 45000),
+    response: truncate(response || '', 20000), unverified: (unverified || []).join(' '), feedback: '', feedback_at: ''
+  };
+  repoAppendHistory('AiLog', [rec]);
+  return rec.id;
+}
+
+var AI_SYSTEM = [
+  'Tu es le copilote PMO de l’outil PPM d’un bureau d’études aéronautique. Tu aides un chef de projet à piloter.',
+  'Règles impératives :',
+  '1. Tu ne cites que des chiffres et des dates présents dans les faits fournis ou dans les résultats des fonctions. Tu ne calcules aucun nouveau chiffre.',
+  '2. Si une information manque, dis-le simplement ; n’invente rien.',
+  '3. Tu ne modifies rien : tu proposes, le chef de projet décide.',
+  '4. Réponds en français, en phrases courtes, sans jargon ; dates au format JJ/MM/AAAA.'
+].join('\n');
+
+/** Texte à coller dans Gemini (mode manual) : consignes, faits, demande. */
+function manualPrompt_(task, facts, extra) {
+  return [AI_SYSTEM, '', 'Faits calculés par l’outil (JSON) :', JSON.stringify(facts, null, 1), extra ? '\n' + extra : '', '', 'Demande : ' + task].join('\n');
+}
+
+/**
+ * Point d'entrée commun : selon le mode, renvoie le texte à copier (manual) ou la réponse du modèle (api).
+ * sources : données autorisées pour le garde-fou des chiffres.
+ */
+function runAi_(ctx, projectId, purpose, task, facts, opts) {
+  opts = opts || {};
+  var mode = aiMode_();
+  if (mode === 'off') {
+    throw new PpmError('CONFIG', 'Le copilote IA n’est pas activé (propriété PPM_AI_MODE). Les synthèses chiffrées, simulations et suggestions restent disponibles.');
+  }
+  if (mode === 'manual' && !AI_PROVIDER) {
+    var prompt = manualPrompt_(task, facts, opts.extra);
+    var id = logAi_(ctx, projectId, purpose, 'manual', prompt, '', []);
+    return { mode: 'manual', prompt: prompt, logId: id };
+  }
+  if (aiUsedToday_(ctx.email) >= aiQuota_()) throw new PpmError('QUOTA', 'Quota du copilote atteint pour aujourd’hui (' + aiQuota_() + ' demandes).');
+  var provider = aiProvider_();
+  var contents = [{ role: 'user', parts: [{ text: 'Faits calculés par l’outil (JSON) :\n' + JSON.stringify(facts) + (opts.extra ? '\n\n' + opts.extra : '') + '\n\nDemande : ' + task }] }];
+  var sources = [facts, task, opts.extra || ''];
+  var steps = [];
+  var res;
+  for (var turn = 0; turn < 6; turn++) {
+    res = provider.generate({ system: AI_SYSTEM, contents: contents, tools: opts.tools ? opts.tools.declarations : null });
+    if (!res.calls || !res.calls.length || !opts.tools) break;
+    contents.push({ role: 'model', parts: res.raw && res.raw.length ? res.raw : res.calls.map(function (c) { return { functionCall: { name: c.name, args: c.args } }; }) });
+    contents.push({ role: 'user', parts: res.calls.map(function (c) {
+      var out;
+      try {
+        var h = opts.tools.handlers[c.name];
+        out = h ? h(c.args || {}) : { error: 'Fonction inconnue : ' + c.name };
+      } catch (err) {
+        out = { error: err && err.message ? err.message : String(err) };
+      }
+      steps.push(c.name);
+      sources.push(out);
+      var json = JSON.stringify(out);
+      return { functionResponse: { name: c.name, response: { content: json.length > 20000 ? truncate(json, 20000) : out } } };
+    }) });
+  }
+  var text = String((res && res.text) || '').trim() || 'Pas de réponse du modèle.';
+  var g = checkGrounding(text, sources);
+  var logId = logAi_(ctx, projectId, purpose, 'api', { system: AI_SYSTEM, contents: contents }, text, g.unverified);
+  return { mode: 'api', text: text, unverified: g.unverified, steps: steps, logId: logId, model: provider.name };
+}
+
+// ---------------------------------------------------------------- données d'un projet
+
+function loadCopilotData_(projectId) {
+  var projects = repoList('Project');
+  var project = indexBy_(projects)[projectId];
+  if (!project) throw new PpmError('NOT_FOUND', 'Projet introuvable : ' + projectId);
+  var events = repoList('ChangeEvent', function (e) { return e.project_id === projectId; });
+  var data = {
+    projects: projects, programs: repoList('Program'), workpackages: repoList('WorkPackage'), planitems: repoList('PlanItem'),
+    dependencies: repoList('Dependency'), resources: repoList('Resource'), insights: repoList('Insight'),
+    risks: repoList('RiskOpportunity'), requirements: repoList('MilestoneRequirement'), holidaySets: repoList('HolidaySet'),
+    progressUpdates: repoList('ProgressUpdate', function (u) { return String(u.declared_at || u.created_at || '') >= addCalendarDays(todayStr(), -THRESHOLDS.staleProgressDays); }),
+    baseline: activeBaselineOf_(project),
+    pendingChanges: pendingChangeCounts_([project], events)[projectId] || 0,
+    pendingRequests: repoList('Baseline', function (b) { return b.project_id === projectId && b.status === 'Demandée'; }).length
+  };
+  data.holFor = holidayResolver(data);
+  return data;
+}
+
+/** Hypothèses de simulation, périmètre du projet plus ses voisins externes. */
+function runSimulation_(data, projectId, changes) {
+  var items = data.planitems.filter(function (i) { return i.project_id === projectId && !isTrue(i.deleted); });
+  var ids = {};
+  items.forEach(function (i) { ids[i.id] = true; });
+  var deps = data.dependencies.filter(function (d) { return !isTrue(d.deleted) && (ids[d.predecessor_id] || ids[d.successor_id]); });
+  var all = indexBy_(data.planitems);
+  var ext = {};
+  deps.forEach(function (d) {
+    [d.predecessor_id, d.successor_id].forEach(function (id) { if (!ids[id] && all[id] && !isTrue(all[id].deleted)) ext[id] = Object.assign({}, all[id], { external: true }); });
+  });
+  var baseFinish = {};
+  if (data.baseline) Object.keys(data.baseline.snap.PlanItem).forEach(function (id) { baseFinish[id] = data.baseline.snap.PlanItem[id].planned_finish; });
+  var r = simulateChanges(items.concat(Object.keys(ext).map(function (k) { return ext[k]; })), deps, data.holFor, changes,
+    { requirements: data.requirements, baselineFinish: baseFinish, projectId: projectId });
+  var projects = indexBy_(data.projects);
+  r.external_impacts.forEach(function (e) { e.project = projects[e.project_id] ? projects[e.project_id].code : ''; });
+  if (data.baseline) {
+    var base = '';
+    Object.keys(baseFinish).forEach(function (id) { if (!isBlank(baseFinish[id]) && baseFinish[id] > base) base = baseFinish[id]; });
+    r.plan_end.baseline = base || null;
+    r.plan_end.slip_vs_baseline = base && r.plan_end.after ? workingDayOffset(base, r.plan_end.after, data.holFor(projectId)) : null;
+  }
+  return r;
+}
+
+/** Fonctions en lecture seule proposées au modèle pour répondre aux questions. */
+function copilotTools_(data, projectId, brief) {
+  var res = indexBy_(data.resources), wps = indexBy_(data.workpackages);
+  var items = data.planitems.filter(function (i) { return i.project_id === projectId && !isTrue(i.deleted); });
+  var ids = {};
+  items.forEach(function (i) { ids[i.id] = true; });
+  var floats = computeFloats(items, data.dependencies.filter(function (d) { return !isTrue(d.deleted) && ids[d.predecessor_id] && ids[d.successor_id]; }), data.holFor);
+  var today = todayStr();
+  var view = function (i) {
+    var f = floats.byId[i.id] || {};
+    return { id: i.id, name: i.name, type: i.item_type, workpackage: wps[i.wp_id] ? (wps[i.wp_id].wbs_code ? wps[i.wp_id].wbs_code + ' ' : '') + wps[i.wp_id].name : '',
+      start: i.planned_start || null, finish: i.planned_finish || null, progress_pct: Number(i.progress_pct) || 0, status: i.status || '',
+      owner: res[i.owner_resource_id] ? res[i.owner_resource_id].name : '', float_days: f.float === undefined ? null : f.float, critical: !!f.critical };
+  };
+  var findItem = function (ref) {
+    var r = String(ref || '').toLowerCase().trim();
+    return items.filter(function (i) { return i.id === ref; })[0] || items.filter(function (i) { return String(i.name).toLowerCase() === r; })[0] ||
+      items.filter(function (i) { return String(i.name).toLowerCase().indexOf(r) >= 0; })[0] || null;
+  };
+  return {
+    declarations: [
+      { name: 'get_brief', description: 'Faits chiffrés du projet : avancement, fin du plan, baseline, retards, jalons, alertes, risques.', parameters: { type: 'object', properties: {} } },
+      { name: 'list_items', description: 'Livrables et jalons du projet avec dates, avancement, responsable, marge et chemin critique.',
+        parameters: { type: 'object', properties: { filter: { type: 'string', enum: ['all', 'late', 'critical', 'milestones', 'open'] } } } },
+      { name: 'simulate_shift', description: 'Simule le décalage d’un livrable ou jalon (en jours ouvrés) et renvoie l’effet sur les successeurs, les jalons et la fin du plan. N’enregistre rien.',
+        parameters: { type: 'object', properties: { item: { type: 'string', description: 'nom ou identifiant' }, shift_days: { type: 'integer' } }, required: ['item', 'shift_days'] } },
+      { name: 'list_risks', description: 'Risques ouverts du projet.', parameters: { type: 'object', properties: {} } },
+      { name: 'list_alerts', description: 'Constats du moteur de règles en attente de décision.', parameters: { type: 'object', properties: {} } }
+    ],
+    handlers: {
+      get_brief: function () { return brief.facts; },
+      list_items: function (a) {
+        var f = a.filter || 'all';
+        var list = items.filter(function (i) {
+          var done = i.status === 'Terminé' || Number(i.progress_pct) >= 100;
+          if (f === 'late') return !done && !isBlank(i.planned_finish) && i.planned_finish < today;
+          if (f === 'critical') return (floats.byId[i.id] || {}).critical;
+          if (f === 'milestones') return i.item_type === 'Jalon';
+          if (f === 'open') return !done;
+          return true;
+        });
+        return { count: list.length, items: list.slice(0, 80).map(view) };
+      },
+      simulate_shift: function (a) {
+        var it = findItem(a.item);
+        if (!it) return { error: 'Élément introuvable : ' + a.item };
+        var r = runSimulation_(data, projectId, [{ itemId: it.id, shiftDays: a.shift_days }]);
+        return { item: it.name, shift_days: Number(a.shift_days), plan_end: r.plan_end, moved: r.moved.slice(0, 20).map(function (m) {
+          return { name: m.name, before_finish: m.before_finish, finish: m.finish, shift: m.shift, cause: m.cause };
+        }), newly_threatened: r.newly_threatened, external_impacts: r.external_impacts, newly_critical: r.newly_critical };
+      },
+      list_risks: function () {
+        return (data.risks || []).filter(function (r) { return !isTrue(r.deleted) && r.project_id === projectId && r.status !== 'Clos'; }).slice(0, 30).map(function (r) {
+          return { title: r.title, kind: r.kind, probability: r.probability, impact: r.impact, score: r.score, strategy: r.strategy, status: r.status,
+            owner: res[r.owner_resource_id] ? res[r.owner_resource_id].name : '', treatment_due: r.treatment_due || null };
+        });
+      },
+      list_alerts: function () {
+        return (data.insights || []).filter(function (x) { return !isTrue(x.deleted) && x.project_id === projectId && x.status === 'Nouveau'; })
+          .slice(0, 30).map(function (x) { return { severity: x.severity, message: x.message, suggestion: x.suggestion }; });
+      }
+    }
+  };
+}
+
+// ---------------------------------------------------------------- actions
+
+defineAction('copilot.status', function (p, ctx) {
+  var mode = aiMode_();
+  return {
+    mode: mode, model: mode === 'api' ? getProp(PROP.GEMINI_MODEL, '') : '',
+    quota: { used: mode === 'api' ? aiUsedToday_(ctx.email) : 0, limit: aiQuota_() },
+    canDecide: isBlank(p.projectId) ? false : can(ctx, 'insight.decide', { type: 'project', id: p.projectId })
+  };
+});
+
+/** Synthèse du projet : faits et phrases du Core ; ai = true ajoute la rédaction du copilote (ou le texte à copier). */
+defineAction('copilot.brief', function (p, ctx) {
+  var projectId = requireParam(p, 'projectId');
+  var data = loadCopilotData_(projectId);
+  var brief = buildProjectBrief(data, projectId, todayStr(), data.holFor);
+  if (!p.ai) return { facts: brief.facts, lines: brief.lines, ai: null };
+  var ai = runAi_(ctx, projectId, 'synthese',
+    'Rédige une synthèse de l’état du projet pour son chef de projet : 5 à 8 lignes, d’abord les points d’attention, puis 2 ou 3 actions possibles.', brief.facts);
+  return { facts: brief.facts, lines: brief.lines, ai: ai };
+});
+
+/** Simulation « et si… » : changes = [{ itemId, shiftDays } | { itemId, finish }]. Rien n'est enregistré. */
+defineAction('simulations.run', function (p, ctx) {
+  var projectId = requireParam(p, 'projectId');
+  if (!Array.isArray(p.changes) || !p.changes.length || p.changes.length > 20) {
+    throw new PpmError('VALIDATION', 'Indiquez entre 1 et 20 hypothèses de décalage.');
+  }
+  var data = loadCopilotData_(projectId);
+  var r = runSimulation_(data, projectId, p.changes);
+  if (p.explain) {
+    r.ai = runAi_(ctx, projectId, 'simulation',
+      'Explique au chef de projet les conséquences de cette hypothèse en 4 à 6 lignes : ce qui bouge, ce qui est menacé, ce qu’il pourrait faire.',
+      { hypotheses: r.changes, resultat: { fin_du_plan: r.plan_end, elements_decales: r.moved, jalons_menaces: r.newly_threatened, autres_projets: r.external_impacts, nouveaux_critiques: r.newly_critical } });
+  }
+  return r;
+});
+
+/** Question en langage naturel : le modèle consulte les données par des fonctions en lecture seule. */
+defineAction('copilot.ask', function (p, ctx) {
+  var projectId = requireParam(p, 'projectId');
+  var question = String(p.question || '').trim();
+  if (!question) throw new PpmError('VALIDATION', 'Posez une question.');
+  if (question.length > 1000) throw new PpmError('VALIDATION', 'Question trop longue (1 000 caractères au plus).');
+  var data = loadCopilotData_(projectId);
+  var brief = buildProjectBrief(data, projectId, todayStr(), data.holFor);
+  var tools = copilotTools_(data, projectId, brief);
+  if (aiMode_() === 'manual' && !AI_PROVIDER) {
+    var items = tools.handlers.list_items({ filter: 'all' });
+    return runAi_(ctx, projectId, 'question', question, brief.facts, { extra: 'Livrables et jalons (JSON) :\n' + JSON.stringify(items) });
+  }
+  return runAi_(ctx, projectId, 'question', question, { projet: brief.facts.project, aujourd_hui: brief.facts.today }, { tools: tools });
+});
+
+/** Avis de l'utilisateur sur une réponse du copilote (mesure de la pertinence). */
+defineAction('copilot.feedback', function (p, ctx) {
+  var id = requireParam(p, 'logId');
+  var t = getTable('AiLog');
+  var n = t.findRow(id);
+  if (!n) throw new PpmError('NOT_FOUND', 'Échange introuvable.');
+  var rec = t.readRow(n);
+  if (rec.actor !== ctx.email) throw new PpmError('FORBIDDEN', 'Seul l’auteur de la demande donne son avis.');
+  t.writeRow(n, Object.assign(rec, { feedback: p.useful ? 'utile' : 'pas utile', feedback_at: nowIso() }));
+  return { ok: true };
+});
+
+/** Décision sur une suggestion du moteur de règles : Accepté ou Ignoré, avec une note facultative. */
+defineAction('insights.decide', function (p, ctx) {
+  var ins = mustGet('Insight', requireParam(p, 'id'));
+  requireCan(ctx, 'insight.decide', { type: 'project', id: ins.project_id });
+  if (['Accepté', 'Ignoré'].indexOf(p.decision) < 0) throw new PpmError('VALIDATION', 'Décision attendue : Accepté ou Ignoré.');
+  if (ins.status !== 'Nouveau') throw new PpmError('VALIDATION', 'Cette suggestion a déjà été traitée.');
+  return repoUpdate('Insight', ins.id, { status: p.decision, decided_by: ctx.email, decided_at: nowIso(), decision_note: truncate(String(p.note || ''), 500) }, p.version, ctx.actx);
+});
+
+/** Suggestions du projet et taux d'acceptation, par règle, plus l'avis sur les réponses de l'IA. */
+defineAction('copilot.suggestions', function (p, ctx) {
+  var projectId = requireParam(p, 'projectId');
+  var all = repoList('Insight', function (x) { return x.project_id === projectId; });
+  var order = { Alerte: 0, Vigilance: 1, Info: 2 };
+  var pending = all.filter(function (x) { return x.status === 'Nouveau'; })
+    .sort(function (a, b) { return (order[a.severity] - order[b.severity]) || String(a.message).localeCompare(String(b.message)); });
+  var byRule = {};
+  all.forEach(function (x) {
+    var r = byRule[x.rule_code] = byRule[x.rule_code] || { rule: x.rule_code, pending: 0, accepted: 0, ignored: 0 };
+    if (x.status === 'Nouveau') r.pending++; else if (x.status === 'Accepté') r.accepted++; else r.ignored++;
+  });
+  var logs = repoList('AiLog', function (l) { return l.project_id === projectId && l.mode === 'api'; });
+  var decided = all.filter(function (x) { return x.status !== 'Nouveau'; });
+  return {
+    canDecide: can(ctx, 'insight.decide', { type: 'project', id: projectId }),
+    pending: pending.map(function (x) { return { id: x.id, version: x.version, rule: x.rule_code, severity: x.severity, message: x.message, suggestion: x.suggestion, target_type: x.target_type, target_id: x.target_id }; }),
+    recent: decided.sort(function (a, b) { return String(b.decided_at || b.updated_at).localeCompare(String(a.decided_at || a.updated_at)); }).slice(0, 20)
+      .map(function (x) { return { rule: x.rule_code, message: x.message, status: x.status, decided_by: x.decided_by || x.updated_by, decided_at: x.decided_at || x.updated_at, note: x.decision_note || '' }; }),
+    stats: {
+      rules: Object.keys(byRule).sort().map(function (k) { return byRule[k]; }),
+      accept_rate: decided.length ? Math.round(100 * decided.filter(function (x) { return x.status === 'Accepté'; }).length / decided.length) : null,
+      ai_answers: logs.length, ai_useful: logs.filter(function (l) { return l.feedback === 'utile'; }).length,
+      ai_not_useful: logs.filter(function (l) { return l.feedback === 'pas utile'; }).length
+    }
+  };
+});
+
+// ======================================================================
+// 40_Jobs.gs
+// ======================================================================
+
+/**
+ * PPM Core — traitements planifiés (section 3, mesures de conception).
+ *
+ * Chaque nuit : réconciliation du journal, contrôles du moteur de règles, synchronisation
+ * Agenda et Drive, compléments depuis l'annuaire, sauvegarde des classeurs.
+ * Chaque matin de semaine (7 h) : mail récapitulatif (36_Digest.gs). Chaque étape s'exécute par tranches de 5 minutes
+ * au plus (plafond Apps Script : 6 min) ; l'état est gardé dans les propriétés
+ * du script et une tranche suivante est programmée une minute plus tard.
+ * Un seul déclencheur de reprise existe à la fois (plafond : 20 déclencheurs).
+ */
+
+var NIGHTLY_STEPS = ['reconcile', 'rules', 'workspace', 'directory', 'backup'];
+var BACKUP_RETENTION_DAYS = 30;
+var JOB_ACTX = { actor: 'ppm-core', source: 'core' };
+
+/** À exécuter une fois après setupPpm() : traitement nocturne (2 h) et récapitulatif du matin (7 h). */
+function installTriggers() {
+  deleteTriggers_('nightlyRun');
+  deleteTriggers_('continueNightly');
+  deleteTriggers_('sendDigests');
+  ScriptApp.newTrigger('nightlyRun').timeBased().atHour(2).everyDays(1).create();
+  ScriptApp.newTrigger('sendDigests').timeBased().atHour(7).everyDays(1).create();
+  return 'Déclencheurs installés : traitement nocturne à 2 h, récapitulatif à 7 h (fuseau du script).';
+}
+
+function deleteTriggers_(handler) {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === handler) ScriptApp.deleteTrigger(t);
+  });
+}
+
+function nightlyRun() {
+  resetExecution_();
+  invalidateAllTables_(); // la nuit repart de ce qui est réellement dans les feuilles
+  setProp(PROP.JOB_STATE, JSON.stringify({ step: 0, startedAt: nowIso() }));
+  continueNightly();
+}
+
+function continueNightly() {
+  resetExecution_();
+  if (typeof ScriptApp !== 'undefined') deleteTriggers_('continueNightly');
+  var state = parseJsonSafe(getProp(PROP.JOB_STATE, ''), null);
+  if (!state) return 'Aucun traitement en cours.';
+  var deadline = nowMs() + JOB_SLICE_MS - 30000;
+  try {
+    while (state.step < NIGHTLY_STEPS.length) {
+      var done = runNightlyStep(NIGHTLY_STEPS[state.step], state, deadline);
+      if (!done) {
+        setProp(PROP.JOB_STATE, JSON.stringify(state));
+        if (typeof ScriptApp !== 'undefined') {
+          ScriptApp.newTrigger('continueNightly').timeBased().after(60 * 1000).create();
+        }
+        return 'Tranche terminée, reprise programmée (étape ' + NIGHTLY_STEPS[state.step] + ').';
+      }
+      state.step++;
+      state.cursor = null;
+    }
+    deleteProp(PROP.JOB_STATE);
+    return 'Traitement nocturne terminé.';
+  } catch (err) {
+    deleteProp(PROP.JOB_STATE);
+    adminEmails().forEach(function (a) {
+      notifyUser(a, 'Échec du traitement nocturne', String(err && err.stack ? err.stack : err));
+    });
+    throw err;
+  }
+}
+
+function runNightlyStep(name, state, deadline) {
+  switch (name) {
+    case 'reconcile':
+      state.cursor = state.cursor || {};
+      return reconcileAll(state.cursor, deadline);
+    case 'rules':
+      runRules();
+      return true;
+    case 'workspace':
+      state.cursor = state.cursor || {};
+      return syncWorkspaceAll(state.cursor, deadline);
+    case 'directory':
+      refreshPeopleFromDirectory();
+      return true;
+    case 'backup':
+      if (typeof DriveApp !== 'undefined') backupBooks_();
+      return true;
+    default:
+      return true;
+  }
+}
+
+/** Exécute le moteur de règles et réécrit les Insights (les décisions « Accepté/Ignoré » sont conservées). */
+function runRules() {
+  var data = {
+    projects: repoList('Project'),
+    workpackages: repoList('WorkPackage'),
+    planitems: repoList('PlanItem'),
+    dependencies: repoList('Dependency'),
+    requirements: repoList('MilestoneRequirement'),
+    risks: repoList('RiskOpportunity'),
+    progressUpdates: repoList('ProgressUpdate', function (u) { return String(u.declared_at || u.created_at || '') >= addCalendarDays(todayStr(), -THRESHOLDS.staleProgressDays); })
+  };
+  var countryOf = {};
+  data.projects.forEach(function (p) { countryOf[p.id] = p.holiday_country || 'FR'; });
+  var holCache = {};
+  var holFor = function (projectId) {
+    var c = countryOf[projectId] || 'FR';
+    if (!holCache[c]) holCache[c] = loadHolidayMap(c);
+    return holCache[c];
+  };
+  addBaselineContext_(data, holFor);
+  var fresh = evaluateRules(data, todayStr(), holFor);
+  var merged = mergeInsights(repoList('Insight', null, { includeDeleted: true }), fresh, JOB_ACTX.actor);
+  withLock(function () { getTable('Insight').replaceAll(merged); });
+  return fresh.length;
+}
+
+/** Dates figées de la baseline active et chemin critique, pour la règle de glissement critique. */
+function addBaselineContext_(data, holFor) {
+  var active = {};
+  data.projects.forEach(function (p) {
+    if (!isTrue(p.deleted) && !isBlank(p.active_baseline_id) && p.status !== 'Clos') active[p.active_baseline_id] = p.id;
+  });
+  data.baselineFinish = {};
+  data.critical = {};
+  if (!Object.keys(active).length) return;
+  repoList('BaselineItem', function (r) { return active[r.baseline_id] && r.entity_type === 'PlanItem'; }).forEach(function (r) {
+    var s = parseJsonSafe(r.snapshot_json, {});
+    if (!isBlank(s.planned_finish)) data.baselineFinish[r.entity_id] = s.planned_finish;
+  });
+  Object.keys(active).forEach(function (bid) {
+    var pid = active[bid];
+    var items = data.planitems.filter(function (i) { return i.project_id === pid && !isTrue(i.deleted); });
+    var ids = {};
+    items.forEach(function (i) { ids[i.id] = true; });
+    var deps = data.dependencies.filter(function (d) { return !isTrue(d.deleted) && ids[d.predecessor_id] && ids[d.successor_id]; });
+    computeFloats(items, deps, holFor).criticalIds.forEach(function (id) { data.critical[id] = true; });
+  });
+}
+
+function backupBooks_() {
+  var folderId = getProp(PROP.BACKUP_FOLDER, '');
+  var folder;
+  if (folderId) {
+    folder = DriveApp.getFolderById(folderId);
+  } else {
+    folder = DriveApp.createFolder('PPM Sauvegardes');
+    setProp(PROP.BACKUP_FOLDER, folder.getId());
+  }
+  var stamp = todayStr();
+  [PROP.DATA_ID, PROP.HISTORY_ID].forEach(function (k) {
+    var file = DriveApp.getFileById(getProp(k, ''));
+    file.makeCopy(file.getName() + ' — ' + stamp, folder);
+  });
+  var limit = nowMs() - BACKUP_RETENTION_DAYS * DAY_MS;
+  var files = folder.getFiles();
+  while (files.hasNext()) {
+    var f = files.next();
+    if (f.getDateCreated().getTime() < limit) f.setTrashed(true);
+  }
+}

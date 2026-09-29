@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="<?= theme ?>">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="ppm-version" content="0.5.1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+  /* Charte : inspirée d'airbus.com. Police Inter (police numérique officielle d'Airbus), bleu de marque #00205B,
+     tout en bleus : aucune teinte grise. Rouge, ambre et vert sont réservés aux états (alerte, critique, terminé). */
+  :root {
+    --brand: #00205B;
+    --brand-2: #0B3A8C;
+    --accent: #0068D6;
+    --paper: #F3F7FD;
+    --surface: #FFFFFF;
+    --tint: #EDF3FC;
+    --hover: #E1ECFB;
+    --ink: #00205B;
+    --muted: #3D64A0;
+    --rule: #D6E3F5;
+    --line-strong: #8FAEDB;
+    --bar: #5B8FE0;
+    --bar-hover: #3F79D6;
+    --bar-done: #1F4FA8;
+    --summary: #00205B;
+    --summary-progress: #3D64A0;
+    --bar-external: #BCD1F0;
+    --bar-external-progress: #97B6E6;
+    --ghost: #0B3A8C;
+    --amber: #D99A12;
+    --amber-dark: #9E6E07;
+    --red: #D0342C;
+    --green: #1E8A56;
+    --cyan: #00A3E0;
+    --focus: #00A3E0;
+    --on-accent: #FFFFFF;
+    --warn-bg: #FFF4DC; --warn-ink: #7A5306;
+    --alert-bg: #FDE9E7; --alert-ink: #9B211A;
+    --ok-bg: #E2F4EA; --ok-ink: #145C39;
+    --shadow: 0 1px 2px rgba(0, 32, 91, .06), 0 4px 16px rgba(0, 32, 91, .08);
+    --radius: 8px;
+    --bar-bg: #00205B;
+    color-scheme: light;
+  }
+  /* Thème nuit : classe .dark posée par la bannière, selon le choix de l'utilisateur ou, à défaut, le réglage de l'ordinateur. */
+  :root.dark {
+    --paper: #061329; --surface: #0B1D3D; --tint: #0F2750; --hover: #14305F;
+    --ink: #E8F0FD; --muted: #9DBCEB; --rule: #1B3766; --line-strong: #4F76B8;
+    --bar: #4F8BEA; --bar-hover: #6A9FF0; --bar-done: #8CB6F5; --summary: #2A56A8; --summary-progress: #4C7ED4;
+    --bar-external: #28477E; --bar-external-progress: #365A98; --ghost: #A9C6F5;
+    --accent: #5AA2FF; --brand-2: #8CB6F5;
+    --warn-bg: #3A2A07; --warn-ink: #F5CE7A; --alert-bg: #3D1412; --alert-ink: #F7A59F; --ok-bg: #0D3322; --ok-ink: #8FE0B6;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 20px rgba(0, 0, 0, .35);
+    --bar-bg: #020B1C;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; background: var(--paper); color: var(--ink);
+    font: 15px/1.5 Inter, "Segoe UI", Roboto, Arial, sans-serif; font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased; }
+  button, select, input, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  a { color: var(--accent); }
+
+  /* ---- bannière commune ---- */
+  .ppm-bar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 8px 28px; height: 52px;
+    padding: 0 24px; background: var(--bar-bg); color: #fff; }
+  .ppm-brand { display: inline-flex; align-items: center; gap: 12px; color: #fff; text-decoration: none; }
+  .ppm-brand img { height: 22px; width: auto; display: block; }
+  .ppm-name { font-weight: 700; font-size: 16px; letter-spacing: .02em; }
+  .ppm-brand img:not([hidden]) + .ppm-name { padding-left: 12px; border-left: 1px solid rgba(255, 255, 255, .35); font-weight: 600; }
+  .ppm-nav { display: flex; align-self: stretch; gap: 4px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .ppm-nav a { display: inline-flex; align-items: center; padding: 0 12px; color: rgba(255, 255, 255, .78); text-decoration: none;
+    font-weight: 500; white-space: nowrap; border-bottom: 3px solid transparent; border-top: 3px solid transparent; }
+  .ppm-nav a:hover { color: #fff; }
+  .ppm-nav a[aria-current="page"] { color: #fff; border-bottom-color: var(--cyan); }
+  .ppm-icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0;
+    border: 0; border-radius: 50%; background: transparent; color: #fff; cursor: pointer; }
+  .ppm-icon:hover { background: rgba(255, 255, 255, .12); }
+  .ppm-icon svg { width: 20px; height: 20px; }
+
+  /* ---- en-tête de page ---- */
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 16px 24px 12px; background: var(--paper); }
+  .title { flex: 1 1 280px; min-width: 0; display: flex; align-items: center; gap: 8px; }
+  .title h1 { margin: 0; font-size: 22px; font-weight: 700; line-height: 1.2; letter-spacing: -.01em; }
+  .title .context { margin: 0; color: var(--muted); font-size: 14px; }
+  .title .context button { padding: 0; border: 0; background: none; color: var(--accent); cursor: pointer; text-decoration: underline; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .controls label.field { display: grid; gap: 2px; font-size: 12.5px; color: var(--muted); }
+  select { min-width: 240px; max-width: 100%; padding: 7px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+  .seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; background: var(--surface); }
+  .seg button { padding: 6px 12px; border: 0; background: transparent; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--rule); }
+  .seg button:hover { background: var(--hover); }
+  .seg button[aria-pressed="true"] { background: var(--brand); color: var(--on-accent); }
+  :root.dark .seg button[aria-pressed="true"] { background: var(--accent); color: #031126; }
+  .toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; }
+  .btn { padding: 7px 14px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); cursor: pointer; font-weight: 500; }
+  .btn:hover { background: var(--hover); }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: var(--on-accent); }
+  .btn.primary:hover { background: var(--brand-2); }
+  :root.dark .btn.primary { background: var(--accent); border-color: var(--accent); color: #031126; }
+  a.btn { display: inline-block; color: var(--ink); text-decoration: none; }
+  a.btn.primary { color: var(--on-accent); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0;
+    border: 1px solid transparent; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; font-size: 16px; font-weight: 600; }
+  .icon-btn:hover, .icon-btn[aria-expanded="true"] { background: var(--hover); color: var(--ink); }
+  .icon-btn svg { width: 18px; height: 18px; }
+
+  /* ---- bandeau d'état : pastilles plutôt que phrases ---- */
+  .status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 0 24px 12px; }
+  .status p { margin: 0; }
+  .status .alert { color: var(--red); font-weight: 500; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--tint); color: var(--ink); font-size: 13px; font-weight: 500; }
+  .chip.alert { background: var(--alert-bg); color: var(--alert-ink); }
+  .chip.warn { background: var(--warn-bg); color: var(--warn-ink); }
+  .chip.ok { background: var(--ok-bg); color: var(--ok-ink); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; padding: 0; list-style: none; color: var(--muted); font-size: 13px; }
+  .legend li { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 18px; height: 10px; border-radius: 3px; background: var(--bar); }
+  .swatch.critical { background: var(--amber); } .swatch.alert { background: var(--red); }
+  .swatch.done { background: var(--green); } .swatch.milestone { background: var(--cyan); }
+  .swatch.summary { background: var(--summary); }
+
+  /* ---- fenêtre d'information (ⓘ, ?) ---- */
+  .pop-anchor { position: relative; display: inline-flex; }
+  .popover { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; min-width: 260px; max-width: min(420px, 86vw);
+    padding: 12px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); font-size: 14px; }
+  .popover.right { left: auto; right: 0; }
+  .popover dl { margin: 0; }
+  .popover .legend { flex-direction: column; gap: 6px; }
+
+  main { display: grid; grid-template-columns: minmax(0, 1fr); }
+  main.with-details { grid-template-columns: minmax(0, 1fr) 340px; }
+  .chart { min-width: 0; padding: 4px 24px 24px; }
+  .gantt-host { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  .empty { padding: 48px 24px; text-align: center; color: var(--muted); }
+  .empty strong { display: block; margin-bottom: 4px; color: var(--ink); font-size: 17px; font-weight: 600; }
+  .undated { margin: 12px 0 0; color: var(--muted); font-size: 14px; }
+
+  section.issues { margin-top: 20px; }
+  section.issues h2, aside h2 { margin: 0 0 8px; font-size: 17px; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: 14px; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--surface); }
+  .table-wrap table { border: 0; }
+  th, td { padding: 9px 12px; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  th { color: var(--muted); font-weight: 500; font-size: 13px; background: var(--tint); }
+  td.num { text-align: right; }
+
+  aside { position: relative; padding: 16px 20px; background: var(--surface); border-left: 1px solid var(--rule); }
+  aside[hidden] { display: none; }
+  aside .close { position: absolute; top: 10px; right: 12px; border: 0; background: none; font-size: 22px; line-height: 1; cursor: pointer; color: var(--muted); }
+  aside h2 { padding-right: 28px; }
+  aside .kind { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; margin: 0 0 16px; font-size: 14px; }
+  dt { color: var(--muted); } dd { margin: 0; }
+  .flag { display: block; margin: 0 0 12px; padding: 8px 10px; border-left: 3px solid var(--amber); border-radius: 0 6px 6px 0; background: var(--warn-bg); color: var(--warn-ink); font-size: 14px; }
+  .flag.alert { border-color: var(--red); background: var(--alert-bg); color: var(--alert-ink); }
+  form.declare { display: grid; gap: 8px; margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--rule); }
+  form.declare h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  input[type=number], input[type=text], textarea { background: var(--surface); }
+  form.declare input[type=number] { width: 96px; padding: 6px 8px; border: 1px solid var(--rule); border-radius: 6px; }
+  form.declare textarea { min-height: 64px; padding: 6px 8px; border: 1px solid var(--rule); border-radius: 6px; resize: vertical; }
+  form.declare .row { display: flex; align-items: center; gap: 8px; }
+  .links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+  dialog { max-width: 460px; border: 1px solid var(--rule); border-radius: var(--radius); padding: 20px 24px; color: var(--ink); background: var(--surface); box-shadow: var(--shadow); }
+  dialog::backdrop { background: rgba(0, 32, 91, .35); }
+  dialog h2 { margin: 0 0 8px; font-size: 18px; font-weight: 600; }
+  dialog p { margin: 0 0 10px; }
+  dialog .warn { color: var(--red); }
+  dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); max-width: calc(100% - 32px); z-index: 40;
+    padding: 10px 16px; border-radius: 6px; background: var(--brand); color: #fff; box-shadow: var(--shadow); }
+  :root.dark .toast { background: var(--accent); color: #031126; }
+  .toast.error { background: var(--red); color: #fff; }
+  .toast[hidden] { display: none; }
+  .busy { cursor: progress; }
+  .loading { padding: 48px 24px; text-align: center; color: var(--muted); }
+
+  @media (max-width: 900px) {
+    .ppm-bar { padding: 0 8px 0 12px; gap: 8px; }
+    .ppm-nav a { padding: 0 8px; }
+    header, .status, .chart { padding-left: 12px; padding-right: 12px; }
+    main.with-details { grid-template-columns: minmax(0, 1fr); }
+    aside { border-left: 0; border-top: 1px solid var(--rule); }
+    select { min-width: 0; width: 100%; }
+    .controls { width: 100%; }
+  }
+  @media (max-width: 520px) { .ppm-brand .ppm-name { display: none; } .ppm-brand img { height: 18px; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+<style>
+  .panel { padding: 16px 24px 32px; }
+  .panel[hidden] { display: none; }
+  .bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 20px; margin: 0 0 16px; }
+  .bar label.field { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
+  .bar select { min-width: 220px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 0 0 16px; }
+  .card { padding: 12px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
+  .card .k { margin: 0; color: var(--muted); font-size: 13px; }
+  .card .v { margin: 2px 0 0; font-size: 20px; font-weight: 600; }
+  .card .s { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+  .card.alert .v { color: var(--red); }
+  .late { color: var(--red); font-weight: 500; }
+  .early { color: var(--green); }
+  .muted { color: var(--muted); }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12.5px; background: var(--tint); color: var(--ink); white-space: nowrap; }
+  .badge.active { background: var(--summary); color: #FFFFFF; }
+  .badge.pending { background: var(--warn-bg); color: var(--warn-ink); }
+  .badge.refused { background: var(--alert-bg); color: var(--alert-ink); }
+  .badge.added { background: var(--ok-bg); color: var(--ok-ink); }
+  .badge.removed { background: var(--alert-bg); color: var(--alert-ink); }
+  .badge.changed { background: var(--warn-bg); color: var(--warn-ink); }
+  td .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  td .btn { padding: 3px 10px; font-size: 13.5px; }
+  .note { margin: 0 0 16px; color: var(--muted); max-width: 70ch; }
+  .table-wrap + .note { margin-top: 10px; }
+  .intro { margin: 0 0 16px; max-width: 70ch; }
+  .ws { display: grid; gap: 12px; max-width: 720px; }
+  .ws .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px;
+    padding: 12px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
+  .ws .row strong { display: block; }
+  .report { margin: 0; padding-left: 18px; }
+  dialog label.lbl { display: grid; gap: 2px; margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+  dialog input[type=text], dialog textarea { padding: 6px 8px; border: 1px solid var(--rule); border-radius: 4px; color: var(--ink); }
+  dialog textarea { min-height: 76px; resize: vertical; }
+  dialog fieldset { margin: 0 0 12px; padding: 0; border: 0; }
+  dialog legend { margin: 0 0 4px; font-weight: 600; }
+  dialog .opt { display: flex; align-items: flex-start; gap: 8px; margin: 4px 0; cursor: pointer; }
+  #notif { max-width: 640px; width: calc(100% - 32px); }
+  #preview { width: 100%; height: 320px; border: 1px solid var(--rule); border-radius: 4px; background: #fff; }
+  .th-check { width: 32px; }
+  @media (max-width: 700px) {
+    .panel { padding: 12px; }
+    .status .seg { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+    .status .seg button { border-left: 0; border-top: 1px solid var(--rule); }
+    .status .seg button:nth-child(-n+2) { border-top: 0; }
+    .status .seg button:nth-child(even) { border-left: 1px solid var(--rule); }
+    #reload { margin-left: 0 !important; }
+    .bar select { min-width: 0; width: 100%; }
+    .bar label.field { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="ppm-bar">
+  <a class="ppm-brand" id="ppm-brand" href="#" aria-label="PPM, retour au planning">
+    <img id="ppm-logo" alt="" hidden>
+    <span class="ppm-name">PPM</span>
+  </a>
+  <nav class="ppm-nav" aria-label="Pages de l’outil">
+    <a id="nav-plan" data-view="gantt" href="#">Planning</a>
+    <a id="nav-struct" data-view="structure" href="#">Structure</a>
+    <a id="nav-suivi" data-view="suivi" href="#">Suivi</a>
+    <a id="nav-copilot" data-view="copilote" href="#">Copilote</a>
+  </nav>
+  <button type="button" class="ppm-icon" id="ppm-theme" aria-label="Thème nuit" title="Thème nuit"></button>
+</div>
+<script>
+/* Éléments communs à toutes les pages : bannière, thème jour/nuit, données préchargées, fenêtres d'information. */
+(function () {
+  'use strict';
+  var MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>';
+  var SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+  var root = document.documentElement;
+
+  /** JSON à clés triées : même clé que celle calculée par le serveur (stableJson_). */
+  function stable(v) {
+    if (Array.isArray(v)) return '[' + v.map(stable).join(',') + ']';
+    if (v && typeof v === 'object') return '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + stable(v[k]); }).join(',') + '}';
+    return JSON.stringify(v === undefined ? null : v);
+  }
+  /** Réponse préparée avec la page, consommée une seule fois ; null si absente (la page fait alors l'appel). */
+  window.ppmPreloaded = function (action, params, write) {
+    var B = window.BOOT;
+    if (write || !B || !B.preload) return null;
+    var k = action + '|' + stable(params || {});
+    if (!Object.prototype.hasOwnProperty.call(B.preload, k)) return null;
+    var res = B.preload[k];
+    delete B.preload[k];
+    return res && res.ok ? Promise.resolve(res.data) : null;
+  };
+
+  /** Fenêtre d'information attachée à un bouton : ouverture, fermeture au clic extérieur et avec Échap. */
+  window.ppmPopover = function (btn, pop) {
+    var close = function () { pop.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+    btn.setAttribute('aria-expanded', 'false');
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = pop.hidden;
+      document.querySelectorAll('.popover').forEach(function (p) { if (p !== pop) p.hidden = true; });
+      pop.hidden = !open;
+      btn.setAttribute('aria-expanded', String(open));
+    });
+    pop.addEventListener('click', function (e) { e.stopPropagation(); });
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !pop.hidden) { close(); btn.focus(); } });
+  };
+
+  function applyClass() { root.classList.toggle('dark', effective() === 'dark'); }
+  function effective() {
+    var t = root.getAttribute('data-theme');
+    if (t === 'dark' || t === 'light') return t;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  function paint(btn) {
+    var dark = effective() === 'dark';
+    btn.innerHTML = dark ? SUN : MOON;
+    btn.title = dark ? 'Thème jour' : 'Thème nuit';
+    btn.setAttribute('aria-label', btn.title);
+  }
+
+  (function early() {
+    var t = root.getAttribute('data-theme');
+    if (t !== 'dark' && t !== 'light') root.removeAttribute('data-theme');
+    applyClass();
+    if (window.matchMedia) {
+      var mq = window.matchMedia('(prefers-color-scheme: dark)');
+      var onChange = function () { if (!root.getAttribute('data-theme')) { applyClass(); var b = document.getElementById('ppm-theme'); if (b) paint(b); } };
+      if (mq.addEventListener) mq.addEventListener('change', onChange); else if (mq.addListener) mq.addListener(onChange);
+    }
+  })();
+
+  function init() {
+    var B = window.BOOT || {};
+    var base = B.baseUrl || '';
+    var btn = document.getElementById('ppm-theme');
+    paint(btn);
+    btn.addEventListener('click', function () {
+      var next = effective() === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      applyClass();
+      paint(btn);
+      document.dispatchEvent(new CustomEvent('ppm-theme', { detail: next }));
+      try { google.script.run.withFailureHandler(function () {}).uiCall('ui.set', { theme: next }, null); } catch (e) { /* hors web app */ }
+    });
+    var here = document.querySelector('.ppm-nav a[data-view="' + (B.view || '') + '"]');
+    if (here) here.setAttribute('aria-current', 'page');
+    document.getElementById('ppm-brand').setAttribute('href', base + '?view=gantt');
+    if (B.logoUrl) {
+      var img = document.getElementById('ppm-logo');
+      img.src = B.logoUrl;
+      img.alt = 'Airbus';
+      img.hidden = false;
+    }
+    window.addEventListener('load', function () {
+      if (window.console && B.version) console.info('PPM ' + B.version + ' : données préparées en ' + (B.serverMs || 0) + ' ms, page prête en ' + Math.round(performance.now()) + ' ms');
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+</script>
+<header>
+  <div class="title">
+    <h1 id="title">Suivi</h1>
+    <p class="context" id="context"></p>
+  </div>
+  <div class="controls">
+    <select id="picker" aria-label="Projet"></select>
+    <button type="button" class="btn" id="notif-btn">Mes notifications</button>
+  </div>
+</header>
+
+<div class="status">
+  <div class="seg" role="tablist" aria-label="Rubriques">
+    <button type="button" role="tab" data-tab="ecarts" aria-pressed="true">Écarts à la baseline</button>
+    <button type="button" role="tab" data-tab="changes" aria-pressed="false" id="tab-changes">Changements à valider</button>
+    <button type="button" role="tab" data-tab="baselines" aria-pressed="false">Baselines</button>
+    <button type="button" role="tab" data-tab="workspace" aria-pressed="false">Agenda et Drive</button>
+  </div>
+  <button type="button" class="icon-btn" id="reload" style="margin-left:auto" aria-label="Actualiser" title="Actualiser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+</div>
+
+<section class="panel" id="panel-ecarts" aria-label="Écarts à la baseline"></section>
+<section class="panel" id="panel-changes" aria-label="Changements à valider" hidden></section>
+<section class="panel" id="panel-baselines" aria-label="Baselines" hidden></section>
+<section class="panel" id="panel-workspace" aria-label="Agenda et Drive" hidden></section>
+
+<dialog id="form">
+  <h2 id="form-title"></h2>
+  <p id="form-text"></p>
+  <label class="lbl" id="form-label-wrap">Libellé (facultatif)<input type="text" id="form-label" maxlength="60"></label>
+  <label class="lbl"><span id="form-reason-label">Justification</span><textarea id="form-reason" maxlength="500"></textarea></label>
+  <div class="actions">
+    <button type="button" class="btn" id="form-cancel">Annuler</button>
+    <button type="button" class="btn primary" id="form-ok">Valider</button>
+  </div>
+</dialog>
+
+<dialog id="notif">
+  <h2>Mes notifications</h2>
+  <fieldset>
+    <legend>Mail récapitulatif</legend>
+    <label class="opt"><input type="radio" name="freq" value="Quotidien"> <span>Chaque matin de semaine</span></label>
+    <label class="opt"><input type="radio" name="freq" value="Hebdomadaire"> <span>Le lundi seulement</span></label>
+    <label class="opt"><input type="radio" name="freq" value="Aucun"> <span>Jamais</span></label>
+  </fieldset>
+  <label class="opt"><input type="checkbox" id="invites"> <span>Mettre les échéances de mes livrables et jalons dans mon agenda (le projet doit avoir son agenda)</span></label>
+  <p class="note" id="notif-state" role="status"></p>
+  <div class="links">
+    <button type="button" class="btn" id="preview-btn">Voir mon récapitulatif</button>
+    <button type="button" class="btn" id="send-btn">Me l’envoyer maintenant</button>
+  </div>
+  <p class="note" id="preview-note" hidden></p>
+  <iframe id="preview" title="Aperçu du récapitulatif" sandbox="" hidden></iframe>
+  <div class="actions"><button type="button" class="btn primary" id="notif-close">Fermer</button></div>
+</dialog>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+var BOOT = <?!= boot ?>;
+</script>
+<script>
+(function () {
+  'use strict';
+
+  var state = { tab: 'ecarts', projectId: '', catalog: null, list: null, diff: null, compare: { base: '', to: '' },
+    onlyChanges: true, feed: null, showAll: false, selected: {}, ws: null, wsReport: null, form: null, seq: 0 };
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ------------------------------------------------------------ outils
+  function el(tag, attrs, children) {
+    var n = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (k === 'text') n.textContent = attrs[k];
+      else if (k === 'class') n.className = attrs[k];
+      else if (k.indexOf('on') === 0) n.addEventListener(k.slice(2), attrs[k]);
+      else n.setAttribute(k, attrs[k]);
+    });
+    (children || []).forEach(function (c) { if (c !== null && c !== undefined) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return n;
+  }
+  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+  function uuid() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  }
+  function frDate(s) {
+    if (!s) return '';
+    var p = String(s).slice(0, 10).split('-');
+    return p[2] + '/' + p[1] + '/' + p[0];
+  }
+  function frDateTime(s) {
+    if (!s) return '';
+    var d = new Date(s);
+    if (isNaN(d.getTime())) return frDate(s);
+    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+  function isoDate(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v)); }
+  function plural(n, one, many) { return n + ' ' + (Math.abs(n) > 1 ? many : one); }
+  function days(n) {
+    if (n === null || n === undefined) return '';
+    if (n === 0) return '=';
+    return (n > 0 ? '+' : '−') + plural(Math.abs(n), 'jour', 'jours');
+  }
+  function euros(n) {
+    if (n === null || n === undefined) return '';
+    return Number(n).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+  }
+  var toastTimer = null;
+  function toast(msg, isError) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast' + (isError ? ' error' : '');
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.hidden = true; }, isError ? 7000 : 3500);
+  }
+  function call(action, params, write) {
+    var pre = window.ppmPreloaded && window.ppmPreloaded(action, params, write);
+    if (pre) return pre;
+    return new Promise(function (resolve, reject) {
+      document.body.classList.add('busy');
+      google.script.run
+        .withSuccessHandler(function (res) {
+          document.body.classList.remove('busy');
+          if (res && res.ok) resolve(res.data);
+          else reject(res && res.error ? res.error : { code: 'INTERNAL', message: 'Réponse inattendue du serveur.' });
+        })
+        .withFailureHandler(function (err) {
+          document.body.classList.remove('busy');
+          reject({ code: 'NETWORK', message: 'Le serveur ne répond pas. Vérifiez la connexion puis cliquez sur Actualiser.', details: String(err) });
+        })
+        .uiCall(action, params || {}, write ? uuid() : null);
+    });
+  }
+  function loading(panel) { clear(panel); panel.appendChild(el('p', { class: 'loading', text: 'Chargement…' })); }
+  function empty(panel, title, text, extra) {
+    clear(panel);
+    panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: title }), el('span', { text: text }), extra || null]));
+  }
+  function failed(panel, err) {
+    empty(panel, 'Chargement impossible.', (err && err.message) || 'Erreur inconnue.');
+  }
+  function badge(text, cls) { return el('span', { class: 'badge ' + (cls || ''), text: text }); }
+  function card(k, v, s, alert) {
+    return el('div', { class: 'card' + (alert ? ' alert' : '') }, [el('p', { class: 'k', text: k }), el('p', { class: 'v', text: v }), s ? el('p', { class: 's', text: s }) : null]);
+  }
+  function table(head, rows) {
+    return el('div', { class: 'table-wrap' }, [el('table', {}, [
+      el('thead', {}, [el('tr', {}, head.map(function (h) { return typeof h === 'string' ? el('th', { scope: 'col', text: h }) : h; }))]),
+      el('tbody', {}, rows)
+    ])]);
+  }
+
+  // ------------------------------------------------------------ navigation
+  function remember() {
+    var base = BOOT.baseUrl || '';
+    $('nav-plan').setAttribute('href', base + '?view=gantt' + (state.projectId ? '&project=' + state.projectId : ''));
+    $('nav-struct').setAttribute('href', base + '?view=structure' + (state.projectId ? '&project=' + state.projectId : ''));
+    $('nav-suivi').setAttribute('href', base + '?view=suivi' + (state.projectId ? '&project=' + state.projectId : '') + '&tab=' + state.tab);
+    $('nav-copilot').setAttribute('href', base + '?view=copilote' + (state.projectId ? '&project=' + state.projectId : ''));
+    try { google.script.history.replace(null, { view: 'suivi', project: state.projectId, tab: state.tab }); } catch (e) { /* hors web app */ }
+  }
+  function fillPicker() {
+    var sel = $('picker'); clear(sel);
+    var cat = state.catalog, byProgram = {};
+    cat.projects.forEach(function (p) { (byProgram[p.program_id || ''] = byProgram[p.program_id || ''] || []).push(p); });
+    var sortCode = function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); };
+    var group = function (label, list) {
+      if (!list || !list.length) return;
+      var og = el('optgroup', { label: label });
+      list.sort(sortCode).forEach(function (p) { og.appendChild(el('option', { value: p.id, text: p.code + ' ' + p.name + (p.status === 'Clos' ? ' (clos)' : '') })); });
+      sel.appendChild(og);
+    };
+    cat.programs.slice().sort(sortCode).forEach(function (g) { group(g.code + ' ' + g.name, byProgram[g.id]); });
+    group('Hors programme', byProgram['']);
+    sel.value = state.projectId;
+  }
+  function syncTabs() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-tab') === state.tab));
+    });
+    ['ecarts', 'changes', 'baselines', 'workspace'].forEach(function (t) { $('panel-' + t).hidden = t !== state.tab; });
+    var l = state.list;
+    $('tab-changes').hidden = !!l && !l.canReadFeed;
+  }
+  function setTab(t) {
+    if (t === 'changes' && state.list && !state.list.canReadFeed) t = 'ecarts';
+    state.tab = t; syncTabs(); remember(); return loadTab();
+  }
+
+  // ------------------------------------------------------------ chargement
+  function loadProject(id) {
+    state.projectId = id; state.selected = {}; state.compare = { base: '', to: '' }; state.wsReport = null;
+    $('picker').value = id;
+    remember();
+    var ticket = ++state.seq;
+    loading($('panel-' + state.tab));
+    return call('baselines.list', { projectId: id }).then(function (l) {
+      if (ticket !== state.seq) return;
+      state.list = l;
+      renderHeader();
+      if (state.tab === 'changes' && !l.canReadFeed) state.tab = 'ecarts';
+      syncTabs(); remember();
+      if (l.canReadFeed) refreshPending();
+      return loadTab();
+    }).catch(function (e) { failed($('panel-' + state.tab), e); toast(e.message || 'Erreur.', true); });
+  }
+  function reloadList() {
+    return call('baselines.list', { projectId: state.projectId }).then(function (l) { state.list = l; renderHeader(); syncTabs(); });
+  }
+  function loadTab() {
+    if (!state.list) return Promise.resolve();
+    if (state.tab === 'ecarts') return loadDiff();
+    if (state.tab === 'changes') return loadFeed();
+    if (state.tab === 'baselines') { renderBaselines(); return Promise.resolve(); }
+    return loadWorkspace();
+  }
+  function activeBaseline() { return (state.list.baselines || []).filter(function (b) { return b.status === 'Active'; })[0] || null; }
+
+  function renderHeader() {
+    var l = state.list, p = l.project;
+    $('title').textContent = p.code + ' ' + p.name;
+    var a = activeBaseline();
+    var pending = l.baselines.filter(function (b) { return b.status === 'Demandée'; }).length;
+    var ctx = $('context'); clear(ctx);
+    ctx.appendChild(el('span', { class: 'chip' + (a ? '' : ' warn'), text: a ? a.label + ' active' : 'Pas de baseline',
+      title: a ? 'Figée le ' + frDate(a.decided_at) + ' par ' + a.decided_by : '' }));
+    if (pending) ctx.appendChild(el('span', { class: 'chip warn', text: plural(pending, 'demande en attente', 'demandes en attente') }));
+  }
+  function refreshPending() {
+    call('changes.feed', { projectId: state.projectId, limit: 1 }).then(function (f) {
+      $('tab-changes').textContent = 'Changements à valider' + (f.pending ? ' (' + f.pending + ')' : '');
+    }).catch(function () { /* onglet laissé tel quel */ });
+  }
+
+  // ------------------------------------------------------------ écarts
+  function loadDiff() {
+    var panel = $('panel-ecarts');
+    var a = activeBaseline();
+    if (!a && !state.compare.base) { renderNoBaseline(panel); return Promise.resolve(); }
+    loading(panel);
+    var params = { projectId: state.projectId };
+    if (state.compare.base) params.baselineId = state.compare.base;
+    if (state.compare.to) params.compareTo = state.compare.to;
+    return call('baselines.diff', params).then(function (d) { state.diff = d; renderDiff(); }).catch(function (e) { failed(panel, e); });
+  }
+  function renderNoBaseline(panel) {
+    var l = state.list, extra = null;
+    if (l.canManage) extra = el('p', {}, [el('button', { type: 'button', class: 'btn primary', text: 'Figer la baseline B0', onclick: function () { openCreate(null); } })]);
+    else if (l.canRequest) extra = el('p', {}, [el('button', { type: 'button', class: 'btn', text: 'Demander une baseline', onclick: openRequest })]);
+    empty(panel, 'Pas encore de baseline pour ce projet.',
+      'Une baseline fige les dates, les responsables, le budget et le périmètre du projet ; les écarts se mesurent ensuite par rapport à elle.', extra);
+  }
+  function renderDiff() {
+    var panel = $('panel-ecarts'), d = state.diff, t = d.totals;
+    clear(panel);
+    var frozen = state.list.baselines.filter(function (b) { return b.status === 'Active' || b.status === 'Archivée'; });
+    var baseSel = el('select', { id: 'cmp-base', 'aria-label': 'Baseline de référence' });
+    frozen.forEach(function (b) { baseSel.appendChild(el('option', { value: b.id, text: b.label + (b.status === 'Active' ? ' (active)' : '') + ' — ' + frDate(b.decided_at) })); });
+    baseSel.value = d.baseline.id;
+    var toSel = el('select', { id: 'cmp-to', 'aria-label': 'Comparée à' });
+    toSel.appendChild(el('option', { value: '', text: 'Le planning d’aujourd’hui' }));
+    frozen.forEach(function (b) { if (b.id !== d.baseline.id) toSel.appendChild(el('option', { value: b.id, text: 'La baseline ' + b.label })); });
+    toSel.value = d.compareTo ? d.compareTo.id : '';
+    baseSel.addEventListener('change', function () { state.compare.base = baseSel.value; if (state.compare.to === baseSel.value) state.compare.to = ''; loadDiff(); });
+    toSel.addEventListener('change', function () { state.compare.to = toSel.value; loadDiff(); });
+    var only = el('input', { type: 'checkbox', id: 'only-changes' });
+    only.checked = state.onlyChanges;
+    only.addEventListener('change', function () { state.onlyChanges = only.checked; renderDiff(); });
+    panel.appendChild(el('div', { class: 'bar' }, [
+      el('label', { class: 'field' }, ['Référence', baseSel]), el('label', { class: 'field' }, ['Comparée à', toSel]),
+      el('label', { class: 'toggle' }, [only, 'Seulement les éléments qui ont changé'])
+    ]));
+
+    var cards = el('div', { class: 'cards' });
+    cards.appendChild(card('Fin du plan', t.end ? frDate(t.end) : '—',
+      t.end_slip === null ? 'Référence : ' + frDate(t.end_base) : (t.end_slip === 0 ? 'Comme la référence' : days(t.end_slip) + ' ouvrés (référence ' + frDate(t.end_base) + ')'), t.end_slip > 0));
+    cards.appendChild(card('Éléments glissés', String(t.slipped), t.slipped ? 'jusqu’à ' + plural(t.max_slip, 'jour ouvré', 'jours ouvrés') : (t.advanced ? plural(t.advanced, 'élément avancé', 'éléments avancés') : 'aucun'), t.slipped > 0));
+    cards.appendChild(card('Périmètre', (t.added ? '+' + t.added : '0') + ' / ' + (t.removed ? '−' + t.removed : '0'), 'ajoutés / retirés', t.added + t.removed > 0));
+    cards.appendChild(card('Responsables changés', String(t.owner_changes), ''));
+    var hasBudget = d.seeBudget && (t.budget || t.budget_base);
+    if (hasBudget) cards.appendChild(card('Budget prévu', euros(t.budget), t.budget_delta ? (t.budget_delta > 0 ? '+' : '') + euros(t.budget_delta) + ' par rapport à la référence' : 'Comme la référence', t.budget_delta > 0));
+    panel.appendChild(cards);
+
+    var items = d.items.filter(function (i) { return !state.onlyChanges || i.state !== 'same'; });
+    if (!items.length) {
+      panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucun écart.' }), el('span', { text: 'Le planning comparé est identique à la référence.' })]));
+      return;
+    }
+    var stateText = { added: ['Ajouté', 'added'], removed: ['Retiré', 'removed'], changed: ['Modifié', 'changed'], same: ['Identique', ''] };
+    var dateCell = function (s, f, type) { return !f ? '—' : (type === 'Jalon' || s === f || !s ? frDate(f) : frDate(s) + ' → ' + frDate(f)); };
+    var head = ['Élément', 'Référence', 'Comparé', 'Glissement', 'Responsable'];
+    if (hasBudget) head.push('Budget');
+    head.push('État');
+    var rows = items.map(function (i) {
+      var slip = i.slip === null || i.slip === undefined ? '' : days(i.slip);
+      var owner = i.owner_changed ? i.base_owner_name + ' → ' + i.owner_name : (i.owner_name || i.base_owner_name || '—');
+      var cells = [
+        el('td', {}, [i.name, el('div', { class: 'muted', text: i.item_type + (i.wp_name ? ' · WP ' + i.wp_name : '') })]),
+        el('td', { text: i.state === 'added' ? '—' : dateCell(i.base_start, i.base_finish, i.item_type) }),
+        el('td', { text: i.state === 'removed' ? '—' : dateCell(i.start, i.finish, i.item_type) }),
+        el('td', { class: 'num' + (i.slip > 0 ? ' late' : i.slip < 0 ? ' early' : ''), text: slip }),
+        el('td', { text: owner })
+      ];
+      if (hasBudget) cells.push(el('td', { class: 'num', text: i.budget_delta ? (i.budget_delta > 0 ? '+' : '') + euros(i.budget_delta) : (i.budget ? euros(i.budget) : '') }));
+      cells.push(el('td', {}, [badge(stateText[i.state][0], stateText[i.state][1])]));
+      return el('tr', { 'data-item': i.id }, cells);
+    });
+    panel.appendChild(table(head, rows));
+    panel.appendChild(el('p', { class: 'note', text: 'Glissement de la fin, en jours ouvrés du calendrier du projet : positif = plus tard que la référence.' }));
+  }
+
+  // ------------------------------------------------------------ changements à valider
+  function loadFeed() {
+    var panel = $('panel-changes');
+    loading(panel);
+    return call('changes.feed', { projectId: state.projectId, all: state.showAll }).then(function (f) {
+      state.feed = f; state.selected = {}; renderFeed();
+      $('tab-changes').textContent = 'Changements à valider' + (f.pending ? ' (' + f.pending + ')' : '');
+    }).catch(function (e) { failed(panel, e); });
+  }
+  function valueText(v) { return v === '' || v === null || v === undefined ? '(vide)' : isoDate(v) ? frDate(v) : String(v); }
+  function renderFeed() {
+    var panel = $('panel-changes'), f = state.feed;
+    clear(panel);
+    if (!f.baseline) {
+      empty(panel, 'Pas de baseline active.', 'Le fil des changements démarre quand une baseline est figée : chaque modification des dates, responsables, budget ou périmètre y apparaît jusqu’à sa validation.');
+      return;
+    }
+    if (!f.canAck) panel.appendChild(el('p', { class: 'note', text: 'Lecture seule : le chef de projet et le DPL valident.' }));
+    var all = el('input', { type: 'checkbox', id: 'show-all' });
+    all.checked = state.showAll;
+    all.addEventListener('change', function () { state.showAll = all.checked; loadFeed(); });
+    var bar = el('div', { class: 'bar' }, [el('label', { class: 'toggle' }, [all, 'Afficher aussi les changements déjà validés'])]);
+    if (f.canAck && f.pending) {
+      bar.appendChild(el('button', { type: 'button', class: 'btn', id: 'ack-selected', text: 'Valider la sélection', onclick: ackSelected }));
+      bar.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'ack-all', text: 'Tout valider (' + f.pending + ')', onclick: ackAll }));
+    }
+    panel.appendChild(bar);
+    if (!f.items.length) {
+      panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Rien à valider.' }), el('span', { text: 'Aucune modification des données figées depuis la dernière validation.' })]));
+      return;
+    }
+    var head = [];
+    if (f.canAck) head.push(el('th', { scope: 'col', class: 'th-check' }, [el('span', { class: 'muted', text: '✓' })]));
+    head = head.concat(['Quand', 'Qui', 'Élément', 'Changement', 'État']);
+    var rows = f.items.map(function (e) {
+      var change;
+      if (e.what === 'modification') change = [e.field_label + ' : ', el('span', { class: 'muted', text: valueText(e.old_value) }), ' → ', el('strong', { text: valueText(e.new_value) })];
+      else change = [e.what === 'ajout' ? 'Ajouté' : e.what === 'suppression' ? 'Supprimé' : 'Rétabli'];
+      var cells = [];
+      if (f.canAck) {
+        var box = el('input', { type: 'checkbox', 'data-event': e.id, 'aria-label': 'Sélectionner : ' + e.entity });
+        box.checked = !!state.selected[e.id];
+        box.disabled = e.acknowledged;
+        box.addEventListener('change', function () { if (box.checked) state.selected[e.id] = true; else delete state.selected[e.id]; });
+        cells.push(el('td', {}, [box]));
+      }
+      cells.push(el('td', { text: frDateTime(e.at) }), el('td', { text: e.actor_name || e.actor, title: e.actor }), el('td', { text: e.entity }), el('td', {}, change),
+        el('td', {}, [e.acknowledged ? badge('Validé' + (e.acknowledged_by ? ' par ' + e.acknowledged_by : '')) : badge('À valider', 'pending')]));
+      return el('tr', { 'data-event-row': e.id }, cells);
+    });
+    panel.appendChild(table(head, rows));
+  }
+  function ackSelected() {
+    var ids = Object.keys(state.selected);
+    if (!ids.length) { toast('Cochez d’abord les changements à valider.', true); return; }
+    call('changes.ack', { ids: ids }, true).then(function (r) {
+      toast(plural(r.acknowledged, 'changement validé', 'changements validés') + '.'); return loadFeed();
+    }).catch(function (e) { toast(e.message || 'Validation impossible.', true); });
+  }
+  function ackAll() {
+    call('changes.ack', { projectId: state.projectId, all: true }, true).then(function (r) {
+      toast(plural(r.acknowledged, 'changement validé', 'changements validés') + '.'); return loadFeed();
+    }).catch(function (e) { toast(e.message || 'Validation impossible.', true); });
+  }
+
+  // ------------------------------------------------------------ baselines
+  var STATUS = { 'Active': 'active', 'Demandée': 'pending', 'Refusée': 'refused', 'Archivée': '' };
+  function renderBaselines() {
+    var panel = $('panel-baselines'), l = state.list;
+    clear(panel);
+    var bar = el('div', { class: 'bar' });
+    if (l.canManage) bar.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'create-btn', text: activeBaseline() ? 'Figer une nouvelle baseline' : 'Figer la baseline B0', onclick: function () { openCreate(null); } }));
+    else if (l.canRequest) bar.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'request-btn', text: 'Demander une nouvelle baseline', onclick: openRequest }));
+    panel.appendChild(bar);
+    if (!l.baselines.length) {
+      panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucune baseline ni demande.' })]));
+      return;
+    }
+    var rows = l.baselines.map(function (b) {
+      var actions = el('div', { class: 'actions' });
+      if (b.status === 'Demandée' && l.canManage) {
+        actions.appendChild(el('button', { type: 'button', class: 'btn primary', text: 'Figer', onclick: function () { openCreate(b); } }));
+        actions.appendChild(el('button', { type: 'button', class: 'btn', text: 'Refuser', onclick: function () { openRefuse(b); } }));
+      }
+      if (b.status === 'Archivée' && l.canManage) actions.appendChild(el('button', { type: 'button', class: 'btn', text: 'Réactiver', onclick: function () { openActivate(b); } }));
+      if (b.status === 'Active' || b.status === 'Archivée') {
+        actions.appendChild(el('button', { type: 'button', class: 'btn', text: 'Voir les écarts', onclick: function () {
+          state.compare = { base: b.id, to: '' };
+          setTab('ecarts');
+        } }));
+      }
+      var who = b.status === 'Demandée' ? 'Demandée par ' + b.requested_by + ' le ' + frDate(b.created_at)
+        : (b.decided_by ? (b.status === 'Refusée' ? 'Refusée' : 'Figée') + ' par ' + b.decided_by + ' le ' + frDate(b.decided_at) : '');
+      return el('tr', { 'data-baseline': b.id }, [
+        el('td', {}, [el('strong', { text: b.label || 'Demande' }), b.items ? el('div', { class: 'muted', text: plural(b.items, 'élément figé', 'éléments figés') }) : null]),
+        el('td', {}, [badge(b.status, STATUS[b.status])]),
+        el('td', { text: b.justification }),
+        el('td', { text: who }),
+        el('td', {}, [actions])
+      ]);
+    });
+    panel.appendChild(table(['Baseline', 'État', 'Justification', 'Décision', ''], rows));
+  }
+
+  // Boîte de saisie commune (figer, demander, refuser, réactiver).
+  function openForm(opts) {
+    state.form = opts;
+    $('form-title').textContent = opts.title;
+    $('form-text').textContent = opts.text || '';
+    $('form-label-wrap').hidden = !opts.label;
+    $('form-label').value = opts.labelValue || '';
+    $('form-reason-label').textContent = opts.reasonLabel || 'Justification';
+    $('form-reason').value = opts.reasonValue || '';
+    $('form-ok').textContent = opts.ok || 'Valider';
+    $('form-ok').disabled = false;
+    var d = $('form');
+    if (d.showModal) d.showModal(); else d.setAttribute('open', '');
+    $('form-reason').focus();
+  }
+  function closeForm() { state.form = null; var d = $('form'); if (d.open) { if (d.close) d.close(); else d.removeAttribute('open'); } }
+  function submitForm() {
+    var f = state.form;
+    if (!f) return;
+    var reason = $('form-reason').value.trim();
+    if (!reason && !f.reasonOptional) { toast((f.reasonLabel || 'La justification') + ' est obligatoire.', true); $('form-reason').focus(); return; }
+    $('form-ok').disabled = true;
+    f.submit(reason, $('form-label').value.trim()).then(function (msg) {
+      closeForm(); toast(msg);
+      return reloadList().then(loadTab).then(function () { if (state.list.canReadFeed) refreshPending(); });
+    }).catch(function (e) { $('form-ok').disabled = false; toast(e.message || 'Opération impossible.', true); });
+  }
+  function nextLabel() {
+    var nums = state.list.baselines.filter(function (b) { return b.number !== null && (b.status === 'Active' || b.status === 'Archivée'); }).map(function (b) { return b.number; });
+    return 'B' + (nums.length ? Math.max.apply(null, nums) + 1 : 0);
+  }
+  function openCreate(request) {
+    var label = nextLabel();
+    openForm({
+      title: 'Figer la baseline ' + label,
+      text: request ? 'Demande de ' + request.requested_by + ' : « ' + request.justification + ' ». ' : '',
+      label: true, labelValue: label, reasonValue: request ? request.justification : '',
+      ok: 'Figer ' + label,
+      submit: function (reason, lbl) {
+        var params = { projectId: state.projectId, justification: reason, label: lbl };
+        if (request) { params.requestId = request.id; params.version = request.version; }
+        return call('baselines.create', params, true).then(function (b) {
+          state.compare = { base: '', to: '' };
+          return 'Baseline ' + b.label + ' figée : ' + plural(b.items, 'élément', 'éléments') + '.';
+        });
+      }
+    });
+    $('form-text').textContent += 'Les dates, responsables, budget et périmètre actuels deviennent la référence ; la baseline active actuelle sera archivée.';
+  }
+  function openRequest() {
+    openForm({ title: 'Demander une nouvelle baseline', text: 'Le chef de projet recevra votre demande et décidera de figer ou non une nouvelle référence.',
+      ok: 'Envoyer la demande', submit: function (reason) {
+        return call('baselines.request', { projectId: state.projectId, justification: reason }, true).then(function () { return 'Demande envoyée.'; });
+      } });
+  }
+  function openRefuse(b) {
+    openForm({ title: 'Refuser la demande', text: 'Demande de ' + b.requested_by + ' : « ' + b.justification + ' ».', reasonLabel: 'Motif du refus', ok: 'Refuser',
+      submit: function (reason) { return call('baselines.refuse', { id: b.id, reason: reason, version: b.version }, true).then(function () { return 'Demande refusée.'; }); } });
+  }
+  function openActivate(b) {
+    openForm({ title: 'Réactiver ' + b.label, text: 'Elle redevient la référence des écarts ; la baseline active actuelle sera archivée.', reasonLabel: 'Motif', ok: 'Réactiver ' + b.label,
+      submit: function (reason) { return call('baselines.activate', { id: b.id, reason: reason, version: b.version }, true).then(function () { return b.label + ' réactivée.'; }); } });
+  }
+
+  // ------------------------------------------------------------ agenda et Drive
+  function loadWorkspace() {
+    var panel = $('panel-workspace');
+    loading(panel);
+    return call('workspace.status', { projectId: state.projectId }).then(function (st) { state.ws = st; renderWorkspace(); }).catch(function (e) { failed(panel, e); });
+  }
+  function renderWorkspace() {
+    var panel = $('panel-workspace'), st = state.ws;
+    clear(panel);
+    var box = el('div', { class: 'ws' });
+    box.appendChild(el('div', { class: 'row' }, [
+      el('div', {}, [el('strong', { text: 'Agenda du projet' }), el('span', { class: 'muted', text: st.calendar_id ? 'En service.' : 'Pas encore créé.' })]),
+      st.calendar_url ? el('a', { class: 'btn', href: st.calendar_url, target: '_blank', rel: 'noopener', text: 'Ouvrir l’agenda' }) : null
+    ]));
+    box.appendChild(el('div', { class: 'row' }, [
+      el('div', {}, [el('strong', { text: 'Dossier Drive du projet' }), el('span', { class: 'muted', text: st.drive_folder_id ? 'En service.' : 'Pas encore créé.' })]),
+      st.drive_url ? el('a', { class: 'btn', href: st.drive_url, target: '_blank', rel: 'noopener', text: 'Ouvrir le dossier' }) : null
+    ]));
+    panel.appendChild(box);
+    var bar = el('div', { class: 'bar', style: 'margin-top:16px' });
+    if (st.canManage && st.available !== false) {
+      if (!st.calendar_id || !st.drive_folder_id) bar.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'ws-enable', text: 'Créer l’agenda et le dossier du projet', onclick: function () { runWorkspace('workspace.enable'); } }));
+      else bar.appendChild(el('button', { type: 'button', class: 'btn', id: 'ws-sync', text: 'Synchroniser maintenant', onclick: function () { runWorkspace('workspace.sync'); } }));
+    } else if (!st.canManage) {
+      bar.appendChild(el('p', { class: 'note', text: 'Seuls le chef de projet, le DPL et le Program Leader activent l’agenda et le dossier.' }));
+    }
+    panel.appendChild(bar);
+    if (state.wsReport) {
+      var r = state.wsReport, lines = [];
+      lines.push(plural(r.created, 'événement créé', 'événements créés') + ', ' + plural(r.updated, 'mis à jour', 'mis à jour') + ', ' + plural(r.removed, 'retiré', 'retirés') + '.');
+      lines.push(plural(r.folders, 'dossier créé ou renommé', 'dossiers créés ou renommés') + '.');
+      lines.push('Partagés avec les ' + plural(r.members || 0, 'membre', 'membres') + ' du projet' + (r.shared ? ' (' + plural(r.shared, 'nouvel accès', 'nouveaux accès') + ')' : '') + '.');
+      var list = el('ul', { class: 'report', id: 'ws-report' }, lines.map(function (t) { return el('li', { text: t }); }));
+      r.errors.forEach(function (e) { list.appendChild(el('li', { class: 'late', text: e })); });
+      panel.appendChild(list);
+    }
+  }
+  function runWorkspace(action) {
+    var btn = $('ws-enable') || $('ws-sync');
+    if (btn) btn.disabled = true;
+    call(action, { projectId: state.projectId }, true).then(function (st) {
+      state.wsReport = st.report;
+      toast(action === 'workspace.enable' ? 'Agenda et dossier en service.' : 'Synchronisation terminée.');
+      return loadWorkspace();
+    }).catch(function (e) { if (btn) btn.disabled = false; toast(e.message || 'Opération impossible.', true); });
+  }
+
+  // ------------------------------------------------------------ mes notifications
+  function openNotif() {
+    $('preview').hidden = true; $('preview-note').hidden = true; $('notif-state').textContent = '';
+    call('settings.get', {}).then(function (s) {
+      Array.prototype.forEach.call(document.querySelectorAll('input[name=freq]'), function (r) { r.checked = r.value === s.notify_frequency; });
+      $('invites').checked = s.calendar_invites;
+      var d = $('notif');
+      if (d.showModal) d.showModal(); else d.setAttribute('open', '');
+    }).catch(function (e) { toast(e.message || 'Réglages indisponibles.', true); });
+  }
+  function saveNotif(patch) {
+    call('settings.set', patch, true).then(function () { $('notif-state').textContent = 'Réglage enregistré.'; })
+      .catch(function (e) { toast(e.message || 'Enregistrement impossible.', true); });
+  }
+  function preview(send) {
+    call('digest.preview', { send: !!send }, !!send).then(function (p) {
+      var note = $('preview-note');
+      note.hidden = false;
+      if (p.reason) { note.textContent = p.reason; $('preview').hidden = true; return; }
+      note.textContent = (p.sent ? 'Envoyé à votre adresse. ' : '') + 'Objet : « ' + p.subject + ' »' + (p.empty ? ' — rien à signaler aujourd’hui.' : '');
+      var f = $('preview');
+      f.hidden = false;
+      f.setAttribute('srcdoc', p.html);
+    }).catch(function (e) { toast(e.message || 'Aperçu impossible.', true); });
+  }
+
+  // ------------------------------------------------------------ événements
+  Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) {
+    b.addEventListener('click', function () { setTab(b.getAttribute('data-tab')); });
+  });
+  $('picker').addEventListener('change', function () { loadProject(this.value); });
+  $('reload').addEventListener('click', function () { loadProject(state.projectId); });
+  $('form-ok').addEventListener('click', submitForm);
+  $('form-cancel').addEventListener('click', closeForm);
+  $('form').addEventListener('cancel', function (e) { e.preventDefault(); closeForm(); });
+  $('notif-btn').addEventListener('click', openNotif);
+  $('notif-close').addEventListener('click', function () { var d = $('notif'); if (d.close) d.close(); else d.removeAttribute('open'); });
+  Array.prototype.forEach.call(document.querySelectorAll('input[name=freq]'), function (r) {
+    r.addEventListener('change', function () { if (r.checked) saveNotif({ notify_frequency: r.value }); });
+  });
+  $('invites').addEventListener('change', function () { saveNotif({ calendar_invites: this.checked }); });
+  $('preview-btn').addEventListener('click', function () { preview(false); });
+  $('send-btn').addEventListener('click', function () { preview(true); });
+
+  // ------------------------------------------------------------ démarrage
+  state.tab = BOOT.tab || 'ecarts';
+  syncTabs();
+  call('planning.catalog', {}).then(function (cat) {
+    state.catalog = cat;
+    var first = BOOT.project || (cat.projects.filter(function (p) { return p.status !== 'Clos'; })[0] || cat.projects[0] || {}).id;
+    if (!first) { empty($('panel-' + state.tab), 'Aucun projet pour l’instant.', 'Créez un projet dans l’application AppSheet, puis revenez ici.'); return; }
+    state.projectId = first;
+    fillPicker();
+    return loadProject(first);
+  }).catch(function (e) { failed($('panel-' + state.tab), e); });
+
+  window.__ppm = { state: state, setTab: setTab, loadProject: loadProject };
+})();
+</script>
+</body>
+</html>

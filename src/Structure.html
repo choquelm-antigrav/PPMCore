@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="<?= theme ?>">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="ppm-version" content="0.5.1">
+<?!= include('Style') ?>
+<style>
+  main { display: grid; grid-template-columns: minmax(0, 1fr); }
+  main.with-details { grid-template-columns: minmax(0, 1fr) 340px; }
+  .chart { min-width: 0; padding: 16px 24px 24px; }
+  .canvas { overflow: auto; max-height: calc(100vh - 230px); min-height: 240px; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
+  .canvas svg { display: block; }
+  .team-pick[hidden], .scope-pick[hidden], .mode[hidden] { display: none; }
+
+  .options { margin: 0 24px; padding: 12px 16px; background: var(--surface); border: 1px solid var(--rule); border-top: 0; border-radius: 0 0 4px 4px; }
+  .options[hidden] { display: none; }
+  .options .groups { display: flex; flex-wrap: wrap; gap: 12px 32px; }
+  .options fieldset { margin: 0; padding: 0; border: 0; min-width: 200px; }
+  .options .checks { columns: 2; column-gap: 32px; }
+  .options .checks label { break-inside: avoid; }
+  .options legend { padding: 0; margin: 0 0 4px; font-weight: 600; }
+  .options label { display: flex; align-items: center; gap: 8px; padding: 2px 0; cursor: pointer; }
+  .options .foot { display: flex; align-items: center; gap: 16px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 14px; }
+
+  .legend { margin: 0 0 10px; min-height: 18px; }
+  .swatch.dot { width: 12px; height: 12px; border-radius: 3px; }
+
+  /* Cartes du graphique */
+  .canvas text { font-family: inherit; }
+  .t-title { font-size: 13px; font-weight: 600; fill: var(--ink); }
+  .t-line { font-size: 12px; fill: var(--ink); }
+  .t-muted { font-size: 12px; fill: var(--muted); }
+  .t-caption { font-size: 11.5px; fill: var(--muted); }
+  .card { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; }
+  .card-head { fill: var(--tint); }
+  .node { cursor: pointer; }
+  .node:focus { outline: none; }
+  .node:focus-visible > .card, .node.selected > .card { stroke: var(--focus); stroke-width: 2.5; }
+  .person { cursor: pointer; }
+  .person:focus { outline: none; }
+  .person:hover .person-bg, .person:focus-visible .person-bg, .person.selected .person-bg { fill: var(--hover); }
+  .person-bg { fill: transparent; }
+  .edge { fill: none; stroke: var(--line-strong); stroke-width: 1.25; }
+  .toggle-badge { cursor: pointer; }
+  .toggle-badge rect { fill: var(--surface); stroke: var(--line-strong); }
+  .toggle-badge:hover rect, .toggle-badge:focus-visible rect { stroke: var(--focus); stroke-width: 2; }
+  .toggle-badge:focus { outline: none; }
+  .toggle-badge text { font-size: 12px; font-weight: 600; fill: var(--ink); text-anchor: middle; }
+
+  aside .edit { display: grid; gap: 8px; margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--rule); }
+  aside .edit h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  aside .edit label { display: grid; gap: 2px; color: var(--muted); font-size: 13px; }
+  aside .edit input { padding: 6px 8px; border: 1px solid var(--rule); border-radius: 4px; color: var(--ink); }
+  aside ul.roles { margin: 0 0 16px; padding-left: 18px; font-size: 14px; }
+  aside .hint { margin: 12px 0 0; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<?!= include('Header') ?>
+<header>
+  <div class="title">
+    <h1 id="title">Structure</h1>
+    <span class="pop-anchor">
+      <button type="button" class="icon-btn" id="info-btn" aria-label="Informations" title="Informations"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.01"/></svg></button>
+      <div class="popover" id="info-pop" hidden>
+        <p id="summary" aria-live="polite"></p>
+        <p class="context" id="context"></p>
+      </div>
+    </span>
+  </div>
+  <div class="controls">
+    <div class="seg" role="group" aria-label="Type de structure">
+      <button type="button" data-tab="obs" aria-pressed="true">Organisation (OBS)</button>
+      <button type="button" data-tab="wbs" aria-pressed="false">Découpage (WBS)</button>
+    </div>
+    <div class="seg mode" id="mode" role="group" aria-label="Lecture de l’organisation">
+      <button type="button" data-mode="roles" aria-pressed="true">Par rôles</button>
+      <button type="button" data-mode="teams" aria-pressed="false">Par équipes</button>
+    </div>
+    <span class="scope-pick" id="scope-pick"><select id="picker" aria-label="Projet ou programme"></select></span>
+    <span class="team-pick" id="team-pick" hidden><select id="team-root" aria-label="Équipe de départ"></select></span>
+  </div>
+</header>
+
+<div class="status">
+  <div class="controls" style="margin-left:auto">
+    <button type="button" class="btn" id="options-btn" aria-expanded="false" aria-controls="options">Attributs affichés</button>
+    <div class="seg" role="group" aria-label="Zoom">
+      <button type="button" id="zoom-out" aria-label="Zoom arrière">−</button>
+      <button type="button" id="zoom-fit">Ajuster</button>
+      <button type="button" id="zoom-in" aria-label="Zoom avant">+</button>
+    </div>
+    <button type="button" class="icon-btn" id="reload" aria-label="Actualiser" title="Actualiser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+  </div>
+</div>
+
+<section class="options" id="options" hidden aria-label="Attributs affichés">
+  <div class="groups">
+    <fieldset id="opt-attrs"><legend>Afficher sur chaque carte</legend><div class="checks" id="attr-list"></div></fieldset>
+    <fieldset id="opt-colors"><legend>Couleur selon</legend></fieldset>
+    <fieldset id="opt-more" hidden><legend>Contenu</legend></fieldset>
+  </div>
+  <div class="foot">
+    <button type="button" class="btn" id="opt-reset">Rétablir les valeurs par défaut</button>
+    <span id="prefs-state" role="status" aria-live="polite"></span>
+    <span>Le nom et le titre de chaque carte sont toujours affichés. Vos choix sont mémorisés pour votre compte.</span>
+  </div>
+</section>
+
+<main id="main">
+  <div class="chart">
+    <ul class="legend" id="legend" aria-label="Légende des couleurs"></ul>
+    <div class="canvas" id="canvas"><p class="loading">Chargement…</p></div>
+  </div>
+  <aside id="details" hidden aria-live="polite"></aside>
+</main>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+var BOOT = <?!= boot ?>;
+</script>
+<script>
+(function () {
+  'use strict';
+
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  var ROLE_COLORS = { PL: '#3B6FE0', DPL: '#00A3E0', CP: '#1F8A85', RWP: '#B7791F', MEMBER: '#8A4F9E' };
+  var ORG_PALETTE = ['#2F6DB5', '#1F8A85', '#B7791F', '#8A4F9E', '#4C8C2B', '#B4487A', '#00A3E0', '#8C5A3C', '#5B8FE0', '#A0522D'];
+  var NEUTRAL = '#8FB3E3';
+  var KIND_COLORS = { project: '#1E4FB0', wp: '#3F7FE0', item: '#8CB6F0', milestone: '#00A3E0' };
+  var TYPE_COLORS = { Interne: '#2F6DB5', Externe: '#B7791F' };
+  var CHAR_PX = 6.7, CHAR_PX_BOLD = 7.6; // largeur moyenne d'un caractère (12 px) et d'un titre gras (13 px)
+
+  var state = {
+    tab: 'obs', mode: 'roles', scopeType: 'project', scopeId: '', teamRoot: '',
+    catalog: null, prefs: null, data: null, catalogLists: null, collapsed: {}, zoom: 1,
+    layout: null, selected: '', suggestions: null, saveTimer: null, orgColors: {}, seq: 0
+  };
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ------------------------------------------------------------ outils
+  function el(tag, attrs, children) {
+    var n = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (k === 'text') n.textContent = attrs[k];
+      else if (k === 'class') n.className = attrs[k];
+      else if (k.indexOf('on') === 0) n.addEventListener(k.slice(2), attrs[k]);
+      else n.setAttribute(k, attrs[k]);
+    });
+    (children || []).forEach(function (c) { if (c) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return n;
+  }
+  function sv(tag, attrs, children) {
+    var n = document.createElementNS(SVGNS, tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (k === 'text') n.textContent = attrs[k];
+      else n.setAttribute(k, attrs[k]);
+    });
+    (children || []).forEach(function (c) { if (c) n.appendChild(c); });
+    return n;
+  }
+  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+  function uuid() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  }
+  function frDate(s) {
+    if (!s) return '';
+    var p = String(s).split('-');
+    return p[2] + '/' + p[1] + '/' + p[0];
+  }
+  function plural(n, one, many) { return n + ' ' + (n > 1 ? many : one); }
+  function clip(text, px, bold) {
+    var max = Math.max(4, Math.floor(px / (bold ? CHAR_PX_BOLD : CHAR_PX)));
+    text = String(text);
+    return text.length > max ? text.slice(0, max - 1) + '…' : text;
+  }
+  function has(list, k) { return list.indexOf(k) >= 0; }
+
+  var toastTimer = null;
+  function toast(msg, isError) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast' + (isError ? ' error' : '');
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.hidden = true; }, isError ? 7000 : 3500);
+  }
+
+  function call(action, params, write) {
+    var pre = window.ppmPreloaded && window.ppmPreloaded(action, params, write);
+    if (pre) return pre;
+    return new Promise(function (resolve, reject) {
+      document.body.classList.add('busy');
+      google.script.run
+        .withSuccessHandler(function (res) {
+          document.body.classList.remove('busy');
+          if (res && res.ok) resolve(res.data);
+          else reject(res && res.error ? res.error : { code: 'INTERNAL', message: 'Réponse inattendue du serveur.' });
+        })
+        .withFailureHandler(function (err) {
+          document.body.classList.remove('busy');
+          reject({ code: 'NETWORK', message: 'Le serveur ne répond pas. Vérifiez la connexion puis cliquez sur Actualiser.', details: String(err) });
+        })
+        .uiCall(action, params || {}, write ? uuid() : null);
+    });
+  }
+
+  // ------------------------------------------------------------ adresse et navigation
+  function scopeParams() {
+    return state.scopeType === 'program' ? (state.scopeId ? '&program=' + state.scopeId : '') : '&project=' + state.scopeId;
+  }
+  function remember() {
+    var base = BOOT.baseUrl || '';
+    $('nav-plan').setAttribute('href', base + '?view=gantt' + scopeParams());
+    $('nav-struct').setAttribute('href', base + '?view=structure' + scopeParams() + '&tab=' + state.tab);
+    $('nav-suivi').setAttribute('href', base + '?view=suivi' + (state.scopeType === 'project' ? '&project=' + state.scopeId : ''));
+    $('nav-copilot').setAttribute('href', base + '?view=copilote' + (state.scopeType === 'project' ? '&project=' + state.scopeId : ''));
+    try {
+      var p = { view: 'structure', tab: state.tab };
+      if (state.tab === 'obs') p.mode = state.mode;
+      if (state.scopeType === 'program') p.program = state.scopeId || 'none'; else p.project = state.scopeId;
+      google.script.history.replace(null, p);
+    } catch (e) { /* hors web app */ }
+  }
+
+  // ------------------------------------------------------------ choix d'affichage
+  function prefs() { return state.prefs[state.tab]; }
+
+  function renderOptions() {
+    var cat = state.catalog[state.tab], pr = prefs();
+    var box = $('attr-list'), colors = $('opt-colors'), more = $('opt-more');
+    clear(box);
+    [colors, more].forEach(function (f) {
+      Array.prototype.slice.call(f.querySelectorAll('label')).forEach(function (n) { f.removeChild(n); });
+    });
+
+    // Les gestionnaires relisent prefs() au moment du clic : l'objet est remplacé quand le serveur confirme l'enregistrement.
+    cat.attrs.forEach(function (a) {
+      var input = el('input', { type: 'checkbox', 'data-attr': a.key });
+      input.checked = has(pr.attrs, a.key);
+      input.addEventListener('change', function () {
+        var cur = prefs();
+        cur.attrs = cat.attrs.map(function (x) { return x.key; }).filter(function (k) {
+          return k === a.key ? input.checked : has(cur.attrs, k);
+        });
+        prefsChanged();
+      });
+      box.appendChild(el('label', {}, [input, a.label]));
+    });
+    cat.colors.forEach(function (c) {
+      var input = el('input', { type: 'radio', name: 'color-by', value: c.key });
+      input.checked = pr.colorBy === c.key;
+      input.addEventListener('change', function () { prefs().colorBy = c.key; prefsChanged(); });
+      colors.appendChild(el('label', {}, [input, c.label]));
+    });
+    more.hidden = state.tab !== 'wbs';
+    if (state.tab === 'wbs') {
+      var items = el('input', { type: 'checkbox', id: 'show-items' });
+      items.checked = !!pr.showItems;
+      items.addEventListener('change', function () { prefs().showItems = items.checked; prefsChanged(); });
+      more.appendChild(el('label', {}, [items, 'Livrables et jalons']));
+    }
+  }
+
+  function prefsChanged() {
+    draw();
+    savePrefsSoon();
+  }
+
+  function savePrefsSoon() {
+    $('prefs-state').textContent = '';
+    clearTimeout(state.saveTimer);
+    var view = state.tab;
+    state.saveTimer = setTimeout(function () {
+      call('prefs.set', { view: view, prefs: state.prefs[view] }, true)
+        .then(function () { $('prefs-state').textContent = 'Choix enregistrés.'; })
+        .catch(function (err) { toast(err.message || 'Vos choix n’ont pas pu être enregistrés.', true); });
+    }, 500);
+  }
+
+  function resetPrefs() {
+    var cat = state.catalog[state.tab], pr = prefs();
+    pr.attrs = cat.attrs.filter(function (a) { return a.on; }).map(function (a) { return a.key; });
+    pr.colorBy = cat.defaults.colorBy;
+    if (state.tab === 'wbs') pr.showItems = cat.defaults.showItems;
+    renderOptions();
+    prefsChanged();
+  }
+
+  // ------------------------------------------------------------ couleurs
+  function buildOrgColors(orgs) {
+    var list = [];
+    orgs.forEach(function (o) { if (o && list.indexOf(o) < 0) list.push(o); });
+    list.sort(function (a, b) { return a.localeCompare(b, 'fr'); });
+    state.orgColors = {};
+    list.forEach(function (o, i) { state.orgColors[o] = ORG_PALETTE[i % ORG_PALETTE.length]; });
+  }
+  function orgColor(o) { return o ? state.orgColors[o] || NEUTRAL : NEUTRAL; }
+
+  function personColor(p, node) {
+    switch (prefs().colorBy) {
+      case 'role': return ROLE_COLORS[node.role_code] || '#C5CFD8';
+      case 'organization': return orgColor(p.organization);
+      case 'resource_type': return TYPE_COLORS[p.resource_type] || NEUTRAL;
+      default: return '#B7CDEB';
+    }
+  }
+  function wbsColor(n) {
+    switch (prefs().colorBy) {
+      case 'kind': return n.kind === 'item' ? (n.item_type === 'Jalon' ? KIND_COLORS.milestone : KIND_COLORS.item) : KIND_COLORS[n.kind];
+      case 'organization': return orgColor(n.owner_org);
+      default: return '#B7CDEB';
+    }
+  }
+
+  function renderLegend() {
+    var box = $('legend'); clear(box);
+    var add = function (label, color) {
+      box.appendChild(el('li', {}, [el('span', { class: 'swatch dot', style: 'background:' + color }), label]));
+    };
+    var by = prefs().colorBy;
+    if (state.tab === 'obs') {
+      if (by === 'role' && state.data && state.data.mode !== 'teams') Object.keys(ROLE_COLORS).forEach(function (k) { add(roleLabel(k), ROLE_COLORS[k]); });
+      if (by === 'role' && state.data && state.data.mode === 'teams') box.appendChild(el('li', { text: 'Les rôles n’existent que dans la vue par rôles : choisissez « Organisation » ou « Interne ou externe » pour colorer les personnes.' }));
+      if (by === 'resource_type') { add('Interne', TYPE_COLORS.Interne); add('Externe', TYPE_COLORS.Externe); }
+      if (by === 'organization') orgLegend(add);
+    } else {
+      if (by === 'kind') { add('Projet', KIND_COLORS.project); add('Workpackage', KIND_COLORS.wp); add('Livrable', KIND_COLORS.item); add('Jalon', KIND_COLORS.milestone); }
+      if (by === 'organization') orgLegend(add);
+    }
+  }
+  function orgLegend(add) {
+    Object.keys(state.orgColors).sort(function (a, b) { return a.localeCompare(b, 'fr'); }).forEach(function (o) { add(o, state.orgColors[o]); });
+    add('Non renseignée', NEUTRAL);
+  }
+  function roleLabel(code) {
+    var labels = { PL: 'Program Leader', DPL: 'Domain Program Leader', CP: 'Chef de projet', RWP: 'Responsable de workpackage', MEMBER: 'Membre affecté' };
+    return labels[code] || code;
+  }
+
+  // ------------------------------------------------------------ mise en page d'un arbre
+  /**
+   * Arbre « propre » : chaque nœud est centré au-dessus (ou à côté) de ses enfants.
+   * nodes : [{ id, parent, w, h }] ; dir : 'down' (organigramme) ou 'right' (arbre horizontal).
+   */
+  function layoutTree(nodes, dir, gapSib, gapLevel) {
+    var kids = {}, byId = {}, roots = [];
+    nodes.forEach(function (n) { byId[n.id] = n; kids[n.id] = []; });
+    nodes.forEach(function (n) { if (n.parent && byId[n.parent]) kids[n.parent].push(n); else roots.push(n); });
+    var horizontal = dir === 'right';
+    var breadth = function (n) { return horizontal ? n.h : n.w; };
+    var extent = function (n) { return horizontal ? n.w : n.h; };
+    var sub = {}, kidsTotal = {}, depth = {}, levelMax = [];
+
+    var measure = function (n) {
+      var total = 0;
+      kids[n.id].forEach(function (k, i) { measure(k); total += sub[k.id] + (i ? gapSib : 0); });
+      kidsTotal[n.id] = total;
+      sub[n.id] = Math.max(breadth(n), total);
+    };
+    var walk = function (n, d) {
+      depth[n.id] = d;
+      levelMax[d] = Math.max(levelMax[d] || 0, extent(n));
+      kids[n.id].forEach(function (k) { walk(k, d + 1); });
+    };
+    roots.forEach(measure);
+    roots.forEach(function (r) { walk(r, 0); });
+
+    var levelPos = [], acc = 0;
+    levelMax.forEach(function (m, i) { levelPos[i] = acc; acc += m + gapLevel; });
+
+    var pos = {}, edges = [];
+    var place = function (n, start) {
+      var s = sub[n.id], center = start + s / 2, d = levelPos[depth[n.id]];
+      pos[n.id] = horizontal ? { x: d, y: center - n.h / 2 } : { x: center - n.w / 2, y: d };
+      var offset = start + (s - kidsTotal[n.id]) / 2;
+      kids[n.id].forEach(function (k) {
+        place(k, offset);
+        offset += sub[k.id] + gapSib;
+        edges.push({ from: n.id, to: k.id });
+      });
+    };
+    var cursor = 0;
+    roots.forEach(function (r) { place(r, cursor); cursor += sub[r.id] + gapSib * 2; });
+
+    var width = 0, height = 0;
+    nodes.forEach(function (n) {
+      width = Math.max(width, pos[n.id].x + n.w);
+      height = Math.max(height, pos[n.id].y + n.h);
+    });
+    return { pos: pos, edges: edges, width: width, height: height, kids: kids, byId: byId };
+  }
+
+  function visibleNodes(nodes) {
+    var kids = {}, byId = {}, out = [];
+    nodes.forEach(function (n) { byId[n.id] = n; kids[n.id] = []; });
+    var roots = [];
+    nodes.forEach(function (n) { if (n.parent && byId[n.parent]) kids[n.parent].push(n); else roots.push(n); });
+    var walk = function (n) {
+      out.push(n);
+      if (!state.collapsed[n.id]) kids[n.id].forEach(walk);
+    };
+    roots.forEach(walk);
+    return { list: out, kids: kids };
+  }
+  function countBelow(kids, id) {
+    var c = 0;
+    (kids[id] || []).forEach(function (k) { c += 1 + countBelow(kids, k.id); });
+    return c;
+  }
+
+  // ------------------------------------------------------------ contenu des cartes
+  var NONE = '—';
+
+  /** Lignes d'attributs d'une personne selon les attributs choisis. muted = valeur absente. */
+  function personLines(p, attrs) {
+    var out = [];
+    var line = function (label, value, always) {
+      if (value === '' || value === null || value === undefined) { if (always) out.push({ text: label + ' : ' + NONE, muted: true }); return; }
+      out.push({ text: label + ' : ' + value });
+    };
+    if (has(attrs, 'job_function')) line('Fonction', p.job_function, true);
+    if (has(attrs, 'organization')) line('Organisation', p.organization, true);
+    if (has(attrs, 'team')) line('Équipe', p.team);
+    if (has(attrs, 'country')) line('Pays', p.country);
+    if (has(attrs, 'resource_type')) line('Type', p.resource_type);
+    if (has(attrs, 'supplier')) line('Fournisseur', p.supplier);
+    if (has(attrs, 'capacity')) line('Capacité', p.capacity === '' ? '' : p.capacity + ' j/mois');
+    if (has(attrs, 'email')) line('E-mail', p.email);
+    return out;
+  }
+
+  var OBS_W = 272, WBS_W = 288, LINE = 16;
+
+  /** Carte d'un rôle (vue par rôles) ou d'une équipe (vue par équipes). */
+  function obsSpec(n) {
+    var attrs = prefs().attrs;
+    var s = { id: n.id, parent: n.parent, w: OBS_W, blocks: [], head: [], node: n };
+    if (state.data.mode === 'teams') {
+      if (has(attrs, 'members')) s.w = OBS_W + 72;
+      s.head.push({ cls: 't-title', text: n.name });
+      if (has(attrs, 'cost_center') && n.cost_center) s.head.push({ cls: 't-caption', text: 'Centre de coût : ' + n.cost_center });
+      if (n.manager) s.blocks.push({ person: n.manager, title: n.manager.name + ' (responsable)', lines: personLines(n.manager, attrs) });
+      if (has(attrs, 'members')) {
+        var shown = n.members.slice(0, 12);
+        shown.forEach(function (m) {
+          var lines = [];
+          var l = personLines(m, attrs);
+          if (l.length) lines = [{ text: l.map(function (x) { return x.text.replace(/^[^:]+ : /, ''); }).join(' · '), muted: l.every(function (x) { return x.muted; }) }];
+          s.blocks.push({ person: m, title: m.name, lines: lines });
+        });
+        if (n.members.length > shown.length) s.foot = '+ ' + (n.members.length - shown.length) + ' autres membres';
+      } else if (n.member_count) {
+        s.foot = plural(n.member_count, 'membre', 'membres');
+      }
+    } else {
+      s.head.push({ cls: 't-title', text: n.role_label });
+      if (has(attrs, 'scope')) s.head.push({ cls: 't-caption', text: n.scope_label });
+      n.people.forEach(function (p) { s.blocks.push({ person: p, title: p.name, lines: personLines(p, attrs) }); });
+    }
+    var h = 10 + s.head.length * 18;
+    s.blocks.forEach(function (b) { b.h = 26 + b.lines.length * LINE; h += b.h; });
+    if (s.foot) h += 22;
+    s.h = Math.max(h + 8, 44);
+    return s;
+  }
+
+  function wbsSpec(n, levelOf) {
+    var attrs = prefs().attrs;
+    var kindLabel = n.kind === 'project' ? 'Projet' : n.kind === 'wp' ? (levelOf[n.id] > 1 ? 'Sous-workpackage' : 'Workpackage') : n.item_type;
+    var title = (has(attrs, 'wbs_code') && n.code ? n.code + ' ' : '') + n.name;
+    var lines = [];
+    var add = function (t, muted) { lines.push({ text: t, muted: !!muted }); };
+    if (has(attrs, 'owner')) n.owner ? add('Responsable : ' + n.owner) : add('Responsable : ' + NONE, true);
+    if (has(attrs, 'owner_org') && n.owner) n.owner_org ? add('Organisation : ' + n.owner_org) : add('Organisation : ' + NONE, true);
+    if (has(attrs, 'dates') && n.start) {
+      if (n.kind === 'item' && n.item_type === 'Jalon') add('Date : ' + frDate(n.finish || n.start));
+      else add(frDate(n.start) + ' → ' + frDate(n.finish));
+    }
+    if (has(attrs, 'progress') && (n.kind !== 'item' || n.item_type === 'Livrable')) add('Avancement : ' + n.progress + ' %');
+    if (has(attrs, 'status') && n.status) add('Statut : ' + n.status);
+    if (has(attrs, 'charge_code') && n.kind === 'wp' && n.charge_code) add('Imputation : ' + n.charge_code);
+    if (has(attrs, 'float')) {
+      if (n.float !== null && n.float !== undefined && n.float < 0) add('Décale un successeur de ' + plural(-n.float, 'jour ouvré', 'jours ouvrés'));
+      else if (n.critical) add('Sur le chemin critique');
+      else if (n.float > 0) add('Marge : ' + plural(n.float, 'jour ouvré', 'jours ouvrés'));
+    }
+    return { id: n.id, parent: n.parent, w: WBS_W, h: 12 + 18 + 22 + lines.length * LINE + 6, node: n, caption: kindLabel, title: title, lines: lines };
+  }
+
+  // ------------------------------------------------------------ dessin
+  function textNode(cls, x, y, text, maxPx, full) {
+    var bold = cls === 't-title', shown = clip(text, maxPx, bold);
+    var t = sv('text', { class: cls, x: x, y: y, text: shown });
+    if (full && full !== shown) t.appendChild(sv('title', { text: full }));
+    return t;
+  }
+
+  function drawObsCard(s, pos) {
+    var g = sv('g', { class: 'node', transform: 'translate(' + pos.x + ',' + pos.y + ')', tabindex: '0', role: 'button',
+      'data-id': s.id, 'aria-label': (s.node.role_label || s.node.name) + (s.node.scope_label ? ', ' + s.node.scope_label : '') });
+    g.appendChild(sv('rect', { class: 'card', width: s.w, height: s.h, rx: 6 }));
+    var y = 22;
+    s.head.forEach(function (h, i) {
+      g.appendChild(textNode(h.cls, 12, y, h.text, s.w - 24, h.text));
+      y += i === 0 ? 18 : 18;
+    });
+    y = 10 + s.head.length * 18;
+    s.blocks.forEach(function (b) {
+      var pg = sv('g', { class: 'person', tabindex: '0', role: 'button', 'data-person': b.person.resource_id,
+        'aria-label': b.person.name + (b.person.job_function ? ', ' + b.person.job_function : '') });
+      pg.appendChild(sv('rect', { class: 'person-bg', x: 4, y: y, width: s.w - 8, height: b.h, rx: 3 }));
+      pg.appendChild(sv('rect', { x: 8, y: y + 4, width: 4, height: b.h - 8, rx: 2, fill: personColor(b.person, s.node) }));
+      pg.appendChild(textNode('t-title', 20, y + 18, b.title, s.w - 32, b.title));
+      b.lines.forEach(function (l, i) {
+        pg.appendChild(textNode(l.muted ? 't-muted' : 't-line', 20, y + 18 + LINE * (i + 1), l.text, s.w - 32, l.text));
+      });
+      g.appendChild(pg);
+      y += b.h;
+    });
+    if (s.foot) g.appendChild(textNode('t-muted', 12, y + 16, s.foot, s.w - 24, s.foot));
+    return g;
+  }
+
+  function drawWbsCard(s, pos) {
+    var n = s.node;
+    var g = sv('g', { class: 'node', transform: 'translate(' + pos.x + ',' + pos.y + ')', tabindex: '0', role: 'button',
+      'data-id': s.id, 'aria-label': s.caption + ' ' + n.name });
+    g.appendChild(sv('rect', { class: 'card', width: s.w, height: s.h, rx: 6 }));
+    g.appendChild(sv('rect', { x: 0, y: 0, width: 6, height: s.h, rx: 3, fill: wbsColor(n) }));
+    g.appendChild(textNode('t-caption', 16, 20, s.caption, s.w - 28, s.caption));
+    g.appendChild(textNode('t-title', 16, 40, s.title, s.w - 28, s.title));
+    s.lines.forEach(function (l, i) {
+      g.appendChild(textNode(l.muted ? 't-muted' : 't-line', 16, 58 + LINE * i, l.text, s.w - 28, l.text));
+    });
+    return g;
+  }
+
+  function drawToggle(id, x, y, collapsed, hidden, name) {
+    var label = collapsed ? '+' + hidden : '−';
+    var w = collapsed ? Math.max(26, 10 + String(label).length * 8) : 22;
+    var b = sv('g', { class: 'toggle-badge', transform: 'translate(' + x + ',' + y + ')', tabindex: '0', role: 'button',
+      'data-toggle': id, 'aria-label': (collapsed ? 'Déplier ' : 'Replier ') + name + (collapsed ? ' (' + plural(hidden, 'élément', 'éléments') + ')' : '') });
+    b.appendChild(sv('rect', { x: -w / 2, y: -9, width: w, height: 18, rx: 9 }));
+    b.appendChild(sv('text', { x: 0, y: 4, text: label }));
+    return b;
+  }
+
+  function draw() {
+    if (!state.data) return;
+    var canvas = $('canvas'), data = state.data, nodes = data.nodes;
+    clear(canvas);
+    if (!nodes.length) { renderLegend(); showEmptyFor(data); return; }
+
+    // couleurs par organisation : calculées sur toutes les personnes, pas seulement les cartes visibles
+    if (prefs().colorBy === 'organization') {
+      var orgs = [];
+      if (state.tab === 'wbs') nodes.forEach(function (n) { orgs.push(n.owner_org); });
+      else nodes.forEach(function (n) {
+        (n.people || []).concat(n.members || [], n.manager ? [n.manager] : []).forEach(function (p) { orgs.push(p.organization); });
+      });
+      buildOrgColors(orgs);
+    }
+    renderLegend();
+
+    var vis = state.tab === 'wbs' && !prefs().showItems
+      ? nodes.filter(function (n) { return n.kind !== 'item'; }) : nodes;
+    var shown = visibleNodes(vis);
+    var levelOf = {};
+    var byId = {};
+    vis.forEach(function (n) { byId[n.id] = n; });
+    vis.forEach(function (n) { var d = 0, c = n; while (c && c.parent && byId[c.parent] && d < 20) { d++; c = byId[c.parent]; } levelOf[n.id] = d; });
+
+    var specs = shown.list.map(function (n) { return state.tab === 'obs' ? obsSpec(n) : wbsSpec(n, levelOf); });
+    var lay = layoutTree(specs, state.tab === 'obs' ? 'down' : 'right', state.tab === 'obs' ? 24 : 12, state.tab === 'obs' ? 44 : 56);
+    var pad = 24, W = Math.ceil(lay.width + pad * 2), H = Math.ceil(lay.height + pad * 2 + 12);
+    state.layout = { width: W, height: H, root: specs.length ? { x: pad + lay.pos[specs[0].id].x, y: pad + 6 + lay.pos[specs[0].id].y, w: specs[0].w, h: specs[0].h } : null };
+
+    var svg = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, width: Math.round(W * state.zoom), height: Math.round(H * state.zoom),
+      role: 'group', 'aria-label': state.tab === 'obs' ? 'Organigramme' : 'Découpage du projet (WBS)' });
+    var root = sv('g', { transform: 'translate(' + pad + ',' + (pad + 6) + ')' });
+    svg.appendChild(root);
+
+    var down = state.tab === 'obs';
+    lay.edges.forEach(function (e) {
+      var a = lay.byId[e.from], b = lay.byId[e.to], pa = lay.pos[e.from], pb = lay.pos[e.to], d;
+      if (down) {
+        var mid = pb.y - 22;
+        d = 'M' + (pa.x + a.w / 2) + ' ' + (pa.y + a.h) + 'V' + mid + 'H' + (pb.x + b.w / 2) + 'V' + pb.y;
+      } else {
+        var mx = pb.x - 28;
+        d = 'M' + (pa.x + a.w) + ' ' + (pa.y + a.h / 2) + 'H' + mx + 'V' + (pb.y + b.h / 2) + 'H' + pb.x;
+      }
+      root.appendChild(sv('path', { class: 'edge', d: d }));
+    });
+    specs.forEach(function (s) {
+      var g = state.tab === 'obs' ? drawObsCard(s, lay.pos[s.id]) : drawWbsCard(s, lay.pos[s.id]);
+      if (state.selected === s.id) g.classList.add('selected');
+      root.appendChild(g);
+    });
+    specs.forEach(function (s) {
+      var kidsCount = (shown.kids[s.id] || []).length;
+      var totalBelow = 0;
+      if (state.collapsed[s.id]) {
+        totalBelow = vis.filter(function (n) { return isBelow(vis, n, s.id); }).length;
+      }
+      if (!kidsCount && !state.collapsed[s.id]) return;
+      var p = lay.pos[s.id];
+      var name = s.node.name || s.node.role_label;
+      var t = down ? drawToggle(s.id, p.x + s.w / 2, p.y + s.h, !!state.collapsed[s.id], totalBelow, name)
+        : drawToggle(s.id, p.x + s.w, p.y + s.h / 2, !!state.collapsed[s.id], totalBelow, name);
+      root.appendChild(t);
+    });
+    canvas.appendChild(svg);
+  }
+
+  function isBelow(list, node, ancestorId) {
+    var byId = {};
+    list.forEach(function (n) { byId[n.id] = n; });
+    var c = node, g = 0;
+    while (c && c.parent && g++ < 50) { if (c.parent === ancestorId) return true; c = byId[c.parent]; }
+    return false;
+  }
+
+  function showEmptyFor(data) {
+    var canvas = $('canvas');
+    var msg;
+    if (state.tab === 'wbs') msg = ['Ce projet n’a pas encore de workpackage ni d’élément.', 'Ajoutez-les dans l’application AppSheet, puis cliquez sur Actualiser.'];
+    else if (data.mode === 'teams') msg = ['Aucune équipe hiérarchique.', 'Créez les équipes dans l’application AppSheet (table Équipes), puis cliquez sur Actualiser.'];
+    else msg = ['Aucun rôle attribué sur ce périmètre.', 'Attribuez des rôles dans l’application AppSheet (Organisation), puis cliquez sur Actualiser.'];
+    canvas.appendChild(el('div', { class: 'empty' }, [el('strong', { text: msg[0] }), el('span', { text: msg[1] })]));
+  }
+
+  // ------------------------------------------------------------ chargement
+  function setLoading() {
+    var c = $('canvas'); clear(c);
+    c.appendChild(el('p', { class: 'loading', text: 'Chargement…' }));
+    $('legend').textContent = '';
+  }
+  function showError(err) {
+    var c = $('canvas'); clear(c);
+    c.appendChild(el('div', { class: 'empty' }, [
+      el('strong', { text: 'La structure n’a pas pu être chargée.' }),
+      el('span', { text: (err && err.message) || 'Erreur inconnue.' })
+    ]));
+    toast((err && err.message) || 'Erreur inconnue.', true);
+  }
+
+  function load() {
+    var ticket = ++state.seq;
+    state.data = null;
+    closeDetails();
+    remember();
+    syncControls();
+    var req;
+    if (state.tab === 'wbs') {
+      if (state.scopeType !== 'project') {
+        state.data = null;
+        var c = $('canvas'); clear(c);
+        c.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Le WBS se lit projet par projet.' }), el('span', { text: 'Choisissez un projet dans la liste « Périmètre ».' })]));
+        setSummary(); return Promise.resolve();
+      }
+      req = call('wbs.tree', { projectId: state.scopeId });
+    } else if (state.mode === 'teams') {
+      req = call('obs.teams', { rootTeamId: state.teamRoot });
+    } else {
+      req = call('obs.tree', { scopeType: state.scopeType, scopeId: state.scopeId });
+    }
+    setLoading();
+    return req.then(function (d) {
+      if (ticket !== state.seq) return;
+      state.data = d;
+      if (d.mode === 'teams') fillTeamPicker(d.teams);
+      setSummary();
+      draw();
+      initialView();
+    }).catch(function (e) { if (ticket === state.seq) showError(e); });
+  }
+
+  function setSummary() {
+    var d = state.data, s = $('summary'), t = $('title'), ctx = $('context');
+    clear(ctx);
+    if (!d) { s.textContent = ''; return; }
+    if (state.tab === 'wbs') {
+      t.textContent = 'WBS — ' + d.project.code + ' ' + d.project.name;
+      s.textContent = plural(d.stats.wps, 'workpackage', 'workpackages') + ', ' + plural(d.stats.items, 'livrable ou jalon', 'livrables et jalons') + '.';
+      ctx.textContent = d.project.program_name ? 'Programme ' + d.project.program_name + '. ' : '';
+      ctx.appendChild(document.createTextNode('Cliquez sur une carte pour son détail ; le bouton sur une carte replie sa branche.'));
+    } else if (d.mode === 'teams') {
+      t.textContent = 'Organisation par équipes';
+      s.textContent = plural(d.stats.nodes, 'équipe', 'équipes') + ', ' + plural(d.stats.people, 'personne', 'personnes') + '.';
+      ctx.textContent = 'Cliquez sur une personne pour voir et compléter sa fonction et son organisation.';
+    } else {
+      t.textContent = 'Organisation — ' + d.scope.label;
+      s.textContent = plural(d.stats.nodes, 'rôle', 'rôles') + ', ' + plural(d.stats.people, 'affectation', 'affectations') + '.';
+      ctx.textContent = 'Chaque carte est un rôle sur un périmètre ; il dépend du rôle supérieur qui le couvre. Cliquez sur une personne pour son détail.';
+    }
+  }
+
+  // ------------------------------------------------------------ sélecteurs
+  function fillPicker(cat) {
+    var sel = $('picker'); clear(sel);
+    var byProgram = {};
+    cat.projects.forEach(function (p) { (byProgram[p.program_id || ''] = byProgram[p.program_id || ''] || []).push(p); });
+    var sortCode = function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); };
+    var group = function (label, programId, programName) {
+      var og = el('optgroup', { label: label });
+      var po = el('option', { value: 'program:' + (programId || 'none'), text: programName });
+      po.setAttribute('data-kind', 'program');
+      og.appendChild(po);
+      (byProgram[programId || ''] || []).sort(sortCode).forEach(function (p) {
+        og.appendChild(el('option', { value: 'project:' + p.id, text: p.code + ' ' + p.name + (p.status === 'Clos' ? ' (clos)' : '') }));
+      });
+      sel.appendChild(og);
+    };
+    cat.programs.slice().sort(sortCode).forEach(function (g) { group(g.code + ' ' + g.name, g.id, 'Programme ' + g.code + ' (tous les projets)'); });
+    if ((byProgram[''] || []).length) group('Hors programme', '', 'Projets hors programme');
+  }
+  function syncControls() {
+    var sel = $('picker');
+    sel.value = (state.scopeType === 'program' ? 'program:' + (state.scopeId || 'none') : 'project:' + state.scopeId);
+    Array.prototype.forEach.call(sel.querySelectorAll('option[data-kind="program"]'), function (o) { o.disabled = state.tab === 'wbs'; });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-tab') === state.tab)); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === state.mode)); });
+    $('mode').hidden = state.tab !== 'obs';
+    var teams = state.tab === 'obs' && state.mode === 'teams';
+    $('scope-pick').hidden = teams;
+    $('team-pick').hidden = !teams;
+    renderOptions();
+  }
+  function fillTeamPicker(teams) {
+    var sel = $('team-root'); clear(sel);
+    sel.appendChild(el('option', { value: '', text: 'Toutes les équipes' }));
+    teams.forEach(function (t) {
+      var indent = new Array(t.depth + 1).join('— ');
+      sel.appendChild(el('option', { value: t.id, text: indent + t.name }));
+    });
+    sel.value = state.teamRoot;
+  }
+
+  // ------------------------------------------------------------ détail
+  function closeDetails() {
+    state.selected = '';
+    clear($('details'));
+    $('details').hidden = true;
+    $('main').classList.remove('with-details');
+    Array.prototype.forEach.call(document.querySelectorAll('.selected'), function (n) { n.classList.remove('selected'); });
+  }
+  function openDetails(nodes) {
+    var a = $('details'); clear(a);
+    a.appendChild(el('button', { type: 'button', class: 'close', 'aria-label': 'Fermer le détail', text: '×', onclick: closeDetails }));
+    nodes.forEach(function (n) { if (n) a.appendChild(n); });
+    a.hidden = false;
+    $('main').classList.add('with-details');
+  }
+  function facts(pairs) {
+    var dl = el('dl');
+    pairs.forEach(function (p) {
+      if (p[1] === null || p[1] === undefined || p[1] === '') return;
+      dl.appendChild(el('dt', { text: p[0] })); dl.appendChild(el('dd', { text: String(p[1]) }));
+    });
+    return dl;
+  }
+  function markSelected(id) {
+    state.selected = id;
+    Array.prototype.forEach.call(document.querySelectorAll('.selected'), function (n) { n.classList.remove('selected'); });
+    var g = $('canvas').querySelector('[data-id="' + cssEscape(id) + '"]');
+    if (g) g.classList.add('selected');
+  }
+  function cssEscape(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&'); }
+
+  function allPeople() {
+    var out = [];
+    state.data.nodes.forEach(function (n) {
+      (n.people || []).concat(n.members || [], n.manager ? [n.manager] : []).forEach(function (p) { out.push({ p: p, node: n }); });
+    });
+    return out;
+  }
+
+  function showPerson(personId) {
+    var hits = allPeople().filter(function (x) { return x.p.resource_id === personId; });
+    if (!hits.length) return;
+    var p = hits[0].p;
+    var nodes = [el('h2', { text: p.name }), el('p', { class: 'kind', text: p.job_function || 'Fonction non renseignée' })];
+    nodes.push(facts([
+      ['Organisation', p.organization || 'Non renseignée'], ['Fonction', p.job_function || 'Non renseignée'],
+      ['E-mail', p.email], ['Équipe', p.team], ['Pays', p.country], ['Type', p.resource_type], ['Fournisseur', p.supplier],
+      ['Capacité', p.capacity === '' ? '' : p.capacity + ' jours par mois']
+    ]));
+    if (state.data.mode === 'roles') {
+      var seen = {};
+      var roles = hits.map(function (h) { return h.node.role_label + ', ' + h.node.scope_label; }).filter(function (t) { if (seen[t]) return false; seen[t] = true; return true; });
+      nodes.push(el('h3', { text: 'Rôles dans cette vue', style: 'font-size:15px;margin:0 0 6px' }));
+      nodes.push(el('ul', { class: 'roles' }, roles.map(function (t) { return el('li', { text: t }); })));
+    }
+    if (p.canEdit) nodes.push(editForm(p));
+    else nodes.push(el('p', { class: 'hint', text: 'Seuls la personne elle-même, un chef de projet, un DPL ou un Program Leader peuvent modifier cette fiche.' }));
+    openDetails(nodes);
+  }
+
+  function ensureSuggestions() {
+    if (state.suggestions) return Promise.resolve(state.suggestions);
+    return call('resources.list', { limit: 500 }).then(function (rows) {
+      var f = {}, o = {};
+      rows.forEach(function (r) { if (r.job_function) f[r.job_function] = true; if (r.organization) o[r.organization] = true; });
+      state.suggestions = { functions: Object.keys(f).sort(), organizations: Object.keys(o).sort() };
+      return state.suggestions;
+    }).catch(function () { return { functions: [], organizations: [] }; });
+  }
+
+  function editForm(p) {
+    var fn = el('input', { type: 'text', id: 'edit-function', maxlength: '80', list: 'dl-functions', value: p.job_function });
+    var org = el('input', { type: 'text', id: 'edit-org', maxlength: '80', list: 'dl-orgs', value: p.organization });
+    var dlF = el('datalist', { id: 'dl-functions' }), dlO = el('datalist', { id: 'dl-orgs' });
+    ensureSuggestions().then(function (s) {
+      s.functions.forEach(function (v) { dlF.appendChild(el('option', { value: v })); });
+      s.organizations.forEach(function (v) { dlO.appendChild(el('option', { value: v })); });
+    });
+    var submit = el('button', { type: 'submit', class: 'btn primary', text: 'Enregistrer' });
+    return el('form', { class: 'edit', onsubmit: function (e) {
+      e.preventDefault();
+      submit.disabled = true;
+      call('resources.update', { id: p.resource_id, version: p.version, patch: { job_function: fn.value, organization: org.value } }, true)
+        .then(function () { state.suggestions = null; toast('Fiche de ' + p.name + ' enregistrée.'); return load(); })
+        .catch(function (err) {
+          submit.disabled = false;
+          toast(err.code === 'CONFLICT' ? 'Cette fiche a été modifiée entre-temps : rechargez puis recommencez.' : (err.message || 'Enregistrement impossible.'), true);
+        });
+    } }, [
+      el('h3', { text: 'Compléter la fiche' }),
+      el('label', {}, ['Fonction', fn]), el('label', {}, ['Organisation', org]), dlF, dlO, submit
+    ]);
+  }
+
+  function showNode(id) {
+    var n = state.data.nodes.filter(function (x) { return x.id === id; })[0];
+    if (!n) return;
+    markSelected(id);
+    var nodes = [];
+    if (state.tab === 'wbs') {
+      var kind = n.kind === 'project' ? 'Projet' : n.kind === 'wp' ? 'Workpackage' : n.item_type;
+      nodes.push(el('h2', { text: (n.code ? n.code + ' ' : '') + n.name }), el('p', { class: 'kind', text: kind }));
+      var flt = n.float === null || n.float === undefined ? '' : (n.float < 0 ? 'Décale un successeur de ' + plural(-n.float, 'jour ouvré', 'jours ouvrés') : n.float === 0 ? 'Aucune : chemin critique' : plural(n.float, 'jour ouvré', 'jours ouvrés'));
+      nodes.push(facts([
+        ['Responsable', n.owner], ['Organisation', n.owner ? (n.owner_org || 'Non renseignée') : ''], ['Fonction', n.owner_function],
+        ['Début', frDate(n.start)], ['Fin', frDate(n.finish)],
+        ['Avancement', n.kind === 'item' && n.item_type === 'Jalon' ? '' : n.progress + ' %'],
+        ['Statut', n.status], ['Imputation', n.charge_code], ['Marge', flt]
+      ]));
+      if (n.late) nodes.push(el('p', { class: 'flag alert', text: 'Au moins un élément est en retard sur sa date de fin prévue.' }));
+    } else if (state.data.mode === 'teams') {
+      nodes.push(el('h2', { text: n.name }), el('p', { class: 'kind', text: 'Équipe hiérarchique' }));
+      nodes.push(facts([['Centre de coût', n.cost_center], ['Responsable', n.manager ? n.manager.name : 'Non désigné'], ['Membres', n.member_count]]));
+    } else {
+      nodes.push(el('h2', { text: n.role_label }), el('p', { class: 'kind', text: n.scope_label }));
+      nodes.push(el('ul', { class: 'roles' }, n.people.map(function (p) { return el('li', { text: p.name + (p.job_function ? ', ' + p.job_function : '') }); })));
+    }
+    if (BOOT.appsheetUrl) nodes.push(el('div', { class: 'links' }, [el('a', { class: 'btn', href: BOOT.appsheetUrl, target: '_blank', rel: 'noopener', text: 'Modifier dans AppSheet' })]));
+    openDetails(nodes);
+  }
+
+  // ------------------------------------------------------------ zoom
+  function applyZoom() {
+    var svg = $('canvas').querySelector('svg');
+    if (!svg || !state.layout) return;
+    svg.setAttribute('width', Math.round(state.layout.width * state.zoom));
+    svg.setAttribute('height', Math.round(state.layout.height * state.zoom));
+  }
+  function setZoom(z) { state.zoom = Math.max(0.3, Math.min(1.6, Math.round(z * 10) / 10)); applyZoom(); }
+  /** À l'ouverture : tout tient lisiblement → ajusté ; sinon taille normale, placée sur la racine de l'arbre. */
+  function initialView() {
+    var canvas = $('canvas');
+    if (!state.layout) return;
+    var avail = canvas.clientWidth || 900, fit = (avail - 8) / state.layout.width;
+    setZoom(fit >= 0.7 ? Math.min(1, fit) : 1);
+    var r = state.layout.root;
+    if (!r) return;
+    if (state.tab === 'obs') {
+      canvas.scrollLeft = Math.max(0, (r.x + r.w / 2) * state.zoom - avail / 2);
+      canvas.scrollTop = 0;
+    } else {
+      canvas.scrollLeft = 0;
+      canvas.scrollTop = Math.max(0, (r.y + r.h / 2) * state.zoom - (canvas.clientHeight || 500) / 2);
+    }
+  }
+  function fitZoom() {
+    if (!state.layout) return;
+    var avail = $('canvas').clientWidth || 900;
+    setZoom(Math.min(1, (avail - 8) / state.layout.width));
+  }
+
+  // ------------------------------------------------------------ événements
+  function activate(e, fn) {
+    if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
+    if (e.type === 'keydown') e.preventDefault();
+    fn();
+  }
+  function onCanvas(e) {
+    var t = e.target.closest ? e.target : e.target.parentNode;
+    var tog = t.closest('[data-toggle]');
+    if (tog) { activate(e, function () { var id = tog.getAttribute('data-toggle'); state.collapsed[id] = !state.collapsed[id]; draw(); }); return; }
+    var per = t.closest('[data-person]');
+    if (per) { activate(e, function () { showPerson(per.getAttribute('data-person')); }); return; }
+    var node = t.closest('[data-id]');
+    if (node) activate(e, function () { showNode(node.getAttribute('data-id')); });
+  }
+  $('canvas').addEventListener('click', onCanvas);
+  $('canvas').addEventListener('keydown', onCanvas);
+
+  $('picker').addEventListener('change', function () {
+    var v = this.value.split(':');
+    state.scopeType = v[0]; state.scopeId = v[1] === 'none' ? '' : v[1];
+    load();
+  });
+  $('team-root').addEventListener('change', function () { state.teamRoot = this.value; load(); });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) {
+    b.addEventListener('click', function () { switchTab(b.getAttribute('data-tab')); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (b) {
+    b.addEventListener('click', function () {
+      state.mode = b.getAttribute('data-mode');
+      state.prefs.obs.mode = state.mode;
+      savePrefsSoon();
+      load();
+    });
+  });
+  function switchTab(tab) {
+    if (tab === state.tab) return;
+    state.tab = tab;
+    if (tab === 'wbs' && state.scopeType === 'program') {
+      var first = state.catalogLists.projects.filter(function (p) { return (p.program_id || '') === state.scopeId; })[0] ||
+        state.catalogLists.projects.filter(function (p) { return p.status !== 'Clos'; })[0] || state.catalogLists.projects[0];
+      if (first) { state.scopeType = 'project'; state.scopeId = first.id; }
+    }
+    state.selected = '';
+    load();
+  }
+  $('options-btn').addEventListener('click', function () {
+    var box = $('options'), open = box.hidden;
+    box.hidden = !open;
+    this.setAttribute('aria-expanded', String(open));
+  });
+  $('opt-reset').addEventListener('click', resetPrefs);
+  $('reload').addEventListener('click', function () { state.suggestions = null; load(); });
+  $('zoom-in').addEventListener('click', function () { setZoom(state.zoom + 0.1); });
+  $('zoom-out').addEventListener('click', function () { setZoom(state.zoom - 0.1); });
+  $('zoom-fit').addEventListener('click', fitZoom);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('details').hidden) closeDetails(); });
+
+  // ------------------------------------------------------------ démarrage
+  ppmPopover($('info-btn'), $('info-pop'));
+  Promise.all([call('planning.catalog', {}), call('views.config', {})]).then(function (r) {
+    state.catalogLists = r[0];
+    state.catalog = r[1].catalog;
+    state.prefs = r[1].prefs;
+    fillPicker(r[0]);
+    state.tab = BOOT.tab === 'wbs' ? 'wbs' : 'obs';
+    state.mode = BOOT.mode || state.prefs.obs.mode || 'roles';
+    if (BOOT.program) { state.scopeType = 'program'; state.scopeId = BOOT.program === 'none' ? '' : BOOT.program; }
+    else {
+      var first = BOOT.project || (r[0].projects.filter(function (p) { return p.status !== 'Clos'; })[0] || r[0].projects[0] || {}).id;
+      if (!first) {
+        var c = $('canvas'); clear(c);
+        c.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucun projet pour l’instant.' }), el('span', { text: 'Créez un projet dans l’application AppSheet, puis revenez ici.' })]));
+        return;
+      }
+      state.scopeType = 'project'; state.scopeId = first;
+    }
+    if (state.tab === 'wbs' && state.scopeType === 'program') { state.tab = 'obs'; }
+    return load();
+  }).catch(showError);
+
+  window.__ppm = { state: state, layoutTree: layoutTree, draw: draw, load: load };
+})();
+</script>
+</body>
+</html>

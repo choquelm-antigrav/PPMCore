@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="<?= theme ?>">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="ppm-version" content="0.5.1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.css">
+<?!= include('Style') ?>
+<style>
+  /* ---- Frappe Gantt : couleurs à la manière d'un écran de cockpit ---- */
+  .gantt-container .popup-wrapper { display: none !important; }
+  .gantt .grid-background { fill: var(--surface); }
+  .gantt .grid-header { fill: var(--surface); stroke: var(--rule); }
+  .gantt .grid-row { fill: var(--surface); }
+  .gantt .grid-row:nth-child(even) { fill: var(--tint); }
+  .gantt .row-line, .gantt .tick { stroke: var(--rule); }
+  .gantt .today-highlight { fill: var(--hover); opacity: 1; }
+  .gantt .upper-text, .gantt .lower-text { fill: var(--muted); font-family: inherit; }
+  .gantt .bar-label { fill: #FFFFFF; font-family: inherit; font-size: 12px; font-weight: 500; }
+  .gantt .bar-label.big { fill: var(--ink); }
+  .gantt .handle.progress { display: none; }
+  .gantt .bar-wrapper.is-locked .handle, .gantt .bar-wrapper.is-wp .handle { display: none; }
+  .gantt .bar-wrapper .bar { fill: var(--bar); }
+  .gantt .bar-wrapper .bar-progress { fill: var(--bar-done); }
+  .gantt .bar-wrapper:hover .bar { fill: var(--bar-hover); }
+  .gantt .bar-wrapper.is-wp .bar, .gantt .bar-wrapper.is-project .bar { fill: var(--summary); }
+  .gantt .bar-wrapper.is-wp .bar-progress, .gantt .bar-wrapper.is-project .bar-progress { fill: var(--summary-progress); }
+  .gantt .bar-wrapper.is-critical .bar { fill: var(--amber); }
+  .gantt .bar-wrapper.is-critical .bar-progress { fill: var(--amber-dark); }
+  .gantt .bar-wrapper.is-critical .bar-label:not(.big) { fill: var(--ink); }
+  .critical-off .gantt .bar-wrapper.is-critical .bar { fill: var(--bar); }
+  .critical-off .gantt .bar-wrapper.is-critical .bar-progress { fill: var(--bar-done); }
+  .critical-off .gantt .bar-wrapper.is-critical .bar-label:not(.big) { fill: #fff; }
+  .gantt .bar-wrapper.is-milestone .bar { fill: var(--cyan); }
+  .gantt .bar-wrapper.is-done .bar, .gantt .bar-wrapper.is-done .bar-progress { fill: var(--green); }
+  .gantt .bar-wrapper.is-late .bar, .gantt .bar-wrapper.is-violated .bar { stroke: var(--red); stroke-width: 2; }
+  .gantt .bar-wrapper.is-external .bar { fill: var(--bar-external); }
+  .gantt .bar-wrapper.is-external .bar-progress { fill: var(--bar-external-progress); }
+  .gantt .bar-wrapper.is-external .bar-label:not(.big) { fill: var(--ink); }
+  .gantt .bar-wrapper.active .bar { stroke: var(--ink); stroke-width: 2; }
+  .gantt .arrow { stroke: var(--line-strong); }
+  .gantt .arrow path.is-violated { stroke: var(--red); stroke-width: 2; }
+  .gantt .grid-background, .gantt .grid-header { fill: var(--surface); }
+  .gantt .grid-row { fill: var(--surface); }
+  .gantt .upper-text, .gantt .lower-text { fill: var(--muted); font-family: inherit; }
+  .gantt .bar-label.big { fill: var(--ink); }
+  .gantt-container { background: var(--surface); }
+  #chips:empty { display: none; }
+  .status:has(#chips:empty) { display: none; }
+  .baselines .baseline-ghost { fill: var(--ghost); opacity: .55; pointer-events: none; }
+  .baseline-off .baselines { display: none; }
+  .swatch.baseline { height: 4px; background: var(--ghost); opacity: .55; }
+  .status .base-note { color: var(--muted); }
+</style>
+</head>
+<body>
+<?!= include('Header') ?>
+<header>
+  <div class="title">
+    <h1 id="title">Planning</h1>
+    <span class="pop-anchor">
+      <button type="button" class="icon-btn" id="info-btn" aria-label="Informations sur le planning" title="Informations"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.01"/></svg></button>
+      <div class="popover" id="info-pop" hidden>
+        <p class="context" id="context"></p>
+        <p id="summary" aria-live="polite"></p>
+      </div>
+    </span>
+  </div>
+  <div class="controls">
+    <select id="picker" aria-label="Projet ou programme"></select>
+    <div class="seg" role="group" aria-label="Échelle de temps">
+      <button type="button" data-mode="Day" aria-pressed="false">Jour</button>
+      <button type="button" data-mode="Week" aria-pressed="true">Semaine</button>
+      <button type="button" data-mode="Month" aria-pressed="false">Mois</button>
+    </div>
+    <label class="toggle"><input type="checkbox" id="critical" checked> Critique</label>
+    <label class="toggle" id="baseline-toggle" hidden><input type="checkbox" id="baseline" checked> Baseline</label>
+    <span class="pop-anchor">
+      <button type="button" class="icon-btn" id="legend-btn" aria-label="Légende" title="Légende">?</button>
+      <div class="popover right" id="legend-pop" hidden>
+        <ul class="legend">
+          <li><span class="swatch summary"></span>Workpackage ou projet</li>
+          <li><span class="swatch"></span>Livrable</li>
+          <li><span class="swatch critical"></span>Chemin critique</li>
+          <li><span class="swatch milestone"></span>Jalon</li>
+          <li><span class="swatch done"></span>Terminé</li>
+          <li><span class="swatch alert"></span>Retard ou dépendance non respectée</li>
+          <li id="legend-baseline" hidden><span class="swatch baseline"></span>Baseline (trait sous la barre)</li>
+        </ul>
+      </div>
+    </span>
+    <button type="button" class="icon-btn" id="reload" aria-label="Actualiser" title="Actualiser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+  </div>
+</header>
+
+<div class="status"><ul class="chips" id="chips" aria-live="polite"></ul></div>
+
+<main id="main">
+  <div class="chart">
+    <div class="gantt-host" id="host"><p class="loading">Chargement du planning…</p></div>
+    <p class="undated" id="undated" hidden></p>
+    <section class="issues" id="issues" hidden>
+      <h2 id="issues-title">Dépendances non respectées</h2>
+      <div class="table-wrap"><table>
+        <thead id="issues-head"></thead>
+        <tbody id="issues-body"></tbody>
+      </table></div>
+    </section>
+  </div>
+  <aside id="details" hidden aria-live="polite"></aside>
+</main>
+
+<dialog id="confirm">
+  <h2>Déplacer cet élément ?</h2>
+  <p id="confirm-text"></p>
+  <p id="confirm-warn" class="warn" hidden></p>
+  <p>Les éléments liés ne bougent pas : un écart éventuel apparaîtra en rouge.</p>
+  <div class="actions">
+    <button type="button" class="btn" id="confirm-cancel">Annuler</button>
+    <button type="button" class="btn primary" id="confirm-ok">Déplacer</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
+<script>
+var BOOT = <?!= boot ?>;
+</script>
+<script>
+(function () {
+  'use strict';
+
+  var state = { mode: 'project', projectId: '', programId: '', data: null, catalog: null,
+    viewMode: 'Week', gantt: null, lastDrag: 0, pending: null };
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ------------------------------------------------------------ outils
+  function el(tag, attrs, children) {
+    var n = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (k === 'text') n.textContent = attrs[k];
+      else if (k === 'class') n.className = attrs[k];
+      else if (k.indexOf('on') === 0) n.addEventListener(k.slice(2), attrs[k]);
+      else n.setAttribute(k, attrs[k]);
+    });
+    (children || []).forEach(function (c) { if (c) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return n;
+  }
+  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+  // Frappe Gantt insère les libellés en HTML : on les échappe pour qu'un nom reste du texte.
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function uuid() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  }
+  function frDate(s) {
+    if (!s) return '—';
+    var p = String(s).split('-');
+    return p[2] + '/' + p[1] + '/' + p[0];
+  }
+  function ymd(d) {
+    var m = d.getMonth() + 1, day = d.getDate();
+    return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+  }
+  function isWeekend(s) { var d = new Date(s + 'T12:00:00'); return d.getDay() === 0 || d.getDay() === 6; }
+  function plural(n, one, many) { return n + ' ' + (n > 1 ? many : one); }
+
+  var toastTimer = null;
+  function toast(msg, isError) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast' + (isError ? ' error' : '');
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.hidden = true; }, isError ? 7000 : 3500);
+  }
+
+  function call(action, params, write) {
+    var pre = window.ppmPreloaded && window.ppmPreloaded(action, params, write);
+    if (pre) return pre;
+    return new Promise(function (resolve, reject) {
+      document.body.classList.add('busy');
+      google.script.run
+        .withSuccessHandler(function (res) {
+          document.body.classList.remove('busy');
+          if (res && res.ok) resolve(res.data);
+          else reject(res && res.error ? res.error : { code: 'INTERNAL', message: 'Réponse inattendue du serveur.' });
+        })
+        .withFailureHandler(function (err) {
+          document.body.classList.remove('busy');
+          reject({ code: 'NETWORK', message: 'Le serveur ne répond pas. Vérifiez la connexion puis cliquez sur Actualiser.', details: String(err) });
+        })
+        .uiCall(action, params || {}, write ? uuid() : null);
+    });
+  }
+
+  function updateNav() {
+    var base = BOOT.baseUrl || '';
+    var scope = state.mode === 'program' ? (state.programId ? '&program=' + state.programId : '') : '&project=' + state.projectId;
+    $('nav-plan').setAttribute('href', base + '?view=gantt' + scope);
+    $('nav-struct').setAttribute('href', base + '?view=structure' + scope + (state.mode === 'program' ? '' : '&tab=obs'));
+    $('nav-suivi').setAttribute('href', base + '?view=suivi' + (state.mode === 'program' ? '' : '&project=' + state.projectId));
+    $('nav-copilot').setAttribute('href', base + '?view=copilote' + (state.mode === 'program' ? '' : '&project=' + state.projectId));
+  }
+
+  function remember() {
+    updateNav();
+    try {
+      var p = state.mode === 'program' ? { view: 'gantt', program: state.programId || 'none' } : { view: 'gantt', project: state.projectId };
+      google.script.history.replace(null, p);
+    } catch (e) { /* hors web app */ }
+  }
+
+  // ------------------------------------------------------------ sélecteur
+  function fillPicker() {
+    var sel = $('picker'), cat = state.catalog;
+    clear(sel);
+    var byProgram = {};
+    cat.projects.forEach(function (p) { (byProgram[p.program_id || ''] = byProgram[p.program_id || ''] || []).push(p); });
+    var sortCode = function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); };
+    cat.programs.slice().sort(sortCode).forEach(function (g) {
+      var og = el('optgroup', { label: g.code + ' ' + g.name });
+      og.appendChild(el('option', { value: 'program:' + g.id, text: 'Vue programme ' + g.code }));
+      (byProgram[g.id] || []).sort(sortCode).forEach(function (p) {
+        og.appendChild(el('option', { value: 'project:' + p.id, text: p.code + ' ' + p.name + (p.status === 'Clos' ? ' (clos)' : '') }));
+      });
+      sel.appendChild(og);
+    });
+    if ((byProgram[''] || []).length) {
+      var og = el('optgroup', { label: 'Hors programme' });
+      og.appendChild(el('option', { value: 'program:none', text: 'Vue des projets hors programme' }));
+      byProgram[''].sort(sortCode).forEach(function (p) {
+        og.appendChild(el('option', { value: 'project:' + p.id, text: p.code + ' ' + p.name + (p.status === 'Clos' ? ' (clos)' : '') }));
+      });
+      sel.appendChild(og);
+    }
+    syncPicker();
+  }
+  function syncPicker() {
+    $('picker').value = state.mode === 'program' ? 'program:' + (state.programId || 'none') : 'project:' + state.projectId;
+  }
+
+  // ------------------------------------------------------------ chargement
+  function loadProject(id) {
+    state.mode = 'project'; state.projectId = id; closeDetails(); syncPicker(); remember();
+    showLoading();
+    return call('gantt.project', { projectId: id }).then(function (d) {
+      state.data = d; renderProject();
+    }).catch(showError);
+  }
+  function loadProgram(id) {
+    state.mode = 'program'; state.programId = id || ''; closeDetails(); syncPicker(); remember();
+    showLoading();
+    return call('gantt.program', { programId: id || '' }).then(function (d) {
+      state.data = d; renderProgram();
+    }).catch(showError);
+  }
+  function reload() { return state.mode === 'program' ? loadProgram(state.programId) : loadProject(state.projectId); }
+
+  function showLoading() {
+    var host = $('host'); clear(host);
+    host.appendChild(el('p', { class: 'loading', text: 'Chargement du planning…' }));
+  }
+  function showError(err) {
+    var host = $('host'); clear(host);
+    host.appendChild(el('div', { class: 'empty' }, [
+      el('strong', { text: 'Le planning n’a pas pu être chargé.' }),
+      el('span', { text: (err && err.message) || 'Erreur inconnue.' })
+    ]));
+    toast((err && err.message) || 'Erreur inconnue.', true);
+  }
+  function showEmpty(title, text) {
+    var host = $('host'); clear(host);
+    host.appendChild(el('div', { class: 'empty' }, [el('strong', { text: title }), el('span', { text: text })]));
+  }
+
+  // ------------------------------------------------------------ rendu : projet
+  function itemClasses(r) {
+    var c = [r.kind === 'wp' ? 'is-wp' : r.kind === 'external' ? 'is-external' : 'is-item'];
+    if (r.item_type === 'Jalon') c.push('is-milestone');
+    if (r.critical && r.kind !== 'wp') c.push('is-critical');
+    if (r.late) c.push('is-late');
+    if (r.violated) c.push('is-violated');
+    if (r.status === 'Terminé' || (r.kind === 'item' && r.progress >= 100)) c.push('is-done');
+    if (!r.canEdit) c.push('is-locked');
+    return c.join(' ');
+  }
+
+  function setChips(list) {
+    var ul = $('chips'); clear(ul);
+    list.forEach(function (c) { ul.appendChild(el('li', { class: 'chip ' + c[0], text: c[1] })); });
+  }
+
+  function renderProject() {
+    var d = state.data, p = d.project;
+    $('title').textContent = p.code + ' ' + p.name;
+    var ctx = $('context'); clear(ctx);
+    var bits = [];
+    if (p.manager) bits.push('Chef de projet : ' + p.manager);
+    bits.push('Calendrier ' + p.holiday_country);
+    if (p.end_date) bits.push('Fin visée le ' + frDate(p.end_date));
+    ctx.appendChild(document.createTextNode(bits.join(', ') + '. '));
+    if (p.program_id) {
+      ctx.appendChild(el('button', { type: 'button', text: 'Programme ' + p.program_name, onclick: function () { loadProgram(p.program_id); } }));
+    }
+
+    var s = d.stats, parts = [plural(s.items, 'élément', 'éléments'), 'avancement ' + s.progress + ' %',
+      plural(s.critical, 'élément critique', 'éléments critiques')];
+    var sum = $('summary'); clear(sum);
+    sum.appendChild(document.createTextNode(parts.join(', ') + '. '));
+    var alerts = [];
+    if (s.late) alerts.push(plural(s.late, 'élément en retard', 'éléments en retard'));
+    if (s.violations) alerts.push(plural(s.violations, 'dépendance non respectée', 'dépendances non respectées'));
+    if (s.beyondEnd) alerts.push('le plan se termine le ' + frDate(d.anchor) + ', après la fin visée');
+    if (alerts.length) sum.appendChild(el('span', { class: 'alert', text: alerts.join(', ') + '.' }));
+    var chips = [];
+    if (s.late) chips.push(['alert', plural(s.late, 'en retard', 'en retard')]);
+    if (s.violations) chips.push(['alert', plural(s.violations, 'dépendance non respectée', 'dépendances non respectées')]);
+    if (s.beyondEnd) chips.push(['alert', 'Fin après la date visée']);
+    var b = d.baseline;
+    if (b && b.end_slip > 0) chips.push(['alert', 'Fin +' + plural(b.end_slip, 'jour', 'jours') + ' / ' + b.label]);
+    else if (b && b.slipped) chips.push(['warn', plural(b.slipped, 'glissé', 'glissés') + ' / ' + b.label]);
+    if (!b && d.canEditProject) chips.push(['', 'Pas de baseline']);
+    setChips(chips);
+    $('baseline-toggle').hidden = !b;
+    $('legend-baseline').hidden = !b;
+    if (b) {
+      var bits2 = [];
+      if (b.slipped) bits2.push(plural(b.slipped, 'élément glissé', 'éléments glissés'));
+      if (b.added) bits2.push(plural(b.added, 'ajouté', 'ajoutés'));
+      if (b.removed) bits2.push(plural(b.removed, 'retiré', 'retirés'));
+      if (b.end_slip > 0) bits2.push('fin du plan ' + plural(b.end_slip, 'jour ouvré', 'jours ouvrés') + ' après la baseline');
+      sum.appendChild(el('span', { class: 'base-note', text: ' Baseline ' + b.label + ' du ' + frDate(String(b.decided_at).slice(0, 10)) + ' : ' +
+        (bits2.length ? bits2.join(', ') : 'aucun écart') + '.' }));
+    } else if (d.canEditProject) {
+      sum.appendChild(el('span', { class: 'base-note', text: ' Pas encore de baseline : les écarts ne sont pas mesurés.' }));
+    }
+
+    var dated = d.rows.filter(function (r) { return r.start && r.finish; });
+    var undated = d.rows.filter(function (r) { return r.kind === 'item' && !(r.start && r.finish); });
+    var und = $('undated');
+    und.hidden = !undated.length;
+    und.textContent = undated.length ? 'Sans dates, donc absents du Gantt : ' + undated.map(function (r) { return r.name; }).join(', ') + '.' : '';
+
+    var ids = {};
+    dated.forEach(function (r) { ids[r.id] = true; });
+    var preds = {};
+    d.dependencies.forEach(function (x) { if (ids[x.from] && ids[x.to]) (preds[x.to] = preds[x.to] || []).push(x.from); });
+    var tasks = dated.map(function (r) {
+      var label = r.kind === 'wp' ? ((r.wbs_code ? r.wbs_code + ' ' : '') + r.name)
+        : r.kind === 'external' ? '[' + r.project_code + '] ' + r.name : r.name;
+      return { id: r.id, name: escapeHtml(label), start: r.start, end: r.finish, progress: Math.max(0, Math.min(100, r.progress || 0)),
+        dependencies: (preds[r.id] || []).join(','), custom_class: itemClasses(r) };
+    });
+    if (!tasks.length) {
+      showEmpty('Aucun élément daté dans ce projet.', 'Ajoutez des livrables et des jalons avec leurs dates dans l’application AppSheet, puis cliquez sur Actualiser.');
+      renderIssues([]);
+      return;
+    }
+    drawGantt(tasks, d.dependencies);
+    renderIssues(d.violations);
+  }
+
+  function renderIssues(list) {
+    var box = $('issues'), head = $('issues-head'), body = $('issues-body');
+    clear(head); clear(body);
+    box.hidden = !list.length;
+    if (!list.length) return;
+    $('issues-title').textContent = 'Dépendances non respectées';
+    head.appendChild(el('tr', {}, ['Prédécesseur', 'Successeur', 'Type', 'Date prévue', 'Date requise', 'Écart'].map(function (h) {
+      return el('th', { scope: 'col', text: h });
+    })));
+    list.forEach(function (v) {
+      body.appendChild(el('tr', {}, [
+        el('td', { text: v.predecessor_name || '' }), el('td', { text: v.successor_name || '' }),
+        el('td', { text: v.dep_type }), el('td', { text: frDate(v.actual) }), el('td', { text: frDate(v.required) }),
+        el('td', { class: 'num', text: plural(v.gap_days, 'jour ouvré', 'jours ouvrés') })
+      ]));
+    });
+  }
+
+  // ------------------------------------------------------------ rendu : programme
+  function renderProgram() {
+    var d = state.data, g = d.program;
+    $('title').textContent = g.code ? g.code + ' ' + g.name : g.name;
+    var ctx = $('context'); clear(ctx);
+    ctx.textContent = (g.leader ? 'Program Leader : ' + g.leader + '. ' : '') + 'Cliquez sur un projet pour ouvrir son planning.';
+    var s = d.stats, sum = $('summary'); clear(sum);
+    sum.appendChild(document.createTextNode(plural(s.projects, 'projet', 'projets') + ', ' +
+      plural(s.crossDependencies, 'dépendance entre projets', 'dépendances entre projets') + '. '));
+    var alerts = [];
+    if (s.late) alerts.push(plural(s.late, 'élément en retard', 'éléments en retard'));
+    if (s.violations) alerts.push(plural(s.violations, 'dépendance non respectée', 'dépendances non respectées'));
+    if (alerts.length) sum.appendChild(el('span', { class: 'alert', text: alerts.join(', ') + '.' }));
+    var chips = [];
+    if (s.late) chips.push(['alert', plural(s.late, 'en retard', 'en retard')]);
+    if (s.violations) chips.push(['alert', plural(s.violations, 'dépendance non respectée', 'dépendances non respectées')]);
+    setChips(chips);
+    $('undated').hidden = true;
+
+    var tasks = [], depsByTarget = {};
+    d.crossDependencies.forEach(function (x) {
+      (depsByTarget['prj:' + x.to_project] = depsByTarget['prj:' + x.to_project] || {})['prj:' + x.from_project] = true;
+    });
+    d.projects.forEach(function (p) {
+      if (!p.start || !p.finish) return;
+      var cls = ['is-project', 'is-locked'];
+      if (p.late || p.violations) cls.push('is-late');
+      tasks.push({ id: 'prj:' + p.id, name: escapeHtml(p.code + ' ' + p.name), start: p.start, end: p.finish, progress: p.progress,
+        dependencies: Object.keys(depsByTarget['prj:' + p.id] || {}).join(','), custom_class: cls.join(' ') });
+      p.milestones.forEach(function (m) {
+        tasks.push({ id: m.id, name: escapeHtml(m.name), start: m.date, end: m.date, progress: m.status === 'Terminé' ? 100 : 0,
+          custom_class: 'is-milestone is-locked' + (m.critical ? ' is-critical' : '') + (m.status === 'Terminé' ? ' is-done' : '') });
+      });
+    });
+    if (!tasks.length) {
+      showEmpty('Aucun projet daté dans ce programme.', 'Les projets apparaissent ici dès que leurs livrables ont des dates.');
+      renderIssues([]);
+      return;
+    }
+    var arrows = d.crossDependencies.map(function (x) { return { from: 'prj:' + x.from_project, to: 'prj:' + x.to_project, violated: x.violated }; });
+    drawGantt(tasks, arrows);
+
+    var box = $('issues'), head = $('issues-head'), body = $('issues-body');
+    clear(head); clear(body);
+    box.hidden = !d.crossDependencies.length;
+    if (!d.crossDependencies.length) return;
+    $('issues-title').textContent = 'Dépendances entre projets';
+    var code = {};
+    d.projects.forEach(function (p) { code[p.id] = p.code; });
+    head.appendChild(el('tr', {}, ['De', 'Vers', 'Type', 'État'].map(function (h) { return el('th', { scope: 'col', text: h }); })));
+    d.crossDependencies.forEach(function (x) {
+      body.appendChild(el('tr', {}, [
+        el('td', { text: code[x.from_project] + ' ' + x.from_item }), el('td', { text: code[x.to_project] + ' ' + x.to_item }),
+        el('td', { text: x.type }), el('td', { class: x.violated ? 'alert' : '', text: x.violated ? 'Non respectée' : 'Respectée' })
+      ]));
+    });
+  }
+
+  // ------------------------------------------------------------ Gantt
+  function drawGantt(tasks, deps) {
+    var host = $('host'); clear(host);
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    host.appendChild(svg);
+    state.gantt = new Gantt(svg, tasks, {
+      view_mode: state.viewMode,
+      language: 'fr',
+      bar_height: 22,
+      padding: 14,
+      custom_popup_html: function () { return ''; },
+      on_date_change: onDateChange
+    });
+    markViolatedArrows(deps);
+    paintBaselines();
+    $('main').classList.toggle('critical-off', !$('critical').checked);
+    $('main').classList.toggle('baseline-off', !$('baseline').checked);
+  }
+
+  /**
+   * Baseline « en fantôme » : un trait gris sous chaque barre, aux dates figées.
+   * L'échelle (pixels par jour, origine) se déduit d'une barre déjà dessinée : aucun calcul interne à Frappe Gantt.
+   */
+  function dayIndex(s) { var p = String(s).split('-'); return Math.round(Date.UTC(+p[0], +p[1] - 1, +p[2]) / 86400000); }
+  function paintBaselines() {
+    var svg = $('host').querySelector('svg');
+    if (!svg || state.mode !== 'project' || !state.data || !state.data.baseline) return;
+    var old = svg.querySelector('g.baselines');
+    if (old) old.parentNode.removeChild(old);
+    var rows = {};
+    state.data.rows.forEach(function (r) { rows[r.id] = r; });
+    var wrappers = Array.prototype.slice.call(svg.querySelectorAll('.bar-wrapper'));
+    var scale = null;
+    wrappers.some(function (w) {
+      var r = rows[w.getAttribute('data-id')], bar = w.querySelector('rect.bar');
+      if (!r || !bar || !r.start || !r.finish) return false;
+      var days = dayIndex(r.finish) - dayIndex(r.start) + 1, width = Number(bar.getAttribute('width'));
+      if (days < 1 || !(width > 0)) return false;
+      var px = width / days;
+      scale = { px: px, x0: Number(bar.getAttribute('x')) - dayIndex(r.start) * px };
+      return true;
+    });
+    if (!scale) return;
+    var NS = 'http://www.w3.org/2000/svg';
+    var g = document.createElementNS(NS, 'g');
+    g.setAttribute('class', 'baselines');
+    wrappers.forEach(function (w) {
+      var r = rows[w.getAttribute('data-id')], bar = w.querySelector('rect.bar');
+      if (!r || !bar || !r.baseline_finish) return;
+      var from = dayIndex(r.baseline_start || r.baseline_finish), to = dayIndex(r.baseline_finish) + 1;
+      var rect = document.createElementNS(NS, 'rect');
+      rect.setAttribute('class', 'baseline-ghost');
+      rect.setAttribute('data-for', r.id);
+      rect.setAttribute('x', String(scale.x0 + from * scale.px));
+      rect.setAttribute('y', String(Number(bar.getAttribute('y')) + Number(bar.getAttribute('height')) + 2));
+      rect.setAttribute('width', String(Math.max(3, (to - from) * scale.px)));
+      rect.setAttribute('height', '4');
+      rect.setAttribute('rx', '1');
+      g.appendChild(rect);
+    });
+    var layer = svg.querySelector('g.bar');
+    if (layer) svg.insertBefore(g, layer); else svg.appendChild(g);
+  }
+
+  function markViolatedArrows(deps) {
+    (deps || []).forEach(function (x) {
+      if (!x.violated) return;
+      var sel = 'path[data-from="' + cssEscape(x.from) + '"][data-to="' + cssEscape(x.to) + '"]';
+      Array.prototype.forEach.call($('host').querySelectorAll(sel), function (p) { p.classList.add('is-violated'); });
+    });
+  }
+  function cssEscape(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&'); }
+
+  function findRow(id) {
+    if (state.mode === 'program') return null;
+    return state.data.rows.filter(function (r) { return r.id === id; })[0] || null;
+  }
+
+  function onDateChange(task, start, end) {
+    state.lastDrag = Date.now();
+    var row = findRow(task.id);
+    if (!row || row.kind !== 'item' || !row.canEdit) {
+      rerender();
+      toast(state.mode === 'program' ? 'La vue programme est en lecture seule : ouvrez le planning du projet pour déplacer un élément.'
+        : 'Vous ne pouvez pas déplacer cet élément : il faut être responsable de son workpackage, chef de projet ou au-dessus.', true);
+      return;
+    }
+    var ns = ymd(start), nf = ymd(end);
+    if (row.item_type === 'Jalon') nf = ns;
+    if (ns === row.start && nf === row.finish) return;
+    state.pending = { row: row, start: ns, finish: nf };
+    $('confirm-text').textContent = '« ' + row.name + ' » : du ' + frDate(row.start) + ' au ' + frDate(row.finish) +
+      ', déplacé du ' + frDate(ns) + ' au ' + frDate(nf) + '.';
+    var weekend = [ns, nf].filter(isWeekend);
+    $('confirm-warn').hidden = !weekend.length;
+    $('confirm-warn').textContent = weekend.length ? 'Attention : ' + weekend.map(frDate).join(' et ') + ' tombe un week-end.' : '';
+    var dlg = $('confirm');
+    if (dlg.showModal) dlg.showModal(); else if (window.confirm($('confirm-text').textContent)) confirmMove(); else cancelMove();
+  }
+
+  function rerender() {
+    if (!state.data) return;
+    if (state.mode === 'program') renderProgram(); else renderProject();
+  }
+
+  function confirmMove() {
+    var p = state.pending; state.pending = null;
+    if ($('confirm').open) $('confirm').close();
+    if (!p) return;
+    call('planitems.update', { id: p.row.id, version: p.row.version, patch: { planned_start: p.start, planned_finish: p.finish } }, true)
+      .then(function () { toast('Dates enregistrées.'); return loadProject(state.projectId); })
+      .catch(function (err) {
+        if (err.code === 'CONFLICT') toast('Quelqu’un a modifié cet élément entre-temps : le planning est rechargé, recommencez le déplacement.', true);
+        else toast(err.message || 'Enregistrement impossible.', true);
+        return loadProject(state.projectId);
+      });
+  }
+  function cancelMove() {
+    state.pending = null;
+    if ($('confirm').open) $('confirm').close();
+    rerender();
+  }
+
+  // ------------------------------------------------------------ détails
+  function closeDetails() {
+    clear($('details'));
+    $('details').hidden = true;
+    $('main').classList.remove('with-details');
+  }
+  function openDetails(nodes) {
+    var a = $('details'); clear(a);
+    a.appendChild(el('button', { type: 'button', class: 'close', 'aria-label': 'Fermer le détail', text: '×', onclick: closeDetails }));
+    nodes.forEach(function (n) { if (n) a.appendChild(n); });
+    a.hidden = false;
+    $('main').classList.add('with-details');
+  }
+  function facts(pairs) {
+    var dl = el('dl');
+    pairs.forEach(function (p) { if (p[1] !== null && p[1] !== undefined && p[1] !== '') { dl.appendChild(el('dt', { text: p[0] })); dl.appendChild(el('dd', { text: String(p[1]) })); } });
+    return dl;
+  }
+  function floatText(r) {
+    if (r.float === null || r.float === undefined) return null;
+    if (r.float < 0) return { alert: true, text: 'Décale un successeur de ' + plural(-r.float, 'jour ouvré', 'jours ouvrés') + '.' };
+    if (r.float === 0) return { alert: false, text: 'Sur le chemin critique : tout glissement décale la fin du plan.' };
+    return null;
+  }
+
+  function showItem(r) {
+    var d = state.data;
+    var wp = d.rows.filter(function (x) { return x.kind === 'wp' && x.wp_id === r.wp_id; })[0];
+    var nodes = [el('h2', { text: r.name }), el('p', { class: 'kind', text: r.item_type + (wp ? ' du workpackage ' + wp.name : '') })];
+    if (r.late) nodes.push(el('p', { class: 'flag alert', text: 'Fin prévue le ' + frDate(r.finish) + ', dépassée.' }));
+    var ft = floatText(r);
+    if (ft) nodes.push(el('p', { class: 'flag' + (ft.alert ? ' alert' : ''), text: ft.text }));
+    if (d.baseline && r.added) nodes.push(el('p', { class: 'flag', text: 'Ajouté depuis la baseline ' + d.baseline.label + '.' }));
+    if (d.baseline && r.slip > 0) nodes.push(el('p', { class: 'flag alert', text: 'Finit ' + plural(r.slip, 'jour ouvré', 'jours ouvrés') + ' après la baseline ' + d.baseline.label + '.' }));
+    if (d.baseline && r.slip < 0) nodes.push(el('p', { class: 'flag', text: 'Finit ' + plural(-r.slip, 'jour ouvré', 'jours ouvrés') + ' avant la baseline ' + d.baseline.label + '.' }));
+    nodes.push(facts([
+      ['Responsable', r.owner || 'À désigner'],
+      ['Début', r.item_type === 'Jalon' ? null : frDate(r.start)],
+      [r.item_type === 'Jalon' ? 'Date' : 'Fin', frDate(r.finish)],
+      ['Avancement', r.item_type === 'Livrable' ? r.progress + ' %' : null],
+      ['Statut', r.status],
+      ['Marge', r.float > 0 ? plural(r.float, 'jour ouvré', 'jours ouvrés') : null],
+      ['Fin au plus tard', r.late_finish ? frDate(r.late_finish) : null],
+      ['Baseline', r.baseline_finish ? (r.item_type === 'Jalon' || r.baseline_start === r.baseline_finish ? frDate(r.baseline_finish)
+        : frDate(r.baseline_start) + ' → ' + frDate(r.baseline_finish)) : null]
+    ]));
+    var related = d.violations.filter(function (v) { return v.successor_id === r.id || v.predecessor_id === r.id; });
+    related.forEach(function (v) {
+      nodes.push(el('p', { class: 'flag alert', text: v.predecessor_name + ' → ' + v.successor_name + ' (' + v.dep_type + ') : il manque ' +
+        plural(v.gap_days, 'jour ouvré', 'jours ouvrés') + ', date requise le ' + frDate(v.required) + '.' }));
+    });
+    if (r.canDeclare && r.status !== 'Terminé') nodes.push(declareForm(r));
+    if (BOOT.appsheetUrl) nodes.push(el('div', { class: 'links' }, [el('a', { class: 'btn', href: BOOT.appsheetUrl, target: '_blank', rel: 'noopener', text: 'Modifier dans AppSheet' })]));
+    openDetails(nodes);
+  }
+
+  function declareForm(r) {
+    var input = el('input', { type: 'number', min: '0', max: '100', step: '5', value: String(r.progress || 0), id: 'pct', required: 'required' });
+    var comment = el('textarea', { id: 'pct-comment', placeholder: 'Ce qui a avancé, ce qui bloque (facultatif)' });
+    var submit = el('button', { type: 'submit', class: 'btn primary', text: 'Déclarer l’avancement' });
+    return el('form', { class: 'declare', onsubmit: function (e) {
+      e.preventDefault();
+      var v = Number(input.value);
+      if (!(v >= 0 && v <= 100)) { toast('L’avancement doit être compris entre 0 et 100 %.', true); return; }
+      submit.disabled = true;
+      call('progress.declare', { planItemId: r.id, progressPct: v, comment: comment.value.trim() }, true)
+        .then(function () { toast('Avancement déclaré : ' + v + ' %.'); return loadProject(state.projectId); })
+        .catch(function (err) { submit.disabled = false; toast(err.message || 'Déclaration impossible.', true); });
+    } }, [
+      el('h3', { text: 'Déclarer l’avancement' }),
+      el('div', { class: 'row' }, [el('label', { for: 'pct', text: 'Avancement' }), input, document.createTextNode('%')]),
+      el('label', { for: 'pct-comment', text: 'Commentaire' }), comment, submit
+    ]);
+  }
+
+  function showWp(r) {
+    var nodes = [el('h2', { text: (r.wbs_code ? r.wbs_code + ' ' : '') + r.name }), el('p', { class: 'kind', text: r.level ? 'Sous-workpackage' : 'Workpackage' })];
+    if (r.late) nodes.push(el('p', { class: 'flag alert', text: 'Au moins un élément de ce workpackage est en retard.' }));
+    if (r.critical) nodes.push(el('p', { class: 'flag', text: 'Ce workpackage contient des éléments du chemin critique.' }));
+    nodes.push(facts([['Responsable', r.owner || 'À désigner'], ['Début', frDate(r.start)], ['Fin', frDate(r.finish)], ['Avancement', r.progress + ' %'],
+      ['Baseline', r.baseline_finish ? frDate(r.baseline_start) + ' → ' + frDate(r.baseline_finish) : null]]));
+    openDetails(nodes);
+  }
+
+  function showExternal(r) {
+    openDetails([
+      el('h2', { text: r.name }),
+      el('p', { class: 'kind', text: r.item_type + ' du projet ' + r.project_code + ', lié à ce planning' }),
+      facts([['Début', frDate(r.start)], ['Fin', frDate(r.finish)], ['Statut', r.status]]),
+      el('div', { class: 'links' }, [el('button', { type: 'button', class: 'btn', text: 'Ouvrir le planning ' + r.project_code, onclick: function () { loadProject(r.project_id); } })])
+    ]);
+  }
+
+  function showProject(p) {
+    var nodes = [el('h2', { text: p.code + ' ' + p.name }), el('p', { class: 'kind', text: 'Projet' + (p.status ? ', ' + p.status.toLowerCase() : '') })];
+    if (p.late) nodes.push(el('p', { class: 'flag alert', text: plural(p.late, 'élément en retard', 'éléments en retard') + '.' }));
+    if (p.violations) nodes.push(el('p', { class: 'flag alert', text: plural(p.violations, 'dépendance non respectée', 'dépendances non respectées') + '.' }));
+    nodes.push(facts([
+      ['Chef de projet', p.manager || 'À désigner'], ['Début', frDate(p.start)], ['Fin prévue', frDate(p.finish)],
+      ['Fin visée', p.end_date ? frDate(p.end_date) : null], ['Avancement', p.progress + ' %'],
+      ['Éléments', p.items], ['Critiques', p.critical]
+    ]));
+    nodes.push(el('div', { class: 'links' }, [el('button', { type: 'button', class: 'btn primary', text: 'Ouvrir le planning', onclick: function () { loadProject(p.id); } })]));
+    openDetails(nodes);
+  }
+
+  function onBarClick(id) {
+    if (Date.now() - state.lastDrag < 400) return;
+    if (state.mode === 'program') {
+      if (id.indexOf('prj:') === 0) {
+        var p = state.data.projects.filter(function (x) { return 'prj:' + x.id === id; })[0];
+        if (p) showProject(p);
+      } else {
+        var owner = state.data.projects.filter(function (x) { return x.milestones.some(function (m) { return m.id === id; }); })[0];
+        if (owner) showProject(owner);
+      }
+      return;
+    }
+    var r = findRow(id);
+    if (!r) return;
+    if (r.kind === 'wp') showWp(r); else if (r.kind === 'external') showExternal(r); else showItem(r);
+  }
+
+  // ------------------------------------------------------------ événements
+  $('host').addEventListener('click', function (e) {
+    var g = e.target.closest && e.target.closest('.bar-wrapper');
+    if (g && g.getAttribute('data-id')) onBarClick(g.getAttribute('data-id'));
+  });
+  $('picker').addEventListener('change', function () {
+    var v = this.value.split(':');
+    if (v[0] === 'program') loadProgram(v[1] === 'none' ? '' : v[1]); else loadProject(v[1]);
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.seg button'), function (b) {
+    b.addEventListener('click', function () {
+      state.viewMode = b.getAttribute('data-mode');
+      Array.prototype.forEach.call(document.querySelectorAll('.seg button'), function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+      if (state.gantt) { state.gantt.change_view_mode(state.viewMode); rerender(); }
+    });
+  });
+  $('critical').addEventListener('change', function () { $('main').classList.toggle('critical-off', !this.checked); });
+  $('baseline').addEventListener('change', function () { $('main').classList.toggle('baseline-off', !this.checked); });
+  $('reload').addEventListener('click', function () { reload(); });
+  $('confirm-ok').addEventListener('click', confirmMove);
+  $('confirm-cancel').addEventListener('click', cancelMove);
+  $('confirm').addEventListener('cancel', function (e) { e.preventDefault(); cancelMove(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('details').hidden && !$('confirm').open) closeDetails(); });
+
+  // ------------------------------------------------------------ démarrage
+  ppmPopover($('info-btn'), $('info-pop'));
+  ppmPopover($('legend-btn'), $('legend-pop'));
+  call('planning.catalog', {}).then(function (cat) {
+    state.catalog = cat;
+    fillPicker();
+    if (BOOT.program) return loadProgram(BOOT.program === 'none' ? '' : BOOT.program);
+    var first = BOOT.project || (cat.projects.filter(function (p) { return p.status !== 'Clos'; })[0] || cat.projects[0] || {}).id;
+    if (!first) { showEmpty('Aucun projet pour l’instant.', 'Créez un projet dans l’application AppSheet, puis revenez ici.'); return; }
+    return loadProject(first);
+  }).catch(showError);
+
+  window.__ppm = { state: state, onBarClick: onBarClick, onDateChange: onDateChange, confirmMove: confirmMove };
+})();
+</script>
+</body>
+</html>
