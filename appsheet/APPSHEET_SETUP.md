@@ -318,3 +318,13 @@ Le Gantt montre la baseline active sous forme d'un trait gris sous chaque barre 
 6. Déplacer un jalon dans le Gantt : son événement change de date dans la minute.
 7. Mon compte, onglet Notifications : **Voir mon récapitulatif**, puis **Me l'envoyer maintenant** : le mail arrive, avec des liens vers les pages.
 8. Le lendemain matin (jour de semaine) : chaque membre concerné reçoit un seul récapitulatif.
+
+## 13. Depuis la version 0.7.0 : le WBS se crée dans les pages web
+
+Les workpackages, sous-workpackages, livrables et jalons se créent, se modifient, se déplacent et se suppriment depuis la page **Structure** (onglet Découpage), avec les règles décrites dans le README (codes automatiques, deux niveaux, dates, suppression sans orphelin).
+
+AppSheet reste utilisable pour ces tables, mais **il ne passe pas par ces règles** :
+
+- **Ne supprimez pas** un workpackage dans AppSheet : son contenu resterait sans rattachement, et les dépendances d'un élément supprimé resteraient en place. Utilisez le bouton « Supprimer » de la page Structure.
+- Les codes WBS ne sont pas numérotés automatiquement dans AppSheet.
+- Pour éviter les écarts, vous pouvez rendre les tables `WorkPackage` et `PlanItem` en lecture seule dans AppSheet (Update et Delete désactivés) et n'y garder que la consultation.

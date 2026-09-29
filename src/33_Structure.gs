@@ -298,7 +298,7 @@ function floatsForProject_(data, projectId, items, holFor) {
  * Arbre du WBS d'un projet : projet → WP → sous-WP → livrables et jalons.
  * Les WP portent des valeurs de synthèse (dates, avancement pondéré, chemin critique).
  */
-function buildWbsTree(data, projectId, today) {
+function buildWbsTree(data, projectId, today, ctx) {
   var project = indexBy_(data.projects)[projectId];
   if (!project) throw new PpmError('NOT_FOUND', 'Projet introuvable : ' + projectId);
   var holFor = holidayResolver(data);
@@ -310,6 +310,13 @@ function buildWbsTree(data, projectId, today) {
   var wpById = indexBy_(wps);
   var floats = floatsForProject_(data, projectId, items, holFor);
   var fl = function (id) { return floats.byId[id] || {}; };
+  // Droit de modifier chaque carte (wbs.edit sur son périmètre) : la page n'affiche des boutons que là où c'est permis.
+  var canEdit = function (type, id) { return !!ctx && can(ctx, 'wbs.edit', { type: type, id: id }); };
+  var depCount = {};
+  (data.dependencies || []).forEach(function (d) {
+    depCount[d.predecessor_id] = (depCount[d.predecessor_id] || 0) + 1;
+    depCount[d.successor_id] = (depCount[d.successor_id] || 0) + 1;
+  });
 
   var childrenOfWp = {}, itemsOfWp = {};
   wps.forEach(function (w) {
@@ -345,14 +352,15 @@ function buildWbsTree(data, projectId, today) {
   var rootId = 'project:' + project.id;
   var nodes = [Object.assign({
     id: rootId, parent: '', kind: 'project', name: project.name, code: project.code, status: project.status || '',
-    charge_code: ''
+    charge_code: '', ref: project.id, canEdit: canEdit('project', project.id)
   }, ownerOf(project.manager_resource_id), summary(items))];
 
   var emitWp = function (w, parentId) {
     var all = deepItems(w.id);
     var id = 'wp:' + w.id;
     nodes.push(Object.assign({
-      id: id, parent: parentId, kind: 'wp', name: w.name, code: w.wbs_code || '', status: '', charge_code: w.charge_code || ''
+      id: id, parent: parentId, kind: 'wp', name: w.name, code: w.wbs_code || '', status: '', charge_code: w.charge_code || '',
+      ref: w.id, version: w.version, owner_id: w.owner_resource_id || '', parent_ref: w.parent_wp_id || '', canEdit: canEdit('workpackage', w.id)
     }, ownerOf(w.owner_resource_id), summary(all)));
     (childrenOfWp[w.id] || []).slice().sort(byWbs_).forEach(function (c) { emitWp(c, id); });
     (itemsOfWp[w.id] || []).slice().sort(byStartThenName_).forEach(function (i) { emitItem(i, id); });
@@ -364,7 +372,9 @@ function buildWbsTree(data, projectId, today) {
       status: i.status || '', charge_code: '',
       start: itemStart(i) || null, finish: itemFinish(i) || null, progress: Number(i.progress_pct) || 0,
       critical: !!f.critical, float: f.float === undefined ? null : f.float,
-      late: !isDone_(i) && !isBlank(itemFinish(i)) && itemFinish(i) < today
+      late: !isDone_(i) && !isBlank(itemFinish(i)) && itemFinish(i) < today,
+      ref: i.id, version: i.version, owner_id: i.owner_resource_id || '', wp_ref: i.wp_id || '', raw_start: i.planned_start || '', raw_finish: i.planned_finish || '',
+      milestone_category: i.milestone_category || '', dep_count: depCount[i.id] || 0, canEdit: canEdit('planitem', i.id)
     }, ownerOf(i.owner_resource_id)));
   };
   (childrenOfWp[''] || []).slice().sort(byWbs_).forEach(function (w) { emitWp(w, rootId); });
@@ -376,6 +386,7 @@ function buildWbsTree(data, projectId, today) {
     project: { id: project.id, code: project.code, name: project.name, program_id: project.program_id || '',
       program_name: program ? program.name : '' },
     nodes: nodes,
+    canCreate: canEdit('project', projectId),
     stats: {
       wps: wps.length, items: items.length,
       depth: wps.some(function (w) { return !isBlank(w.parent_wp_id); }) ? 2 : (wps.length ? 1 : 0)
@@ -440,8 +451,8 @@ defineAction('obs.teams', function (p, ctx) {
   return buildTeamTree(loadObsData_(), p.rootTeamId || '', ctx);
 });
 
-defineAction('wbs.tree', function (p) {
-  return buildWbsTree(loadWbsData_(), requireParam(p, 'projectId'), todayStr());
+defineAction('wbs.tree', function (p, ctx) {
+  return buildWbsTree(loadWbsData_(), requireParam(p, 'projectId'), todayStr(), ctx);
 });
 
 // ---- personnes

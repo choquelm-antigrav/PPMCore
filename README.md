@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.6.0)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.7.0)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -37,6 +37,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `35_Workspace.gs` | Lot 2 : agenda Google et dossier Drive par projet, annuaire, import de personnes depuis une feuille |
 | `36_Digest.gs` | Lot 2 : mail récapitulatif (un par personne, quotidien ou hebdomadaire), réglages personnels |
 | `37_Simulation.gs` | Lot 4 : simulation « et si… », synthèse chiffrée d'un projet, signaux faibles (sans IA) |
+| `41_Edit.gs` | 0.7.0 : création, modification, déplacement et suppression sûre du WBS (`wbs.create`, `wbs.update`, `wbs.delete`) |
 | `39_Account.gs` | 0.6.0 : Mon compte (`account.get`) et Administration (`admin.*` : réglages validés, santé, journaux, jours fériés) |
 | `38_Copilot.gs` | Lot 4 : copilote (modes off, manual, api), garde-fou des chiffres, journal AiLog, quota, questions, décisions sur les suggestions |
 | `40_Jobs.gs` | Traitement nocturne par tranches (journal, règles, agenda et Drive, annuaire, sauvegardes), récapitulatif de 7 h |
@@ -116,13 +117,14 @@ Actions disponibles :
 | Fil des changements (lot 2) | `changes.feed`, `changes.ack` |
 | Workspace (lot 2) | `workspace.status`, `workspace.enable`, `workspace.sync` |
 | Notifications (lot 2) | `settings.get`, `settings.set`, `digest.preview` |
+| Édition du WBS (0.7.0) | `wbs.create`, `wbs.update`, `wbs.delete` (les actions `workpackages.*` et `planitems.*` restent disponibles pour l'API) |
 | Compte et administration (0.6.0) | `account.get`, `ui.set` ; réservées aux administrateurs : `admin.get`, `admin.set`, `admin.health`, `admin.logs`, `admin.holidays`, `admin.holidays.seed`, `admin.holidays.set` |
 | Copilote (lot 4) | `copilot.status`, `copilot.brief`, `simulations.run`, `copilot.ask`, `copilot.feedback`, `copilot.suggestions`, `insights.decide` |
 
 ## Tests
 
 ```bash
-node tests/run.js                    # 115 tests : calendriers, graphe, droits, journal, règles, API, marges, vues, personnes, OBS, WBS,
+node tests/run.js                    # 123 tests : calendriers, graphe, droits, journal, règles, API, marges, vues, personnes, OBS, WBS,
                                      # préférences, baselines, écarts, fil des changements, agenda, Drive, annuaire, récapitulatif,
                                      # simulation, synthèse, copilote (faux modèle), signaux faibles, fabrication, installation
 node tools/build.js                  # fabrique dist/ (8 fichiers)
@@ -136,12 +138,28 @@ node tests/ui_structure.js    # page Structure
 node tests/ui_suivi.js        # page Suivi et baseline du Gantt
 node tests/ui_copilote.js     # page Copilote, dans les trois modes
 node tests/ui_compte.js       # pages Mon compte et Administration
+node tests/ui_edit.js         # création et édition du WBS dans la page Structure
 
 # Aperçu visuel des pages avec un jeu de données fourni, Agenda et Drive simulés (hors production) :
 node tests/preview_server.js 8123   # puis http://localhost:8123/?view=suivi&project=p1 (ou view=gantt, view=structure)
 ```
 
 Les tests chargent les fichiers `.gs` tels quels, avec des tables en mémoire à la place de Sheets et de faux services Agenda, Drive et annuaire. Tout changement du Core doit les garder verts.
+
+## Édition du WBS (0.7.0)
+
+Dans la page **Structure**, onglet **Découpage (WBS)** : cliquer une carte ouvre son détail ; selon vos droits, il propose **Ajouter** (sous-workpackage, livrable, jalon), **Modifier** et **Supprimer**. Le bouton **Ajouter un workpackage**, en haut de page, crée un workpackage de premier niveau. Les boutons n'apparaissent que là où le serveur autorise l'action : un simple membre n'en voit aucun ; un responsable de workpackage agit dans son workpackage et ses sous-niveaux ; le chef de projet, le DPL et le Program Leader agissent sur tout le projet.
+
+Règles appliquées par le serveur (`41_Edit.gs`), donc aussi pour l'API :
+
+- **Codes WBS** numérotés automatiquement (3, puis 3.1, 3.2…), uniques dans le projet ; un code saisi à la main est respecté. Déplacer un workpackage le renumérote, sauf si un code est imposé.
+- **Deux niveaux** de workpackage au plus ; aucun rattachement à un autre projet ; un workpackage qui a des sous-niveaux ne peut pas devenir lui-même un sous-niveau.
+- **Dates** contrôlées : la fin ne précède pas le début ; un jalon n'a qu'une date (début = fin) et une catégorie facultative (Revue, Client, Interne).
+- **Déplacer** un élément ou un workpackage demande aussi le droit d'écrire à la destination.
+- **Supprimer** : un workpackage non vide refuse la suppression, sauf confirmation explicite (« cascade ») qui emporte ses sous-workpackages et ses éléments. Supprimer un élément retire aussi ses liens de dépendance et ses exigences de jalon, pour ne rien laisser dans le vide. Rien n'est effacé pour de bon : les lignes sont marquées supprimées et la suppression reste dans le journal.
+- L'avancement, le statut et le type d'un élément ne se modifient pas ici : l'avancement se déclare depuis le Planning.
+
+Pas encore d'écran pour les dépendances, les rôles, les personnes et les équipes (prochaine version) : ils se saisissent toujours par l'API ou dans AppSheet.
 
 ## Mon compte et Administration (0.6.0)
 

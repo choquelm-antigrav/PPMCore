@@ -1,5 +1,13 @@
 # Journal des versions
 
+## 0.7.0 — création et édition du WBS depuis la page Structure
+
+- **Ajouter, modifier, déplacer, supprimer** des workpackages, sous-workpackages, livrables et jalons dans l'onglet Découpage (WBS) : boutons dans le détail de chaque carte, et « Ajouter un workpackage » en haut de page. Les boutons n'apparaissent que là où le serveur autorise l'action.
+- Règles côté serveur (`wbs.create`, `wbs.update`, `wbs.delete`) : codes WBS numérotés automatiquement et uniques, deux niveaux au plus, dates contrôlées, un jalon n'a qu'une date, droits vérifiés sur la destination d'un déplacement.
+- **Suppression sans orphelin** : un workpackage non vide refuse la suppression sauf confirmation explicite (cascade) ; supprimer un élément retire ses dépendances et ses exigences de jalon. Le nombre d'éléments et de liens concernés est annoncé avant confirmation.
+- L'arbre du WBS porte désormais les identifiants, versions, responsables, dates brutes, nombre de dépendances et droit de modification de chaque carte.
+- Tests : 123, plus l'essai du parcours complet dans la page.
+
 ## 0.6.0 — Mon compte et Administration
 
 - **Mon compte** : fiche personnelle (fonction, organisation), rôles en lecture seule (les affectations en double sont regroupées), notifications déplacées depuis la page Suivi, affichage (thème automatique, jour ou nuit ; page d'accueil au choix).

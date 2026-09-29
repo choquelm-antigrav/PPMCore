@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.6.0">
+<meta name="ppm-version" content="0.7.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -256,6 +256,16 @@
   aside .edit input { padding: 6px 8px; border: 1px solid var(--rule); border-radius: 4px; color: var(--ink); }
   aside ul.roles { margin: 0 0 16px; padding-left: 18px; font-size: 14px; }
   aside .hint { margin: 12px 0 0; color: var(--muted); font-size: 13px; }
+  #editor { width: min(520px, calc(100% - 32px)); max-width: none; }
+  #confirm { width: min(460px, calc(100% - 32px)); }
+  .ed-grid { display: grid; gap: 12px; }
+  .ed-grid label.lbl { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
+  .ed-grid input, .ed-grid select { padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--ink); min-width: 0; width: 100%; }
+  .ed-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .ed-error { margin: 12px 0 0; color: var(--red); font-weight: 500; }
+  .btn.danger { background: var(--red); border-color: var(--red); color: #FFFFFF; }
+  .btn.danger:hover { filter: brightness(.92); background: var(--red); }
+  #wbs-actions { margin: 4px 0 16px; padding-top: 12px; border-top: 1px solid var(--rule); }
 </style>
 </head>
 <body>
@@ -418,6 +428,7 @@
 
 <div class="status">
   <div class="controls" style="margin-left:auto">
+    <button type="button" class="btn" id="wbs-add" hidden>Ajouter un workpackage</button>
     <button type="button" class="btn" id="options-btn" aria-expanded="false" aria-controls="options">Attributs affichés</button>
     <div class="seg" role="group" aria-label="Zoom">
       <button type="button" id="zoom-out" aria-label="Zoom arrière">−</button>
@@ -448,6 +459,28 @@
   </div>
   <aside id="details" hidden aria-live="polite"></aside>
 </main>
+
+<dialog id="editor" aria-labelledby="editor-title">
+  <form id="editor-form" novalidate>
+    <h2 id="editor-title"></h2>
+    <div class="ed-grid" id="editor-body"></div>
+    <p class="ed-error" id="ed-error" role="alert" hidden></p>
+    <div class="actions">
+      <button type="button" class="btn" id="ed-cancel">Annuler</button>
+      <button type="submit" class="btn primary" id="ed-save">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="confirm" aria-labelledby="confirm-title">
+  <h2 id="confirm-title"></h2>
+  <p id="confirm-text"></p>
+  <p class="ed-error" id="confirm-error" role="alert" hidden></p>
+  <div class="actions">
+    <button type="button" class="btn" id="confirm-cancel">Annuler</button>
+    <button type="button" class="btn danger" id="confirm-ok">Supprimer</button>
+  </div>
+</dialog>
 
 <div class="toast" id="toast" role="status" hidden></div>
 
@@ -982,8 +1015,9 @@ var BOOT = <?!= boot ?>;
     toast((err && err.message) || 'Erreur inconnue.', true);
   }
 
-  function load() {
+  function load(keep) {
     var ticket = ++state.seq;
+    var scroll = keep ? { x: $('canvas').scrollLeft, y: $('canvas').scrollTop } : null;
     state.data = null;
     closeDetails();
     remember();
@@ -1009,13 +1043,15 @@ var BOOT = <?!= boot ?>;
       if (d.mode === 'teams') fillTeamPicker(d.teams);
       setSummary();
       draw();
-      initialView();
+      if (scroll) { $('canvas').scrollLeft = scroll.x; $('canvas').scrollTop = scroll.y; } else initialView();
+      selectPending();
     }).catch(function (e) { if (ticket === state.seq) showError(e); });
   }
 
   function setSummary() {
     var d = state.data, s = $('summary'), t = $('title'), ctx = $('context');
     clear(ctx);
+    $('wbs-add').hidden = !(state.tab === 'wbs' && d && d.canCreate);
     if (!d) { s.textContent = ''; return; }
     if (state.tab === 'wbs') {
       t.textContent = 'WBS — ' + d.project.code + ' ' + d.project.name;
@@ -1184,6 +1220,7 @@ var BOOT = <?!= boot ?>;
         ['Statut', n.status], ['Imputation', n.charge_code], ['Marge', flt]
       ]));
       if (n.late) nodes.push(el('p', { class: 'flag alert', text: 'Au moins un élément est en retard sur sa date de fin prévue.' }));
+      if (n.canEdit) nodes.push(wbsActions(n));
     } else if (state.data.mode === 'teams') {
       nodes.push(el('h2', { text: n.name }), el('p', { class: 'kind', text: 'Équipe hiérarchique' }));
       nodes.push(facts([['Centre de coût', n.cost_center], ['Responsable', n.manager ? n.manager.name : 'Non désigné'], ['Membres', n.member_count]]));
@@ -1194,6 +1231,180 @@ var BOOT = <?!= boot ?>;
     if (BOOT.appsheetUrl) nodes.push(el('div', { class: 'links' }, [el('a', { class: 'btn', href: BOOT.appsheetUrl, target: '_blank', rel: 'noopener', text: 'Modifier dans AppSheet' })]));
     openDetails(nodes);
   }
+
+  // ------------------------------------------------------------ création et édition du WBS
+  var KIND_NAMES = { wp: 'workpackage', Livrable: 'livrable', Jalon: 'jalon' };
+
+  function ensurePeople() {
+    if (state.people) return Promise.resolve(state.people);
+    return call('resources.list', { limit: 500 }).then(function (rows) { state.people = rows; return rows; }).catch(function () { return []; });
+  }
+  function below(id) {
+    var out = [];
+    state.data.nodes.forEach(function (n) { if (n.parent === id) { out.push(n); out = out.concat(below(n.id)); } });
+    return out;
+  }
+  function selectPending() {
+    var id = state.pendingSelect;
+    state.pendingSelect = '';
+    if (id && state.data && state.data.nodes.some(function (n) { return n.id === id; })) showNode(id);
+  }
+  function openDialog(d) { if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
+  function closeDialog(d) { if (d.close) d.close(); else d.removeAttribute('open'); }
+
+  /** Boutons du panneau de détail : seulement ceux que le serveur autorise pour cette carte. */
+  function wbsActions(n) {
+    var box = el('div', { class: 'links', id: 'wbs-actions' });
+    var add = function (label, kind, id) {
+      box.appendChild(el('button', { type: 'button', class: 'btn', id: id, text: label, onclick: function () { openEditor({ mode: 'create', kind: kind, parent: n }); } }));
+    };
+    if (n.kind === 'project') { add('Ajouter un workpackage', 'wp', 'add-wp'); add('Ajouter un livrable', 'Livrable', 'add-deliverable'); add('Ajouter un jalon', 'Jalon', 'add-milestone'); }
+    if (n.kind === 'wp') {
+      if (!n.parent_ref) add('Ajouter un sous-workpackage', 'wp', 'add-subwp');
+      add('Ajouter un livrable', 'Livrable', 'add-deliverable'); add('Ajouter un jalon', 'Jalon', 'add-milestone');
+    }
+    if (n.kind !== 'project') {
+      box.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'edit-node', text: 'Modifier', onclick: function () { openEditor({ mode: 'edit', kind: n.kind === 'wp' ? 'wp' : n.item_type, node: n }); } }));
+      box.appendChild(el('button', { type: 'button', class: 'btn', id: 'delete-node', text: 'Supprimer', onclick: function () { openDelete(n); } }));
+    }
+    return box;
+  }
+
+  function parentChoices(kind, n) {
+    var hasKids = kind === 'wp' && state.data.nodes.some(function (x) { return x.parent_ref === n.ref; });
+    var out = [{ value: '', label: 'Projet (racine)' }];
+    if (hasKids) return out;
+    state.data.nodes.forEach(function (x) {
+      if (x.kind !== 'wp') return;
+      if (kind === 'wp' && (x.parent_ref || x.ref === n.ref)) return;
+      out.push({ value: x.ref, label: (x.code ? x.code + ' ' : '') + x.name });
+    });
+    return out;
+  }
+
+  function openEditor(spec) {
+    ensurePeople().then(function (people) {
+      var create = spec.mode === 'create', kind = spec.kind, n = spec.node || {};
+      var isSub = create && kind === 'wp' && spec.parent.kind === 'wp';
+      $('editor-title').textContent = create ? (isSub ? 'Nouveau sous-workpackage' : 'Nouveau ' + KIND_NAMES[kind]) : 'Modifier ' + (kind === 'wp' ? 'le workpackage' : 'le ' + KIND_NAMES[kind]);
+      var body = $('editor-body'); clear(body);
+      var fields = {};
+      var input = function (id, type, value, extra) { var i = el('input', Object.assign({ type: type, id: id }, extra || {})); i.value = value || ''; fields[id] = i; return i; };
+      var select = function (id, options, value) {
+        var s = el('select', { id: id }, options.map(function (o) { return el('option', { value: o.value, text: o.label }); }));
+        s.value = value || ''; fields[id] = s; return s;
+      };
+      var row = function (label, control) { return el('label', { class: 'lbl' }, [label, control]); };
+      body.appendChild(row('Nom', input('ed-name', 'text', create ? '' : n.name, { maxlength: '120', autocomplete: 'off' })));
+      if (kind === 'wp') {
+        body.appendChild(el('div', { class: 'ed-row2' }, [
+          row('Code WBS', input('ed-code', 'text', create ? '' : n.code, { maxlength: '20', placeholder: create ? 'automatique' : '' })),
+          row('Code d’imputation', input('ed-charge', 'text', create ? '' : n.charge_code, { maxlength: '40' }))]));
+      } else if (kind === 'Livrable') {
+        body.appendChild(el('div', { class: 'ed-row2' }, [
+          row('Début', input('ed-start', 'date', create ? '' : n.raw_start)), row('Fin', input('ed-finish', 'date', create ? '' : n.raw_finish))]));
+      } else {
+        body.appendChild(el('div', { class: 'ed-row2' }, [
+          row('Date', input('ed-date', 'date', create ? '' : (n.raw_finish || n.raw_start))),
+          row('Catégorie', select('ed-cat', [{ value: '', label: '—' }, { value: 'Revue', label: 'Revue' }, { value: 'Client', label: 'Client' }, { value: 'Interne', label: 'Interne' }], create ? '' : n.milestone_category))]));
+      }
+      body.appendChild(row('Responsable', select('ed-owner', [{ value: '', label: 'Aucun' }].concat(people.map(function (p) {
+        return { value: p.resource_id, label: p.name + (p.job_function ? ' — ' + p.job_function : '') };
+      })), create ? '' : n.owner_id)));
+      if (!create) {
+        var choices = parentChoices(kind, n);
+        if (choices.length > 1) body.appendChild(row('Rattaché à', select('ed-parent', choices, kind === 'wp' ? n.parent_ref : n.wp_ref)));
+      }
+      $('ed-error').hidden = true;
+      $('ed-save').disabled = false;
+      state.editor = { spec: spec, fields: fields };
+      openDialog($('editor'));
+      fields['ed-name'].focus();
+    });
+  }
+
+  function submitEditor() {
+    var ed = state.editor;
+    if (!ed) return;
+    var f = ed.fields, spec = ed.spec, n = spec.node || {}, kind = spec.kind, create = spec.mode === 'create';
+    var v = function (id) { return f[id] ? f[id].value : undefined; };
+    var values = { name: v('ed-name'), owner_resource_id: v('ed-owner') };
+    if (kind === 'wp') {
+      values.charge_code = v('ed-charge');
+      if (create || v('ed-code') !== n.code) values.wbs_code = v('ed-code'); // le code n'est envoyé que s'il a changé : un déplacement renumérote sinon
+    } else if (kind === 'Livrable') {
+      values.planned_start = v('ed-start'); values.planned_finish = v('ed-finish');
+    } else {
+      values.planned_finish = v('ed-date'); values.milestone_category = v('ed-cat');
+    }
+    var req;
+    if (create) {
+      req = call('wbs.create', { projectId: state.scopeId, kind: kind, parentId: spec.parent && spec.parent.kind === 'wp' ? spec.parent.ref : '', values: values }, true);
+    } else {
+      if (f['ed-parent'] && f['ed-parent'].value !== (kind === 'wp' ? n.parent_ref : n.wp_ref)) values[kind === 'wp' ? 'parent_wp_id' : 'wp_id'] = f['ed-parent'].value;
+      req = call('wbs.update', { kind: kind === 'wp' ? 'wp' : 'item', id: n.ref, version: n.version, patch: values }, true);
+    }
+    $('ed-save').disabled = true;
+    req.then(function (r) {
+      closeDialog($('editor'));
+      state.pendingSelect = (r.kind === 'wp' ? 'wp:' : 'item:') + r.id;
+      toast(create ? 'Créé : ' + r.record.name + '.' : 'Enregistré : ' + r.record.name + '.');
+      return load(true);
+    }).catch(function (err) {
+      $('ed-save').disabled = false;
+      var m = $('ed-error');
+      m.textContent = err && err.code === 'CONFLICT' ? 'Cet élément a été modifié entre-temps par quelqu’un d’autre : fermez, actualisez puis recommencez.' : ppmErrorText(err);
+      m.hidden = false;
+    });
+  }
+
+  function openDelete(n) {
+    var sub = n.kind === 'wp' ? below(n.id) : [];
+    var wps = sub.filter(function (x) { return x.kind === 'wp'; }).length, items = sub.filter(function (x) { return x.kind === 'item'; }).length;
+    var text;
+    if (n.kind === 'item') text = '« ' + n.name + ' » sera supprimé' + (n.dep_count ? ', ainsi que ' + plural(n.dep_count, 'lien de dépendance', 'liens de dépendance') : '') + '.';
+    else if (wps + items) {
+      var parts = [];
+      if (wps) parts.push(plural(wps, 'sous-workpackage', 'sous-workpackages'));
+      if (items) parts.push(plural(items, 'livrable ou jalon', 'livrables et jalons'));
+      text = 'Le workpackage « ' + n.name + ' » contient ' + parts.join(' et ') + '. Tout sera supprimé, avec les liens de dépendance de ces éléments.';
+    } else text = 'Le workpackage « ' + n.name + ' » sera supprimé.';
+    $('confirm-title').textContent = 'Supprimer ' + (n.kind === 'wp' ? 'le workpackage' : 'le ' + KIND_NAMES[n.item_type]) + ' ?';
+    $('confirm-text').textContent = text + ' La suppression est tracée dans le journal.';
+    $('confirm-error').hidden = true;
+    $('confirm-ok').disabled = false;
+    state.deleting = { node: n, cascade: wps + items > 0 };
+    openDialog($('confirm'));
+  }
+
+  function confirmDelete() {
+    var d = state.deleting;
+    if (!d) return;
+    $('confirm-ok').disabled = true;
+    call('wbs.delete', { kind: d.node.kind === 'wp' ? 'wp' : 'item', id: d.node.ref, version: d.node.version, cascade: d.cascade }, true).then(function (r) {
+      var x = r.deleted, parts = [];
+      if (x.wps) parts.push(plural(x.wps, 'workpackage', 'workpackages'));
+      if (x.items) parts.push(plural(x.items, 'livrable ou jalon', 'livrables et jalons'));
+      if (x.dependencies) parts.push(plural(x.dependencies, 'dépendance', 'dépendances'));
+      closeDialog($('confirm'));
+      toast('Supprimé : ' + parts.join(', ') + '.');
+      return load(true);
+    }).catch(function (err) {
+      $('confirm-ok').disabled = false;
+      var m = $('confirm-error');
+      m.textContent = err && err.code === 'CONFLICT' ? 'Modifié entre-temps par quelqu’un d’autre : fermez, actualisez puis recommencez.' : ppmErrorText(err);
+      m.hidden = false;
+    });
+  }
+
+  $('editor-form').addEventListener('submit', function (e) { e.preventDefault(); submitEditor(); });
+  $('ed-cancel').addEventListener('click', function () { closeDialog($('editor')); });
+  $('confirm-cancel').addEventListener('click', function () { closeDialog($('confirm')); });
+  $('confirm-ok').addEventListener('click', confirmDelete);
+  $('wbs-add').addEventListener('click', function () {
+    var root = state.data && state.data.nodes.filter(function (x) { return x.kind === 'project'; })[0];
+    if (root) openEditor({ mode: 'create', kind: 'wp', parent: root });
+  });
 
   // ------------------------------------------------------------ zoom
   function applyZoom() {
