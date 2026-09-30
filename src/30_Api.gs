@@ -282,6 +282,11 @@ defineAction('dependencies.create', function (p, ctx) {
   mustGet('PlanItem', requireParam(v, 'predecessor_id'));
   mustGet('PlanItem', requireParam(v, 'successor_id'));
   requireCan(ctx, 'wbs.edit', { type: 'planitem', id: v.successor_id });
+  if (v.predecessor_id === v.successor_id) throw new PpmError('VALIDATION', 'Un élément ne peut pas dépendre de lui-même.');
+  if (repoList('Dependency', function (d) { return d.predecessor_id === v.predecessor_id && d.successor_id === v.successor_id; }).length) {
+    throw new PpmError('VALIDATION', 'Cette dépendance existe déjà.');
+  }
+  if ('lag_days' in v) v.lag_days = checkLag_(v.lag_days);
   var edges = repoList('Dependency').map(function (d) { return { from: d.predecessor_id, to: d.successor_id }; });
   if (wouldCreateCycle(edges, { from: v.predecessor_id, to: v.successor_id })) {
     throw new PpmError('VALIDATION', 'Cette dépendance fermerait une boucle dans le planning.', { rule: 'CYCLE' });

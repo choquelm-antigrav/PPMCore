@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.7.0)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.8.0)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -37,6 +37,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `35_Workspace.gs` | Lot 2 : agenda Google et dossier Drive par projet, annuaire, import de personnes depuis une feuille |
 | `36_Digest.gs` | Lot 2 : mail récapitulatif (un par personne, quotidien ou hebdomadaire), réglages personnels |
 | `37_Simulation.gs` | Lot 4 : simulation « et si… », synthèse chiffrée d'un projet, signaux faibles (sans IA) |
+| `42_Org.gs` | 0.8.0 : dépendances d'un élément (`deps.item`), rôles attribuables (`roles.options`), retrait d'une personne, équipes hiérarchiques (`teams.*`) |
 | `41_Edit.gs` | 0.7.0 : création, modification, déplacement et suppression sûre du WBS (`wbs.create`, `wbs.update`, `wbs.delete`) |
 | `39_Account.gs` | 0.6.0 : Mon compte (`account.get`) et Administration (`admin.*` : réglages validés, santé, journaux, jours fériés) |
 | `38_Copilot.gs` | Lot 4 : copilote (modes off, manual, api), garde-fou des chiffres, journal AiLog, quota, questions, décisions sur les suggestions |
@@ -117,6 +118,7 @@ Actions disponibles :
 | Fil des changements (lot 2) | `changes.feed`, `changes.ack` |
 | Workspace (lot 2) | `workspace.status`, `workspace.enable`, `workspace.sync` |
 | Notifications (lot 2) | `settings.get`, `settings.set`, `digest.preview` |
+| Organisation (0.8.0) | `deps.item`, `dependencies.update`, `roles.options`, `people.remove`, `teams.create`, `teams.update`, `teams.delete` (avec `dependencies.create/delete`, `roles.assign/end`, `resources.*`) |
 | Édition du WBS (0.7.0) | `wbs.create`, `wbs.update`, `wbs.delete` (les actions `workpackages.*` et `planitems.*` restent disponibles pour l'API) |
 | Compte et administration (0.6.0) | `account.get`, `ui.set` ; réservées aux administrateurs : `admin.get`, `admin.set`, `admin.health`, `admin.logs`, `admin.holidays`, `admin.holidays.seed`, `admin.holidays.set` |
 | Copilote (lot 4) | `copilot.status`, `copilot.brief`, `simulations.run`, `copilot.ask`, `copilot.feedback`, `copilot.suggestions`, `insights.decide` |
@@ -124,7 +126,7 @@ Actions disponibles :
 ## Tests
 
 ```bash
-node tests/run.js                    # 123 tests : calendriers, graphe, droits, journal, règles, API, marges, vues, personnes, OBS, WBS,
+node tests/run.js                    # 128 tests : calendriers, graphe, droits, journal, règles, API, marges, vues, personnes, OBS, WBS,
                                      # préférences, baselines, écarts, fil des changements, agenda, Drive, annuaire, récapitulatif,
                                      # simulation, synthèse, copilote (faux modèle), signaux faibles, fabrication, installation
 node tools/build.js                  # fabrique dist/ (8 fichiers)
@@ -139,12 +141,24 @@ node tests/ui_suivi.js        # page Suivi et baseline du Gantt
 node tests/ui_copilote.js     # page Copilote, dans les trois modes
 node tests/ui_compte.js       # pages Mon compte et Administration
 node tests/ui_edit.js         # création et édition du WBS dans la page Structure
+node tests/ui_org.js          # dépendances, rôles, personnes et équipes dans la page Structure
 
 # Aperçu visuel des pages avec un jeu de données fourni, Agenda et Drive simulés (hors production) :
 node tests/preview_server.js 8123   # puis http://localhost:8123/?view=suivi&project=p1 (ou view=gantt, view=structure)
 ```
 
 Les tests chargent les fichiers `.gs` tels quels, avec des tables en mémoire à la place de Sheets et de faux services Agenda, Drive et annuaire. Tout changement du Core doit les garder verts.
+
+## Dépendances, rôles, personnes et équipes (0.8.0)
+
+Depuis la page **Structure**, sans AppSheet :
+
+- **Dépendances** : la carte d'un livrable ou d'un jalon liste ses prédécesseurs et ses successeurs, avec le type de lien (fin → début, début → début, fin → fin, début → fin) et le décalage en jours ouvrés. On ajoute un lien avec un élément du projet ou d'un autre projet du même programme, on le retire d'un clic. Le serveur refuse un lien qui fermerait une boucle, un doublon, un lien d'un élément avec lui-même, et vérifie le droit d'écrire sur l'élément successeur.
+- **Rôles** (organigramme par rôles) : sur la carte d'un rôle, « Ajouter une personne à ce rôle » et une croix pour retirer. Le bouton « Attribuer un rôle » de l'en-tête permet de choisir personne, périmètre et rôle. **On ne donne jamais un rôle plus élevé que le sien** sur le périmètre : la liste des rôles proposés s'adapte au périmètre choisi. Retirer un rôle le termine (il reste dans l'historique).
+- **Personnes** : « Ajouter une personne » (nom, adresse, statut, pays, fonction, organisation, fournisseur, capacité, équipe) et « Modifier la fiche » pour le chef de projet, le DPL et le Program Leader ; chacun garde la modification de sa propre fonction et de sa propre organisation. « Retirer cette personne » annonce d'abord les conséquences : ses rôles se terminent, elle cesse de diriger une équipe, et ses livrables et workpackages redeviennent sans responsable (ils ressortent dans les constats). Impossible de retirer sa propre fiche.
+- **Équipes** (organigramme par équipes) : créer une équipe ou une sous-équipe, la renommer, la rattacher, désigner son responsable, ajouter ou retirer des membres (une personne n'est que dans une équipe). Une équipe ne se supprime que vide, et jamais sous elle-même ni sous une de ses sous-équipes.
+
+L'import d'un WBS depuis Google Sheets est abandonné (décision du propriétaire).
 
 ## Édition du WBS (0.7.0)
 
@@ -159,7 +173,6 @@ Règles appliquées par le serveur (`41_Edit.gs`), donc aussi pour l'API :
 - **Supprimer** : un workpackage non vide refuse la suppression, sauf confirmation explicite (« cascade ») qui emporte ses sous-workpackages et ses éléments. Supprimer un élément retire aussi ses liens de dépendance et ses exigences de jalon, pour ne rien laisser dans le vide. Rien n'est effacé pour de bon : les lignes sont marquées supprimées et la suppression reste dans le journal.
 - L'avancement, le statut et le type d'un élément ne se modifient pas ici : l'avancement se déclare depuis le Planning.
 
-Pas encore d'écran pour les dépendances, les rôles, les personnes et les équipes (prochaine version) : ils se saisissent toujours par l'API ou dans AppSheet.
 
 ## Mon compte et Administration (0.6.0)
 

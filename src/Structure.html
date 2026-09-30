@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.7.0">
+<meta name="ppm-version" content="0.8.0">
 <?!= include('Style') ?>
 <style>
   main { display: grid; grid-template-columns: minmax(0, 1fr); }
@@ -64,6 +64,13 @@
   .btn.danger { background: var(--red); border-color: var(--red); color: #FFFFFF; }
   .btn.danger:hover { filter: brightness(.92); background: var(--red); }
   #wbs-actions { margin: 4px 0 16px; padding-top: 12px; border-top: 1px solid var(--rule); }
+  #genform { width: min(520px, calc(100% - 32px)); max-width: none; }
+  .deps h3 { margin: 4px 0 8px; font-size: 15px; font-weight: 600; }
+  .dep-row, aside ul.member-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; }
+  .dep-row { border-bottom: 1px solid var(--rule); font-size: 14px; }
+  .dep-row .muted { color: var(--muted); font-size: 13px; }
+  aside ul.member-list { list-style: none; padding-left: 0; margin: 0 0 12px; }
+  .deps .note { margin: 2px 0 8px; }
 </style>
 </head>
 <body>
@@ -95,6 +102,9 @@
 
 <div class="status">
   <div class="controls" style="margin-left:auto">
+    <button type="button" class="btn" id="org-role" hidden>Attribuer un rôle</button>
+    <button type="button" class="btn" id="org-person" hidden>Ajouter une personne</button>
+    <button type="button" class="btn" id="org-team" hidden>Ajouter une équipe</button>
     <button type="button" class="btn" id="wbs-add" hidden>Ajouter un workpackage</button>
     <button type="button" class="btn" id="options-btn" aria-expanded="false" aria-controls="options">Attributs affichés</button>
     <div class="seg" role="group" aria-label="Zoom">
@@ -147,6 +157,18 @@
     <button type="button" class="btn" id="confirm-cancel">Annuler</button>
     <button type="button" class="btn danger" id="confirm-ok">Supprimer</button>
   </div>
+</dialog>
+
+<dialog id="genform" aria-labelledby="gf-title">
+  <form id="gf-form" novalidate>
+    <h2 id="gf-title"></h2>
+    <div class="ed-grid" id="gf-body"></div>
+    <p class="ed-error" id="gf-error" role="alert" hidden></p>
+    <div class="actions">
+      <button type="button" class="btn" id="gf-cancel">Annuler</button>
+      <button type="submit" class="btn primary" id="gf-ok">Enregistrer</button>
+    </div>
+  </form>
 </dialog>
 
 <div class="toast" id="toast" role="status" hidden></div>
@@ -719,6 +741,10 @@ var BOOT = <?!= boot ?>;
     var d = state.data, s = $('summary'), t = $('title'), ctx = $('context');
     clear(ctx);
     $('wbs-add').hidden = !(state.tab === 'wbs' && d && d.canCreate);
+    var orgEdit = !!(state.tab === 'obs' && d && d.canEditAll);
+    $('org-person').hidden = !orgEdit;
+    $('org-role').hidden = !(orgEdit && d.mode === 'roles');
+    $('org-team').hidden = !(orgEdit && d.mode === 'teams');
     if (!d) { s.textContent = ''; return; }
     if (state.tab === 'wbs') {
       t.textContent = 'WBS — ' + d.project.code + ' ' + d.project.name;
@@ -832,7 +858,8 @@ var BOOT = <?!= boot ?>;
       nodes.push(el('h3', { text: 'Rôles dans cette vue', style: 'font-size:15px;margin:0 0 6px' }));
       nodes.push(el('ul', { class: 'roles' }, roles.map(function (t) { return el('li', { text: t }); })));
     }
-    if (p.canEdit) nodes.push(editForm(p));
+    if (state.data.canEditAll) nodes.push(personActions(p));
+    else if (p.canEdit) nodes.push(editForm(p));
     else nodes.push(el('p', { class: 'hint', text: 'Seuls la personne elle-même, un chef de projet, un DPL ou un Program Leader peuvent modifier cette fiche.' }));
     openDetails(nodes);
   }
@@ -888,12 +915,16 @@ var BOOT = <?!= boot ?>;
       ]));
       if (n.late) nodes.push(el('p', { class: 'flag alert', text: 'Au moins un élément est en retard sur sa date de fin prévue.' }));
       if (n.canEdit) nodes.push(wbsActions(n));
+      if (n.kind === 'item') nodes.push(depsBlock(n));
     } else if (state.data.mode === 'teams') {
       nodes.push(el('h2', { text: n.name }), el('p', { class: 'kind', text: 'Équipe hiérarchique' }));
       nodes.push(facts([['Centre de coût', n.cost_center], ['Responsable', n.manager ? n.manager.name : 'Non désigné'], ['Membres', n.member_count]]));
+      nodes.push(teamMembers(n));
+      if (state.data.canEditAll && n.team_id) nodes.push(teamActions(n));
     } else {
       nodes.push(el('h2', { text: n.role_label }), el('p', { class: 'kind', text: n.scope_label }));
-      nodes.push(el('ul', { class: 'roles' }, n.people.map(function (p) { return el('li', { text: p.name + (p.job_function ? ', ' + p.job_function : '') }); })));
+      nodes.push(roleMembers(n));
+      if (n.canAssign) nodes.push(roleActions(n));
     }
     if (BOOT.appsheetUrl) nodes.push(el('div', { class: 'links' }, [el('a', { class: 'btn', href: BOOT.appsheetUrl, target: '_blank', rel: 'noopener', text: 'Modifier dans AppSheet' })]));
     openDetails(nodes);
@@ -1026,6 +1057,9 @@ var BOOT = <?!= boot ?>;
   }
 
   function openDelete(n) {
+    state.confirmAction = null;
+    $('confirm-ok').textContent = 'Supprimer';
+    $('confirm-ok').className = 'btn danger';
     var sub = n.kind === 'wp' ? below(n.id) : [];
     var wps = sub.filter(function (x) { return x.kind === 'wp'; }).length, items = sub.filter(function (x) { return x.kind === 'item'; }).length;
     var text;
@@ -1045,6 +1079,7 @@ var BOOT = <?!= boot ?>;
   }
 
   function confirmDelete() {
+    if (state.confirmAction) return state.confirmAction();
     var d = state.deleting;
     if (!d) return;
     $('confirm-ok').disabled = true;
@@ -1072,6 +1107,312 @@ var BOOT = <?!= boot ?>;
     var root = state.data && state.data.nodes.filter(function (x) { return x.kind === 'project'; })[0];
     if (root) openEditor({ mode: 'create', kind: 'wp', parent: root });
   });
+
+  // ------------------------------------------------------------ 0.8.0 : dépendances, rôles, personnes, équipes
+  var COUNTRY_LIST = [['FR', 'France'], ['DE', 'Allemagne'], ['UK', 'Royaume-Uni'], ['IN', 'Inde']];
+  var DEP_TYPES = { FS: 'Fin → début', SS: 'Début → début', FF: 'Fin → fin', SF: 'Début → fin' };
+
+  function ensureTeams() {
+    if (state.teamsList) return Promise.resolve(state.teamsList);
+    return call('obs.teams', {}).then(function (d) { state.teamsList = d.teams; return d.teams; }).catch(function () { return []; });
+  }
+  function personOptions(people) {
+    return [{ value: '', label: '—' }].concat(people.map(function (p) { return { value: p.resource_id, label: p.name + (p.job_function ? ' — ' + p.job_function : '') }; }));
+  }
+  function teamOptions(teams, emptyLabel) {
+    return [{ value: '', label: emptyLabel || 'Aucune' }].concat(teams.map(function (t) { return { value: t.id, label: new Array(t.depth + 1).join('— ') + t.name }; }));
+  }
+  function fillSelect(sel, options, value) {
+    clear(sel);
+    options.forEach(function (o) { sel.appendChild(el('option', { value: o.value, text: o.label })); });
+    sel.value = value === undefined || value === null ? (options[0] ? options[0].value : '') : value;
+  }
+  function refreshAfter(id) {
+    state.people = null; state.teamsList = null;
+    if (id) state.pendingSelect = id;
+    return load(true);
+  }
+
+  /** Formulaire générique : spec = { title, note, ok, fields: [{ key, label, type, value, options, maxlength, placeholder, half }], after(inputs), onSubmit(values) → Promise }. */
+  function openForm(spec) {
+    $('gf-title').textContent = spec.title;
+    var body = $('gf-body'); clear(body);
+    var inputs = {}, pending = null;
+    var flush = function () { if (pending) { body.appendChild(el('div', { class: 'ed-row2' }, pending)); pending = null; } };
+    spec.fields.forEach(function (f) {
+      var c;
+      if (f.type === 'select') { c = el('select', { id: 'gf-' + f.key }); fillSelect(c, f.options || [], f.value === undefined || f.value === null ? undefined : f.value); }
+      else {
+        var attrs = { type: f.type || 'text', id: 'gf-' + f.key, autocomplete: 'off' };
+        if (f.maxlength) attrs.maxlength = String(f.maxlength);
+        if (f.placeholder) attrs.placeholder = f.placeholder;
+        if (f.type === 'number') { attrs.min = '0'; attrs.step = 'any'; }
+        c = el('input', attrs); c.value = f.value === undefined || f.value === null ? '' : f.value;
+      }
+      inputs[f.key] = c;
+      var lab = el('label', { class: 'lbl' }, [f.label, c]);
+      if (f.half) { pending = pending || []; pending.push(lab); if (pending.length === 2) flush(); }
+      else { flush(); body.appendChild(lab); }
+    });
+    flush();
+    if (spec.note) body.appendChild(el('p', { class: 'note', text: spec.note }));
+    if (spec.after) spec.after(inputs);
+    state.gform = { spec: spec, inputs: inputs };
+    $('gf-error').hidden = true; $('gf-ok').textContent = spec.ok || 'Enregistrer'; $('gf-ok').disabled = false;
+    openDialog($('genform'));
+    var first = body.querySelector('input, select'); if (first) first.focus();
+  }
+  function submitForm() {
+    var g = state.gform;
+    if (!g) return;
+    var values = {};
+    Object.keys(g.inputs).forEach(function (k) { values[k] = g.inputs[k].value; });
+    $('gf-ok').disabled = true;
+    Promise.resolve().then(function () { return g.spec.onSubmit(values); }).then(function () { closeDialog($('genform')); }).catch(function (err) {
+      $('gf-ok').disabled = false;
+      var m = $('gf-error');
+      m.textContent = err && err.code === 'CONFLICT' ? 'Modifié entre-temps par quelqu’un d’autre : fermez, actualisez puis recommencez.' : ppmErrorText(err);
+      m.hidden = false;
+    });
+  }
+  function openConfirm(title, text, okLabel, action) {
+    state.deleting = null;
+    $('confirm-title').textContent = title; $('confirm-text').textContent = text;
+    $('confirm-ok').textContent = okLabel; $('confirm-ok').className = 'btn danger';
+    $('confirm-error').hidden = true; $('confirm-ok').disabled = false;
+    state.confirmAction = function () {
+      $('confirm-ok').disabled = true;
+      return action().then(function () { closeDialog($('confirm')); }).catch(function (err) {
+        $('confirm-ok').disabled = false;
+        var m = $('confirm-error'); m.textContent = ppmErrorText(err); m.hidden = false;
+      });
+    };
+    openDialog($('confirm'));
+  }
+
+  // ---- dépendances (carte d'un livrable ou d'un jalon)
+  function depsBlock(n) {
+    var box = el('div', { class: 'deps', id: 'deps-box' }, [el('h3', { text: 'Dépendances' }), el('p', { class: 'note', text: 'Chargement…' })]);
+    call('deps.item', { itemId: n.ref }).then(function (d) { renderDeps(box, n, d); }).catch(function () { clear(box); });
+    return box;
+  }
+  function lagText(l) { return l ? (l > 0 ? ' +' : ' −') + Math.abs(l) + ' j' : ''; }
+  function renderDeps(box, n, d) {
+    clear(box);
+    box.appendChild(el('h3', { text: 'Dépendances' }));
+    var reload = function () { return call('deps.item', { itemId: n.ref }).then(function (x) { renderDeps(box, n, x); }); };
+    var afterChange = function () { state.pendingSelect = n.id; return load(true); };
+    var section = function (title, arr, incoming) {
+      box.appendChild(el('p', { class: 'kind', text: title }));
+      if (!arr.length) box.appendChild(el('p', { class: 'note', text: 'Aucune.' }));
+      arr.forEach(function (x) {
+        var label = (x.other.project_id !== d.item.project_id ? x.other.project_code + ' · ' : '') + x.other.name;
+        var row = el('div', { class: 'dep-row' }, [el('span', { text: label }), el('span', { class: 'muted', text: DEP_TYPES[x.dep_type] + lagText(x.lag_days) })]);
+        if (x.canEdit) row.appendChild(el('button', { type: 'button', class: 'icon-btn', title: 'Retirer ce lien', 'aria-label': 'Retirer le lien avec ' + x.other.name, text: '×', onclick: function () {
+          call('dependencies.delete', { id: x.id, version: x.version }, true).then(function () { toast('Lien retiré.'); return afterChange(); }).catch(function (e) { toast(ppmErrorText(e), true); });
+        } }));
+        box.appendChild(row);
+      });
+    };
+    section('Doit attendre (prédécesseurs)', d.predecessors, true);
+    section('Fait attendre (successeurs)', d.successors, false);
+    if (d.canEdit || d.candidates.length) {
+      var add = function (incoming) {
+        var list = d.candidates.filter(function (c) { return incoming ? d.canEdit : c.can_edit; });
+        if (!list.length) return null;
+        return el('button', { type: 'button', class: 'btn', id: incoming ? 'add-pred' : 'add-succ', text: incoming ? 'Ajouter un prédécesseur' : 'Ajouter un successeur', onclick: function () {
+          openForm({
+            title: incoming ? 'Ajouter un prédécesseur à « ' + n.name + ' »' : 'Ajouter un successeur à « ' + n.name + ' »', ok: 'Ajouter',
+            note: d.truncated ? 'La liste est limitée aux 400 premiers éléments.' : '',
+            fields: [
+              { key: 'other', label: incoming ? 'À terminer avant' : 'À faire après', type: 'select', value: '', options: [{ value: '', label: '—' }].concat(list.map(function (c) {
+                return { value: c.id, label: (c.project_id !== d.item.project_id ? c.project_code + ' · ' : '') + c.name + (c.wp ? ' (' + c.wp + ')' : '') };
+              })) },
+              { key: 'dep_type', label: 'Type de lien', type: 'select', value: 'FS', options: Object.keys(DEP_TYPES).map(function (k) { return { value: k, label: DEP_TYPES[k] }; }), half: true },
+              { key: 'lag_days', label: 'Décalage (jours ouvrés)', type: 'number', value: '0', half: true }
+            ],
+            onSubmit: function (v) {
+              if (!v.other) return Promise.reject({ message: 'Choisissez un élément.' });
+              var values = incoming ? { predecessor_id: v.other, successor_id: n.ref } : { predecessor_id: n.ref, successor_id: v.other };
+              values.dep_type = v.dep_type; values.lag_days = v.lag_days === '' ? 0 : Number(v.lag_days);
+              return call('dependencies.create', { values: values }, true).then(function () { toast('Lien ajouté.'); return afterChange(); });
+            }
+          });
+        } });
+      };
+      var links = el('div', { class: 'links' }, [add(true), add(false)]);
+      if (links.childNodes.length) box.appendChild(links);
+    }
+  }
+
+  // ---- rôles (carte d'un rôle)
+  function roleMembers(n) {
+    var canEnd = n.canAssign && n.rank >= n.min_rank;
+    return el('ul', { class: 'roles member-list' }, n.people.map(function (p) {
+      var li = el('li', {}, [el('span', { text: p.name + (p.job_function ? ', ' + p.job_function : '') })]);
+      if (canEnd) li.appendChild(el('button', { type: 'button', class: 'icon-btn', title: 'Retirer ' + p.name + ' de ce rôle', 'aria-label': 'Retirer ' + p.name + ' de ce rôle', text: '×', onclick: function () {
+        openConfirm('Retirer ' + p.name + ' ?', p.name + ' ne sera plus « ' + n.role_label + ' » sur ' + n.scope_label + '. L’affectation reste dans l’historique.', 'Retirer', function () {
+          return p.assignment_ids.reduce(function (chain, id) { return chain.then(function () { return call('roles.end', { id: id }, true); }); }, Promise.resolve())
+            .then(function () { toast(p.name + ' retiré(e) du rôle.'); return refreshAfter(n.id); });
+        });
+      } }));
+      return li;
+    }));
+  }
+  function roleActions(n) {
+    return el('div', { class: 'links', id: 'role-actions' }, [el('button', { type: 'button', class: 'btn primary', id: 'role-add', text: 'Ajouter une personne à ce rôle', onclick: function () {
+      ensurePeople().then(function (people) {
+        var here = {}; n.people.forEach(function (p) { here[p.resource_id] = true; });
+        openForm({
+          title: 'Ajouter à « ' + n.role_label + ' »', note: n.scope_label, ok: 'Ajouter',
+          fields: [
+            { key: 'resource_id', label: 'Personne', type: 'select', value: '', options: personOptions(people.filter(function (p) { return !here[p.resource_id]; })) },
+            { key: 'start_date', label: 'Depuis le (facultatif)', type: 'date', half: true }, { key: 'end_date', label: 'Jusqu’au (facultatif)', type: 'date', half: true }
+          ],
+          onSubmit: function (v) {
+            if (!v.resource_id) return Promise.reject({ message: 'Choisissez une personne.' });
+            return call('roles.assign', { values: { resource_id: v.resource_id, role_code: n.role_code, scope_type: n.scope_type, scope_id: n.scope_id, start_date: v.start_date, end_date: v.end_date } }, true)
+              .then(function () { toast('Rôle attribué.'); return refreshAfter(n.id); });
+          }
+        });
+      });
+    } })]);
+  }
+  function assignRoleGeneral() {
+    Promise.all([ensurePeople(), call('roles.options', {})]).then(function (r) {
+      var people = r[0], opt = r[1];
+      if (!opt.scopes.length) { toast('Vous ne pouvez attribuer de rôle sur aucun périmètre.', true); return; }
+      var byKey = {};
+      var scopes = opt.scopes.map(function (s) { var k = s.type + ':' + s.id; byKey[k] = s; return { value: k, label: s.label + (s.type === 'program' ? ' (programme)' : s.type === 'project' ? ' (projet)' : '') }; });
+      var roleOptions = function (key) { return opt.roles.filter(function (x) { return x.rank >= byKey[key].min_rank; }).map(function (x) { return { value: x.code, label: x.label }; }); };
+      openForm({
+        title: 'Attribuer un rôle', ok: 'Attribuer', note: 'Vous ne pouvez pas attribuer un rôle plus élevé que le vôtre sur le périmètre choisi.',
+        fields: [
+          { key: 'resource_id', label: 'Personne', type: 'select', value: '', options: personOptions(people) },
+          { key: 'scope', label: 'Périmètre', type: 'select', value: scopes[0].value, options: scopes },
+          { key: 'role_code', label: 'Rôle', type: 'select', options: roleOptions(scopes[0].value) }
+        ],
+        after: function (inputs) { inputs.scope.addEventListener('change', function () { fillSelect(inputs.role_code, roleOptions(inputs.scope.value)); }); },
+        onSubmit: function (v) {
+          if (!v.resource_id) return Promise.reject({ message: 'Choisissez une personne.' });
+          var i = v.scope.indexOf(':');
+          return call('roles.assign', { values: { resource_id: v.resource_id, role_code: v.role_code, scope_type: v.scope.slice(0, i), scope_id: v.scope.slice(i + 1) } }, true)
+            .then(function () { toast('Rôle attribué.'); return refreshAfter(''); });
+        }
+      });
+    }).catch(function (e) { toast(ppmErrorText(e), true); });
+  }
+
+  // ---- personnes
+  function openPersonForm(p) {
+    ensureTeams().then(function (teams) {
+      var create = !p; p = p || {};
+      var fields = [
+        { key: 'name', label: 'Nom', value: p.name, maxlength: 120 },
+        { key: 'resource_type', label: 'Statut', type: 'select', value: p.resource_type || 'Interne', options: [{ value: 'Interne', label: 'Interne' }, { value: 'Externe', label: 'Externe' }], half: true },
+        { key: 'country', label: 'Pays', type: 'select', value: p.country || '', options: [{ value: '', label: '—' }].concat(COUNTRY_LIST.map(function (c) { return { value: c[0], label: c[1] }; })), half: true },
+        { key: 'job_function', label: 'Fonction', value: p.job_function, maxlength: 80, half: true },
+        { key: 'organization', label: 'Organisation', value: p.organization, maxlength: 80, half: true },
+        { key: 'supplier', label: 'Fournisseur (si externe)', value: p.supplier, maxlength: 80, half: true },
+        { key: 'capacity', label: 'Capacité (jours par mois)', type: 'number', value: p.capacity, half: true },
+        { key: 'team_id', label: 'Équipe', type: 'select', value: p.team_id || '', options: teamOptions(teams) }
+      ];
+      if (create) fields.splice(1, 0, { key: 'email', label: 'Adresse e-mail (facultative)', value: '', maxlength: 120 });
+      openForm({
+        title: create ? 'Ajouter une personne' : 'Modifier la fiche de ' + p.name, ok: create ? 'Ajouter' : 'Enregistrer', fields: fields,
+        note: create ? '' : 'L’adresse e-mail ne se modifie que par l’administrateur.',
+        onSubmit: function (v) {
+          var values = { name: v.name, resource_type: v.resource_type, country: v.country, job_function: v.job_function, organization: v.organization,
+            supplier: v.supplier, team_id: v.team_id, capacity_days_month: v.capacity === '' ? '' : Number(v.capacity) };
+          var req;
+          if (create) { if (v.email.trim()) values.email = v.email.trim(); req = call('resources.create', { values: values }, true); }
+          else req = call('resources.update', { id: p.resource_id, version: p.version, patch: values }, true);
+          return req.then(function () { toast(create ? 'Personne ajoutée.' : 'Fiche enregistrée.'); closeDetails(); return refreshAfter(''); });
+        }
+      });
+    });
+  }
+  function personActions(p) {
+    return el('div', { class: 'links', id: 'person-actions' }, [
+      el('button', { type: 'button', class: 'btn primary', id: 'person-edit', text: 'Modifier la fiche', onclick: function () { openPersonForm(p); } }),
+      el('button', { type: 'button', class: 'btn', id: 'person-remove', text: 'Retirer cette personne', onclick: function () {
+        call('people.remove', { id: p.resource_id, dryRun: true }).then(function (s) {
+          var parts = [];
+          if (s.roles) parts.push(plural(s.roles, 'rôle terminé', 'rôles terminés'));
+          if (s.teams) parts.push(plural(s.teams, 'équipe sans responsable', 'équipes sans responsable'));
+          if (s.wps) parts.push(plural(s.wps, 'workpackage', 'workpackages') + ' à réattribuer');
+          if (s.items) parts.push(plural(s.items, 'livrable ou jalon', 'livrables et jalons') + ' à réattribuer');
+          openConfirm('Retirer ' + s.name + ' ?', s.name + ' ne sera plus dans les listes' + (parts.length ? ' : ' + parts.join(', ') : '') + '. La fiche reste dans l’historique.', 'Retirer', function () {
+            return call('people.remove', { id: p.resource_id, version: p.version }, true).then(function () { toast(s.name + ' retiré(e).'); closeDetails(); return refreshAfter(''); });
+          });
+        }).catch(function (e) { toast(ppmErrorText(e), true); });
+      } })
+    ]);
+  }
+
+  // ---- équipes
+  function teamMembers(n) {
+    var ul = el('ul', { class: 'roles member-list' });
+    if (n.manager) ul.appendChild(el('li', {}, [el('span', { text: n.manager.name + ' (responsable)' })]));
+    n.members.forEach(function (m) {
+      var li = el('li', {}, [el('span', { text: m.name + (m.job_function ? ', ' + m.job_function : '') })]);
+      if (state.data.canEditAll && n.team_id) li.appendChild(el('button', { type: 'button', class: 'icon-btn', title: 'Retirer ' + m.name + ' de l’équipe', 'aria-label': 'Retirer ' + m.name + ' de l’équipe', text: '×', onclick: function () {
+        call('resources.update', { id: m.resource_id, patch: { team_id: '' } }, true).then(function () { toast(m.name + ' retiré(e) de l’équipe.'); return refreshAfter(n.id); }).catch(function (e) { toast(ppmErrorText(e), true); });
+      } }));
+      ul.appendChild(li);
+    });
+    return ul;
+  }
+  function openTeamForm(team, parent) {
+    Promise.all([ensureTeams(), ensurePeople()]).then(function (r) {
+      var create = !team;
+      openForm({
+        title: create ? (parent ? 'Nouvelle sous-équipe de « ' + parent.name + ' »' : 'Nouvelle équipe') : 'Modifier l’équipe', ok: create ? 'Créer' : 'Enregistrer',
+        fields: [
+          { key: 'name', label: 'Nom', value: team ? team.name : '', maxlength: 80 },
+          { key: 'parent_team_id', label: 'Équipe parente', type: 'select', value: team ? team.parent_team_id : (parent ? parent.team_id : ''),
+            options: teamOptions(r[0].filter(function (t) { return !team || t.id !== team.team_id; }), 'Aucune (racine)') },
+          { key: 'manager_resource_id', label: 'Responsable', type: 'select', value: team ? team.manager_id : '', options: personOptions(r[1]) },
+          { key: 'cost_center', label: 'Centre de coût', value: team ? team.cost_center : '', maxlength: 40 }
+        ],
+        onSubmit: function (v) {
+          var values = { name: v.name, parent_team_id: v.parent_team_id, manager_resource_id: v.manager_resource_id, cost_center: v.cost_center };
+          var req = create ? call('teams.create', { values: values }, true) : call('teams.update', { id: team.team_id, version: team.version, patch: values }, true);
+          return req.then(function (rec) { toast(create ? 'Équipe créée.' : 'Équipe enregistrée.'); return refreshAfter('team:' + (create ? rec.id : team.team_id)); });
+        }
+      });
+    });
+  }
+  function teamActions(n) {
+    return el('div', { class: 'links', id: 'team-actions' }, [
+      el('button', { type: 'button', class: 'btn', id: 'team-add-member', text: 'Ajouter un membre', onclick: function () {
+        ensurePeople().then(function (people) {
+          var here = {}; n.members.forEach(function (m) { here[m.resource_id] = true; }); if (n.manager) here[n.manager.resource_id] = true;
+          openForm({
+            title: 'Ajouter un membre à « ' + n.name + ' »', ok: 'Ajouter', note: 'Une personne n’appartient qu’à une équipe : elle quitte la précédente.',
+            fields: [{ key: 'resource_id', label: 'Personne', type: 'select', value: '', options: personOptions(people.filter(function (p) { return !here[p.resource_id]; })) }],
+            onSubmit: function (v) {
+              if (!v.resource_id) return Promise.reject({ message: 'Choisissez une personne.' });
+              return call('resources.update', { id: v.resource_id, patch: { team_id: n.team_id } }, true).then(function () { toast('Membre ajouté.'); return refreshAfter(n.id); });
+            }
+          });
+        });
+      } }),
+      el('button', { type: 'button', class: 'btn', id: 'team-add-sub', text: 'Ajouter une sous-équipe', onclick: function () { openTeamForm(null, n); } }),
+      el('button', { type: 'button', class: 'btn primary', id: 'team-edit', text: 'Modifier l’équipe', onclick: function () { openTeamForm(n, null); } }),
+      el('button', { type: 'button', class: 'btn', id: 'team-delete', text: 'Supprimer l’équipe', onclick: function () {
+        openConfirm('Supprimer l’équipe ?', 'L’équipe « ' + n.name + ' » sera supprimée. Elle doit être vide : ni membres ni sous-équipes.', 'Supprimer', function () {
+          return call('teams.delete', { id: n.team_id, version: n.version }, true).then(function () { toast('Équipe supprimée.'); closeDetails(); return refreshAfter(''); });
+        });
+      } })
+    ]);
+  }
+
+  $('gf-form').addEventListener('submit', function (e) { e.preventDefault(); submitForm(); });
+  $('gf-cancel').addEventListener('click', function () { closeDialog($('genform')); });
+  $('org-person').addEventListener('click', function () { openPersonForm(null); });
+  $('org-team').addEventListener('click', function () { openTeamForm(null, null); });
+  $('org-role').addEventListener('click', assignRoleGeneral);
 
   // ------------------------------------------------------------ zoom
   function applyZoom() {

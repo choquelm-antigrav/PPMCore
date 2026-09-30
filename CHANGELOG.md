@@ -1,5 +1,14 @@
 # Journal des versions
 
+## 0.8.0 — dépendances, rôles, personnes et équipes depuis la page Structure
+
+- **Dépendances** : liste amont et aval sur la carte d'un livrable ou d'un jalon, ajout (même programme), retrait, type et décalage ; refus des boucles, doublons et liens d'un élément avec lui-même.
+- **Rôles** : ajouter ou retirer une personne sur la carte d'un rôle, bouton « Attribuer un rôle » ; jamais de rôle plus élevé que le sien, même dans les listes proposées.
+- **Personnes** : ajouter, modifier (formulaire complet pour les responsables), retirer avec annonce des conséquences (rôles terminés, responsabilités libérées).
+- **Équipes** : créer, sous-équipes, responsable, membres, suppression seulement si vide, jamais de boucle.
+- Formulaire générique réutilisable dans la page ; la fiche d'une personne pour un responsable est désormais le formulaire complet.
+- L'import d'un WBS depuis Google Sheets est abandonné. Tests : 128, plus l'essai du parcours dans la page.
+
 ## 0.7.0 — création et édition du WBS depuis la page Structure
 
 - **Ajouter, modifier, déplacer, supprimer** des workpackages, sous-workpackages, livrables et jalons dans l'onglet Découpage (WBS) : boutons dans le détail de chaque carte, et « Ajouter un workpackage » en haut de page. Les boutons n'apparaissent que là où le serveur autorise l'action.

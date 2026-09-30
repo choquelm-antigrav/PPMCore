@@ -328,3 +328,5 @@ AppSheet reste utilisable pour ces tables, mais **il ne passe pas par ces règle
 - **Ne supprimez pas** un workpackage dans AppSheet : son contenu resterait sans rattachement, et les dépendances d'un élément supprimé resteraient en place. Utilisez le bouton « Supprimer » de la page Structure.
 - Les codes WBS ne sont pas numérotés automatiquement dans AppSheet.
 - Pour éviter les écarts, vous pouvez rendre les tables `WorkPackage` et `PlanItem` en lecture seule dans AppSheet (Update et Delete désactivés) et n'y garder que la consultation.
+
+Même remarque pour les personnes, les rôles et les équipes (0.8.0) : ils se gèrent depuis la page Structure, qui applique la règle du rang pour les rôles et libère les responsabilités d'une personne retirée. AppSheet ne le fait pas : retirer une personne dans AppSheet laisserait ses rôles en cours et ses livrables à son nom. Depuis la 0.8.0, l'outil se passe entièrement d'AppSheet.

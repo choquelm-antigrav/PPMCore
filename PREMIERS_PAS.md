@@ -1,4 +1,4 @@
-# Premiers pas : installer et essayer PPM (version 0.7.0)
+# Premiers pas : installer et essayer PPM (version 0.8.0)
 
 Environ 15 minutes. Pas besoin d'AppSheet pour ces essais. Tout ce qu'il faut est dans le dossier `dist` de l'archive : **8 fichiers**.
 
@@ -34,7 +34,7 @@ Ouvrir l'URL suivie de `?view=gantt`. Les onglets en haut de chaque page mènent
 | Page | Ce qu'on essaie |
 | --- | --- |
 | **Planning** | Chemin critique ; glisser une barre pour la déplacer ; cliquer une barre pour déclarer un avancement. |
-| **Structure** | Organigramme (par rôles ou par équipes) et WBS ; bouton **Attributs affichés**. Onglet **Découpage (WBS)** : **Ajouter un workpackage**, puis cliquer une carte pour **Ajouter** un livrable ou un jalon, **Modifier** (nom, responsable, dates, rattachement) ou **Supprimer**. |
+| **Structure** | Organigramme (par rôles ou par équipes) et WBS ; bouton **Attributs affichés**. Onglet **Découpage (WBS)** : **Ajouter un workpackage**, puis cliquer une carte pour **Ajouter** un livrable ou un jalon, **Modifier** (nom, responsable, dates, rattachement) ou **Supprimer** ; sur un livrable, la section **Dépendances**. En **Organisation** : « Attribuer un rôle », « Ajouter une personne », « Ajouter une équipe », et les boutons de chaque carte. |
 | **Suivi** | Onglet **Baselines** → **Figer la baseline B0**. Déplacer ensuite une barre dans le Planning : un trait gris garde l'ancienne place. **Changements à valider** → **Tout valider**. **Agenda et Drive** → **Créer l'agenda et le dossier du projet**.  |
 | **Mon compte** (icône de personne, en haut à droite) | **Notifications** → **Me l'envoyer maintenant** : le mail récapitulatif arrive dans votre boîte. **Affichage** : choisir le thème et la page d'accueil. |
 | **Administration** (icône d'engrenage, administrateurs seulement) | **Santé** : l'installation doit être « Conforme ». **Réglages** : ajouter un second administrateur. **Jours fériés** : ajouter une année. |

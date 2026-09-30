@@ -114,7 +114,7 @@ function personCard_(r, teamsById, ctx, editAll) {
     job_function: r.job_function || '', organization: r.organization || '',
     team: team ? team.name : '', country: r.country || '', resource_type: r.resource_type || '',
     supplier: r.supplier || '', capacity: isBlank(r.capacity_days_month) ? '' : Number(r.capacity_days_month),
-    version: r.version, canEdit: editAll || (!!ctx.resourceId && ctx.resourceId === r.id)
+    team_id: r.team_id || '', version: r.version, canEdit: editAll || (!!ctx.resourceId && ctx.resourceId === r.id)
   };
 }
 
@@ -171,9 +171,11 @@ function buildObsTree(data, scopeType, scopeId, today, ctx) {
       order.push(key);
     }
     var g = groups[key];
-    if (g.seen[res.id]) return;
-    g.seen[res.id] = true;
-    g.people.push(personCard_(res, teamsById, ctx, editAll));
+    if (g.seen[res.id]) { g.seen[res.id].assignment_ids.push(a.id); return; } // la même affectation en double : on garde toutes les lignes pour pouvoir les terminer ensemble
+    var card = personCard_(res, teamsById, ctx, editAll);
+    card.assignment_ids = [a.id];
+    g.seen[res.id] = card;
+    g.people.push(card);
   });
 
   var list = order.map(function (k) { return groups[k]; });
@@ -199,7 +201,9 @@ function buildObsTree(data, scopeType, scopeId, today, ctx) {
     people += g.people.length;
     return {
       id: g.id, parent: g.parent, role_code: g.role_code, role_label: g.role_label,
-      scope_type: g.scope_type, scope_id: g.scope_id, scope_label: g.scope_label, people: g.people
+      scope_type: g.scope_type, scope_id: g.scope_id, scope_label: g.scope_label, people: g.people,
+      rank: g.rank, canAssign: !!ctx && can(ctx, 'roles.assign', { type: g.scope_type, id: g.scope_id }),
+      min_rank: ctx && !ctx.isAdmin ? bestRankOn_(ctx, { type: g.scope_type, id: g.scope_id }) : 0
     };
   });
   return {
@@ -258,6 +262,7 @@ function buildTeamTree(data, rootTeamId, ctx) {
     return {
       id: 'team:' + t.id, parent: parentOf[t.id] && inBranch(parentOf[t.id]) && t.id !== rootTeamId ? 'team:' + parentOf[t.id] : '',
       team_id: t.id, name: t.name, cost_center: t.cost_center || '', manager: mgr ? card(mgr) : null,
+      version: t.version, parent_team_id: parentOf[t.id] || '', manager_id: mgr ? mgr.id : '',
       members: members, member_count: members.length, sort: pathOf(t.id)
     };
   }).sort(function (a, b) { return a.sort.localeCompare(b.sort, 'fr'); });
@@ -467,6 +472,10 @@ defineAction('resources.list', function (p, ctx) {
   return paginate(rows, p);
 });
 
+function assertTeam_(values) {
+  if (!isBlank(values.team_id) && !repoGet('HierarchicalTeam', values.team_id)) throw new PpmError('VALIDATION', 'Équipe introuvable.');
+}
+
 function cleanResourceValues_(values, allowed) {
   var out = {};
   Object.keys(values || {}).forEach(function (k) {
@@ -484,6 +493,7 @@ defineAction('resources.create', function (p, ctx) {
     if (findResourceByEmail(values.email)) throw new PpmError('VALIDATION', 'Cette adresse est déjà utilisée par une autre personne.');
     values = fillFromDirectory_(values); // nom, fonction, organisation depuis l'annuaire s'ils manquent
   }
+  assertTeam_(values);
   return repoInsert('Resource', values, ctx.actx);
 });
 
@@ -500,6 +510,7 @@ defineAction('resources.update', function (p, ctx) {
     throw new PpmError('FORBIDDEN', 'Champ(s) non modifiable(s) par vous : ' + refused.join(', ') +
       (editAll ? '' : ' (vous pouvez modifier votre fonction et votre organisation).'));
   }
+  assertTeam_(patch);
   return repoUpdate('Resource', id, patch, p.version, ctx.actx);
 });
 

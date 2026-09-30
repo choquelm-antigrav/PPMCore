@@ -151,10 +151,13 @@ function openPage(user, boot) {
   p.click(carlG);
   check(p.doc.querySelector('#details h2').textContent === 'Carl', 'détail de Carl');
   check(p.doc.getElementById('details').textContent.includes('Sous-traitant Alpha') && p.doc.getElementById('details').textContent.includes('Alpha GmbH'), 'tous les attributs dans le détail, même ceux masqués sur la carte');
-  check(!!p.doc.getElementById('edit-function'), 'formulaire de fiche pour un chef de projet');
-  p.doc.getElementById('edit-function').value = 'Ingénieur essais senior';
-  p.doc.getElementById('edit-org').value = '  Alpha   Test ';
-  p.doc.querySelector('form.edit').dispatchEvent(new p.w.Event('submit', { cancelable: true }));
+  check(!!p.doc.getElementById('person-edit') && !!p.doc.getElementById('person-remove'), 'un chef de projet dispose de « Modifier la fiche » et « Retirer cette personne »');
+  p.click(p.doc.getElementById('person-edit'));
+  await p.until(() => p.doc.getElementById('gf-job_function'));
+  check(p.doc.getElementById('gf-name').value === 'Carl' && p.doc.getElementById('gf-resource_type').value === 'Externe' && p.doc.getElementById('gf-country').value === 'DE', 'formulaire complet prérempli');
+  p.doc.getElementById('gf-job_function').value = 'Ingénieur essais senior';
+  p.doc.getElementById('gf-organization').value = '  Alpha   Test ';
+  p.doc.getElementById('gf-form').dispatchEvent(new p.w.Event('submit', { cancelable: true }));
   await p.until(() => c.repoGet('Resource', carl.id).job_function === 'Ingénieur essais senior');
   check(c.repoGet('Resource', carl.id).organization === 'Alpha Test', 'fiche enregistrée, espaces nettoyés');
   await p.until(() => p.texts().includes('Fonction : Ingénieur essais senior'));
