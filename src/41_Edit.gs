@@ -114,10 +114,12 @@ defineAction('wbs.create', function (p, ctx) {
       requireCan(ctx, 'wbs.edit', parent ? wbsScope_('workpackage', parent.id) : wbsScope_('project', projectId));
       var wps = projectWps_(projectId);
       var code = isBlank(v.wbs_code) ? nextWbsCode_(wps, parent) : checkWbsCode_(wps, v.wbs_code, '');
-      var rec = repoInsert('WorkPackage', {
+      var newWp = {
         project_id: projectId, parent_wp_id: parent ? parent.id : '', wbs_code: code, name: name, owner_resource_id: owner,
         charge_code: wbsShortText_(v.charge_code, 40, 'Code d’imputation')
-      }, ctx.actx);
+      };
+      applyWpCpn_(ctx, { project_id: projectId, parent_wp_id: parent ? parent.id : '', cpn: '', cpn_label: '', id: '' }, v, newWp);
+      var rec = repoInsert('WorkPackage', newWp, ctx.actx);
       return { kind: 'wp', id: rec.id, record: rec };
     }
     if (!isBlank(parentId)) {
@@ -154,6 +156,7 @@ defineAction('wbs.update', function (p, ctx) {
       if ('owner_resource_id' in patch) out.owner_resource_id = wbsOwner_(patch.owner_resource_id);
       if ('charge_code' in patch) out.charge_code = wbsShortText_(patch.charge_code, 40, 'Code d’imputation');
       if ('wbs_code' in patch) out.wbs_code = checkWbsCode_(wps, patch.wbs_code, id);
+      applyWpCpn_(ctx, w, patch, out);
       if ('parent_wp_id' in patch && String(patch.parent_wp_id || '') !== String(w.parent_wp_id || '')) {
         var np = wbsParentWp_(patch.parent_wp_id, w.project_id, id);
         if (np && wps.some(function (c) { return c.parent_wp_id === id; })) {
@@ -202,6 +205,12 @@ function detachItem_(itemId, actx) {
   deps.forEach(function (d) { repoSoftDelete('Dependency', d.id, null, actx); });
   var reqs = repoList('MilestoneRequirement', function (r) { return r.milestone_id === itemId || r.deliverable_id === itemId; });
   reqs.forEach(function (r) { repoSoftDelete('MilestoneRequirement', r.id, null, actx); });
+  // Budget et répartition des PO du livrable : la ligne de budget et ses mois, le lien de PO (le montant de la PO reste, « non affecté »).
+  repoList('BudgetLine', function (l) { return l.deliverable_id === itemId; }).forEach(function (l) {
+    repoList('BudgetPhasing', function (x) { return x.budget_line_id === l.id; }).forEach(function (x) { repoSoftDelete('BudgetPhasing', x.id, null, actx); });
+    repoSoftDelete('BudgetLine', l.id, null, actx);
+  });
+  repoList('PurchaseOrderLink', function (l) { return l.deliverable_id === itemId; }).forEach(function (l) { repoSoftDelete('PurchaseOrderLink', l.id, null, actx); });
   return { dependencies: deps.length, requirements: reqs.length };
 }
 

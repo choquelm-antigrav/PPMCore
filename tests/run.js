@@ -14,6 +14,7 @@ require('./test_perf')();
 require('./test_account')();
 require('./test_edit')();
 require('./test_org')();
+require('./test_budget')();
 console.log('\n' + results.passed + ' réussis, ' + results.failed + ' en échec');
 if (results.failed) {
   results.failures.forEach((f) => console.log('\n✗ ' + f.name + '\n' + (f.error && f.error.stack)));

@@ -79,10 +79,27 @@ c.setProp(c.PROP.DATA_ID, 'donnees'); c.setProp(c.PROP.HISTORY_ID, 'historique')
 c.TRIGGER_LIST = () => ['nightlyRun', 'sendDigests'];
 c.nightlyRun();
 call('admin@entreprise.com', 'admin.set', { values: { ai_quota: 40, logo_url: 'https://exemple.test/logo.svg' } });
+{ // budget, CPN et commandes d'achat d'exemple
+  const A = 'alice@entreprise.com';
+  const res = (n) => c.repoList('Resource').find((r) => r.name === n);
+  const wp = (n) => c.repoList('WorkPackage').find((x) => x.name === n && !x.parent_wp_id);
+  const pid = byName('Note de calcul primaire').project_id;
+  call(A, 'rates.set', { values: { profile: 'Ingénieur', country: 'FR', daily_rate: 540, effective_date: '2026-01-01' } });
+  call(A, 'rates.assign', { resource_id: res('Fay Colin').id, rate_profile: 'Ingénieur' });
+  call(A, 'cpn.set', { projectId: pid, cpn: 'CPN-2401', cpn_label: 'Nacelle NAC-1 — conception' });
+  call(A, 'wbs.update', { kind: 'wp', id: wp('Essais').id, patch: { cpn: 'CPN-2402', cpn_label: 'Nacelle NAC-1 — essais' } });
+  call(A, 'budget.line.save', { values: { deliverable_id: byName('Note de calcul primaire').id, resource_id: res('Fay Colin').id, planned_days: 22 } });
+  call(A, 'budget.line.save', { values: { deliverable_id: byName('Rapport d’essais statiques').id, resource_id: res('Carl Weber').id, fixed_amount: 18000 } });
+  call(A, 'budget.line.save', { values: { deliverable_id: byName('Plan d’essais statiques').id, resource_id: res('Carl Weber').id, fixed_amount: 6000 } });
+  const link = (name, amount) => ({ deliverable_id: byName(name).id, amount });
+  call(A, 'po.save', { values: { po_number: 'CB-458812', cpn: 'CPN-2402', resource_id: res('Carl Weber').id, description: 'Essais statiques, banc 2', start_date: '2026-09-01', end_date: '2026-12-18', amount: 15000, status: 'Lancée', gr_due_date: '2026-10-01' }, links: [link('Rapport d’essais statiques', 15000)] });
+  call(A, 'po.save', { values: { po_number: 'CB-459107', cpn: 'CPN-2402', resource_id: res('Carl Weber').id, description: 'Plan d’essais', start_date: '2026-10-05', end_date: '2026-11-13', amount: 6500, status: 'Lancée', gr_due_date: '2026-10-09' }, links: [link('Plan d’essais statiques', 6500)] });
+  call(A, 'po.save', { values: { po_number: 'CB-460001', cpn: 'CPN-2402', resource_id: res('Dora Schmidt').id, description: 'Qualification', amount: 4000, status: 'À faire', gr_due_date: '2027-01-20' }, links: [] });
+}
 
 const src = (f) => fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8');
 const deps = process.env.UI_DEPS || path.join(__dirname, '..', 'node_modules');
-const pages = { structure: 'Structure.html', suivi: 'Suivi.html', gantt: 'Gantt.html', copilote: 'Copilote.html', compte: 'Compte.html', admin: 'Admin.html' };
+const pages = { structure: 'Structure.html', suivi: 'Suivi.html', gantt: 'Gantt.html', copilote: 'Copilote.html', compte: 'Compte.html', admin: 'Admin.html', budget: 'Budget.html' };
 function template(view) {
   let html = src(pages[view] || 'Structure.html').replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Header') ?>", src('Header.html'));
   if (view === 'gantt') {
@@ -104,8 +121,8 @@ const server = http.createServer((req, res) => {
     }); return;
   }
   const view = url.searchParams.get('view') || 'structure';
-  const defTab = { structure: 'obs', suivi: 'ecarts', gantt: '', copilote: 'synthese', compte: 'fiche', admin: 'reglages' }[view];
-  const boot = { project: url.searchParams.get('project') === 'p1' ? p1.id : (url.searchParams.get('project') || ''), program: '', tab: url.searchParams.get('tab') || defTab, mode: url.searchParams.get('mode') || '', baseUrl: '', appsheetUrl: '', version: 'preview', view: view, home: 'gantt', isAdmin: (url.searchParams.get('as') || user) === 'admin@entreprise.com' };
+  const defTab = { structure: 'obs', suivi: 'ecarts', gantt: '', copilote: 'synthese', compte: 'fiche', admin: 'reglages', budget: 'bilan' }[view];
+  const boot = { project: url.searchParams.get('project') === 'p1' ? p1.id : (url.searchParams.get('project') || ''), program: '', tab: url.searchParams.get('tab') || defTab, mode: url.searchParams.get('mode') || '', baseUrl: '', appsheetUrl: '', version: 'preview', view: view, home: 'gantt', isAdmin: (url.searchParams.get('as') || user) === 'admin@entreprise.com', canBudget: true };
   if (url.searchParams.get('program')) boot.program = prog.id;
   const as = url.searchParams.get('as');
   const rpc = as ? '/rpc?as=' + encodeURIComponent(as) : '/rpc';

@@ -77,6 +77,11 @@ function evaluateRules(data, today, holFor) {
       'Vérifier avec le responsable si la date de fin tient toujours.');
   });
 
+  // Commandes d'achat : GR à faire, PO à lancer, dépassement du budget externe (calculés par poFindings_, sans montant).
+  (data.poFindings || []).forEach(function (f) {
+    if (activeProject[f.projectId]) push(f.projectId, f.rule, f.severity, f.targetType, f.targetId, f.message, f.suggestion);
+  });
+
   // Projet actif, planifié, sans baseline : les écarts ne peuvent pas être mesurés.
   projects.forEach(function (p) {
     if (p.status !== 'Actif' || !isBlank(p.active_baseline_id)) return;

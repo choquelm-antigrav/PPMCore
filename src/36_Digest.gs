@@ -81,6 +81,19 @@ function buildDigests(data, today, opts) {
     if (due.length) sections.push({ title: 'À échéance dans les ' + THRESHOLDS.dueSoonDays + ' jours', lines: due.sort(byDate).map(function (l) { return Object.assign(l, { note: 'le ' + frDate_(l.date) }); }) });
     if (stale.length) sections.push({ title: 'Avancement à déclarer', lines: stale.sort(byDate).map(function (l) { return Object.assign(l, { note: 'dernière déclaration le ' + frDate_(l.date) }); }) });
 
+    // 1b. Mes GR à faire : PO lancées dont la date de GR attendue est passée ou approche (aucun montant dans le mail)
+    var resNames = {};
+    data.resources.forEach(function (x) { resNames[x.id] = x.name; });
+    var grLines = (data.purchaseOrders || []).filter(function (o) {
+      return live(o) && o.status === 'Lancée' && !isBlank(o.gr_due_date) && String(o.gr_due_date) <= soon &&
+        (o.owner_resource_id === r.id || (isBlank(o.owner_resource_id) && String(o.created_by || '').toLowerCase() === email));
+    }).sort(function (a, b) { return String(a.gr_due_date).localeCompare(String(b.gr_due_date)); }).map(function (o) {
+      var late = String(o.gr_due_date) < today, pid = (data.cpnProject || {})[normCpn_(o.cpn)];
+      return { text: 'PO ' + o.po_number + (resNames[o.resource_id] ? ' · ' + resNames[o.resource_id] : ''), tone: late ? 'alert' : '',
+        note: late ? 'GR à faire, attendue depuis le ' + frDate_(o.gr_due_date) : 'GR attendue le ' + frDate_(o.gr_due_date), url: pid ? link('budget', pid, '&tab=po') : '' };
+    });
+    if (grLines.length) sections.push({ title: 'Bons de réception (GR) à faire', tone: grLines.some(function (l) { return l.tone === 'alert'; }) ? 'alert' : '', lines: grLines });
+
     // 2. Pilotage : projets dont la personne valide les changements (chef de projet, DPL)
     var ctx = { resourceId: r.id, isAdmin: false, assignments: activeAssignments(r.id, data.assignments, today), lookup: lookup };
     var pilot = data.projects.filter(function (p) {
@@ -167,7 +180,9 @@ function loadDigestData_() {
     projects: projects, planitems: repoList('PlanItem'), resources: repoList('Resource'),
     assignments: repoList('RoleAssignment'), settings: repoList('UserSetting'), insights: repoList('Insight'),
     baselines: repoList('Baseline'), workpackages: repoList('WorkPackage'), budgetLines: repoList('BudgetLine'),
-    pendingChanges: pendingChangeCounts_(projects, repoList('ChangeEvent'))
+    pendingChanges: pendingChangeCounts_(projects, repoList('ChangeEvent')),
+    purchaseOrders: repoList('PurchaseOrder', function (o) { return o.status === 'Lancée'; }),
+    cpnProject: (function () { var m = {}, idx = cpnIndex_(); Object.keys(idx).forEach(function (k) { m[k] = idx[k].project.id; }); return m; })()
   };
 }
 

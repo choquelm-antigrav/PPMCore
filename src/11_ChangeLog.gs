@@ -35,6 +35,10 @@ function projectIdOf(table, rec) {
         var d = repoGet('PlanItem', rec.deliverable_id);
         return d ? d.project_id : '';
       }
+      case 'PurchaseOrder': {
+        var owner = cpnOwner_(rec.cpn);
+        return owner ? owner.project.id : '';
+      }
       case 'MilestoneRequirement': {
         var m = repoGet('PlanItem', rec.milestone_id);
         return m ? m.project_id : '';
@@ -168,7 +172,7 @@ function runHooks(table, before, rec, actx) {
   if (table === 'Baseline' && !before && rec.status === 'Demandée') hookBaselineRequested(rec, actx);
   if (table === 'RoleAssignment' && actx.source === 'appsheet') hookRoleAssignmentGuard(before, rec, actx);
   if (table === 'Resource' && actx.source === 'appsheet') hookResourceGuard(before, rec, actx);
-  if (table === 'PlanItem') hookCalendarItem(before, rec);
+  if (table === 'PlanItem') { hookCalendarItem(before, rec); hookRephase(before, rec); }
 }
 
 /**

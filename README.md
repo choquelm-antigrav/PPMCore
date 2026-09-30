@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.8.0)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.9.0)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -9,7 +9,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | Dossier | Rôle |
 | --- | --- |
 | `src/` | Les sources, modulaires : un fichier par sujet. C'est ici qu'on modifie le code. |
-| `dist/` | La version à installer, fabriquée depuis `src/` par `node tools/build.js` : **8 fichiers** (`PPM_Core.gs`, six pages, le manifeste). Ne jamais la modifier à la main. |
+| `dist/` | La version à installer, fabriquée depuis `src/` par `node tools/build.js` : **9 fichiers** (`PPM_Core.gs`, sept pages, le manifeste). Ne jamais la modifier à la main. |
 | `tools/` | `build.js`, qui fabrique `dist/` |
 | `PREMIERS_PAS.md` | Installation et premiers essais, pas à pas |
 | `tests/` | Tests hors ligne (Node 18+) : `node tests/run.js` |
@@ -37,6 +37,8 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `35_Workspace.gs` | Lot 2 : agenda Google et dossier Drive par projet, annuaire, import de personnes depuis une feuille |
 | `36_Digest.gs` | Lot 2 : mail récapitulatif (un par personne, quotidien ou hebdomadaire), réglages personnels |
 | `37_Simulation.gs` | Lot 4 : simulation « et si… », synthèse chiffrée d'un projet, signaux faibles (sans IA) |
+| `43_Budget.gs` | 0.9.0 : CPN (projet et sous-projet), grille de taux, lignes de budget et étalement, bilan par CPN |
+| `44_Orders.gs` | 0.9.0 : commandes d'achat (PO) : saisie, statuts, répartition par livrable, constats et rappels de GR |
 | `42_Org.gs` | 0.8.0 : dépendances d'un élément (`deps.item`), rôles attribuables (`roles.options`), retrait d'une personne, équipes hiérarchiques (`teams.*`) |
 | `41_Edit.gs` | 0.7.0 : création, modification, déplacement et suppression sûre du WBS (`wbs.create`, `wbs.update`, `wbs.delete`) |
 | `39_Account.gs` | 0.6.0 : Mon compte (`account.get`) et Administration (`admin.*` : réglages validés, santé, journaux, jours fériés) |
@@ -45,6 +47,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `Gantt.html` | Page du planning (Frappe Gantt 0.6.1, chargé depuis jsDelivr) |
 | `Structure.html` | Page Structure : OBS et WBS dessinés en SVG, sans bibliothèque externe |
 | `Suivi.html` | Page Suivi : écarts à la baseline, changements à valider, baselines, agenda et Drive, mes notifications |
+| `Budget.html` | Page Budget : bilan par CPN, achats (PO), lignes de budget, taux |
 | `Compte.html` | Page Mon compte : fiche, rôles en lecture seule, notifications, affichage (thème, page d'accueil) |
 | `Admin.html` | Page Administration (réservée aux administrateurs) : réglages, santé, jours fériés, journaux |
 | `Copilote.html` | Page Copilote : synthèse, simulation, questions, suggestions |
@@ -57,11 +60,11 @@ Le pas à pas détaillé est dans `PREMIERS_PAS.md`. En résumé :
 
 1. **Ranger dans un Drive partagé** : créer un Drive partagé « PPM » et y placer le projet Apps Script, les classeurs, les sauvegardes et un dossier « PPM Sources ». L'outil n'est alors pas lié à un compte personnel.
 2. **Créer le projet** : sur script.google.com, *Nouveau projet* nommé **PPM Core**, puis cocher « Afficher le fichier manifeste » dans *Paramètres du projet*.
-3. **Copier les 8 fichiers de `dist/`** : `PPM_Core.gs` (à la place de `Code.gs`), les pages `Gantt`, `Structure`, `Suivi`, `Copilote`, `Compte`, `Admin` (fichiers *HTML*, sans l'extension) et `appsscript.json` (il active le service avancé « Google Calendar API », qui sert à partager l'agenda d'un projet à ses membres). Ou bien les envoyer d'un coup avec `clasp` (voir `PREMIERS_PAS.md`).
+3. **Copier les 9 fichiers de `dist/`** : `PPM_Core.gs` (à la place de `Code.gs`), les pages `Gantt`, `Structure`, `Suivi`, `Copilote`, `Compte`, `Admin`, `Budget` (fichiers *HTML*, sans l'extension) et `appsscript.json` (il active le service avancé « Google Calendar API », qui sert à partager l'agenda d'un projet à ses membres). Ou bien les envoyer d'un coup avec `clasp` (voir `PREMIERS_PAS.md`).
 4. **Installer** : exécuter `installerPpm` et accepter les autorisations. Il règle le domaine et l'administrateur d'après ton compte (propriétés `PPM_DOMAIN`, `PPM_ADMINS`, sans rien écraser s'ils existent), crée les classeurs **PPM Données** et **PPM Historique**, installe les déclencheurs (nuit à 2 h, récapitulatif à 7 h) et vérifie l'installation. Ajouter ensuite un second administrateur dans `PPM_ADMINS` (adresses séparées par des virgules) et déplacer les classeurs dans le Drive partagé.
 5. **Données d'essai** (facultatif) : exécuter `seedDemo`.
 6. **Publier** : *Déployer → Nouveau déploiement → Application Web*, « Exécuter en tant que : moi », « Accès : tous les utilisateurs du domaine ». Noter l'URL `/exec`.
-7. **Ouvrir les pages** : `<URL /exec>?view=gantt`, `?view=structure`, `?view=suivi`, `?view=copilote`, `?view=compte`, `?view=admin` (avec `&project=<id>` pour un projet précis ; `&tab=…` pour un onglet).
+7. **Ouvrir les pages** : `<URL /exec>?view=gantt`, `?view=structure`, `?view=suivi`, `?view=copilote`, `?view=compte`, `?view=admin`, `?view=budget` (avec `&project=<id>` pour un projet précis ; `&tab=…` pour un onglet).
 8. **AppSheet** : suivre `appsheet/APPSHEET_SETUP.md` (sections 1 à 9, puis 10 et 11 pour le lot 1, 12 pour le lot 2). `PPM_APPSHEET_URL` (propriété facultative) = l'URL de l'application, une fois créée.
 
 **Pourquoi un fichier unique ?** Apps Script n'a pas de modules : tous les fichiers `.gs` partagent le même espace et sont chargés dans l'ordre où ils apparaissent dans l'éditeur. Réunir les sources dans `PPM_Core.gs` ne change rien au fonctionnement (la suite de tests tourne à l'identique sur les deux : `PPM_BUNDLE=dist/PPM_Core.gs node tests/run.js`), supprime le risque d'un mauvais ordre de fichiers (qui empêche tout le script de se charger) et ramène l'installation à 6 copier-coller. La modularité reste entière dans `src/`, où l'on travaille.
@@ -83,9 +86,9 @@ Le dépôt Git est la référence du code ; Apps Script n'en est que le lieu d'e
 
 1. Travailler sur une branche : `git switch -c ma-modification`.
 2. Modifier `src/`, tester hors ligne : `node tests/run.js` doit rester entièrement vert.
-3. Changer `PPM_VERSION` (`00_Config.gs`) et la balise `ppm-version` des six pages, puis fabriquer : `node tools/build.js` (il refuse une page dont la version ne correspond pas). `dist/` est versionné : il doit toujours correspondre aux sources.
+3. Changer `PPM_VERSION` (`00_Config.gs`) et la balise `ppm-version` des sept pages, puis fabriquer : `node tools/build.js` (il refuse une page dont la version ne correspond pas). `dist/` est versionné : il doit toujours correspondre aux sources.
 4. Valider et pousser : `git add -A && git commit -m "…" && git push`, puis fusionner la branche.
-5. Mettre en production : remplacer le contenu des 8 fichiers du dossier `dist/` dans le projet Apps Script (ou `clasp push -f` depuis `dist/`), puis exécuter `installerPpm`.
+5. Mettre en production : remplacer le contenu des 9 fichiers du dossier `dist/` dans le projet Apps Script (ou `clasp push -f` depuis `dist/`), puis exécuter `installerPpm`.
 6. *Déployer → Gérer les déploiements → Modifier (crayon) → Version : nouvelle version*. L'URL `/exec` ne change pas, AppSheet continue de fonctionner.
 7. Poser une étiquette sur la version publiée : `git tag v0.5.1 && git push --tags`. Elle remplace l'archive déposée dans « PPM Sources » (on peut en garder une copie).
 8. Retour arrière : même écran Apps Script, choisir la version précédente ; côté code, `git revert`.
@@ -118,6 +121,7 @@ Actions disponibles :
 | Fil des changements (lot 2) | `changes.feed`, `changes.ack` |
 | Workspace (lot 2) | `workspace.status`, `workspace.enable`, `workspace.sync` |
 | Notifications (lot 2) | `settings.get`, `settings.set`, `digest.preview` |
+| Budget et achats (0.9.0) | `cpn.set`, `budget.access`, `budget.get`, `budget.balance`, `budget.line.save`, `budget.line.delete`, `budget.phasing.set`, `rates.list`, `rates.set`, `rates.delete`, `rates.people`, `rates.assign`, `po.options`, `po.list`, `po.save`, `po.status`, `po.delete` |
 | Organisation (0.8.0) | `deps.item`, `dependencies.update`, `roles.options`, `people.remove`, `teams.create`, `teams.update`, `teams.delete` (avec `dependencies.create/delete`, `roles.assign/end`, `resources.*`) |
 | Édition du WBS (0.7.0) | `wbs.create`, `wbs.update`, `wbs.delete` (les actions `workpackages.*` et `planitems.*` restent disponibles pour l'API) |
 | Compte et administration (0.6.0) | `account.get`, `ui.set` ; réservées aux administrateurs : `admin.get`, `admin.set`, `admin.health`, `admin.logs`, `admin.holidays`, `admin.holidays.seed`, `admin.holidays.set` |
@@ -126,10 +130,10 @@ Actions disponibles :
 ## Tests
 
 ```bash
-node tests/run.js                    # 128 tests : calendriers, graphe, droits, journal, règles, API, marges, vues, personnes, OBS, WBS,
+node tests/run.js                    # 138 tests : calendriers, graphe, droits, journal, règles, API, marges, vues, personnes, OBS, WBS,
                                      # préférences, baselines, écarts, fil des changements, agenda, Drive, annuaire, récapitulatif,
                                      # simulation, synthèse, copilote (faux modèle), signaux faibles, fabrication, installation
-node tools/build.js                  # fabrique dist/ (8 fichiers)
+node tools/build.js                  # fabrique dist/ (9 fichiers)
 PPM_BUNDLE=dist/PPM_Core.gs node tests/run.js   # la même suite, sur le fichier unique
 node tests/gen_appsheet_columns.js   # régénère appsheet/COLONNES.md après une évolution du schéma
 
@@ -142,12 +146,33 @@ node tests/ui_copilote.js     # page Copilote, dans les trois modes
 node tests/ui_compte.js       # pages Mon compte et Administration
 node tests/ui_edit.js         # création et édition du WBS dans la page Structure
 node tests/ui_org.js          # dépendances, rôles, personnes et équipes dans la page Structure
+node tests/ui_budget.js       # page Budget : bilan, PO, lignes de budget, taux
 
 # Aperçu visuel des pages avec un jeu de données fourni, Agenda et Drive simulés (hors production) :
 node tests/preview_server.js 8123   # puis http://localhost:8123/?view=suivi&project=p1 (ou view=gantt, view=structure)
 ```
 
 Les tests chargent les fichiers `.gs` tels quels, avec des tables en mémoire à la place de Sheets et de faux services Agenda, Drive et annuaire. Tout changement du Core doit les garder verts.
+
+## Budget, CPN et commandes d'achat (0.9.0)
+
+Page **Budget** (`?view=budget`, onglet visible des personnes internes nommées dans une équipe).
+
+**CPN.** Le CPN est le code financier d'un projet, avec sa « désignation ». Un workpackage de premier niveau, le **sous-projet**, peut porter le sien (champs du formulaire de modification dans la page Structure). **Un CPN ne couvre qu'un seul projet**, au maximum ; le même CPN peut en revanche figurer sur un projet et sur ses propres sous-projets. Poser ou changer un CPN demande le rôle de chef de projet, DPL ou Program Leader ; un CPN qui porte des PO ne se retire ni ne se change. **Les analyses budgétaires se font par CPN** : un livrable relève du CPN de son premier workpackage ancêtre qui en porte un, à défaut de celui du projet.
+
+**Budget** (onglets Budget et Taux). Une ligne relie un livrable à une ressource : *interne* = jours × taux journalier, **taux figé à la création de la ligne** (un changement de la grille n'y touche pas, sauf demande explicite) ; *externe* = forfait. L'étalement se calcule seul (interne : au prorata des jours ouvrés de chaque mois ; externe : en totalité le mois de la livraison), suit les dates du livrable, et peut être fixé à la main (la somme doit égaler le montant). La grille de taux (profil, pays, taux, date d'effet) et le profil tarifaire des personnes sont **réservés au chef de projet et au DPL** ; les autres ne voient jamais les taux. Un responsable de workpackage ne voit et n'édite que le budget de son périmètre.
+
+**Commandes d'achat (PO).** Une PO se passe auprès d'une **ressource externe** ; son **numéro est saisi à la main** (celui de Click and Buy) et doit être unique. Elle porte un **CPN saisi à la main** : s'il correspond à un projet de l'outil (ou à l'un de ses sous-projets), le bilan budgétaire de ce projet en est impacté ; sinon la PO est enregistrée, sans effet sur aucun budget (elle apparaît dans « Mes PO hors périmètre de l'outil »).
+
+- **Statuts** : *À faire* (prévisionnel, rien d'engagé), *Lancée* (engagée), *GR* (good receipt : prestation réceptionnée), *Terminée* (soldée). **Engagé = Lancée + GR + Terminée.**
+- **Engagement en une fois** : la PO est engagée en totalité à sa date de lancement, **sans étalement** (dans la vue par mois, elle compte le mois du lancement). Sa période d'activité est indicative.
+- **Répartition par livrable en montants réglables** : leur somme doit égaler le montant de la PO. Elle se compare au budget externe (forfait) de chaque livrable ; un dépassement, un livrable sans budget externe ou d'un autre CPN sont signalés sur la PO.
+- **Date de GR attendue** (obligatoire tant que la PO est à faire ou lancée) : à l'approche (7 jours), puis au-delà, un rappel apparaît dans le **récapitulatif quotidien du responsable de la GR** (par défaut l'auteur de la PO) et un constat (`PO_GR_SOON`, `PO_GR_LATE`) remonte au pilotage. Autres constats : `PO_TODO_LATE` (PO à faire alors que l'activité a commencé), `PO_OVERRUN` (engagé supérieur au budget externe du CPN), `PO_UNBUDGETED`. **Aucun montant** dans les constats ni dans les mails.
+- **Qui** : toute personne **interne** nommée dans l'équipe du projet (un rôle sur le projet, au-dessus, ou sur l'un de ses workpackages) crée et modifie les PO de ce projet, quel que soit son rôle ; un externe, même nommé, ne le peut pas. Une PO se supprime par son auteur ou par le pilotage du projet ; la suppression est tracée.
+
+Le **bilan par CPN** met en regard, pour chaque CPN : budget interne, budget externe, PO à faire, engagé, réceptionné, soldé et reste sur le budget externe.
+
+Pas encore : le réalisé (import d'actuals) et la valeur acquise (EVM), prochaine version.
 
 ## Dépendances, rôles, personnes et équipes (0.8.0)
 

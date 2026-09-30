@@ -3,10 +3,10 @@
  *
  *   node tools/build.js
  *
- * Résultat : 8 fichiers au lieu d'une trentaine.
+ * Résultat : 9 fichiers au lieu d'une trentaine.
  *   PPM_Core.gs      tous les .gs de src/, dans l'ordre de leur numéro (l'ordre de chargement compte :
  *                    00_Config doit passer avant 30_Api, qui doit passer avant les modules qui déclarent des actions) ;
- *   Gantt, Structure, Suivi, Copilote, Compte, Admin (un .html chacun)   avec le style commun et la bannière intégrés ;
+ *   Gantt, Structure, Suivi, Copilote, Compte, Admin, Budget (un .html chacun)   avec le style commun et la bannière intégrés ;
  *   appsscript.json  le manifeste.
  *
  * Les sources restent la référence : on ne modifie jamais dist/ à la main (il est réécrit à chaque fabrication).
@@ -19,7 +19,7 @@ const crypto = require('crypto');
 const root = path.join(__dirname, '..');
 const src = path.join(root, 'src');
 const dist = path.join(root, 'dist');
-const PAGES = ['Gantt', 'Structure', 'Suivi', 'Copilote', 'Compte', 'Admin'];
+const PAGES = ['Gantt', 'Structure', 'Suivi', 'Copilote', 'Compte', 'Admin', 'Budget'];
 
 function build() {
   const files = fs.readdirSync(src).filter((f) => f.endsWith('.gs')).sort();

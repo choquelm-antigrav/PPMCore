@@ -1,7 +1,7 @@
 /**
- * PPM Core 0.8.0 — fichier unique à installer (fabriqué par tools/build.js, empreinte ab4d3865c400).
+ * PPM Core 0.9.0 — fichier unique à installer (fabriqué par tools/build.js, empreinte d9282fd6174a).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
- * Contient, dans cet ordre : 00_Config.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 30_Api.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs.
+ * Contient, dans cet ordre : 00_Config.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 30_Api.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs.
  */
 
 // ======================================================================
@@ -15,7 +15,7 @@
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.8.0';
+var PPM_VERSION = '0.9.0';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -63,6 +63,8 @@ var PERMISSIONS = {
   'baseline.manage':  ['DPL', 'CP'],
   'baseline.request': ['PL', 'DPL', 'CP', 'RWP', 'MEMBER'],
   'budget.edit':      ['PL', 'DPL', 'CP', 'RWP'],
+  'cpn.edit':         ['PL', 'DPL', 'CP'],
+  'po.edit':          ['PL', 'DPL', 'CP', 'RWP', 'MEMBER'],
   'ratecard.manage':  ['DPL', 'CP'],
   'actuals.manage':   ['DPL', 'CP'],
   'roles.assign':     ['PL', 'DPL', 'CP'],
@@ -155,6 +157,9 @@ function allowedDomain() {
 
 var COUNTRIES = ['FR', 'DE', 'UK', 'IN'];
 
+/** Statuts d'une commande d'achat (PO) : à faire, lancée (engagée), GR (good receipt : prestation réceptionnée), terminée (soldée). */
+var PO_STATUSES = ['À faire', 'Lancée', 'GR', 'Terminée'];
+
 var SCHEMA = {
   // ---------- Classeur Données : structure (WBS) ----------
   Program: {
@@ -166,13 +171,13 @@ var SCHEMA = {
   Project: {
     book: 'data',
     cols: ['id', 'code', 'name', 'program_id', 'manager_resource_id', 'status', 'holiday_country',
-      'start_date', 'end_date', 'active_baseline_id', 'drive_folder_id', 'calendar_id'],
+      'start_date', 'end_date', 'active_baseline_id', 'drive_folder_id', 'calendar_id', 'cpn', 'cpn_label'],
     required: ['code', 'name'],
     enums: { status: ['Préparation', 'Actif', 'En pause', 'Clos'], holiday_country: COUNTRIES }
   },
   WorkPackage: {
     book: 'data',
-    cols: ['id', 'project_id', 'parent_wp_id', 'wbs_code', 'name', 'owner_resource_id', 'charge_code'],
+    cols: ['id', 'project_id', 'parent_wp_id', 'wbs_code', 'name', 'owner_resource_id', 'charge_code', 'cpn', 'cpn_label'],
     required: ['project_id', 'name']
   },
   PlanItem: {
@@ -240,9 +245,22 @@ var SCHEMA = {
   BudgetLine: {
     book: 'data',
     cols: ['id', 'deliverable_id', 'resource_id', 'cost_type', 'planned_days', 'frozen_rate',
-      'fixed_amount', 'planned_amount'],
+      'fixed_amount', 'planned_amount', 'phasing_mode'],
     required: ['deliverable_id', 'resource_id', 'cost_type'],
     enums: { cost_type: ['TJM', 'Forfait'] }
+  },
+  /** Commande d'achat auprès d'une ressource externe. Rattachée à un projet par son CPN ; engagée en une fois à son lancement. */
+  PurchaseOrder: {
+    book: 'data',
+    cols: ['id', 'po_number', 'cpn', 'resource_id', 'owner_resource_id', 'description', 'start_date', 'end_date', 'amount',
+      'status', 'gr_due_date', 'launched_on', 'gr_on', 'closed_on'],
+    required: ['po_number', 'cpn', 'resource_id', 'amount', 'status'],
+    enums: { status: PO_STATUSES }
+  },
+  PurchaseOrderLink: {
+    book: 'data',
+    cols: ['id', 'po_id', 'deliverable_id', 'amount'],
+    required: ['po_id', 'deliverable_id', 'amount']
   },
   BudgetPhasing: {
     book: 'data',
@@ -1107,6 +1125,11 @@ function evaluateRules(data, today, holFor) {
       'Vérifier avec le responsable si la date de fin tient toujours.');
   });
 
+  // Commandes d'achat : GR à faire, PO à lancer, dépassement du budget externe (calculés par poFindings_, sans montant).
+  (data.poFindings || []).forEach(function (f) {
+    if (activeProject[f.projectId]) push(f.projectId, f.rule, f.severity, f.targetType, f.targetId, f.message, f.suggestion);
+  });
+
   // Projet actif, planifié, sans baseline : les écarts ne peuvent pas être mesurés.
   projects.forEach(function (p) {
     if (p.status !== 'Actif' || !isBlank(p.active_baseline_id)) return;
@@ -1768,6 +1791,10 @@ function projectIdOf(table, rec) {
         var d = repoGet('PlanItem', rec.deliverable_id);
         return d ? d.project_id : '';
       }
+      case 'PurchaseOrder': {
+        var owner = cpnOwner_(rec.cpn);
+        return owner ? owner.project.id : '';
+      }
       case 'MilestoneRequirement': {
         var m = repoGet('PlanItem', rec.milestone_id);
         return m ? m.project_id : '';
@@ -1901,7 +1928,7 @@ function runHooks(table, before, rec, actx) {
   if (table === 'Baseline' && !before && rec.status === 'Demandée') hookBaselineRequested(rec, actx);
   if (table === 'RoleAssignment' && actx.source === 'appsheet') hookRoleAssignmentGuard(before, rec, actx);
   if (table === 'Resource' && actx.source === 'appsheet') hookResourceGuard(before, rec, actx);
-  if (table === 'PlanItem') hookCalendarItem(before, rec);
+  if (table === 'PlanItem') { hookCalendarItem(before, rec); hookRephase(before, rec); }
 }
 
 /**
@@ -3125,10 +3152,10 @@ function uiCall(action, params, requestId) {
     currentUserEmail_());
 }
 
-var PAGES = { gantt: 'Gantt', structure: 'Structure', suivi: 'Suivi', copilote: 'Copilote', compte: 'Compte', admin: 'Admin' };
-var PAGE_TITLES = { gantt: 'PPM — Planning', structure: 'PPM — Structure', suivi: 'PPM — Suivi', copilote: 'PPM — Copilote', compte: 'PPM — Mon compte', admin: 'PPM — Administration' };
+var PAGES = { gantt: 'Gantt', structure: 'Structure', suivi: 'Suivi', copilote: 'Copilote', compte: 'Compte', admin: 'Admin', budget: 'Budget' };
+var PAGE_TITLES = { gantt: 'PPM — Planning', structure: 'PPM — Structure', suivi: 'PPM — Suivi', copilote: 'PPM — Copilote', compte: 'PPM — Mon compte', admin: 'PPM — Administration', budget: 'PPM — Budget' };
 var PAGE_TABS = { gantt: [''], structure: ['obs', 'wbs'], suivi: ['ecarts', 'changes', 'baselines', 'workspace'], copilote: ['synthese', 'simulation', 'questions', 'suggestions'],
-  compte: ['fiche', 'notifications', 'affichage'], admin: ['reglages', 'sante', 'feries', 'journaux'] };
+  compte: ['fiche', 'notifications', 'affichage'], admin: ['reglages', 'sante', 'feries', 'journaux'], budget: ['bilan', 'po', 'budget', 'taux'] };
 
 /** JSON à clés triées : la page et le serveur calculent la même clé pour les mêmes paramètres. */
 function stableJson_(v) {
@@ -3153,6 +3180,12 @@ function preloadFor_(view, boot, email) {
   };
   if (view === 'compte') { put('account.get', {}); return pre; }
   if (view === 'admin') { if (boot.isAdmin) put('admin.get', {}); return pre; }
+  if (view === 'budget') {
+    var bcat = put('planning.catalog', {});
+    var bfirst = boot.project || (bcat.ok ? ((bcat.data.projects.filter(function (x) { return x.status !== 'Clos'; })[0] || bcat.data.projects[0] || {}).id || '') : '');
+    if (bfirst) put('budget.access', { projectId: bfirst });
+    return pre;
+  }
   var cat = put('planning.catalog', {});
   if (!cat.ok) return pre;
   var open = cat.data.projects.filter(function (p) { return p.status !== 'Clos'; })[0] || cat.data.projects[0] || {};
@@ -3219,6 +3252,7 @@ function renderPage_(e) {
   t.theme = theme === 'dark' || theme === 'light' ? theme : 'auto';
   boot.home = home;
   boot.isAdmin = adminEmails().indexOf(currentUserEmail_()) >= 0;
+  try { var bctx = buildContext(currentUserEmail_()); boot.canBudget = boot.isAdmin || (isInternalUser_(bctx) && (bctx.assignments || []).length > 0); } catch (err) { boot.canBudget = boot.isAdmin; }
   var t0 = Date.now();
   try {
     boot.preload = preloadFor_(view, boot, currentUserEmail_());
@@ -3612,7 +3646,7 @@ function buildWbsTree(data, projectId, today, ctx) {
   var rootId = 'project:' + project.id;
   var nodes = [Object.assign({
     id: rootId, parent: '', kind: 'project', name: project.name, code: project.code, status: project.status || '',
-    charge_code: '', ref: project.id, canEdit: canEdit('project', project.id)
+    charge_code: '', ref: project.id, canEdit: canEdit('project', project.id), cpn: project.cpn || '', cpn_label: project.cpn_label || ''
   }, ownerOf(project.manager_resource_id), summary(items))];
 
   var emitWp = function (w, parentId) {
@@ -3620,7 +3654,8 @@ function buildWbsTree(data, projectId, today, ctx) {
     var id = 'wp:' + w.id;
     nodes.push(Object.assign({
       id: id, parent: parentId, kind: 'wp', name: w.name, code: w.wbs_code || '', status: '', charge_code: w.charge_code || '',
-      ref: w.id, version: w.version, owner_id: w.owner_resource_id || '', parent_ref: w.parent_wp_id || '', canEdit: canEdit('workpackage', w.id)
+      ref: w.id, version: w.version, owner_id: w.owner_resource_id || '', parent_ref: w.parent_wp_id || '', canEdit: canEdit('workpackage', w.id),
+      cpn: w.cpn || '', cpn_label: w.cpn_label || ''
     }, ownerOf(w.owner_resource_id), summary(all)));
     (childrenOfWp[w.id] || []).slice().sort(byWbs_).forEach(function (c) { emitWp(c, id); });
     (itemsOfWp[w.id] || []).slice().sort(byStartThenName_).forEach(function (i) { emitItem(i, id); });
@@ -3647,6 +3682,7 @@ function buildWbsTree(data, projectId, today, ctx) {
       program_name: program ? program.name : '' },
     nodes: nodes,
     canCreate: canEdit('project', projectId),
+    canCpn: !!ctx && can(ctx, 'cpn.edit', { type: 'project', id: projectId }),
     stats: {
       wps: wps.length, items: items.length,
       depth: wps.some(function (w) { return !isBlank(w.parent_wp_id); }) ? 2 : (wps.length ? 1 : 0)
@@ -4873,6 +4909,19 @@ function buildDigests(data, today, opts) {
     if (due.length) sections.push({ title: 'À échéance dans les ' + THRESHOLDS.dueSoonDays + ' jours', lines: due.sort(byDate).map(function (l) { return Object.assign(l, { note: 'le ' + frDate_(l.date) }); }) });
     if (stale.length) sections.push({ title: 'Avancement à déclarer', lines: stale.sort(byDate).map(function (l) { return Object.assign(l, { note: 'dernière déclaration le ' + frDate_(l.date) }); }) });
 
+    // 1b. Mes GR à faire : PO lancées dont la date de GR attendue est passée ou approche (aucun montant dans le mail)
+    var resNames = {};
+    data.resources.forEach(function (x) { resNames[x.id] = x.name; });
+    var grLines = (data.purchaseOrders || []).filter(function (o) {
+      return live(o) && o.status === 'Lancée' && !isBlank(o.gr_due_date) && String(o.gr_due_date) <= soon &&
+        (o.owner_resource_id === r.id || (isBlank(o.owner_resource_id) && String(o.created_by || '').toLowerCase() === email));
+    }).sort(function (a, b) { return String(a.gr_due_date).localeCompare(String(b.gr_due_date)); }).map(function (o) {
+      var late = String(o.gr_due_date) < today, pid = (data.cpnProject || {})[normCpn_(o.cpn)];
+      return { text: 'PO ' + o.po_number + (resNames[o.resource_id] ? ' · ' + resNames[o.resource_id] : ''), tone: late ? 'alert' : '',
+        note: late ? 'GR à faire, attendue depuis le ' + frDate_(o.gr_due_date) : 'GR attendue le ' + frDate_(o.gr_due_date), url: pid ? link('budget', pid, '&tab=po') : '' };
+    });
+    if (grLines.length) sections.push({ title: 'Bons de réception (GR) à faire', tone: grLines.some(function (l) { return l.tone === 'alert'; }) ? 'alert' : '', lines: grLines });
+
     // 2. Pilotage : projets dont la personne valide les changements (chef de projet, DPL)
     var ctx = { resourceId: r.id, isAdmin: false, assignments: activeAssignments(r.id, data.assignments, today), lookup: lookup };
     var pilot = data.projects.filter(function (p) {
@@ -4959,7 +5008,9 @@ function loadDigestData_() {
     projects: projects, planitems: repoList('PlanItem'), resources: repoList('Resource'),
     assignments: repoList('RoleAssignment'), settings: repoList('UserSetting'), insights: repoList('Insight'),
     baselines: repoList('Baseline'), workpackages: repoList('WorkPackage'), budgetLines: repoList('BudgetLine'),
-    pendingChanges: pendingChangeCounts_(projects, repoList('ChangeEvent'))
+    pendingChanges: pendingChangeCounts_(projects, repoList('ChangeEvent')),
+    purchaseOrders: repoList('PurchaseOrder', function (o) { return o.status === 'Lancée'; }),
+    cpnProject: (function () { var m = {}, idx = cpnIndex_(); Object.keys(idx).forEach(function (k) { m[k] = idx[k].project.id; }); return m; })()
   };
 }
 
@@ -6179,6 +6230,7 @@ function runRules() {
     return holCache[c];
   };
   addBaselineContext_(data, holFor);
+  data.poFindings = poFindings_(poRuleInputs_(), todayStr());
   var fresh = evaluateRules(data, todayStr(), holFor);
   var merged = mergeInsights(repoList('Insight', null, { includeDeleted: true }), fresh, JOB_ACTX.actor);
   withLock(function () { getTable('Insight').replaceAll(merged); });
@@ -6350,10 +6402,12 @@ defineAction('wbs.create', function (p, ctx) {
       requireCan(ctx, 'wbs.edit', parent ? wbsScope_('workpackage', parent.id) : wbsScope_('project', projectId));
       var wps = projectWps_(projectId);
       var code = isBlank(v.wbs_code) ? nextWbsCode_(wps, parent) : checkWbsCode_(wps, v.wbs_code, '');
-      var rec = repoInsert('WorkPackage', {
+      var newWp = {
         project_id: projectId, parent_wp_id: parent ? parent.id : '', wbs_code: code, name: name, owner_resource_id: owner,
         charge_code: wbsShortText_(v.charge_code, 40, 'Code d’imputation')
-      }, ctx.actx);
+      };
+      applyWpCpn_(ctx, { project_id: projectId, parent_wp_id: parent ? parent.id : '', cpn: '', cpn_label: '', id: '' }, v, newWp);
+      var rec = repoInsert('WorkPackage', newWp, ctx.actx);
       return { kind: 'wp', id: rec.id, record: rec };
     }
     if (!isBlank(parentId)) {
@@ -6390,6 +6444,7 @@ defineAction('wbs.update', function (p, ctx) {
       if ('owner_resource_id' in patch) out.owner_resource_id = wbsOwner_(patch.owner_resource_id);
       if ('charge_code' in patch) out.charge_code = wbsShortText_(patch.charge_code, 40, 'Code d’imputation');
       if ('wbs_code' in patch) out.wbs_code = checkWbsCode_(wps, patch.wbs_code, id);
+      applyWpCpn_(ctx, w, patch, out);
       if ('parent_wp_id' in patch && String(patch.parent_wp_id || '') !== String(w.parent_wp_id || '')) {
         var np = wbsParentWp_(patch.parent_wp_id, w.project_id, id);
         if (np && wps.some(function (c) { return c.parent_wp_id === id; })) {
@@ -6438,6 +6493,12 @@ function detachItem_(itemId, actx) {
   deps.forEach(function (d) { repoSoftDelete('Dependency', d.id, null, actx); });
   var reqs = repoList('MilestoneRequirement', function (r) { return r.milestone_id === itemId || r.deliverable_id === itemId; });
   reqs.forEach(function (r) { repoSoftDelete('MilestoneRequirement', r.id, null, actx); });
+  // Budget et répartition des PO du livrable : la ligne de budget et ses mois, le lien de PO (le montant de la PO reste, « non affecté »).
+  repoList('BudgetLine', function (l) { return l.deliverable_id === itemId; }).forEach(function (l) {
+    repoList('BudgetPhasing', function (x) { return x.budget_line_id === l.id; }).forEach(function (x) { repoSoftDelete('BudgetPhasing', x.id, null, actx); });
+    repoSoftDelete('BudgetLine', l.id, null, actx);
+  });
+  repoList('PurchaseOrderLink', function (l) { return l.deliverable_id === itemId; }).forEach(function (l) { repoSoftDelete('PurchaseOrderLink', l.id, null, actx); });
   return { dependencies: deps.length, requirements: reqs.length };
 }
 
@@ -6691,3 +6752,881 @@ defineAction('teams.delete', function (p, ctx) {
   }
   return repoSoftDelete('HierarchicalTeam', id, p.version, ctx.actx);
 });
+
+// ======================================================================
+// 43_Budget.gs
+// ======================================================================
+
+/**
+ * PPM Core — 0.9.0 : budget, taux, CPN (lot 3, première partie).
+ *
+ *  - CPN : code financier d'un projet, avec sa désignation. Un workpackage de premier niveau (le « sous-projet »)
+ *    peut porter le sien. Un CPN ne couvre qu'un seul projet, au maximum. Les analyses budgétaires se font par CPN.
+ *  - Grille de taux (RateCard) : taux journalier par profil et par pays, avec date d'effet. Réservée au chef de projet
+ *    et au DPL (décision par défaut, à relâcher si besoin).
+ *  - Lignes de budget par livrable : ressource interne = jours × taux (taux FIGÉ à la création de la ligne) ;
+ *    ressource externe = forfait. Étalement automatique (interne : au prorata des jours ouvrés de chaque mois ;
+ *    externe : en totalité le mois de la livraison), modifiable à la main.
+ *  - Bilan par CPN : budget (interne, externe) face aux commandes d'achat engagées (44_Orders.gs).
+ * Fonctions de calcul pures : phasingFor_, computeBalance_.
+ */
+
+var CPN_RE = /^[A-Z0-9][A-Z0-9 ._\/-]{0,29}$/;
+
+// ---------------------------------------------------------------- CPN
+
+function normCpn_(v) { return String(v === undefined || v === null ? '' : v).replace(/\s+/g, ' ').trim().toUpperCase(); }
+
+function checkCpnValue_(v) {
+  var c = normCpn_(v);
+  if (!c) return '';
+  if (!CPN_RE.test(c)) throw new PpmError('VALIDATION', 'CPN invalide : 30 caractères au plus, lettres, chiffres, espace, point, tiret, barre oblique.');
+  return c;
+}
+
+/** CPN → { project, wp } : le projet (et le workpackage, s'il est porté par un sous-projet) qui l'utilise. */
+function cpnIndex_() {
+  var idx = {}, projects = repoList('Project'), byId = indexBy_(projects);
+  projects.forEach(function (p) { var k = normCpn_(p.cpn); if (k && !idx[k]) idx[k] = { project: p, wp: null }; });
+  repoList('WorkPackage').forEach(function (w) {
+    var k = normCpn_(w.cpn);
+    if (k && !idx[k] && byId[w.project_id]) idx[k] = { project: byId[w.project_id], wp: w };
+  });
+  return idx;
+}
+
+function cpnOwner_(cpn) {
+  var k = normCpn_(cpn);
+  return k ? cpnIndex_()[k] || null : null;
+}
+
+function assertCpnFree_(cpn, projectId) {
+  if (!cpn) return;
+  var o = cpnIndex_()[cpn];
+  if (o && o.project.id !== projectId) {
+    throw new PpmError('VALIDATION', 'Le CPN ' + cpn + ' est déjà porté par le projet ' + o.project.code + ' : un CPN ne couvre qu’un seul projet.');
+  }
+}
+
+/** CPN d'un projet : le sien et ceux de ses sous-projets, sans doublon. */
+function projectCpns_(project, wps) {
+  var out = [], seen = {};
+  var add = function (cpn, label, source) {
+    var k = normCpn_(cpn);
+    if (!k) return;
+    if (!seen[k]) { seen[k] = { cpn: k, label: label || '', sources: [] }; out.push(seen[k]); }
+    if (label && !seen[k].label) seen[k].label = label;
+    seen[k].sources.push(source);
+  };
+  add(project.cpn, project.cpn_label, 'Projet');
+  wps.forEach(function (w) { add(w.cpn, w.cpn_label, (w.wbs_code ? w.wbs_code + ' ' : '') + w.name); });
+  return out;
+}
+
+/** Changer ou retirer un CPN est refusé tant que des commandes d'achat s'y rattachent (elles ne seraient plus reliées au projet). */
+function assertCpnRemovable_(projectId, oldCpn, remaining) {
+  var k = normCpn_(oldCpn);
+  if (!k || remaining.indexOf(k) >= 0) return;
+  var n = repoList('PurchaseOrder', function (o) { return normCpn_(o.cpn) === k; }).length;
+  if (n) throw new PpmError('VALIDATION', n + ' commande(s) d’achat portent le CPN ' + k + ' : supprimez-les ou conservez ce CPN.');
+}
+
+defineAction('cpn.set', function (p, ctx) {
+  var project = mustGet('Project', requireParam(p, 'projectId'));
+  requireCan(ctx, 'cpn.edit', { type: 'project', id: project.id });
+  var cpn = checkCpnValue_(p.cpn);
+  var label = cpn ? wbsShortText_(p.cpn_label, 120, 'Désignation du CPN') : '';
+  assertCpnFree_(cpn, project.id);
+  var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; });
+  var remaining = projectCpns_({ cpn: cpn, cpn_label: label }, wps).map(function (x) { return x.cpn; });
+  assertCpnRemovable_(project.id, project.cpn, remaining);
+  return repoUpdate('Project', project.id, { cpn: cpn, cpn_label: label }, p.version, ctx.actx);
+});
+
+/** Sous-projet : un workpackage de premier niveau porte un CPN (utilisé par wbs.create et wbs.update). */
+function applyWpCpn_(ctx, wp, values, out) {
+  if (!('cpn' in values) && !('cpn_label' in values)) return;
+  var cpn = 'cpn' in values ? checkCpnValue_(values.cpn) : normCpn_(wp.cpn);
+  var label = cpn ? ('cpn_label' in values ? wbsShortText_(values.cpn_label, 120, 'Désignation du CPN') : (wp.cpn_label || '')) : '';
+  if (cpn === normCpn_(wp.cpn) && label === String(wp.cpn_label || '')) return;
+  if (cpn && !isBlank(wp.parent_wp_id)) throw new PpmError('VALIDATION', 'Seul un workpackage de premier niveau (sous-projet) porte un CPN.');
+  requireCan(ctx, 'cpn.edit', { type: 'project', id: wp.project_id });
+  assertCpnFree_(cpn, wp.project_id);
+  var project = mustGet('Project', wp.project_id);
+  var others = repoList('WorkPackage', function (w) { return w.project_id === wp.project_id && w.id !== wp.id; });
+  var remaining = projectCpns_(project, others).map(function (x) { return x.cpn; });
+  if (cpn) remaining.push(cpn);
+  assertCpnRemovable_(wp.project_id, wp.cpn, remaining);
+  out.cpn = cpn;
+  out.cpn_label = label;
+}
+
+// ---------------------------------------------------------------- grille de taux
+
+function rateFor_(profile, country, onDate) {
+  var p = String(profile || '').toLowerCase().trim();
+  var rows = repoList('RateCard', function (r) { return String(r.profile).toLowerCase().trim() === p && r.country === country; })
+    .filter(function (r) { return isBlank(r.effective_date) || String(r.effective_date) <= onDate; })
+    .sort(function (a, b) { return String(b.effective_date || '').localeCompare(String(a.effective_date || '')); });
+  return rows.length ? Number(rows[0].daily_rate) : null;
+}
+
+function requireRates_(ctx) {
+  if (!ctx.isAdmin && !can(ctx, 'ratecard.manage', { type: 'global' })) throw new PpmError('FORBIDDEN', 'Les taux journaliers sont réservés au chef de projet et au DPL.');
+}
+
+defineAction('rates.list', function (p, ctx) {
+  requireRates_(ctx);
+  var rows = repoList('RateCard').map(function (r) {
+    return { id: r.id, version: r.version, profile: r.profile, country: r.country, daily_rate: Number(r.daily_rate), effective_date: r.effective_date || '' };
+  }).sort(function (a, b) { return String(a.profile).localeCompare(String(b.profile), 'fr') || String(a.country).localeCompare(String(b.country)) || String(b.effective_date).localeCompare(String(a.effective_date)); });
+  var profiles = {};
+  rows.forEach(function (r) { profiles[r.profile] = true; });
+  repoList('Resource').forEach(function (r) { if (!isBlank(r.rate_profile)) profiles[r.rate_profile] = true; });
+  return { rates: rows, profiles: Object.keys(profiles).sort(function (a, b) { return a.localeCompare(b, 'fr'); }), countries: COUNTRIES };
+});
+
+defineAction('rates.set', function (p, ctx) {
+  requireRates_(ctx);
+  var v = p.values || {};
+  var profile = wbsShortText_(v.profile, 60, 'Profil');
+  if (!profile) throw new PpmError('VALIDATION', 'Le profil est obligatoire.');
+  if (COUNTRIES.indexOf(v.country) < 0) throw new PpmError('VALIDATION', 'Pays inconnu : ' + COUNTRIES.join(', ') + '.');
+  var rate = Number(v.daily_rate);
+  if (isBlank(v.daily_rate) || isNaN(rate) || rate <= 0 || rate > 100000) throw new PpmError('VALIDATION', 'Taux journalier : un nombre positif.');
+  var date = wbsDate_(v.effective_date, 'Date d’effet');
+  var values = { profile: profile, country: v.country, daily_rate: round2(rate), effective_date: date };
+  var dup = repoList('RateCard', function (r) {
+    return r.id !== p.id && String(r.profile).toLowerCase() === profile.toLowerCase() && r.country === v.country && String(r.effective_date || '') === date;
+  });
+  if (dup.length) throw new PpmError('VALIDATION', 'Ce profil a déjà un taux pour ce pays à cette date d’effet : modifiez-le.');
+  return isBlank(p.id) ? repoInsert('RateCard', values, ctx.actx) : repoUpdate('RateCard', p.id, values, p.version, ctx.actx);
+});
+
+defineAction('rates.delete', function (p, ctx) {
+  requireRates_(ctx);
+  return repoSoftDelete('RateCard', requireParam(p, 'id'), p.version, ctx.actx);
+});
+
+/** Profil tarifaire des personnes internes (réservé à ceux qui gèrent les taux). */
+defineAction('rates.people', function (p, ctx) {
+  requireRates_(ctx);
+  return repoList('Resource').filter(function (r) { return r.resource_type === 'Interne'; }).map(function (r) {
+    return { resource_id: r.id, name: r.name, country: r.country || '', rate_profile: r.rate_profile || '', version: r.version };
+  }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
+});
+
+defineAction('rates.assign', function (p, ctx) {
+  requireRates_(ctx);
+  var r = mustGet('Resource', requireParam(p, 'resource_id'));
+  return repoUpdate('Resource', r.id, { rate_profile: wbsShortText_(p.rate_profile, 60, 'Profil') }, p.version, ctx.actx);
+});
+
+// ---------------------------------------------------------------- étalement (fonction pure)
+
+function monthOf_(d) { return String(d).slice(0, 7); }
+
+/** Étalement d'une ligne : [{ month, amount }], somme = montant planifié. hol : jours fériés du calendrier du projet. */
+function phasingFor_(line, deliverable, hol) {
+  var amount = round2(Number(line.planned_amount) || 0);
+  var start = deliverable.planned_start || '', finish = deliverable.planned_finish || '';
+  if (!amount || (!start && !finish)) return [];
+  if (line.cost_type === 'Forfait' || !start || !finish) return [{ month: monthOf_(finish || start), amount: amount }];
+  var counts = {}, total = 0, months = [];
+  for (var d = start; d <= finish; d = addCalendarDays(d, 1)) {
+    if (!isWorkingDay(d, hol)) continue;
+    var m = monthOf_(d);
+    if (!counts[m]) { counts[m] = 0; months.push(m); }
+    counts[m]++; total++;
+  }
+  if (!total) return [{ month: monthOf_(finish), amount: amount }];
+  var out = [], acc = 0;
+  months.forEach(function (m, i) {
+    var a = i === months.length - 1 ? round2(amount - acc) : round2(amount * counts[m] / total);
+    acc = round2(acc + a);
+    out.push({ month: m, amount: a });
+  });
+  return out;
+}
+
+function holidaysOfProject_(projectId) {
+  var project = repoGet('Project', projectId);
+  return loadHolidayMap((project && project.holiday_country) || 'FR');
+}
+
+/** Remplace l'étalement d'une ligne (mode auto : recalculé depuis les dates du livrable). */
+function writePhasing_(line, months, actx) {
+  repoList('BudgetPhasing', function (x) { return x.budget_line_id === line.id; }).forEach(function (x) { repoSoftDelete('BudgetPhasing', x.id, null, actx); });
+  months.forEach(function (m) { repoInsert('BudgetPhasing', { budget_line_id: line.id, month: m.month, amount: m.amount }, actx); });
+}
+
+function rephaseLine_(line, deliverable, actx) {
+  writePhasing_(line, phasingFor_(line, deliverable, holidaysOfProject_(deliverable.project_id)), actx);
+}
+
+/** Les dates d'un livrable changent : les lignes en étalement automatique suivent. Ne bloque jamais la saisie. */
+function hookRephase(before, rec) {
+  try {
+    if (rec.item_type !== 'Livrable' || !before) return;
+    if (String(before.planned_start || '') === String(rec.planned_start || '') && String(before.planned_finish || '') === String(rec.planned_finish || '')) return;
+    var actx = { actor: 'ppm-core', source: 'core' };
+    repoList('BudgetLine', function (l) { return l.deliverable_id === rec.id && l.phasing_mode !== 'manuel'; }).forEach(function (l) { rephaseLine_(l, rec, actx); });
+  } catch (err) {
+    console.error('Étalement : ' + (err && err.message ? err.message : err));
+  }
+}
+
+// ---------------------------------------------------------------- lignes de budget
+
+function budgetNumber_(v, label, max) {
+  var n = Number(v);
+  if (isBlank(v) || isNaN(n) || n < 0 || n > (max || 1e9)) throw new PpmError('VALIDATION', label + ' : un nombre positif ou nul.');
+  return n;
+}
+
+function lineView_(l, ctx, phasing, resById, projectId) {
+  var res = resById[l.resource_id];
+  var seeRate = ctx.isAdmin || can(ctx, 'ratecard.manage', { type: 'project', id: projectId });
+  return {
+    id: l.id, version: l.version, deliverable_id: l.deliverable_id,
+    resource: { id: l.resource_id, name: res ? res.name : '', type: res ? res.resource_type : '' },
+    cost_type: l.cost_type, planned_days: isBlank(l.planned_days) ? null : Number(l.planned_days),
+    frozen_rate: seeRate && !isBlank(l.frozen_rate) ? Number(l.frozen_rate) : null,
+    fixed_amount: isBlank(l.fixed_amount) ? null : Number(l.fixed_amount), planned_amount: Number(l.planned_amount) || 0,
+    phasing_mode: l.phasing_mode === 'manuel' ? 'manuel' : 'auto',
+    phasing: (phasing || []).map(function (x) { return { month: x.month, amount: Number(x.amount) || 0 }; }).sort(function (a, b) { return a.month < b.month ? -1 : 1; })
+  };
+}
+
+defineAction('budget.line.save', function (p, ctx) {
+  var v = p.values || {};
+  var isUpdate = !isBlank(p.id);
+  var line = isUpdate ? mustGet('BudgetLine', p.id) : null;
+  var deliverable = mustGet('PlanItem', isUpdate ? line.deliverable_id : requireParam(v, 'deliverable_id'));
+  if (deliverable.item_type !== 'Livrable') throw new PpmError('VALIDATION', 'Le budget se rattache à un livrable, pas à un jalon.');
+  requireCan(ctx, 'budget.edit', { type: 'planitem', id: deliverable.id });
+  return withLock(function () {
+    var resId = 'resource_id' in v ? v.resource_id : (line ? line.resource_id : requireParam(v, 'resource_id'));
+    var res = repoGet('Resource', resId);
+    if (!res || isTrue(res.deleted)) throw new PpmError('VALIDATION', 'Ressource introuvable.');
+    if (repoList('BudgetLine', function (l) { return l.deliverable_id === deliverable.id && l.resource_id === resId && (!line || l.id !== line.id); }).length) {
+      throw new PpmError('VALIDATION', 'Cette ressource a déjà une ligne sur ce livrable : modifiez-la.');
+    }
+    var out = { resource_id: resId };
+    var resourceChanged = !line || line.resource_id !== resId;
+    if (res.resource_type === 'Externe') {
+      var amount = budgetNumber_('fixed_amount' in v ? v.fixed_amount : (line ? line.fixed_amount : ''), 'Forfait');
+      Object.assign(out, { cost_type: 'Forfait', fixed_amount: round2(amount), planned_days: '', frozen_rate: '', planned_amount: round2(amount) });
+    } else {
+      var days = budgetNumber_('planned_days' in v ? v.planned_days : (line ? line.planned_days : ''), 'Jours prévus', 100000);
+      var rate = line && !resourceChanged && !v.refresh_rate && line.cost_type === 'TJM' ? Number(line.frozen_rate) : null;
+      if (rate === null || isNaN(rate)) {
+        rate = rateFor_(res.rate_profile, res.country, todayStr());
+        if (rate === null) {
+          throw new PpmError('VALIDATION', 'Aucun taux journalier pour le profil « ' + (res.rate_profile || 'non renseigné') + ' » (pays ' + (res.country || '?') +
+            ') : à renseigner dans l’onglet Taux, réservé au chef de projet et au DPL.');
+        }
+      }
+      Object.assign(out, { cost_type: 'TJM', planned_days: days, frozen_rate: rate, planned_amount: round2(days * rate), fixed_amount: '' });
+    }
+    var amountChanged = !line || Number(line.planned_amount) !== out.planned_amount;
+    if (!line || amountChanged || line.phasing_mode !== 'manuel') out.phasing_mode = 'auto';
+    var rec = line ? repoUpdate('BudgetLine', line.id, out, p.version, ctx.actx)
+      : repoInsert('BudgetLine', Object.assign({ deliverable_id: deliverable.id }, out), ctx.actx);
+    if (out.phasing_mode === 'auto') rephaseLine_(rec, deliverable, ctx.actx);
+    var phasing = repoList('BudgetPhasing', function (x) { return x.budget_line_id === rec.id; });
+    return lineView_(rec, ctx, phasing, indexBy_([res]), deliverable.project_id);
+  });
+});
+
+defineAction('budget.line.delete', function (p, ctx) {
+  var line = mustGet('BudgetLine', requireParam(p, 'id'));
+  requireCan(ctx, 'budget.edit', { type: 'planitem', id: line.deliverable_id });
+  return withLock(function () {
+    repoList('BudgetPhasing', function (x) { return x.budget_line_id === line.id; }).forEach(function (x) { repoSoftDelete('BudgetPhasing', x.id, null, ctx.actx); });
+    repoSoftDelete('BudgetLine', line.id, p.version, ctx.actx);
+    return { deleted: true };
+  });
+});
+
+/** Étalement à la main : la somme doit égaler le montant planifié de la ligne. mode = 'auto' revient au calcul. */
+defineAction('budget.phasing.set', function (p, ctx) {
+  var line = mustGet('BudgetLine', requireParam(p, 'lineId'));
+  var deliverable = mustGet('PlanItem', line.deliverable_id);
+  requireCan(ctx, 'budget.edit', { type: 'planitem', id: deliverable.id });
+  return withLock(function () {
+    if (p.mode === 'auto') {
+      var rec0 = repoUpdate('BudgetLine', line.id, { phasing_mode: 'auto' }, null, ctx.actx);
+      rephaseLine_(rec0, deliverable, ctx.actx);
+      return { mode: 'auto', months: repoList('BudgetPhasing', function (x) { return x.budget_line_id === line.id; }).map(function (x) { return { month: x.month, amount: Number(x.amount) }; }) };
+    }
+    var seen = {}, months = [], sum = 0;
+    (Array.isArray(p.months) ? p.months : []).forEach(function (m) {
+      var month = String(m && m.month || '').trim();
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new PpmError('VALIDATION', 'Mois invalide : « ' + month + ' » (format AAAA-MM).');
+      if (seen[month]) throw new PpmError('VALIDATION', 'Le mois ' + month + ' est indiqué deux fois.');
+      seen[month] = true;
+      var a = budgetNumber_(m.amount, 'Montant de ' + month);
+      months.push({ month: month, amount: round2(a) });
+      sum = round2(sum + a);
+    });
+    if (!months.length) throw new PpmError('VALIDATION', 'Indiquez au moins un mois.');
+    if (Math.abs(sum - Number(line.planned_amount)) > 0.005) {
+      throw new PpmError('VALIDATION', 'La somme des mois (' + sum + ') doit égaler le montant de la ligne (' + Number(line.planned_amount) + ').');
+    }
+    months.sort(function (a, b) { return a.month < b.month ? -1 : 1; });
+    repoUpdate('BudgetLine', line.id, { phasing_mode: 'manuel' }, null, ctx.actx);
+    writePhasing_(line, months, ctx.actx);
+    return { mode: 'manuel', months: months };
+  });
+});
+
+// ---------------------------------------------------------------- vues : accès, lignes, bilan
+
+function budgetAccess_(ctx, projectId) {
+  var scope = { type: 'project', id: projectId };
+  var all = can(ctx, 'budget.edit', scope);
+  var hasWp = !all && repoList('PlanItem', function (i) { return i.project_id === projectId && i.item_type === 'Livrable'; })
+    .some(function (i) { return can(ctx, 'budget.edit', { type: 'planitem', id: i.id }); });
+  return {
+    budget: all || hasWp, all: all, po: ctx.isAdmin || all || canPoView_(ctx, projectId),
+    rates: ctx.isAdmin || can(ctx, 'ratecard.manage', { type: 'global' }), cpn: can(ctx, 'cpn.edit', scope)
+  };
+}
+
+defineAction('budget.access', function (p, ctx) {
+  var project = mustGet('Project', requireParam(p, 'projectId'));
+  var a = budgetAccess_(ctx, project.id);
+  return Object.assign({ project: { id: project.id, code: project.code, name: project.name, cpn: project.cpn || '', cpn_label: project.cpn_label || '', version: project.version } }, a);
+});
+
+/** Lignes de budget d'un projet, par livrable, avec étalement ; les lignes hors périmètre de l'utilisateur sont masquées. */
+defineAction('budget.get', function (p, ctx) {
+  var project = mustGet('Project', requireParam(p, 'projectId'));
+  var access = budgetAccess_(ctx, project.id);
+  if (!access.budget) throw new PpmError('FORBIDDEN', 'Le budget est réservé aux responsables de budget du projet.');
+  var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; });
+  var wpById = indexBy_(wps);
+  var items = repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable'; });
+  var editable = {};
+  items.forEach(function (i) { if (access.all || can(ctx, 'budget.edit', { type: 'planitem', id: i.id })) editable[i.id] = true; });
+  var lines = repoList('BudgetLine', function (l) { return editable[l.deliverable_id]; });
+  var lineIds = {}; lines.forEach(function (l) { lineIds[l.id] = true; });
+  var phasing = {};
+  repoList('BudgetPhasing', function (x) { return lineIds[x.budget_line_id]; }).forEach(function (x) { (phasing[x.budget_line_id] = phasing[x.budget_line_id] || []).push(x); });
+  var resById = indexBy_(repoList('Resource'));
+  var views = lines.map(function (l) { return lineView_(l, ctx, phasing[l.id], resById, project.id); });
+  var topWp = function (item) {
+    var w = item.wp_id ? wpById[item.wp_id] : null, guard = 0;
+    while (w && w.parent_wp_id && wpById[w.parent_wp_id] && guard++ < 5) w = wpById[w.parent_wp_id];
+    return w;
+  };
+  var byId = indexBy_(items);
+  var months = {}, byWp = {};
+  views.forEach(function (l) {
+    l.phasing.forEach(function (m) { months[m.month] = round2((months[m.month] || 0) + m.amount); });
+    var it = byId[l.deliverable_id], w = it ? topWp(it) : null, key = w ? w.id : '';
+    var g = byWp[key] = byWp[key] || { wp_id: key, code: w ? w.wbs_code || '' : '', name: w ? w.name : 'Sans workpackage', internal: 0, external: 0, total: 0 };
+    if (l.cost_type === 'Forfait') g.external = round2(g.external + l.planned_amount); else g.internal = round2(g.internal + l.planned_amount);
+    g.total = round2(g.internal + g.external);
+  });
+  var withBudget = {}; lines.forEach(function (l) { withBudget[l.deliverable_id] = true; });
+  var cpnOf = function (item) {
+    var w = item.wp_id ? wpById[item.wp_id] : null, guard = 0;
+    while (w && guard++ < 5) { if (!isBlank(w.cpn)) return normCpn_(w.cpn); w = w.parent_wp_id ? wpById[w.parent_wp_id] : null; }
+    return normCpn_(project.cpn);
+  };
+  var wpLabel = function (item) { var w = item.wp_id ? wpById[item.wp_id] : null; return w ? (w.wbs_code ? w.wbs_code + ' ' : '') + w.name : ''; };
+  var deliverables = items.filter(function (i) { return editable[i.id]; }).map(function (i) {
+    return { id: i.id, name: i.name, wp: wpLabel(i), cpn: cpnOf(i), start: i.planned_start || null, finish: i.planned_finish || null, has_budget: !!withBudget[i.id] };
+  }).sort(function (a, b) { return String(a.wp).localeCompare(String(b.wp), 'fr', { numeric: true }) || String(a.name).localeCompare(String(b.name), 'fr'); });
+  var total = 0, ext = 0;
+  views.forEach(function (l) { total = round2(total + l.planned_amount); if (l.cost_type === 'Forfait') ext = round2(ext + l.planned_amount); });
+  return {
+    project: { id: project.id, code: project.code, name: project.name }, partial: !access.all,
+    lines: views, deliverables: deliverables,
+    totals: { total: total, external: ext, internal: round2(total - ext), by_wp: Object.keys(byWp).map(function (k) { return byWp[k]; }).sort(function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); }) },
+    months: Object.keys(months).sort().map(function (m) { return { month: m, planned: months[m] }; }),
+    missing: { deliverables_without_budget: deliverables.filter(function (d) { return !d.has_budget; }).length, undated_lines: views.filter(function (l) { return !l.phasing.length; }).length }
+  };
+});
+
+// ---------------------------------------------------------------- bilan par CPN (fonction pure)
+
+var PO_COMMITTED = ['Lancée', 'GR', 'Terminée'];
+
+/**
+ * d : { project, wps, items, lines, pos: [{ cpn, status, amount, launched_on }] }.
+ * Un livrable relève du CPN de son premier workpackage ancêtre qui en porte un, à défaut de celui du projet.
+ * Les PO relèvent du CPN qu'elles portent. Engagé = lancée + GR + terminée, en une fois (aucun étalement).
+ */
+function computeBalance_(d) {
+  var wpById = indexBy_(d.wps), itemById = indexBy_(d.items);
+  var cpnOf = function (item) {
+    var w = item.wp_id ? wpById[item.wp_id] : null, guard = 0;
+    while (w && guard++ < 5) { if (!isBlank(w.cpn)) return normCpn_(w.cpn); w = w.parent_wp_id ? wpById[w.parent_wp_id] : null; }
+    return normCpn_(d.project.cpn);
+  };
+  var groups = {}, order = [];
+  var group = function (cpn, label) {
+    var k = cpn || '';
+    if (!groups[k]) {
+      groups[k] = { cpn: k, label: label || '', sources: [], budget: { total: 0, internal: 0, external: 0 }, po: { planned: 0, committed: 0, received: 0, closed: 0, count: 0 } };
+      order.push(k);
+    }
+    if (label && !groups[k].label) groups[k].label = label;
+    return groups[k];
+  };
+  projectCpns_(d.project, d.wps).forEach(function (c) { var g = group(c.cpn, c.label); g.sources = c.sources; });
+  d.lines.forEach(function (l) {
+    var it = itemById[l.deliverable_id];
+    if (!it) return;
+    var g = group(cpnOf(it), ''), a = Number(l.planned_amount) || 0;
+    g.budget.total += a;
+    if (l.cost_type === 'Forfait') g.budget.external += a; else g.budget.internal += a;
+  });
+  d.pos.forEach(function (po) {
+    var g = group(normCpn_(po.cpn), ''), a = Number(po.amount) || 0;
+    g.po.count++;
+    if (po.status === 'À faire') g.po.planned += a;
+    if (PO_COMMITTED.indexOf(po.status) >= 0) g.po.committed += a;
+    if (po.status === 'GR' || po.status === 'Terminée') g.po.received += a;
+    if (po.status === 'Terminée') g.po.closed += a;
+  });
+  var tot = { budget: { total: 0, internal: 0, external: 0 }, po: { planned: 0, committed: 0, received: 0, closed: 0, count: 0 } };
+  var cpns = order.map(function (k) {
+    var g = groups[k];
+    ['total', 'internal', 'external'].forEach(function (f) { g.budget[f] = round2(g.budget[f]); tot.budget[f] = round2(tot.budget[f] + g.budget[f]); });
+    ['planned', 'committed', 'received', 'closed'].forEach(function (f) { g.po[f] = round2(g.po[f]); tot.po[f] = round2(tot.po[f] + g.po[f]); });
+    tot.po.count += g.po.count;
+    g.remaining_external = round2(g.budget.external - g.po.committed);
+    g.overrun = g.po.committed > g.budget.external + 0.005;
+    return g;
+  }).sort(function (a, b) { return (a.cpn === '') - (b.cpn === '') || a.cpn.localeCompare(b.cpn); });
+  return { cpns: cpns, totals: Object.assign(tot, { remaining_external: round2(tot.budget.external - tot.po.committed), overrun: tot.po.committed > tot.budget.external + 0.005 }) };
+}
+
+/** Engagements par mois : chaque PO engagée compte en totalité le mois de son lancement. */
+function committedByMonth_(pos) {
+  var out = {};
+  pos.forEach(function (po) {
+    if (PO_COMMITTED.indexOf(po.status) < 0 || isBlank(po.launched_on)) return;
+    var m = monthOf_(po.launched_on);
+    out[m] = round2((out[m] || 0) + (Number(po.amount) || 0));
+  });
+  return out;
+}
+
+defineAction('budget.balance', function (p, ctx) {
+  var project = mustGet('Project', requireParam(p, 'projectId'));
+  var access = budgetAccess_(ctx, project.id);
+  if (!access.all) throw new PpmError('FORBIDDEN', 'Le bilan du projet est réservé à ses responsables de budget.');
+  var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; });
+  var items = repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable'; });
+  var ids = {}; items.forEach(function (i) { ids[i.id] = true; });
+  var lines = repoList('BudgetLine', function (l) { return ids[l.deliverable_id]; });
+  var pos = projectOrders_(project.id, wps);
+  var bal = computeBalance_({ project: project, wps: wps, items: items, lines: lines, pos: pos });
+  var planned = {};
+  repoList('BudgetPhasing', function (x) { return lines.some(function (l) { return l.id === x.budget_line_id; }); }).forEach(function (x) { planned[x.month] = round2((planned[x.month] || 0) + Number(x.amount)); });
+  var committed = committedByMonth_(pos), months = {};
+  Object.keys(planned).concat(Object.keys(committed)).forEach(function (m) { months[m] = true; });
+  return Object.assign({
+    project: { id: project.id, code: project.code, name: project.name, cpn: project.cpn || '', cpn_label: project.cpn_label || '' },
+    months: Object.keys(months).sort().map(function (m) { return { month: m, planned: planned[m] || 0, committed: committed[m] || 0 }; })
+  }, bal);
+});
+
+// ======================================================================
+// 44_Orders.gs
+// ======================================================================
+
+/**
+ * PPM Core — 0.9.0 : commandes d'achat (PO).
+ *
+ * Une PO est passée auprès d'une ressource EXTERNE. Elle porte un CPN saisi à la main et un numéro unique saisi à la main
+ * (celui de Click and Buy). Si son CPN est celui d'un projet de l'outil (ou d'un de ses sous-projets), elle impacte le bilan
+ * budgétaire de ce projet ; sinon elle est simplement enregistrée, sans effet sur aucun budget de l'outil.
+ *
+ * Quatre statuts : À faire (prévisionnel, rien d'engagé), Lancée (engagée), GR (good receipt : prestation réceptionnée),
+ * Terminée (soldée). L'engagement se fait EN UNE FOIS, en totalité, à la date de lancement : aucun étalement.
+ * Chaque PO indique la date à laquelle la GR doit être faite ; à l'approche de cette date, puis au-delà, un rappel part
+ * dans le récapitulatif quotidien de son responsable et un constat apparaît pour le pilotage.
+ *
+ * Le montant se répartit entre un ou plusieurs livrables du projet, montants réglables (leur somme égale celui de la PO).
+ * Droits : toute personne INTERNE nommée dans l'équipe du projet crée et modifie les PO de ce projet.
+ * Aucun montant n'apparaît dans les constats, les mails ni les demandes à l'IA.
+ */
+
+var PO_NUMBER_RE = /^[A-Za-z0-9][A-Za-z0-9 ._\/-]{0,39}$/;
+var PO_ORDER = { 'À faire': 0, 'Lancée': 1, 'GR': 2, 'Terminée': 3 };
+
+// ---------------------------------------------------------------- droits
+
+function isInternalUser_(ctx) {
+  if (ctx.isAdmin) return true;
+  if (!ctx.resourceId) return false;
+  var r = repoGet('Resource', ctx.resourceId);
+  return !!r && !isTrue(r.deleted) && r.resource_type === 'Interne';
+}
+
+/** Nommé dans l'équipe du projet : un rôle sur le projet (ou au-dessus), ou sur l'un de ses workpackages. */
+function namedInProject_(ctx, projectId) {
+  if (can(ctx, 'po.edit', { type: 'project', id: projectId })) return true;
+  var wpIds = {};
+  repoList('WorkPackage', function (w) { return w.project_id === projectId; }).forEach(function (w) { wpIds[w.id] = true; });
+  return (ctx.assignments || []).some(function (a) { return a.scope_type === 'workpackage' && wpIds[a.scope_id]; });
+}
+
+function canPoEdit_(ctx, projectId) {
+  if (ctx.isAdmin) return true;
+  if (!isInternalUser_(ctx)) return false;
+  return projectId ? namedInProject_(ctx, projectId) : (ctx.assignments || []).length > 0;
+}
+
+function canPoView_(ctx, projectId) {
+  return canPoEdit_(ctx, projectId) || can(ctx, 'budget.edit', { type: 'project', id: projectId });
+}
+
+// ---------------------------------------------------------------- validations
+
+function poNumber_(v) {
+  var s = String(v === undefined || v === null ? '' : v).replace(/\s+/g, ' ').trim();
+  if (!s) throw new PpmError('VALIDATION', 'Le numéro de PO est obligatoire (celui de Click and Buy).');
+  if (!PO_NUMBER_RE.test(s)) throw new PpmError('VALIDATION', 'Numéro de PO invalide : 40 caractères au plus, lettres, chiffres, espace, point, tiret, barre oblique.');
+  return s;
+}
+
+function poStatus_(s) {
+  if (PO_STATUSES.indexOf(s) < 0) throw new PpmError('VALIDATION', 'Statut inconnu : ' + PO_STATUSES.join(', ') + '.');
+  return s;
+}
+
+function poAmount_(v) {
+  var n = Number(v);
+  if (isBlank(v) || isNaN(n) || n <= 0 || n > 1e9) throw new PpmError('VALIDATION', 'Montant : un nombre strictement positif.');
+  return round2(n);
+}
+
+/** Dates propres à chaque statut : l'engagement date du lancement, la réception de la GR, le solde de la clôture. */
+function poDates_(status, cur, v, today) {
+  var pick = function (key, label) { return key in v ? wbsDate_(v[key], label) : (cur ? String(cur[key] || '') : ''); };
+  var launched = pick('launched_on', 'Date de lancement'), grOn = pick('gr_on', 'Date de GR'), closed = pick('closed_on', 'Date de clôture');
+  if (status === 'À faire') { launched = ''; grOn = ''; closed = ''; }
+  else {
+    if (!launched) launched = today;
+    if (status === 'Lancée') { grOn = ''; closed = ''; }
+    else {
+      if (!grOn) grOn = today;
+      if (status === 'GR') closed = ''; else if (!closed) closed = today;
+    }
+  }
+  if (grOn && grOn < launched) throw new PpmError('VALIDATION', 'La GR ne peut pas précéder le lancement de la PO.');
+  if (closed && grOn && closed < grOn) throw new PpmError('VALIDATION', 'La clôture ne peut pas précéder la GR.');
+  return { launched_on: launched, gr_on: grOn, closed_on: closed };
+}
+
+function poExternalResource_(id) {
+  var r = isBlank(id) ? null : repoGet('Resource', id);
+  if (!r || isTrue(r.deleted)) throw new PpmError('VALIDATION', 'Ressource externe introuvable.');
+  if (r.resource_type !== 'Externe') throw new PpmError('VALIDATION', 'Une PO est passée auprès d’une ressource externe : « ' + r.name + ' » est interne.');
+  return r;
+}
+
+function poOwner_(id, ctx) {
+  var target = isBlank(id) ? ctx.resourceId : id;
+  if (isBlank(target)) return '';
+  var r = repoGet('Resource', target);
+  if (!r || isTrue(r.deleted) || r.resource_type !== 'Interne') throw new PpmError('VALIDATION', 'Le responsable de la GR doit être une personne interne.');
+  return String(target);
+}
+
+/** Répartition entre livrables du projet : montants réglables, somme égale au montant de la PO. */
+function poLinks_(links, project, amount) {
+  if (!links.length) return [];
+  if (!project) throw new PpmError('VALIDATION', 'Ce CPN ne correspond à aucun projet de l’outil : la PO ne peut pas être répartie sur des livrables.');
+  var items = indexBy_(repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable'; }));
+  var seen = {}, out = [], sum = 0;
+  links.forEach(function (l) {
+    var it = items[l && l.deliverable_id];
+    if (!it) throw new PpmError('VALIDATION', 'Livrable introuvable dans le projet ' + project.code + '.');
+    if (seen[it.id]) throw new PpmError('VALIDATION', 'Le livrable « ' + it.name + ' » est indiqué deux fois.');
+    seen[it.id] = true;
+    var a = round2(budgetNumber_(l.amount, 'Montant du livrable « ' + it.name + ' »'));
+    out.push({ deliverable_id: it.id, amount: a });
+    sum = round2(sum + a);
+  });
+  if (Math.abs(sum - amount) > 0.005) throw new PpmError('VALIDATION', 'La somme des montants par livrable (' + sum + ') doit égaler le montant de la PO (' + amount + ').');
+  return out;
+}
+
+// ---------------------------------------------------------------- lecture
+
+function attachLinks_(pos) {
+  var byId = {};
+  pos.forEach(function (o) { o.links = []; byId[o.id] = o; });
+  repoList('PurchaseOrderLink', function (l) { return byId[l.po_id]; }).forEach(function (l) {
+    byId[l.po_id].links.push({ id: l.id, deliverable_id: l.deliverable_id, amount: Number(l.amount) || 0 });
+  });
+  return pos;
+}
+
+/** PO d'un projet : celles dont le CPN est celui du projet ou d'un de ses sous-projets. */
+function projectOrders_(projectId, wps) {
+  var project = repoGet('Project', projectId);
+  var set = {};
+  projectCpns_(project, wps).forEach(function (c) { set[c.cpn] = true; });
+  return attachLinks_(repoList('PurchaseOrder', function (o) { return set[normCpn_(o.cpn)]; }));
+}
+
+function grFlag_(o, today) {
+  if (o.status !== 'Lancée' || isBlank(o.gr_due_date)) return '';
+  if (String(o.gr_due_date) < today) return 'late';
+  return String(o.gr_due_date) <= addCalendarDays(today, THRESHOLDS.dueSoonDays) ? 'soon' : '';
+}
+
+defineAction('po.options', function (p, ctx) {
+  var project = mustGet('Project', requireParam(p, 'projectId'));
+  if (!canPoView_(ctx, project.id)) throw new PpmError('FORBIDDEN', 'Les commandes d’achat sont réservées aux personnes internes nommées dans l’équipe du projet.');
+  var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; });
+  var wpById = indexBy_(wps);
+  var lines = repoList('BudgetLine', function (l) { return l.cost_type === 'Forfait'; });
+  var ext = {};
+  lines.forEach(function (l) { ext[l.deliverable_id] = round2((ext[l.deliverable_id] || 0) + (Number(l.planned_amount) || 0)); });
+  var resources = repoList('Resource');
+  return {
+    cpns: projectCpns_(project, wps),
+    externals: resources.filter(function (r) { return r.resource_type === 'Externe'; }).map(function (r) { return { id: r.id, name: r.name, supplier: r.supplier || '' }; })
+      .sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); }),
+    internals: resources.filter(function (r) { return r.resource_type === 'Interne'; }).map(function (r) { return { id: r.id, name: r.name }; })
+      .sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); }),
+    deliverables: repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable'; }).map(function (i) {
+      var w = i.wp_id ? wpById[i.wp_id] : null;
+      return { id: i.id, name: i.name, wp: w ? (w.wbs_code ? w.wbs_code + ' ' : '') + w.name : '', budget_external: ext[i.id] || 0 };
+    }).sort(function (a, b) { return String(a.wp).localeCompare(String(b.wp), 'fr', { numeric: true }) || String(a.name).localeCompare(String(b.name), 'fr'); }),
+    canEdit: canPoEdit_(ctx, project.id)
+  };
+});
+
+function orderView_(o, env, today) {
+  var res = env.resById[o.resource_id], owner = env.resById[o.owner_resource_id];
+  var links = o.links.map(function (l) { var it = env.itemById[l.deliverable_id]; return { deliverable_id: l.deliverable_id, name: it ? it.name : '(supprimé)', amount: l.amount }; });
+  var allocated = round2(o.links.reduce(function (a, l) { return a + l.amount; }, 0));
+  var warnings = [];
+  var committed = PO_COMMITTED.indexOf(o.status) >= 0;
+  if (env.project && o.links.length && Math.abs(allocated - Number(o.amount)) > 0.005) warnings.push('Répartition incomplète : ' + round2(Number(o.amount) - allocated) + ' non affecté à un livrable.');
+  if (env.project && !o.links.length) warnings.push('Aucun livrable lié : le montant pèse sur le CPN sans être rattaché à un livrable.');
+  o.links.forEach(function (l) {
+    var it = env.itemById[l.deliverable_id];
+    if (!it) return;
+    var e = env.external[it.id] || 0;
+    if (l.amount > 0 && e === 0) warnings.push('Le livrable « ' + it.name + ' » n’a pas de budget externe.');
+    else if (committed && (env.committed[it.id] || 0) > e + 0.005) warnings.push('Le budget externe du livrable « ' + it.name + ' » est dépassé.');
+    if (env.cpnOf && env.cpnOf(it) && env.cpnOf(it) !== normCpn_(o.cpn)) warnings.push('Le livrable « ' + it.name + ' » relève du CPN ' + env.cpnOf(it) + ', pas de ' + normCpn_(o.cpn) + '.');
+  });
+  if (o.status === 'À faire' && !isBlank(o.start_date) && String(o.start_date) <= today) warnings.push('À lancer : l’activité a commencé le ' + o.start_date + '.');
+  return {
+    id: o.id, version: o.version, po_number: o.po_number, cpn: normCpn_(o.cpn), cpn_label: env.cpnLabels ? env.cpnLabels[normCpn_(o.cpn)] || '' : '',
+    resource: { id: o.resource_id, name: res ? res.name : '(supprimée)', supplier: res ? res.supplier || '' : '' },
+    owner: { id: o.owner_resource_id || '', name: owner ? owner.name : '' }, description: o.description || '',
+    start_date: o.start_date || '', end_date: o.end_date || '', amount: Number(o.amount) || 0, status: o.status,
+    gr_due_date: o.gr_due_date || '', launched_on: o.launched_on || '', gr_on: o.gr_on || '', closed_on: o.closed_on || '',
+    gr_flag: grFlag_(o, today), links: links, unallocated: round2(Number(o.amount) - allocated), warnings: warnings, created_by: o.created_by || ''
+  };
+}
+
+function projectEnv_(project, wps, pos) {
+  var items = repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable'; });
+  var itemById = indexBy_(items), wpById = indexBy_(wps);
+  var ids = {}; items.forEach(function (i) { ids[i.id] = true; });
+  var external = {}, committed = {};
+  repoList('BudgetLine', function (l) { return ids[l.deliverable_id] && l.cost_type === 'Forfait'; }).forEach(function (l) { external[l.deliverable_id] = round2((external[l.deliverable_id] || 0) + (Number(l.planned_amount) || 0)); });
+  pos.forEach(function (o) { if (PO_COMMITTED.indexOf(o.status) >= 0) o.links.forEach(function (l) { committed[l.deliverable_id] = round2((committed[l.deliverable_id] || 0) + l.amount); }); });
+  var cpnOf = function (item) {
+    var w = item.wp_id ? wpById[item.wp_id] : null, guard = 0;
+    while (w && guard++ < 5) { if (!isBlank(w.cpn)) return normCpn_(w.cpn); w = w.parent_wp_id ? wpById[w.parent_wp_id] : null; }
+    return normCpn_(project.cpn);
+  };
+  var labels = {};
+  projectCpns_(project, wps).forEach(function (c) { labels[c.cpn] = c.label; });
+  return { project: project, resById: indexBy_(repoList('Resource')), itemById: itemById, external: external, committed: committed, cpnOf: cpnOf, cpnLabels: labels, wpById: wpById, items: items };
+}
+
+/** PO d'un projet (par CPN), avec la consommation par livrable ; ou, avec scope = 'outside', mes PO sans projet dans l'outil. */
+defineAction('po.list', function (p, ctx) {
+  var today = todayStr();
+  if (p.scope === 'outside') {
+    if (!canPoEdit_(ctx, '')) throw new PpmError('FORBIDDEN', 'Réservé aux personnes internes nommées dans une équipe.');
+    var idx = cpnIndex_();
+    var mine = attachLinks_(repoList('PurchaseOrder', function (o) {
+      return !idx[normCpn_(o.cpn)] && (ctx.isAdmin || String(o.created_by || '').toLowerCase() === ctx.email || (ctx.resourceId && o.owner_resource_id === ctx.resourceId));
+    }));
+    var env0 = { project: null, resById: indexBy_(repoList('Resource')), itemById: {}, external: {}, committed: {} };
+    return { orders: mine.map(function (o) { return orderView_(o, env0, today); }).sort(function (a, b) { return String(a.po_number).localeCompare(String(b.po_number)); }) };
+  }
+  var project = mustGet('Project', requireParam(p, 'projectId'));
+  if (!canPoView_(ctx, project.id)) throw new PpmError('FORBIDDEN', 'Les commandes d’achat sont réservées aux personnes internes nommées dans l’équipe du projet.');
+  var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; });
+  var pos = projectOrders_(project.id, wps);
+  var env = projectEnv_(project, wps, pos);
+  var orders = pos.map(function (o) { return orderView_(o, env, today); }).sort(function (a, b) {
+    return (PO_ORDER[a.status] - PO_ORDER[b.status]) || String(a.gr_due_date || '9999').localeCompare(String(b.gr_due_date || '9999')) || String(a.po_number).localeCompare(String(b.po_number));
+  });
+  var planned = {};
+  pos.forEach(function (o) { if (o.status === 'À faire') o.links.forEach(function (l) { planned[l.deliverable_id] = round2((planned[l.deliverable_id] || 0) + l.amount); }); });
+  var deliverables = env.items.filter(function (i) { return env.external[i.id] || env.committed[i.id] || planned[i.id]; }).map(function (i) {
+    var w = i.wp_id ? env.wpById[i.wp_id] : null, e = env.external[i.id] || 0, c = env.committed[i.id] || 0;
+    return { id: i.id, name: i.name, wp: w ? (w.wbs_code ? w.wbs_code + ' ' : '') + w.name : '', cpn: env.cpnOf(i), budget_external: e, committed: c, planned: planned[i.id] || 0, remaining: round2(e - c), overrun: c > e + 0.005 };
+  }).sort(function (a, b) { return String(a.wp).localeCompare(String(b.wp), 'fr', { numeric: true }) || String(a.name).localeCompare(String(b.name), 'fr'); });
+  return { project: { id: project.id, code: project.code, name: project.name, cpn: project.cpn || '', cpn_label: project.cpn_label || '' }, orders: orders, deliverables: deliverables, canEdit: canPoEdit_(ctx, project.id) };
+});
+
+// ---------------------------------------------------------------- écriture
+
+function replaceLinks_(poId, links, actx) {
+  repoList('PurchaseOrderLink', function (l) { return l.po_id === poId; }).forEach(function (l) { repoSoftDelete('PurchaseOrderLink', l.id, null, actx); });
+  links.forEach(function (l) { repoInsert('PurchaseOrderLink', { po_id: poId, deliverable_id: l.deliverable_id, amount: l.amount }, actx); });
+}
+
+/** Crée ou modifie une PO. values : numéro, CPN, ressource externe, période, montant, statut, échéance de GR, responsable de la GR… */
+defineAction('po.save', function (p, ctx) {
+  var v = p.values || {};
+  var cur = isBlank(p.id) ? null : mustGet('PurchaseOrder', p.id);
+  var today = todayStr();
+  return withLock(function () {
+    var number = !cur || 'po_number' in v ? poNumber_(v.po_number) : cur.po_number;
+    if (repoList('PurchaseOrder', function (o) { return (!cur || o.id !== cur.id) && String(o.po_number).toLowerCase() === number.toLowerCase(); }).length) {
+      throw new PpmError('VALIDATION', 'Le numéro de PO ' + number + ' existe déjà : il est unique.');
+    }
+    var cpn = !cur || 'cpn' in v ? checkCpnValue_(v.cpn) : normCpn_(cur.cpn);
+    if (!cpn) throw new PpmError('VALIDATION', 'Le CPN est obligatoire.');
+    var owner = cpnOwner_(cpn), project = owner ? owner.project : null;
+    var before = cur ? cpnOwner_(cur.cpn) : null;
+    if (!canPoEdit_(ctx, project ? project.id : '') || (before && !canPoEdit_(ctx, before.project.id))) {
+      throw new PpmError('FORBIDDEN', project ? 'Seules les personnes internes nommées dans l’équipe du projet ' + project.code + ' créent ou modifient ses PO.'
+        : 'Seules les personnes internes nommées dans une équipe créent une PO.');
+    }
+    var resource = poExternalResource_('resource_id' in v || !cur ? v.resource_id : cur.resource_id);
+    var status = !cur || 'status' in v ? poStatus_(isBlank(v.status) ? 'À faire' : v.status) : cur.status;
+    var amount = !cur || 'amount' in v ? poAmount_(v.amount) : Number(cur.amount);
+    var start = 'start_date' in v ? wbsDate_(v.start_date, 'Début d’activité') : (cur ? cur.start_date || '' : '');
+    var end = 'end_date' in v ? wbsDate_(v.end_date, 'Fin d’activité') : (cur ? cur.end_date || '' : '');
+    if (start && end && start > end) throw new PpmError('VALIDATION', 'La fin d’activité ne peut pas précéder son début.');
+    var due = 'gr_due_date' in v ? wbsDate_(v.gr_due_date, 'Date de GR attendue') : (cur ? cur.gr_due_date || '' : '');
+    if (!due && (status === 'À faire' || status === 'Lancée')) throw new PpmError('VALIDATION', 'La date à laquelle la GR doit être faite est obligatoire : elle déclenche le rappel.');
+    var dates = poDates_(status, cur, v, today);
+    var links = Array.isArray(p.links) ? poLinks_(p.links, project, amount) : null;
+    if (links === null && cur) {
+      var existing = repoList('PurchaseOrderLink', function (l) { return l.po_id === cur.id; });
+      if (existing.length && (Number(cur.amount) !== amount || (before && project && before.project.id !== project.id))) {
+        throw new PpmError('VALIDATION', 'Le montant ou le CPN a changé : ajustez la répartition entre livrables.');
+      }
+    }
+    var values = {
+      po_number: number, cpn: cpn, resource_id: resource.id, owner_resource_id: poOwner_('owner_resource_id' in v ? v.owner_resource_id : (cur ? cur.owner_resource_id : ''), ctx),
+      description: wbsShortText_('description' in v ? v.description : (cur ? cur.description : ''), 300, 'Description'),
+      start_date: start, end_date: end, amount: amount, status: status, gr_due_date: due,
+      launched_on: dates.launched_on, gr_on: dates.gr_on, closed_on: dates.closed_on
+    };
+    var rec = cur ? repoUpdate('PurchaseOrder', cur.id, values, p.version, ctx.actx) : repoInsert('PurchaseOrder', values, ctx.actx);
+    if (links !== null) replaceLinks_(rec.id, links, ctx.actx);
+    var stored = attachLinks_([rec])[0];
+    var env = project ? projectEnv_(project, repoList('WorkPackage', function (w) { return w.project_id === project.id; }), projectOrders_(project.id, repoList('WorkPackage', function (w) { return w.project_id === project.id; })))
+      : { project: null, resById: indexBy_(repoList('Resource')), itemById: {}, external: {}, committed: {} };
+    var view = orderView_(stored, env, today);
+    view.project = project ? { id: project.id, code: project.code, name: project.name } : null;
+    return view;
+  });
+});
+
+/** Changement de statut en un geste (les dates d'engagement, de GR et de clôture suivent). */
+defineAction('po.status', function (p, ctx) {
+  var o = mustGet('PurchaseOrder', requireParam(p, 'id'));
+  poStatus_(p.status);
+  var owner = cpnOwner_(o.cpn);
+  if (!canPoEdit_(ctx, owner ? owner.project.id : '')) throw new PpmError('FORBIDDEN', 'Seules les personnes internes nommées dans l’équipe du projet modifient ses PO.');
+  var dates = poDates_(p.status, o, {}, todayStr());
+  var rec = repoUpdate('PurchaseOrder', o.id, Object.assign({ status: p.status }, dates), p.version, ctx.actx);
+  return { id: rec.id, version: rec.version, status: rec.status, launched_on: rec.launched_on || '', gr_on: rec.gr_on || '', closed_on: rec.closed_on || '' };
+});
+
+defineAction('po.delete', function (p, ctx) {
+  var o = mustGet('PurchaseOrder', requireParam(p, 'id'));
+  var owner = cpnOwner_(o.cpn);
+  var creator = String(o.created_by || '').toLowerCase() === ctx.email;
+  var manager = owner ? can(ctx, 'cpn.edit', { type: 'project', id: owner.project.id }) : false;
+  if (!ctx.isAdmin && !manager && !(creator && canPoEdit_(ctx, owner ? owner.project.id : ''))) {
+    throw new PpmError('FORBIDDEN', 'Une PO se supprime par son auteur ou par le pilotage du projet.');
+  }
+  return withLock(function () {
+    replaceLinks_(o.id, [], ctx.actx);
+    repoSoftDelete('PurchaseOrder', o.id, p.version, ctx.actx);
+    return { deleted: true };
+  });
+});
+
+// ---------------------------------------------------------------- constats (moteur de règles)
+
+/**
+ * Constats sur les PO : GR en retard ou attendue sous 7 jours, PO à lancer alors que l'activité a commencé, dépassement du
+ * budget externe d'un CPN. Fonction pure. Aucun montant dans les messages (ils vont aux équipes et peuvent aller à l'IA).
+ *   data : { orders: [{ id, po_number, projectId, cpn, status, start_date, gr_due_date, resource }], balances: { projectId: bilan } }
+ */
+function poFindings_(data, today) {
+  var out = [];
+  var soon = addCalendarDays(today, THRESHOLDS.dueSoonDays);
+  (data.orders || []).forEach(function (o) {
+    if (!o.projectId) return;
+    var who = o.po_number + (o.resource ? ' (' + o.resource + ')' : '');
+    if (o.status === 'Lancée' && !isBlank(o.gr_due_date)) {
+      if (String(o.gr_due_date) < today) {
+        out.push({ projectId: o.projectId, rule: 'PO_GR_LATE', severity: 'Alerte', targetType: 'PurchaseOrder', targetId: o.id,
+          message: 'La GR de la PO ' + who + ' devait être faite le ' + o.gr_due_date + '.',
+          suggestion: 'Faire la réception (GR) dans Click and Buy, puis passer la PO en « GR » dans l’outil.' });
+      } else if (String(o.gr_due_date) <= soon) {
+        out.push({ projectId: o.projectId, rule: 'PO_GR_SOON', severity: 'Vigilance', targetType: 'PurchaseOrder', targetId: o.id,
+          message: 'La GR de la PO ' + who + ' est attendue le ' + o.gr_due_date + '.', suggestion: 'Préparer la réception de la prestation.' });
+      }
+    }
+    if (o.status === 'À faire' && !isBlank(o.start_date) && String(o.start_date) <= today) {
+      out.push({ projectId: o.projectId, rule: 'PO_TODO_LATE', severity: 'Vigilance', targetType: 'PurchaseOrder', targetId: o.id,
+        message: 'La PO ' + who + ' est encore à faire alors que l’activité a commencé le ' + o.start_date + '.', suggestion: 'Lancer la PO ou corriger la période d’activité.' });
+    }
+  });
+  Object.keys(data.balances || {}).forEach(function (projectId) {
+    (data.balances[projectId].cpns || []).forEach(function (g) {
+      if (g.overrun && g.budget.external > 0) {
+        out.push({ projectId: projectId, rule: 'PO_OVERRUN', severity: 'Alerte', targetType: 'Project', targetId: projectId,
+          message: 'Les PO engagées dépassent le budget externe du CPN ' + g.cpn + ' de ' + Math.round(100 * (g.po.committed - g.budget.external) / g.budget.external) + ' %.',
+          suggestion: 'Revoir le budget externe, ou la répartition et le montant des PO.' });
+      } else if (g.overrun && g.budget.external === 0 && g.po.committed > 0) {
+        out.push({ projectId: projectId, rule: 'PO_UNBUDGETED', severity: 'Vigilance', targetType: 'Project', targetId: projectId,
+          message: 'Des PO sont engagées sur le CPN ' + (g.cpn || '(sans CPN)') + ', qui n’a aucun budget externe.', suggestion: 'Saisir le budget externe correspondant.' });
+      }
+    });
+  });
+  return out;
+}
+
+/** Charge les données et calcule les constats des PO (appelée par runRules). */
+function poRuleInputs_() {
+  var projects = repoList('Project'), pos = attachLinks_(repoList('PurchaseOrder'));
+  var idx = cpnIndex_(), resById = indexBy_(repoList('Resource'));
+  var byProject = {};
+  var orders = pos.map(function (o) {
+    var own = idx[normCpn_(o.cpn)];
+    var projectId = own ? own.project.id : '';
+    if (projectId) (byProject[projectId] = byProject[projectId] || []).push(o);
+    return { id: o.id, po_number: o.po_number, projectId: projectId, cpn: normCpn_(o.cpn), status: o.status, start_date: o.start_date || '',
+      gr_due_date: o.gr_due_date || '', resource: resById[o.resource_id] ? resById[o.resource_id].name : '' };
+  });
+  var balances = {};
+  projects.forEach(function (project) {
+    if (project.status === 'Clos' || !byProject[project.id]) return;
+    var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; });
+    var items = repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable'; });
+    var ids = {}; items.forEach(function (i) { ids[i.id] = true; });
+    balances[project.id] = computeBalance_({ project: project, wps: wps, items: items, lines: repoList('BudgetLine', function (l) { return ids[l.deliverable_id]; }), pos: byProject[project.id] });
+  });
+  return { orders: orders, balances: balances };
+}

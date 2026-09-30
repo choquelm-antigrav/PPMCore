@@ -1,5 +1,16 @@
 # Journal des versions
 
+## 0.9.0 — budget, CPN et commandes d'achat (lot 3, première partie)
+
+- **CPN** : code financier du projet avec sa désignation, portable aussi par un sous-projet (workpackage de premier niveau) ; un CPN ne couvre qu'un projet ; les analyses budgétaires se font par CPN.
+- **Commandes d'achat (PO)** : numéro unique saisi à la main (Click and Buy), ressource externe, CPN saisi à la main, période d'activité, montant, répartition en montants réglables entre livrables, statuts À faire / Lancée / GR / Terminée. **Engagement en une fois** à la date de lancement, sans étalement. Elles pèsent sur le budget du projet dont elles portent le CPN.
+- **Date de GR attendue** : rappel dans le récapitulatif quotidien du responsable de la GR, et constats pour le pilotage (GR en retard, GR sous 7 jours, PO à lancer, dépassement du budget externe). Aucun montant dans les constats et les mails.
+- **Budget** : lignes par livrable (interne : jours × taux **figé** ; externe : forfait), étalement automatique qui suit les dates du livrable ou fixé à la main, grille de taux par profil, pays et date d'effet (réservée au chef de projet et au DPL), profil tarifaire des personnes.
+- **Bilan par CPN** : budget interne et externe, PO à faire, engagé, réceptionné, soldé, reste.
+- Toute personne **interne** nommée dans l'équipe du projet peut faire une PO.
+- Nouvelle page Budget ; lien dans la bannière pour les personnes concernées. `dist/` : 9 fichiers. Tests : 138, plus l'essai de la page.
+- Pas encore : import du réalisé (actuals) et valeur acquise (EVM), prévus pour la suite.
+
 ## 0.8.0 — dépendances, rôles, personnes et équipes depuis la page Structure
 
 - **Dépendances** : liste amont et aval sur la carte d'un livrable ou d'un jalon, ajout (même programme), retrait, type et décalage ; refus des boucles, doublons et liens d'un élément avec lui-même.

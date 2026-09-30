@@ -1,18 +1,18 @@
-# Premiers pas : installer et essayer PPM (version 0.8.0)
+# Premiers pas : installer et essayer PPM (version 0.9.0)
 
-Environ 15 minutes. Pas besoin d'AppSheet pour ces essais. Tout ce qu'il faut est dans le dossier `dist` de l'archive : **8 fichiers**.
+Environ 15 minutes. Pas besoin d'AppSheet pour ces essais. Tout ce qu'il faut est dans le dossier `dist` de l'archive : **9 fichiers**.
 
 ## 1. Créer le projet
 
 1. Aller sur **script.google.com**, cliquer **Nouveau projet**, le nommer **PPM Core**.
 2. Roue dentée (**Paramètres du projet**) : cocher **Afficher le fichier manifeste « appsscript.json »**.
 
-## 2. Copier les 8 fichiers
+## 2. Copier les 9 fichiers
 
 | Fichier de `dist` | Dans l'éditeur |
 | --- | --- |
 | `PPM_Core.gs` | Renommer `Code.gs` en `PPM_Core`, remplacer tout son contenu |
-| `Gantt.html`, `Structure.html`, `Suivi.html`, `Copilote.html`, `Compte.html`, `Admin.html` | Pour chacun : **+** → **HTML**, même nom sans `.html`, coller |
+| `Gantt.html`, `Structure.html`, `Suivi.html`, `Copilote.html`, `Compte.html`, `Admin.html`, `Budget.html` | Pour chacun : **+** → **HTML**, même nom sans `.html`, coller |
 | `appsscript.json` | Ouvrir le fichier existant, remplacer tout son contenu |
 
 ## 3. Installer
@@ -38,6 +38,7 @@ Ouvrir l'URL suivie de `?view=gantt`. Les onglets en haut de chaque page mènent
 | **Suivi** | Onglet **Baselines** → **Figer la baseline B0**. Déplacer ensuite une barre dans le Planning : un trait gris garde l'ancienne place. **Changements à valider** → **Tout valider**. **Agenda et Drive** → **Créer l'agenda et le dossier du projet**.  |
 | **Mon compte** (icône de personne, en haut à droite) | **Notifications** → **Me l'envoyer maintenant** : le mail récapitulatif arrive dans votre boîte. **Affichage** : choisir le thème et la page d'accueil. |
 | **Administration** (icône d'engrenage, administrateurs seulement) | **Santé** : l'installation doit être « Conforme ». **Réglages** : ajouter un second administrateur. **Jours fériés** : ajouter une année. |
+| **Budget** (onglet de la bannière) | Définir le **CPN** du projet. **Taux** : ajouter un taux, donner un profil aux personnes. **Budget** : ajouter une ligne (interne : jours ; externe : forfait). **Achats (PO)** : ajouter une PO (numéro Click and Buy, CPN, ressource externe, montant, date de GR attendue, répartition par livrable), la passer en Lancée puis GR. **Bilan par CPN** : engagé et reste. |
 | **Copilote** | **Synthèse** chiffrée du projet ; **Simulation** : choisir un livrable, +10 jours, **Simuler** (rien n'est enregistré) ; **Suggestions** : accepter ou ignorer. |
 
 Le bouton en haut à droite de la bannière bascule en thème nuit (par défaut, celui de l'ordinateur) et mémorise votre choix. Pour mesurer la vitesse d'affichage : touche F12, onglet Console, chaque page y indique son temps de préparation.
@@ -48,7 +49,7 @@ Le copilote fonctionne sans IA. Pour essayer la préparation de textes à coller
 
 ## Mettre à jour plus tard
 
-1. Remplacer le contenu des 8 fichiers par ceux de la nouvelle archive (toujours les 8 : c'est plus sûr que de chercher ce qui a changé).
+1. Remplacer le contenu des 9 fichiers par ceux de la nouvelle archive (toujours les 9 : c'est plus sûr que de chercher ce qui a changé).
 2. Exécuter **installerPpm** (il ajoute les nouvelles colonnes et vérifie que chaque page est à la bonne version).
 3. **Déployer** → **Gérer les déploiements** → crayon → Version : **Nouvelle version** → **Déployer**. L'URL ne change pas.
 

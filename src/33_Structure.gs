@@ -357,7 +357,7 @@ function buildWbsTree(data, projectId, today, ctx) {
   var rootId = 'project:' + project.id;
   var nodes = [Object.assign({
     id: rootId, parent: '', kind: 'project', name: project.name, code: project.code, status: project.status || '',
-    charge_code: '', ref: project.id, canEdit: canEdit('project', project.id)
+    charge_code: '', ref: project.id, canEdit: canEdit('project', project.id), cpn: project.cpn || '', cpn_label: project.cpn_label || ''
   }, ownerOf(project.manager_resource_id), summary(items))];
 
   var emitWp = function (w, parentId) {
@@ -365,7 +365,8 @@ function buildWbsTree(data, projectId, today, ctx) {
     var id = 'wp:' + w.id;
     nodes.push(Object.assign({
       id: id, parent: parentId, kind: 'wp', name: w.name, code: w.wbs_code || '', status: '', charge_code: w.charge_code || '',
-      ref: w.id, version: w.version, owner_id: w.owner_resource_id || '', parent_ref: w.parent_wp_id || '', canEdit: canEdit('workpackage', w.id)
+      ref: w.id, version: w.version, owner_id: w.owner_resource_id || '', parent_ref: w.parent_wp_id || '', canEdit: canEdit('workpackage', w.id),
+      cpn: w.cpn || '', cpn_label: w.cpn_label || ''
     }, ownerOf(w.owner_resource_id), summary(all)));
     (childrenOfWp[w.id] || []).slice().sort(byWbs_).forEach(function (c) { emitWp(c, id); });
     (itemsOfWp[w.id] || []).slice().sort(byStartThenName_).forEach(function (i) { emitItem(i, id); });
@@ -392,6 +393,7 @@ function buildWbsTree(data, projectId, today, ctx) {
       program_name: program ? program.name : '' },
     nodes: nodes,
     canCreate: canEdit('project', projectId),
+    canCpn: !!ctx && can(ctx, 'cpn.edit', { type: 'project', id: projectId }),
     stats: {
       wps: wps.length, items: items.length,
       depth: wps.some(function (w) { return !isBlank(w.parent_wp_id); }) ? 2 : (wps.length ? 1 : 0)

@@ -5,7 +5,7 @@
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.8.0';
+var PPM_VERSION = '0.9.0';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -53,6 +53,8 @@ var PERMISSIONS = {
   'baseline.manage':  ['DPL', 'CP'],
   'baseline.request': ['PL', 'DPL', 'CP', 'RWP', 'MEMBER'],
   'budget.edit':      ['PL', 'DPL', 'CP', 'RWP'],
+  'cpn.edit':         ['PL', 'DPL', 'CP'],
+  'po.edit':          ['PL', 'DPL', 'CP', 'RWP', 'MEMBER'],
   'ratecard.manage':  ['DPL', 'CP'],
   'actuals.manage':   ['DPL', 'CP'],
   'roles.assign':     ['PL', 'DPL', 'CP'],

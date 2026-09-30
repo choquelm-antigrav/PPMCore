@@ -12,6 +12,9 @@
 
 var COUNTRIES = ['FR', 'DE', 'UK', 'IN'];
 
+/** Statuts d'une commande d'achat (PO) : à faire, lancée (engagée), GR (good receipt : prestation réceptionnée), terminée (soldée). */
+var PO_STATUSES = ['À faire', 'Lancée', 'GR', 'Terminée'];
+
 var SCHEMA = {
   // ---------- Classeur Données : structure (WBS) ----------
   Program: {
@@ -23,13 +26,13 @@ var SCHEMA = {
   Project: {
     book: 'data',
     cols: ['id', 'code', 'name', 'program_id', 'manager_resource_id', 'status', 'holiday_country',
-      'start_date', 'end_date', 'active_baseline_id', 'drive_folder_id', 'calendar_id'],
+      'start_date', 'end_date', 'active_baseline_id', 'drive_folder_id', 'calendar_id', 'cpn', 'cpn_label'],
     required: ['code', 'name'],
     enums: { status: ['Préparation', 'Actif', 'En pause', 'Clos'], holiday_country: COUNTRIES }
   },
   WorkPackage: {
     book: 'data',
-    cols: ['id', 'project_id', 'parent_wp_id', 'wbs_code', 'name', 'owner_resource_id', 'charge_code'],
+    cols: ['id', 'project_id', 'parent_wp_id', 'wbs_code', 'name', 'owner_resource_id', 'charge_code', 'cpn', 'cpn_label'],
     required: ['project_id', 'name']
   },
   PlanItem: {
@@ -97,9 +100,22 @@ var SCHEMA = {
   BudgetLine: {
     book: 'data',
     cols: ['id', 'deliverable_id', 'resource_id', 'cost_type', 'planned_days', 'frozen_rate',
-      'fixed_amount', 'planned_amount'],
+      'fixed_amount', 'planned_amount', 'phasing_mode'],
     required: ['deliverable_id', 'resource_id', 'cost_type'],
     enums: { cost_type: ['TJM', 'Forfait'] }
+  },
+  /** Commande d'achat auprès d'une ressource externe. Rattachée à un projet par son CPN ; engagée en une fois à son lancement. */
+  PurchaseOrder: {
+    book: 'data',
+    cols: ['id', 'po_number', 'cpn', 'resource_id', 'owner_resource_id', 'description', 'start_date', 'end_date', 'amount',
+      'status', 'gr_due_date', 'launched_on', 'gr_on', 'closed_on'],
+    required: ['po_number', 'cpn', 'resource_id', 'amount', 'status'],
+    enums: { status: PO_STATUSES }
+  },
+  PurchaseOrderLink: {
+    book: 'data',
+    cols: ['id', 'po_id', 'deliverable_id', 'amount'],
+    required: ['po_id', 'deliverable_id', 'amount']
   },
   BudgetPhasing: {
     book: 'data',
