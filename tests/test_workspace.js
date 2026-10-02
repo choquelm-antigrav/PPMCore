@@ -24,8 +24,8 @@ module.exports = function () {
     eq(w.raw(MEMBER, 'workspace.enable', { projectId: w.p1.id }).error.code, 'FORBIDDEN');
     const st = w.call(CP, 'workspace.enable', { projectId: w.p1.id });
     ok(st.calendar_id && st.drive_folder_id, JSON.stringify(st));
-    eq([st.report.created, st.report.folders, st.report.errors], [4, 3, []]);
-    eq(w.events().map((e) => e.title + ' @ ' + e.date).sort(), [
+    eq([st.report.created, st.report.folders, st.report.errors], [6, 3, []], '4 échéances et jalons, plus 2 rappels de livraison (0.9.1)');
+    eq(w.events().filter((e) => !/^Rappel livraison/.test(e.title)).map((e) => e.title + ' @ ' + e.date).sort(), [
       'Échéance · P1 · Calcul @ 2026-10-23', 'Échéance · P1 · Essais @ 2026-11-06',
       'Échéance · P1 · Spécification @ 2026-10-09', '◆ P1 · Revue @ 2026-11-09'
     ]);
@@ -52,14 +52,15 @@ module.exports = function () {
     const calls = w.W.calls.length;
     w.call(RWP, 'planitems.update', { id: w.b.id, patch: { planned_finish: '2026-10-28' } });
     eq(w.event('Calcul').date, '2026-10-28');
-    eq(w.W.calls.slice(calls), ['update'], 'mise à jour de l’événement existant, sans doublon');
+    eq(w.W.calls.slice(calls), ['update', 'update'], 'mise à jour de l’événement existant et de son rappel, sans doublon');
     w.call(CP, 'planitems.update', { id: w.cc.id, patch: { status: 'En cours' } });
-    eq(w.W.calls.length, calls + 1, 'un changement sans effet sur l’événement ne rappelle pas l’agenda');
+    eq(w.W.calls.length, calls + 2, 'un changement sans effet sur l’événement et son rappel ne rappelle pas l’agenda');
     w.call(CP, 'planitems.delete', { id: w.a.id });
     ok(w.event('Spécification'), 'la suppression attend la synchronisation de la nuit');
     ok(w.c.syncWorkspaceAll({}, far()));
     ok(!w.event('Spécification'));
-    eq(w.events().length, 3);
+    eq(w.events().filter((e) => !/^Rappel livraison/.test(e.title)).length, 3, 'échéances et jalons restants');
+    eq(w.events().filter((e) => /^Rappel livraison/.test(e.title)).length, 2, 'et les rappels des livrables restants');
   });
 
   test('Renommer un WP renomme son dossier ; un WP supprimé garde son dossier', () => {

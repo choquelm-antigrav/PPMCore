@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.9.0)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.9.1)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -72,6 +72,7 @@ Le pas à pas détaillé est dans `PREMIERS_PAS.md`. En résumé :
 Facultatif (lot 2) :
 
 - `PPM_PROJECTS_FOLDER_ID` (propriété du script) = l'identifiant d'un dossier du Drive partagé « PPM » où ranger les dossiers des projets. Sans elle, un dossier « PPM Projets » est créé dans ton Drive.
+- `PPM_REMINDER_ON` (`oui` par défaut, `non` pour tout désactiver) et `PPM_REMINDER_DAYS` (10 par défaut) (0.9.1) : rappels avant livraison ; se règlent plutôt dans Administration → Réglages.
 - `PPM_LOGO_URL` (0.5.1) = adresse `https://…` du logo officiel Airbus, à prendre sur le portail de marque interne (accès réservé aux salariés). Sans elle, la bannière affiche seulement « PPM ». Le logo n'est pas fourni avec l'outil.
 - `PPM_AI_MODE` (lot 4) = `off` (par défaut : aucune IA), `manual` (le copilote prépare des textes à coller dans Gemini) ou `api` (appel direct). Pour `api`, avec l'accord de la DSI seulement (H12) : `PPM_GEMINI_API_KEY` (la clé, jamais dans le code), `PPM_GEMINI_MODEL` (le nom du modèle validé), `PPM_AI_DAILY_QUOTA` (30 demandes par personne et par jour par défaut), et ajouter `"https://www.googleapis.com/auth/script.external_request"` dans `oauthScopes` du manifeste. Le premier branchement réel est à vérifier sur une question simple : il n'a pu être testé qu'avec un faux modèle.
 - **Annuaire** : pour qu'une adresse suffise à créer une personne (nom, fonction, service repris de l'annuaire), ajouter le service avancé « Admin SDK API » dans l'éditeur et la ligne `"https://www.googleapis.com/auth/admin.directory.user.readonly"` dans `oauthScopes`. À ne faire qu'avec l'accord de la DSI : si le domaine bloque cette autorisation, tout le script reste bloqué. Sinon, importer une liste depuis une feuille : `importPeopleFromSheet("https://docs.google.com/spreadsheets/d/…")` (colonnes reconnues : Nom, E-mail, Fonction, Organisation, Pays, Type, Fournisseur, Équipe).
@@ -130,7 +131,7 @@ Actions disponibles :
 ## Tests
 
 ```bash
-node tests/run.js                    # 138 tests : calendriers, graphe, droits, journal, règles, API, marges, vues, personnes, OBS, WBS,
+node tests/run.js                    # 144 tests : calendriers, graphe, droits, journal, règles, API, marges, vues, personnes, OBS, WBS,
                                      # préférences, baselines, écarts, fil des changements, agenda, Drive, annuaire, récapitulatif,
                                      # simulation, synthèse, copilote (faux modèle), signaux faibles, fabrication, installation
 node tools/build.js                  # fabrique dist/ (9 fichiers)
@@ -153,6 +154,16 @@ node tests/preview_server.js 8123   # puis http://localhost:8123/?view=suivi&pro
 ```
 
 Les tests chargent les fichiers `.gs` tels quels, avec des tables en mémoire à la place de Sheets et de faux services Agenda, Drive et annuaire. Tout changement du Core doit les garder verts.
+
+## Rappels avant livraison (0.9.1)
+
+Pour chaque livrable non terminé qui a un responsable et une date de livraison, l'outil ajoute **un rappel dans l'agenda du projet, daté N jours ouvrés avant la livraison, avec le responsable invité** : il apparaît dans le Google Agenda du responsable (« Rappel livraison · P1 · Calcul »). N vaut **10 par défaut** et se règle de deux façons : par l'administrateur (Administration → Réglages, délai par défaut et interrupteur général) et par chacun (Mon compte → Notifications : son propre délai, ou désinscription).
+
+- Le rappel suit le livrable : **livraison décalée, responsable changé ou retiré, livrable terminé** (avancement à 100 %) l'adaptent ou le retirent aussitôt ; le traitement de nuit rattrape le reste, y compris un changement de délai.
+- Les jours fériés du calendrier du projet comptent dans le décompte.
+- Un rappel déjà créé est **conservé** quand sa date passe ; on n'en crée pas de nouveau pour une date déjà passée (un livrable créé à six jours de sa livraison n'a pas de rappel à dix jours).
+- Il faut que le projet ait son agenda (page Suivi → Agenda et Drive). Aucune invitation par mail n'est envoyée.
+- **Ce n'est pas une « tâche Google »** : l'outil s'exécute sous le compte du propriétaire, et l'API des tâches n'écrit que dans les listes du compte qui l'exécute, jamais dans celles d'un autre utilisateur. Le rappel est donc un événement de l'agenda, sans case à cocher.
 
 ## Budget, CPN et commandes d'achat (0.9.0)
 

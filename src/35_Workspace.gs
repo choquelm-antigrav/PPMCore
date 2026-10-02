@@ -232,18 +232,109 @@ function syncProjectCalendar_(data, project, links, report, baseUrl) {
       report.errors.push('Agenda, suppression : ' + (err && err.message ? err.message : err));
     }
   });
+  syncProjectReminders_(data, project, links, report, baseUrl);
 }
 
 /** Crée ou met à jour un événement ; ne fait rien si son contenu n'a pas changé depuis le dernier envoi. */
-function syncOneEvent_(project, itemId, ev, links, report) {
-  var id = 'cal:' + itemId;
+function syncOneEvent_(project, itemId, ev, links, report, kind) {
+  kind = kind || 'calendar';
+  var id = (kind === 'reminder' ? 'rem:' : 'cal:') + itemId;
   var link = links.byId[id] ? links.byId[id].rec : null;
   var hash = hashString(project.calendar_id + '|' + JSON.stringify(ev));
   var sameCal = link && link.container_id === project.calendar_id && !isBlank(link.external_id);
   if (sameCal && link.hash === hash) return;
   var eventId = ws_().calendar.upsert(project.calendar_id, sameCal ? link.external_id : '', ev);
-  setLink_(links, id, { kind: 'calendar', entity_id: itemId, project_id: project.id, container_id: project.calendar_id, external_id: eventId, hash: hash });
+  setLink_(links, id, { kind: kind, entity_id: itemId, project_id: project.id, container_id: project.calendar_id, external_id: eventId, hash: hash });
   report[sameCal ? 'updated' : 'created']++;
+}
+
+// ---------------------------------------------------------------- rappels avant livraison
+
+var REMINDER_DEFAULT_DAYS = 10;
+
+/** Réglage de l'administrateur : rappels actifs (par défaut oui) et délai par défaut en jours ouvrés (par défaut 10). */
+function reminderDefaults_() {
+  var on = String(getProp(PROP.REMINDER_ON, 'oui')).toLowerCase() !== 'non';
+  var d = Number(getProp(PROP.REMINDER_DAYS, String(REMINDER_DEFAULT_DAYS)));
+  return { on: on, days: d >= 1 && d <= 60 && Math.floor(d) === d ? d : REMINDER_DEFAULT_DAYS };
+}
+
+/** Rappel voulu pour une personne : null si désactivé (par l'administrateur ou par elle), sinon son délai (le sien, à défaut celui par défaut). */
+function reminderFor_(setting) {
+  var def = reminderDefaults_();
+  if (!def.on || (setting && isTrue(setting.reminder_off))) return null;
+  var d = setting && !isBlank(setting.reminder_days) ? Number(setting.reminder_days) : def.days;
+  return { days: d >= 1 && d <= 60 ? d : def.days };
+}
+
+function reminderSettingsView_(row) {
+  return {
+    reminder_off: !!(row && isTrue(row.reminder_off)),
+    reminder_days: row && !isBlank(row.reminder_days) ? Number(row.reminder_days) : null,
+    reminder_default: reminderDefaults_()
+  };
+}
+
+/**
+ * Un rappel par livrable non terminé, daté N jours ouvrés avant sa livraison, dans l'agenda du projet, avec son responsable invité :
+ * il apparaît dans le Google Agenda du responsable. (Une vraie tâche Google ne peut pas être créée dans la liste d'un autre utilisateur.)
+ * Un rappel déjà créé dont la date est passée est conservé ; on n'en crée pas de nouveau pour une date passée.
+ */
+function desiredReminders_(data, project, today, links, baseUrl) {
+  var res = indexBy_(data.resources), wps = indexBy_(data.workpackages), settings = {};
+  (data.settings || []).forEach(function (s) { settings[String(s.user_email).toLowerCase()] = s; });
+  var hol = loadHolidayMap(project.holiday_country || 'FR');
+  var domain = allowedDomain();
+  var out = {};
+  data.planitems.forEach(function (i) {
+    if (i.project_id !== project.id || isTrue(i.deleted) || i.item_type !== 'Livrable' || isBlank(i.planned_finish)) return;
+    if (i.status === 'Terminé' || Number(i.progress_pct) >= 100) return;
+    var owner = res[i.owner_resource_id];
+    if (!owner || isTrue(owner.deleted) || isBlank(owner.email)) return;
+    var email = String(owner.email).toLowerCase();
+    if (domain && email.split('@')[1] !== domain) return;
+    var rem = reminderFor_(settings[email]);
+    if (!rem) return;
+    var date = addWorkingDays(i.planned_finish, -rem.days, hol);
+    var link = links && links.byId['rem:' + i.id] ? links.byId['rem:' + i.id].rec : null;
+    if (date < today && !(link && !isBlank(link.external_id))) return;
+    var wp = wps[i.wp_id];
+    var lines = ['Livrable à préparer : la livraison est prévue le ' + frDate_(i.planned_finish) + ' (dans ' + rem.days + ' jours ouvrés).',
+      'Projet ' + project.code + ' — ' + project.name];
+    if (wp) lines.push('Workpackage ' + (wp.wbs_code ? wp.wbs_code + ' ' : '') + wp.name);
+    if (baseUrl) lines.push('Planning : ' + baseUrl + '?view=gantt&project=' + project.id);
+    lines.push('Rappel tenu à jour par PPM : les modifications faites ici seront écrasées.');
+    out[i.id] = { title: 'Rappel livraison · ' + project.code + ' · ' + i.name, date: date, description: lines.join('\n'), guests: [email] };
+  });
+  return out;
+}
+
+function removeReminder_(links, itemId, report) {
+  var l = links.byId['rem:' + itemId];
+  if (!l || isBlank(l.rec.external_id)) return;
+  ws_().calendar.remove(l.rec.container_id, l.rec.external_id);
+  setLink_(links, 'rem:' + itemId, { external_id: '', hash: 'REMOVED' });
+  report.removed = (report.removed || 0) + 1;
+}
+
+function syncProjectReminders_(data, project, links, report, baseUrl) {
+  var wanted = desiredReminders_(data, project, todayStr(), links, baseUrl);
+  Object.keys(wanted).forEach(function (itemId) {
+    try {
+      syncOneEvent_(project, itemId, wanted[itemId], links, report, 'reminder');
+    } catch (err) {
+      report.errors.push('Rappel, « ' + wanted[itemId].title + ' » : ' + (err && err.message ? err.message : err));
+    }
+  });
+  Object.keys(links.byId).forEach(function (id) {
+    var l = links.byId[id].rec;
+    if (l.kind !== 'reminder' || l.project_id !== project.id || isBlank(l.external_id) || wanted[l.entity_id]) return;
+    try {
+      removeReminder_(links, l.entity_id, report);
+    } catch (err) {
+      report.errors.push('Rappel, suppression : ' + (err && err.message ? err.message : err));
+    }
+  });
 }
 
 /**
@@ -252,16 +343,22 @@ function syncOneEvent_(project, itemId, ev, links, report) {
  */
 function hookCalendarItem(before, rec) {
   var fields = ['name', 'planned_finish', 'item_type', 'owner_resource_id', 'status', 'wp_id'];
-  if (before && !fields.some(function (f) { return String(before[f]) !== String(rec[f]); })) return;
+  var crossedDone = !!before && ((Number(before.progress_pct) >= 100) !== (Number(rec.progress_pct) >= 100));
+  if (before && !crossedDone && !fields.some(function (f) { return String(before[f]) !== String(rec[f]); })) return;
   try {
     if (!ws_().available) return;
     var project = repoGet('Project', rec.project_id);
     if (!project || isBlank(project.calendar_id)) return;
     var data = { planitems: [rec], resources: repoList('Resource'), workpackages: repoList('WorkPackage'), settings: repoList('UserSetting') };
-    var wanted = desiredEvents_(data, project, getProp(PROP.WEBAPP_URL, ''));
-    if (!wanted[rec.id]) return;
+    var baseUrl = getProp(PROP.WEBAPP_URL, '');
     var links = loadLinks_();
-    syncOneEvent_(project, rec.id, wanted[rec.id], links, { created: 0, updated: 0 });
+    var wanted = desiredEvents_(data, project, baseUrl);
+    if (wanted[rec.id]) syncOneEvent_(project, rec.id, wanted[rec.id], links, { created: 0, updated: 0 });
+    if (rec.item_type === 'Livrable' || (before && before.item_type === 'Livrable')) {
+      var rem = desiredReminders_(data, project, todayStr(), links, baseUrl);
+      if (rem[rec.id]) syncOneEvent_(project, rec.id, rem[rec.id], links, { created: 0, updated: 0 }, 'reminder');
+      else removeReminder_(links, rec.id, { removed: 0 });
+    }
     saveLinks_(links);
   } catch (err) {
     console.error('Agenda : ' + (err && err.message ? err.message : err));

@@ -5,7 +5,7 @@
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.9.0';
+var PPM_VERSION = '0.9.1';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -88,7 +88,9 @@ var PROP = {
   AI_QUOTA: 'PPM_AI_DAILY_QUOTA',
   LOGO_URL: 'PPM_LOGO_URL',
   LAST_NIGHTLY: 'PPM_LAST_NIGHTLY',
-  LAST_DIGEST: 'PPM_LAST_DIGEST'
+  LAST_DIGEST: 'PPM_LAST_DIGEST',
+  REMINDER_ON: 'PPM_REMINDER_ON',
+  REMINDER_DAYS: 'PPM_REMINDER_DAYS'
 };
 
 /** Surcharge des propriétés pour les tests hors ligne. */

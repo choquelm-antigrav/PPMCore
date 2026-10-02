@@ -15,7 +15,7 @@ module.exports = function () {
     const cp = w.call(CP, 'account.get', {});
     eq([cp.email, cp.isAdmin, cp.person.name, cp.person.job_function, cp.person.canEdit], [CP, false, 'Carla', 'Cheffe de projet', true]);
     eq(cp.roles.map((r) => [r.role_code, r.role_label, r.scope_label]), [['CP', 'Chef de projet', 'P1 — Projet 1']]);
-    eq([cp.settings, cp.ui], [{ notify_frequency: 'Quotidien', calendar_invites: false }, { theme: 'auto', home: 'gantt' }]);
+    eq([cp.settings, cp.ui], [{ notify_frequency: 'Quotidien', calendar_invites: false, reminder_off: false, reminder_days: null, reminder_default: { on: true, days: 10 } }, { theme: 'auto', home: 'gantt' }]);
     const remi = w.call(RWP, 'account.get', {});
     eq(remi.roles.map((r) => [r.role_code, r.scope_label]), [['RWP', '1 Conception']]);
     ok(!JSON.stringify(cp).includes('rate_profile'), 'aucun profil tarifaire');

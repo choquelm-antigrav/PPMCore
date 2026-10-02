@@ -181,7 +181,7 @@ function openPage(file, user, boot, extraScript) {
   p.click(p.doc.getElementById('ws-enable'));
   await p.until(() => p.doc.getElementById('ws-report'));
   const rep = p.text('ws-report');
-  check(/5 événements créés/.test(rep) && /3 dossiers créés ou renommés/.test(rep) && /Partagés avec les 4 membres du projet \(8 nouveaux accès\)/.test(rep), 'compte rendu : ' + rep);
+  check(/7 événements créés/.test(rep) && /3 dossiers créés ou renommés/.test(rep) && /Partagés avec les 4 membres du projet \(8 nouveaux accès\)/.test(rep), 'compte rendu (5 échéances et jalons, 2 rappels) : ' + rep);
   check(!!p.doc.querySelector('a[href^="https://calendar.test/"]') && !!p.doc.querySelector('a[href^="https://drive.test/"]'), 'liens vers l’agenda et le dossier');
   check(!!p.doc.getElementById('ws-sync'), 'ensuite : « Synchroniser maintenant »');
   const mw = openPage('Suivi.html', MEMBER, { tab: 'workspace' });

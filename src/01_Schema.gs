@@ -180,7 +180,7 @@ var SCHEMA = {
   },
   UserSetting: {
     book: 'data',
-    cols: ['id', 'user_email', 'language', 'notify_frequency', 'view_prefs_json', 'calendar_invites'],
+    cols: ['id', 'user_email', 'language', 'notify_frequency', 'view_prefs_json', 'calendar_invites', 'reminder_days', 'reminder_off'],
     enums: { language: ['FR', 'EN', 'DE'], notify_frequency: ['Quotidien', 'Hebdomadaire', 'Aucun'] }
   },
 

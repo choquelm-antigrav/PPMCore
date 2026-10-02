@@ -1,5 +1,13 @@
 # Journal des versions
 
+## 0.9.1 — rappels avant livraison dans l'agenda du responsable
+
+- Un rappel est ajouté à l'agenda du projet, **N jours ouvrés avant la livraison** de chaque livrable non terminé, avec son responsable invité (il le voit dans son Google Agenda). N vaut 10 par défaut.
+- Délai réglable par l'administrateur (défaut et interrupteur général) et par chacun (son délai, ou désinscription dans Mon compte).
+- Le rappel suit la livraison, le responsable et l'avancement ; les jours fériés comptent ; un rappel déjà créé est conservé quand sa date passe.
+- Ce n'est pas une tâche Google (impossible dans la liste d'un autre utilisateur) : c'est un événement d'agenda.
+- Tests : 144.
+
 ## 0.9.0 — budget, CPN et commandes d'achat (lot 3, première partie)
 
 - **CPN** : code financier du projet avec sa désignation, portable aussi par un sous-projet (workpackage de premier niveau) ; un CPN ne couvre qu'un projet ; les analyses budgétaires se font par CPN.

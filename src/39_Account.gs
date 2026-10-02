@@ -46,7 +46,7 @@ defineAction('account.get', function (p, ctx) {
     email: ctx.email, isAdmin: ctx.isAdmin,
     person: res ? personCard_(res, teams, ctx, false) : null,
     roles: roles,
-    settings: { notify_frequency: (row && row.notify_frequency) || 'Quotidien', calendar_invites: !!(row && isTrue(row.calendar_invites)) },
+    settings: Object.assign({ notify_frequency: (row && row.notify_frequency) || 'Quotidien', calendar_invites: !!(row && isTrue(row.calendar_invites)) }, reminderSettingsView_(row)),
     ui: loadPrefs_(ctx.email).ui
   };
 });
@@ -58,6 +58,7 @@ function adminView_() {
     admins: adminEmails(), domain: allowedDomain(),
     ai_mode: aiMode_(), ai_model: getProp(PROP.GEMINI_MODEL, ''), ai_quota: aiQuota_(),
     gemini_key_set: !!getProp(PROP.GEMINI_KEY, ''),
+    reminder_on: reminderDefaults_().on, reminder_days: reminderDefaults_().days,
     appsheet_url: getProp(PROP.APPSHEET_URL, ''), logo_url: getProp(PROP.LOGO_URL, ''),
     projects_folder_id: getProp(PROP.PROJECTS_FOLDER, ''),
     backup_folder_id: getProp(PROP.BACKUP_FOLDER, ''), webapp_url: getProp(PROP.WEBAPP_URL, '')
@@ -132,6 +133,12 @@ function validateAdminSettings_(v, cur, actor) {
     var q = Number(v.ai_quota);
     if (!(q >= 1 && q <= 500) || Math.floor(q) !== q) throw new PpmError('VALIDATION', 'Quota : un nombre entier de 1 à 500 demandes par personne et par jour.');
     change('ai_quota', PROP.AI_QUOTA, cur.ai_quota, q);
+  }
+  if (v.reminder_on !== undefined) change('reminder_on', PROP.REMINDER_ON, cur.reminder_on ? 'oui' : 'non', v.reminder_on ? 'oui' : 'non');
+  if (v.reminder_days !== undefined) {
+    var rd = Number(v.reminder_days);
+    if (isBlank(v.reminder_days) || isNaN(rd) || Math.floor(rd) !== rd || rd < 1 || rd > 60) throw new PpmError('VALIDATION', 'Délai du rappel : un nombre entier de jours ouvrés entre 1 et 60.');
+    change('reminder_days', PROP.REMINDER_DAYS, cur.reminder_days, rd);
   }
   if (v.appsheet_url !== undefined) change('appsheet_url', PROP.APPSHEET_URL, cur.appsheet_url, checkHttpsUrl_('Adresse AppSheet', v.appsheet_url));
   if (v.logo_url !== undefined) change('logo_url', PROP.LOGO_URL, cur.logo_url, checkHttpsUrl_('Adresse du logo', v.logo_url));

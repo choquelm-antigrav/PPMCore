@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.9.0">
+<meta name="ppm-version" content="0.9.1">
 <?!= include('Style') ?>
 <style>
   .panel { padding: 8px 24px 32px; max-width: 1100px; }
@@ -164,6 +164,9 @@ var BOOT = <?!= boot ?>;
     var quota = el('input', { type: 'number', id: 'f-quota', min: '1', max: '500', step: '1', value: String(c.ai_quota) });
     var key = el('input', { type: 'password', id: 'f-key', autocomplete: 'new-password', placeholder: c.gemini_key_set ? '•••• clé enregistrée (laisser vide pour la garder)' : 'coller la clé ici' });
     var clearKey = el('input', { type: 'checkbox', id: 'f-clear-key' });
+    var remOn = el('input', { type: 'checkbox', id: 'f-reminder-on' });
+    remOn.checked = !!c.reminder_on;
+    var remDays = el('input', { type: 'number', id: 'f-reminder-days', min: '1', max: '60', step: '1', value: String(c.reminder_days) });
     var appsheet = el('input', { type: 'text', id: 'f-appsheet', value: c.appsheet_url, placeholder: 'https://…' });
     var logo = el('input', { type: 'text', id: 'f-logo', value: c.logo_url, placeholder: 'https://… (logo officiel, portail de marque)' });
     var folder = el('input', { type: 'text', id: 'f-folder', value: c.projects_folder_id, placeholder: 'identifiant du dossier Drive' });
@@ -172,7 +175,8 @@ var BOOT = <?!= boot ?>;
       e.preventDefault();
       var values = {
         admins: admins.value.split(/[\s,;]+/).filter(Boolean), ai_mode: mode.value, ai_model: model.value, ai_quota: Number(quota.value),
-        appsheet_url: appsheet.value, logo_url: logo.value, projects_folder_id: folder.value
+        appsheet_url: appsheet.value, logo_url: logo.value, projects_folder_id: folder.value,
+        reminder_on: remOn.checked, reminder_days: Number(remDays.value)
       };
       if (key.value.trim()) values.gemini_key = key.value.trim();
       if (clearKey.checked) values.clear_gemini_key = true;
@@ -193,6 +197,9 @@ var BOOT = <?!= boot ?>;
         field('Mode', mode), field('Modèle Gemini', model), field('Quota : demandes par personne et par jour', quota),
         field('Clé Gemini (jamais réaffichée)', key),
         el('label', { class: 'opt' }, [clearKey, el('span', { text: 'Supprimer la clé enregistrée' })])]),
+      el('section', { class: 'grp' }, [el('h3', { text: 'Rappels avant livraison' }),
+        el('label', { class: 'opt' }, [remOn, el('span', { text: 'Ajouter un rappel dans l’agenda du responsable de chaque livrable' })]),
+        field('Délai par défaut, en jours ouvrés avant la livraison (chacun peut régler le sien)', remDays)]),
       el('section', { class: 'grp' }, [el('h3', { text: 'Adresses (facultatives)' }),
         field('Application AppSheet', appsheet), field('Logo Airbus', logo), field('Dossier Drive des projets', folder)]),
       el('div', { class: 'row' }, [save])

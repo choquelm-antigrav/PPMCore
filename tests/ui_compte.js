@@ -102,6 +102,18 @@ function openPage(file, user, boot) {
   await p.until(() => /Envoyé/.test(p.text('preview-note')));
   check(c.SENT_MAILS.length === 1 && c.SENT_MAILS[0].to === RWP, 'récapitulatif d’essai envoyé à soi-même');
 
+  // rappel avant livraison
+  check(p.doc.getElementById('reminder-on').checked && p.doc.getElementById('reminder-days').value === '' && p.doc.getElementById('reminder-days').placeholder === '10', 'rappel actif par défaut, délai vide = 10');
+  p.doc.getElementById('reminder-days').value = '3'; p.change(p.doc.getElementById('reminder-days'));
+  await p.until(() => Number((c.repoList('UserSetting').find((s) => s.user_email === RWP) || {}).reminder_days) === 3);
+  check(true, 'délai personnel de 3 jours ouvrés enregistré');
+  p.doc.getElementById('reminder-days').value = '0'; p.change(p.doc.getElementById('reminder-days'));
+  await p.until(() => p.doc.getElementById('toast').classList.contains('error'));
+  check(/entre 1 et 60/.test(p.text('toast')), 'délai hors bornes refusé : ' + p.text('toast'));
+  p.doc.getElementById('reminder-on').checked = false; p.change(p.doc.getElementById('reminder-on'));
+  await p.until(() => c.isTrue((c.repoList('UserSetting').find((s) => s.user_email === RWP) || {}).reminder_off));
+  check(true, 'désinscription enregistrée');
+
   // ---------------------------------------------------------------- Affichage
   p.tab('affichage');
   await p.until(() => p.doc.getElementById('home'));
@@ -153,6 +165,18 @@ function openPage(file, user, boot) {
   check(c.adminEmails().join() === ADMIN + ',dora@entreprise.com' && c.aiQuota_() === 40 && c.aiMode_() === 'manual' && c.getProp(c.PROP.GEMINI_KEY, '') === KEY, 'administrateurs, quota, mode et clé enregistrés');
   await a.until(() => a.doc.getElementById('f-key').placeholder.includes('clé enregistrée'));
   check(!a.doc.documentElement.outerHTML.includes(KEY), 'la clé n’apparaît nulle part dans la page après enregistrement');
+
+  a.tab('reglages');
+  await a.until(() => a.doc.getElementById('f-reminder-days'));
+  check(a.doc.getElementById('f-reminder-on').checked && a.doc.getElementById('f-reminder-days').value === '10', 'rappels : actifs, 10 jours ouvrés par défaut');
+  a.doc.getElementById('f-reminder-days').value = '7'; a.doc.getElementById('f-reminder-on').checked = false;
+  a.submit(a.doc.querySelector('form.form'));
+  await a.until(() => /2 réglages enregistrés/.test(a.text('toast')));
+  check(c.reminderDefaults_().on === false && c.reminderDefaults_().days === 7, 'réglage par défaut des rappels enregistré par l’administrateur : ' + JSON.stringify(c.reminderDefaults_()));
+  const rp = openPage('Compte.html', RWP, { tab: 'notifications' });
+  await rp.until(() => rp.doc.getElementById('reminder-on'));
+  check(rp.doc.getElementById('reminder-on').disabled && rp.doc.getElementById('reminder-days').disabled && /désactivés par l’administrateur/.test(rp.text('reminder-note')), 'rappels désactivés : les réglages personnels sont grisés, avec la raison');
+  c.setProp(c.PROP.REMINDER_ON, 'oui');
 
   // ---------------------------------------------------------------- Santé
   c.nightlyRun();

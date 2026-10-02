@@ -225,6 +225,7 @@ defineAction('settings.get', function (p, ctx) {
   return {
     notify_frequency: (row && row.notify_frequency) || 'Quotidien',
     calendar_invites: !!(row && isTrue(row.calendar_invites)),
+    reminder_off: reminderSettingsView_(row).reminder_off, reminder_days: reminderSettingsView_(row).reminder_days, reminder_default: reminderDefaults_(),
     email: ctx.email, hasResource: !!ctx.resourceId
   };
 });
@@ -236,6 +237,15 @@ defineAction('settings.set', function (p, ctx) {
     patch.notify_frequency = p.notify_frequency;
   }
   if (p.calendar_invites !== undefined) patch.calendar_invites = !!p.calendar_invites;
+  if (p.reminder_off !== undefined) patch.reminder_off = !!p.reminder_off;
+  if (p.reminder_days !== undefined) {
+    if (p.reminder_days === null || String(p.reminder_days).trim() === '') patch.reminder_days = '';
+    else {
+      var n = Number(p.reminder_days);
+      if (isNaN(n) || Math.floor(n) !== n || n < 1 || n > 60) throw new PpmError('VALIDATION', 'Délai du rappel : un nombre entier de jours ouvrés entre 1 et 60.');
+      patch.reminder_days = n;
+    }
+  }
   var row = userSettingRow_(ctx.email);
   if (row) repoUpdate('UserSetting', row.id, patch, null, ctx.actx);
   else repoInsert('UserSetting', Object.assign({ user_email: ctx.email }, patch), ctx.actx);
