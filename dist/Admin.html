@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.9.1">
+<meta name="ppm-version" content="0.10.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -12,49 +12,53 @@
      tout en bleus : aucune teinte grise. Rouge, ambre et vert sont réservés aux états (alerte, critique, terminé). */
   :root {
     --brand: #00205B;
-    --brand-2: #0B3A8C;
-    --accent: #0068D6;
-    --paper: #F3F7FD;
+    --brand-2: #00377A;
+    --accent: #0085CA;
+    --accent-2: #5FB4E5;
+    --paper: #F4F6F9;
     --surface: #FFFFFF;
-    --tint: #EDF3FC;
-    --hover: #E1ECFB;
-    --ink: #00205B;
-    --muted: #3D64A0;
-    --rule: #D6E3F5;
-    --line-strong: #8FAEDB;
-    --bar: #5B8FE0;
-    --bar-hover: #3F79D6;
-    --bar-done: #1F4FA8;
+    --tint: #E8F2FB;
+    --hover: #DCEAF7;
+    --ink: #1A1D29;
+    --muted: #5A6473;
+    --faint: #8A94A6;
+    --rule: #E2E7EE;
+    --line-strong: #C9D3E0;
+    --bar: #3B9AD6;
+    --bar-hover: #0085CA;
+    --bar-done: #00377A;
     --summary: #00205B;
-    --summary-progress: #3D64A0;
-    --bar-external: #BCD1F0;
-    --bar-external-progress: #97B6E6;
-    --ghost: #0B3A8C;
-    --amber: #D99A12;
-    --amber-dark: #9E6E07;
+    --summary-progress: #00377A;
+    --bar-external: #BFD8EE;
+    --bar-external-progress: #8FBFE3;
+    --ghost: #00377A;
+    --amber: #E8820C;
+    --amber-dark: #C05600;
     --red: #D0342C;
     --green: #1E8A56;
-    --cyan: #00A3E0;
-    --focus: #00A3E0;
+    --cyan: #5FB4E5;
+    --focus: #0085CA;
     --on-accent: #FFFFFF;
-    --warn-bg: #FFF4DC; --warn-ink: #7A5306;
+    --warn-bg: #FFF1E6; --warn-ink: #C05600;
     --alert-bg: #FDE9E7; --alert-ink: #9B211A;
     --ok-bg: #E2F4EA; --ok-ink: #145C39;
-    --shadow: 0 1px 2px rgba(0, 32, 91, .06), 0 4px 16px rgba(0, 32, 91, .08);
-    --radius: 8px;
+    --shadow: 0 4px 20px rgba(0, 32, 91, .08);
+    --radius: 6px;
+    --grad-hero: linear-gradient(120deg, #00205B 0%, #00377A 45%, #0085CA 110%);
+    --grad-accent: linear-gradient(90deg, #0085CA 0%, #5FB4E5 100%);
     --bar-bg: #00205B;
     color-scheme: light;
   }
   /* Thème nuit : classe .dark posée par la bannière, selon le choix de l'utilisateur ou, à défaut, le réglage de l'ordinateur. */
   :root.dark {
-    --paper: #061329; --surface: #0B1D3D; --tint: #0F2750; --hover: #14305F;
-    --ink: #E8F0FD; --muted: #9DBCEB; --rule: #1B3766; --line-strong: #4F76B8;
-    --bar: #4F8BEA; --bar-hover: #6A9FF0; --bar-done: #8CB6F5; --summary: #2A56A8; --summary-progress: #4C7ED4;
-    --bar-external: #28477E; --bar-external-progress: #365A98; --ghost: #A9C6F5;
-    --accent: #5AA2FF; --brand-2: #8CB6F5;
+    --paper: #0A1730; --surface: #10213F; --tint: #152B52; --hover: #1B3563;
+    --ink: #E8F0FD; --muted: #9DB3D6; --faint: #6F86AE; --rule: #1E3560; --line-strong: #4A6AA3;
+    --bar: #4AA8E0; --bar-hover: #6BBBEA; --bar-done: #9CCDF0; --summary: #2A5CA8; --summary-progress: #4C84D0;
+    --bar-external: #27467A; --bar-external-progress: #355C99; --ghost: #9CCDF0;
+    --accent: #4DB2EC; --accent-2: #5FB4E5; --brand-2: #8CC4F0;
     --warn-bg: #3A2A07; --warn-ink: #F5CE7A; --alert-bg: #3D1412; --alert-ink: #F7A59F; --ok-bg: #0D3322; --ok-ink: #8FE0B6;
     --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 20px rgba(0, 0, 0, .35);
-    --bar-bg: #020B1C;
+    --bar-bg: #06101F;
     color-scheme: dark;
   }
 
@@ -69,7 +73,7 @@
 
   /* ---- bannière commune ---- */
   .ppm-bar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 8px 28px; height: 52px;
-    padding: 0 24px; background: var(--bar-bg); color: #fff; }
+    padding: 0 24px; background: var(--bar-bg); color: #fff; border-bottom: 3px solid transparent; border-image: var(--grad-accent) 1; }
   .ppm-brand { display: inline-flex; align-items: center; gap: 12px; color: #fff; text-decoration: none; }
   .ppm-brand img { height: 22px; width: auto; display: block; }
   .ppm-name { font-weight: 700; font-size: 16px; letter-spacing: .02em; }
@@ -78,7 +82,7 @@
   .ppm-nav a { display: inline-flex; align-items: center; padding: 0 12px; color: rgba(255, 255, 255, .78); text-decoration: none;
     font-weight: 500; white-space: nowrap; border-bottom: 3px solid transparent; border-top: 3px solid transparent; }
   .ppm-nav a:hover { color: #fff; }
-  .ppm-nav a[aria-current="page"] { color: #fff; border-bottom-color: var(--cyan); }
+  .ppm-nav a[aria-current="page"] { color: #fff; border-bottom-color: var(--accent-2); }
   .ppm-icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0;
     border: 0; border-radius: 50%; background: transparent; color: #fff; cursor: pointer; }
   .ppm-icon:hover { background: rgba(255, 255, 255, .12); }
@@ -206,6 +210,50 @@
     .ppm-nav { order: 3; flex: 1 0 100%; height: 40px; margin: 0 -8px 0 -12px; padding: 0 8px; }
   }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+  /* ---- charte inspirée de la diapositive Airbus : hero dégradé, libellés en capitales espacées, cartes à liseré, pastilles ---- */
+  body { background: var(--paper); }
+  header { position: relative; overflow: hidden; background: var(--grad-hero); color: #FFFFFF; padding: 20px 24px 18px; }
+  header::after { content: ''; position: absolute; right: -8%; top: -60%; width: 45%; height: 260%; background: radial-gradient(circle at center, rgba(255, 255, 255, .13), transparent 60%); transform: skewX(-12deg); pointer-events: none; }
+  header > * { position: relative; z-index: 1; }
+  header .title { flex-wrap: wrap; row-gap: 2px; }
+  header .eyebrow { flex: 0 0 100%; margin: 0 0 4px; font-size: 12px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase; color: var(--accent-2); }
+  header .title h1 { color: #FFFFFF; font-size: 28px; font-weight: 800; letter-spacing: -.8px; line-height: 1.1; }
+  header .title .context, header .context { color: var(--accent-2); }
+  header .controls label.field { color: var(--accent-2); }
+  header .toggle { color: #FFFFFF; }
+  header .icon-btn { color: #FFFFFF; }
+  header .icon-btn:hover, header .icon-btn[aria-expanded="true"] { background: rgba(255, 255, 255, .16); color: #FFFFFF; }
+  header select, header .seg, header .btn { color: var(--ink); }
+  header .seg button[aria-pressed="true"] { background: var(--accent); color: #FFFFFF; }
+  .popover { color: var(--ink); }
+  .eyebrow-dark, body h2.sec { display: block; position: relative; padding-left: 38px; font-size: 12.5px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: var(--accent); }
+  .eyebrow-dark::before, body h2.sec::before { content: ''; position: absolute; left: 0; top: 50%; width: 28px; height: 2px; background: var(--accent); }
+  .cards .card, .box, .kpi { border-left: 4px solid var(--accent); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .cards .card .k { font-size: 11.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--brand-2); }
+  :root.dark .cards .card .k { color: var(--accent-2); }
+  th { font-size: 11.5px; font-weight: 700; letter-spacing: .9px; text-transform: uppercase; color: var(--brand-2); }
+  :root.dark th { color: var(--accent-2); }
+  .chip, .badge { font-weight: 700; letter-spacing: .3px; }
+  .num-dot { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%; background: var(--brand); color: #FFFFFF; font-weight: 800; font-size: 20px; flex: none; }
+  :root.dark .num-dot { background: var(--accent); color: #06101F; }
+  .tag-warn { display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; background: var(--amber); color: #FFFFFF; padding: 3px 8px; border-radius: 100px; }
+  .callout { display: flex; gap: 10px; align-items: flex-start; background: var(--warn-bg); color: var(--warn-ink); border-radius: 4px; padding: 8px 12px; font-weight: 500; }
+  .hero-note { background: rgba(255, 255, 255, .1); border: 1px solid rgba(255, 255, 255, .28); border-radius: 8px; padding: 12px 18px; max-width: 360px; backdrop-filter: blur(4px); }
+  .hero-note .k { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--accent-2); margin: 0 0 4px; }
+  .hero-note .t { font-size: 15px; font-weight: 300; line-height: 1.4; color: #FFFFFF; margin: 0; }
+  .hero-note .t b { font-weight: 700; }
+  .btn.primary { background: var(--brand); border-color: var(--brand); }
+  .btn.primary:hover { background: var(--accent); border-color: var(--accent); }
+  .ppm-nav .ppm-caret { align-self: stretch; margin-left: -8px; padding: 0 8px 0 4px; background: none; border: 0; border-bottom: 3px solid transparent; color: rgba(255, 255, 255, .78); font-size: 11px; cursor: pointer; }
+  .ppm-nav .ppm-caret:hover, .ppm-nav .ppm-caret[aria-expanded="true"] { color: #fff; }
+  .ppm-nav .ppm-caret[hidden] { display: none; }
+  .ppm-sub { position: fixed; z-index: 40; min-width: 230px; margin: 0; padding: 6px 0; list-style: none; background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .ppm-sub[hidden] { display: none; }
+  .ppm-sub a { display: block; padding: 9px 18px; color: var(--ink); text-decoration: none; font-size: 14.5px; border-left: 3px solid transparent; }
+  .ppm-sub a:hover, .ppm-sub a:focus { background: var(--hover); outline: none; }
+  .ppm-sub a[aria-current="true"] { font-weight: 700; border-left-color: var(--accent); background: var(--tint); }
+  @media (max-width: 900px) { header { padding: 14px 12px 12px; } header .title h1 { font-size: 22px; } }
 </style>
 <style>
   .panel { padding: 8px 24px 32px; max-width: 1100px; }
@@ -252,8 +300,10 @@
     <span class="ppm-name">PPM</span>
   </a>
   <nav class="ppm-nav" aria-label="Pages de l’outil">
+    <a id="nav-overview" data-view="overview" href="#">Overview</a>
     <a id="nav-plan" data-view="gantt" href="#">Planning</a>
     <a id="nav-struct" data-view="structure" href="#">Structure</a>
+    <a id="nav-res" data-view="ressources" href="#">Ressources</a>
     <a id="nav-suivi" data-view="suivi" href="#">Suivi</a>
     <a id="nav-copilot" data-view="copilote" href="#">Copilote</a>
     <a id="nav-budget" data-view="budget" href="#" hidden>Budget</a>
@@ -345,6 +395,10 @@
     }
   })();
 
+  /** Dernier onglet connu de chaque page (les pages le signalent) : sert à marquer l'onglet courant dans le menu. */
+  var currentTab = {};
+  window.ppmTab = function (view, tab) { currentTab[view] = tab; };
+
   function init() {
     var B = window.BOOT || {};
     var base = B.baseUrl || '';
@@ -364,9 +418,87 @@
     });
     document.getElementById('ppm-admin').hidden = !B.isAdmin;
     document.getElementById('nav-budget').hidden = !B.canBudget;
+    var EYEBROW = { overview: 'Overview · Projet', gantt: 'Planning · Gantt', structure: 'Structure · OBS et WBS', ressources: 'Ressources · Équipes et rôles', suivi: 'Suivi · Baselines', copilote: 'Copilote · Analyse', budget: 'Budget · CPN et achats', compte: 'Mon compte', admin: 'Administration' };
+    var titleBox = document.querySelector('header .title');
+    if (titleBox && EYEBROW[B.view] && !titleBox.querySelector('.eyebrow')) {
+      var eb = document.createElement('span');
+      eb.className = 'eyebrow';
+      eb.textContent = EYEBROW[B.view];
+      titleBox.insertBefore(eb, titleBox.firstChild);
+    }
+    // Le projet courant suit d'une page à l'autre : dès qu'un lien de la bannière porte un projet (la page l'y a mis), les autres liens le reprennent.
+    // Ainsi Overview, Ressources et Budget s'ouvrent sur le même projet que celui qu'on regarde, quelle que soit la page de départ.
+    var SHARE = ['overview', 'gantt', 'structure', 'ressources', 'suivi', 'copilote', 'budget'];
+    var navLinks = function () { return document.querySelectorAll('.ppm-nav a[data-view]'); };
+    var propagating = false;
+    function propagateProject() {
+      if (propagating) return;
+      propagating = true;
+      var id = '';
+      Array.prototype.forEach.call(navLinks(), function (a) { var m = /[?&]project=([^&]+)/.exec(a.getAttribute('href') || ''); if (m && !id) id = m[1]; });
+      if (id) {
+        Array.prototype.forEach.call(navLinks(), function (a) {
+          var h = a.getAttribute('href') || '';
+          if (SHARE.indexOf(a.getAttribute('data-view')) >= 0 && !/[?&]project=/.test(h)) a.setAttribute('href', h + (h.indexOf('?') >= 0 ? '&' : '?') + 'project=' + id);
+        });
+      }
+      propagating = false;
+    }
+    var navBox = document.querySelector('.ppm-nav');
+    if (navBox && window.MutationObserver) new MutationObserver(propagateProject).observe(navBox, { subtree: true, attributes: true, attributeFilter: ['href'] });
+    propagateProject();
+
+    // Onglets de Suivi, Copilote et Budget : accessibles directement depuis la bannière, sans recharger la page quand on y est déjà
+    var SUBMENUS = {
+      suivi: [['ecarts', 'Écarts à la baseline'], ['changes', 'Changements à valider'], ['baselines', 'Baselines'], ['workspace', 'Agenda et Drive']],
+      copilote: [['synthese', 'Synthèse'], ['simulation', 'Simulation « et si… »'], ['questions', 'Questions'], ['suggestions', 'Suggestions']],
+      budget: [['bilan', 'Bilan par CPN'], ['po', 'Achats (PO)'], ['budget', 'Budget']]
+    };
+    var menu = document.createElement('ul');
+    menu.className = 'ppm-sub'; menu.id = 'ppm-sub'; menu.setAttribute('role', 'menu'); menu.hidden = true;
+    document.body.appendChild(menu);
+    var openBtn = null;
+    function closeMenu() { menu.hidden = true; if (openBtn) { openBtn.setAttribute('aria-expanded', 'false'); openBtn = null; } }
+    function openMenu(view, caret) {
+      var link = document.querySelector('.ppm-nav a[data-view="' + view + '"]');
+      var href = link ? (link.getAttribute('href') || '') : '';
+      var project = new URLSearchParams(href.indexOf('?') >= 0 ? href.slice(href.indexOf('?') + 1) : '').get('project') || '';
+      while (menu.firstChild) menu.removeChild(menu.firstChild);
+      SUBMENUS[view].forEach(function (it) {
+        var li = document.createElement('li');
+        li.setAttribute('role', 'none');
+        var a = document.createElement('a');
+        a.setAttribute('role', 'menuitem'); a.setAttribute('data-tab', it[0]); a.textContent = it[1];
+        a.href = base + '?view=' + view + '&tab=' + it[0] + (project ? '&project=' + project : '');
+        if (B.view === view && currentTab[view] === it[0]) a.setAttribute('aria-current', 'true');
+        a.addEventListener('click', function (e) {
+          if (B.view === view && window.__ppm && typeof window.__ppm.setTab === 'function') { e.preventDefault(); closeMenu(); window.__ppm.setTab(it[0]); }
+        });
+        li.appendChild(a); menu.appendChild(li);
+      });
+      var r = caret.getBoundingClientRect();
+      menu.style.top = Math.round(r.bottom) + 'px';
+      menu.style.left = Math.max(8, Math.min(Math.round(r.left), window.innerWidth - 250)) + 'px';
+      menu.hidden = false; caret.setAttribute('aria-expanded', 'true'); openBtn = caret;
+      var first = menu.querySelector('a'); if (first) first.focus();
+    }
+    Object.keys(SUBMENUS).forEach(function (view) {
+      var link = document.querySelector('.ppm-nav a[data-view="' + view + '"]');
+      if (!link) return;
+      var caret = document.createElement('button');
+      caret.type = 'button'; caret.className = 'ppm-caret'; caret.setAttribute('data-menu', view);
+      caret.setAttribute('aria-haspopup', 'menu'); caret.setAttribute('aria-expanded', 'false');
+      caret.setAttribute('aria-label', 'Onglets de ' + link.textContent.trim());
+      caret.textContent = '▾'; caret.hidden = link.hidden;
+      link.parentNode.insertBefore(caret, link.nextSibling);
+      caret.addEventListener('click', function (e) { e.stopPropagation(); if (openBtn === caret) closeMenu(); else openMenu(view, caret); });
+    });
+    document.addEventListener('click', function (e) { if (!menu.hidden && !menu.contains(e.target)) closeMenu(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !menu.hidden) { var b = openBtn; closeMenu(); if (b) b.focus(); } });
+    window.addEventListener('resize', closeMenu);
     var here = document.querySelector('.ppm-bar [data-view="' + (B.view || '') + '"]');
     if (here) here.setAttribute('aria-current', 'page');
-    document.getElementById('ppm-brand').setAttribute('href', base + '?view=' + (B.home || 'gantt'));
+    document.getElementById('ppm-brand').setAttribute('href', base + '?view=' + (B.home || 'overview'));
     if (B.logoUrl) {
       var img = document.getElementById('ppm-logo');
       img.src = B.logoUrl;

@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="<?= theme ?>">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="ppm-version" content="0.10.0">
+<?!= include('Style') ?>
+<style>
+  header .title { flex: 1 1 360px; }
+  header .chips-row { display: flex; flex-wrap: wrap; gap: 6px; flex: 0 0 100%; margin-top: 6px; }
+  header .chips-row .badge { background: rgba(255, 255, 255, .14); color: #FFFFFF; border: 1px solid rgba(255, 255, 255, .28); }
+  .hero-note[data-level="ok"] .lv { color: #7FE0A8; } .hero-note[data-level="warn"] .lv { color: #FFC074; } .hero-note[data-level="alert"] .lv { color: #FFA7A0; }
+  .hero-note .lv { font-weight: 800; }
+  main { display: block; padding: 0 0 24px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 16px; padding: 20px 24px 8px; }
+  .kpi { --lvl: var(--accent-2); display: grid; grid-template-columns: 52px 1fr; gap: 14px; background: var(--surface); border: 1px solid var(--rule); border-left-color: var(--lvl); padding: 16px 18px; }
+  .kpi[data-level="ok"] { --lvl: var(--green); } .kpi[data-level="warn"] { --lvl: var(--amber); } .kpi[data-level="alert"] { --lvl: var(--red); } .kpi[data-level="none"] { --lvl: var(--line-strong); }
+  .kpi .k-title { margin: 0 0 2px; font-size: 12px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--brand-2); }
+  :root.dark .kpi .k-title { color: var(--accent-2); }
+  .kpi .k-head { margin: 4px 0 8px; font-size: 19px; font-weight: 700; line-height: 1.25; }
+  .pill-level { display: inline-block; padding: 3px 10px; border-radius: 100px; font-size: 11px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; color: #FFFFFF; background: var(--lvl); vertical-align: middle; margin-left: 8px; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 100px; font-size: 12px; background: var(--tint); color: var(--ink); white-space: nowrap; }
+  .badge.alert { background: var(--alert-bg); color: var(--alert-ink); } .badge.warn { background: var(--warn-bg); color: var(--warn-ink); }
+  .bars { display: grid; gap: 6px; margin: 8px 0; }
+  .bar-row { display: grid; grid-template-columns: 112px 1fr 46px; gap: 8px; align-items: center; font-size: 12.5px; color: var(--muted); }
+  .bar2 { height: 8px; background: var(--tint); border-radius: 4px; overflow: hidden; display: flex; }
+  .bar2 > span { display: block; height: 100%; background: var(--lvl); }
+  .bar2 > span.soft { background: var(--accent-2); }
+  .bar2 > span.red { background: var(--red); } .bar2 > span.amber { background: var(--amber); }
+  .kpi .callout { margin-top: 8px; font-size: 13.5px; flex-direction: column; gap: 3px; }
+  .kpi .callout ul { margin: 0; padding-left: 16px; }
+  .kpi .calm { margin: 8px 0 0; color: var(--muted); font-size: 13.5px; }
+  .kpi a.more { display: inline-block; margin-top: 10px; font-size: 13px; font-weight: 600; text-decoration: none; }
+  .cols { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px; padding: 12px 24px 0; }
+  .panel-box { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px; }
+  .panel-box h2.sec { margin: 0 0 12px; }
+  .proj { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; width: 100%; padding: 9px 10px; border: 0; border-bottom: 1px solid var(--rule); background: transparent; text-align: left; cursor: pointer; color: var(--ink); }
+  .proj:hover { background: var(--hover); }
+  .proj[aria-current="true"] { background: var(--tint); box-shadow: inset 4px 0 0 var(--accent); }
+  .proj small { display: block; color: var(--muted); }
+  .dots { display: inline-flex; gap: 4px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--line-strong); }
+  .dot[data-level="ok"] { background: var(--green); } .dot[data-level="warn"] { background: var(--amber); } .dot[data-level="alert"] { background: var(--red); }
+  .list { margin: 0; padding: 0; list-style: none; }
+  .list li { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--rule); }
+  .list li:last-child { border-bottom: 0; }
+  .muted { color: var(--muted); } .note { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+  .facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; font-size: 14px; }
+  .facts dt { color: var(--muted); } .facts dd { margin: 0; }
+  .mission { margin: 20px 24px 0; background: var(--grad-hero); color: #FFFFFF; border-radius: var(--radius); padding: 16px 22px 16px 24px; border-left: 5px solid var(--accent-2); box-shadow: var(--shadow); }
+  .mission .k { font-size: 10.5px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: var(--accent-2); margin: 0 0 6px; }
+  .mission .m { margin: 0; font-size: 14.5px; line-height: 1.5; font-weight: 400; } .mission .m b { font-weight: 800; }
+  #genform { width: min(540px, calc(100% - 32px)); max-width: none; }
+  .ed-grid { display: grid; gap: 12px; }
+  .ed-grid label.lbl { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
+  .ed-grid input, .ed-grid select { padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--ink); min-width: 0; width: 100%; }
+  .ed-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .ed-error { margin: 12px 0 0; color: var(--red); font-weight: 500; }
+  dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; padding: 12px; } .kpis { padding: 14px 12px 4px; } .mission { margin: 16px 12px 0; } .bar-row { grid-template-columns: 78px 1fr 40px; } .ed-row2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<?!= include('Header') ?>
+<header>
+  <div class="title">
+    <h1 id="title">Overview projet</h1>
+    <div class="chips-row" id="chips"></div>
+  </div>
+  <div class="hero-note" id="verdict" hidden>
+    <p class="k">Verdict global</p>
+    <p class="t" id="verdict-text"></p>
+  </div>
+  <div class="controls">
+    <select id="picker" aria-label="Projet"></select>
+    <button type="button" class="btn" id="project-edit" hidden>Renommer / modifier</button>
+    <button type="button" class="btn primary" id="project-new" hidden>Nouveau projet</button>
+  </div>
+</header>
+
+<main>
+  <section class="kpis" id="kpis" aria-label="Indicateurs du projet"></section>
+  <div class="cols">
+    <section class="panel-box" aria-label="Portefeuille"><h2 class="sec">Portefeuille</h2><div id="portfolio"></div></section>
+    <div>
+      <section class="panel-box" aria-label="Prochains jalons"><h2 class="sec">Prochains jalons</h2><ul class="list" id="milestones"></ul></section>
+      <section class="panel-box" style="margin-top:20px" aria-label="Alertes ouvertes"><h2 class="sec">Alertes ouvertes</h2><ul class="list" id="alerts"></ul></section>
+      <section class="panel-box" style="margin-top:20px" aria-label="Repères"><h2 class="sec">Repères</h2><dl class="facts" id="facts"></dl></section>
+    </div>
+  </div>
+  <section class="mission" aria-label="Comment lire ces indicateurs">
+    <p class="k">Comment lire ces indicateurs</p>
+    <p class="m"><b>Délais</b> : retards, dépendances non respectées, glissement sur la baseline, fin visée et avancement face au plan. <b>Qualité</b> : maîtrise des risques et des jalons (risques élevés, traitements en retard, jalons menacés, signaux faibles) ; l’outil ne mesure pas encore la qualité des livrables eux-mêmes. <b>Coût</b> : commandes d’achat engagées face au budget externe de chaque CPN, GR en retard. Chaque indicateur est <b>Maîtrisé</b>, en <b>Vigilance</b> ou en <b>Alerte</b> ; le verdict global reprend le pire des trois.</p>
+  </section>
+</main>
+
+<dialog id="genform" aria-labelledby="gf-title">
+  <form id="gf-form" novalidate>
+    <h2 id="gf-title"></h2>
+    <div class="ed-grid" id="gf-body"></div>
+    <p class="ed-error" id="gf-error" role="alert" hidden></p>
+    <div class="actions">
+      <button type="button" class="btn" id="gf-cancel">Annuler</button>
+      <button type="submit" class="btn primary" id="gf-ok">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+var BOOT = <?!= boot ?>;
+</script>
+<script>
+(function () {
+  'use strict';
+
+  var state = { data: null, selected: '', seq: 0 };
+  var $ = function (id) { return document.getElementById(id); };
+  var LEVEL_LABEL = { ok: 'Maîtrisé', warn: 'Vigilance', alert: 'Alerte', none: 'Non renseigné' };
+  var VERDICT_PHRASE = { ok: 'maîtrisé', warn: 'en vigilance', alert: 'en alerte', none: 'non évalué' };
+
+  // ------------------------------------------------------------ outils
+  function el(tag, attrs, children) {
+    var n = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (k === 'text') n.textContent = attrs[k];
+      else if (k === 'class') n.className = attrs[k];
+      else if (k.indexOf('on') === 0) n.addEventListener(k.slice(2), attrs[k]);
+      else n.setAttribute(k, attrs[k]);
+    });
+    (children || []).forEach(function (c) { if (c !== null && c !== undefined) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return n;
+  }
+  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+  function uuid() { return window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2); }
+  var toastTimer = null;
+  function toast(msg, isError) {
+    var t = $('toast');
+    t.textContent = msg; t.className = 'toast' + (isError ? ' error' : ''); t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.hidden = true; }, isError ? 8000 : 3500);
+  }
+  function call(action, params, write) {
+    var pre = window.ppmPreloaded && window.ppmPreloaded(action, params, write);
+    if (pre) return pre;
+    return new Promise(function (resolve, reject) {
+      document.body.classList.add('busy');
+      google.script.run
+        .withSuccessHandler(function (res) {
+          document.body.classList.remove('busy');
+          if (res && res.ok) resolve(res.data); else reject(res && res.error ? res.error : { code: 'INTERNAL', message: 'Réponse inattendue du serveur.' });
+        })
+        .withFailureHandler(function (err) {
+          document.body.classList.remove('busy');
+          reject({ code: 'NETWORK', message: 'Le serveur ne répond pas. Vérifiez la connexion puis rechargez la page.', details: String(err) });
+        })
+        .uiCall(action, params || {}, write ? uuid() : null);
+    });
+  }
+  function frDate(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+  function plural(n, one, many) { return n + ' ' + (Math.abs(n) > 1 ? many : one); }
+  function openDialog(d) { if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
+  function closeDialog(d) { if (d.close) d.close(); else d.removeAttribute('open'); }
+
+  // ------------------------------------------------------------ formulaire générique
+  function fillSelect(sel, options, value) {
+    clear(sel);
+    options.forEach(function (o) { sel.appendChild(el('option', { value: o.value, text: o.label })); });
+    sel.value = value === undefined || value === null ? (options[0] ? options[0].value : '') : value;
+  }
+  function openForm(spec) {
+    $('gf-title').textContent = spec.title;
+    var body = $('gf-body'); clear(body);
+    var inputs = {}, pending = null;
+    var flush = function () { if (pending) { body.appendChild(el('div', { class: 'ed-row2' }, pending)); pending = null; } };
+    spec.fields.forEach(function (f) {
+      var c;
+      if (f.type === 'select') { c = el('select', { id: 'gf-' + f.key }); fillSelect(c, f.options || [], f.value); }
+      else {
+        var a = { type: f.type || 'text', id: 'gf-' + f.key, autocomplete: 'off' };
+        if (f.maxlength) a.maxlength = String(f.maxlength);
+        c = el('input', a); c.value = f.value === undefined || f.value === null ? '' : f.value;
+      }
+      inputs[f.key] = c;
+      var lab = el('label', { class: 'lbl' }, [f.label, c]);
+      if (f.half) { pending = pending || []; pending.push(lab); if (pending.length === 2) flush(); } else { flush(); body.appendChild(lab); }
+    });
+    flush();
+    if (spec.note) body.appendChild(el('p', { class: 'note', text: spec.note }));
+    state.gform = { spec: spec, inputs: inputs };
+    $('gf-error').hidden = true; $('gf-ok').textContent = spec.ok || 'Enregistrer'; $('gf-ok').disabled = false;
+    openDialog($('genform'));
+    var first = body.querySelector('input, select'); if (first) first.focus();
+  }
+  function submitForm() {
+    var g = state.gform;
+    if (!g) return;
+    var values = {};
+    Object.keys(g.inputs).forEach(function (k) { values[k] = g.inputs[k].value; });
+    $('gf-ok').disabled = true;
+    Promise.resolve().then(function () { return g.spec.onSubmit(values); }).then(function () { closeDialog($('genform')); }).catch(function (err) {
+      $('gf-ok').disabled = false;
+      var m = $('gf-error'); m.textContent = err && err.code === 'CONFLICT' ? 'Modifié entre-temps par quelqu’un d’autre : fermez, actualisez puis recommencez.' : ppmErrorText(err); m.hidden = false;
+    });
+  }
+
+  // ------------------------------------------------------------ rendu
+  function levelDots(k) {
+    return el('span', { class: 'dots', title: 'Délais : ' + LEVEL_LABEL[k.time.level] + ' · Qualité : ' + LEVEL_LABEL[k.quality.level] + ' · Coût : ' + LEVEL_LABEL[k.cost.level] },
+      [k.time, k.quality, k.cost].map(function (x) { return el('span', { class: 'dot', 'data-level': x.level }); }));
+  }
+  function current() { return state.data.projects.filter(function (p) { return p.id === state.data.selected; })[0] || null; }
+  function link(view, p, extra) { return (BOOT.baseUrl || '') + '?view=' + view + '&project=' + p.id + (extra || ''); }
+
+  function bar(label, value, cls, shown) {
+    return el('div', { class: 'bar-row' }, [el('span', { text: label }), el('div', { class: 'bar2', role: 'img', 'aria-label': label + ' ' + shown }, [el('span', { class: cls || '', style: 'width:' + Math.max(0, Math.min(100, value)) + '%' })]), el('span', { text: shown })]);
+  }
+
+  function kpiCard(n, title, kpi, p, bars, href, hrefLabel, id) {
+    var card = el('article', { class: 'kpi', 'data-kpi': id, 'data-level': kpi.level }, [
+      el('span', { class: 'num-dot', text: String(n), 'aria-hidden': 'true' }),
+      el('div', {}, [
+        el('p', { class: 'k-title' }, [title, el('span', { class: 'pill-level', text: kpi.label })]),
+        el('p', { class: 'k-head', text: kpi.headline }), bars && bars.length ? el('div', { class: 'bars' }, bars) : null
+      ])
+    ]);
+    var body = card.lastChild;
+    if (kpi.facts.length) {
+      var box = el('div', { class: kpi.level === 'ok' || kpi.level === 'none' ? 'calm' : 'callout' });
+      if (kpi.level === 'warn' || kpi.level === 'alert') box.appendChild(el('span', { class: 'tag-warn', text: kpi.level === 'alert' ? 'Alerte' : 'À surveiller' }));
+      box.appendChild(el('ul', {}, kpi.facts.map(function (t) { return el('li', { text: t }); })));
+      body.appendChild(box);
+    }
+    if (href) body.appendChild(el('a', { class: 'more', href: href, text: hrefLabel }));
+    return card;
+  }
+
+  function render() {
+    var d = state.data, p = current();
+    var sel = $('picker'); clear(sel);
+    d.projects.forEach(function (x) { sel.appendChild(el('option', { value: x.id, text: x.code + ' ' + x.name + (x.status === 'Clos' ? ' (clos)' : '') })); });
+    $('project-new').hidden = !d.canCreate;
+    if (!p) {
+      $('title').textContent = 'Overview projet'; clear($('chips')); $('verdict').hidden = true; $('project-edit').hidden = true;
+      clear($('kpis')); $('kpis').appendChild(el('div', { class: 'empty', style: 'grid-column:1/-1' }, [el('strong', { text: 'Aucun projet pour l’instant.' }), el('span', { text: d.canCreate ? 'Créez le premier projet avec « Nouveau projet ».' : 'Un Program Leader ou un DPL peut créer le premier projet.' })]));
+      return;
+    }
+    sel.value = p.id;
+    $('title').textContent = p.name;
+    var chips = $('chips'); clear(chips);
+    [p.code, p.status, p.cpn ? 'CPN ' + p.cpn : '', p.program, p.manager ? 'Chef de projet : ' + p.manager : ''].filter(Boolean).forEach(function (t) { chips.appendChild(el('span', { class: 'badge', text: t })); });
+    $('project-edit').hidden = !p.canEdit;
+    var k = p.kpis, v = $('verdict');
+    v.hidden = false; v.setAttribute('data-level', k.overall);
+    var t = $('verdict-text'); clear(t);
+    t.appendChild(document.createTextNode('Projet '));
+    t.appendChild(el('span', { class: 'lv', text: VERDICT_PHRASE[k.overall] }));
+    var weak = [['délais', k.time], ['qualité', k.quality], ['coût', k.cost]].filter(function (x) { return x[1].level === 'warn' || x[1].level === 'alert'; });
+    t.appendChild(document.createTextNode(weak.length ? ' : à regarder — ' + weak.map(function (x) { return x[0]; }).join(', ') + '.' : '.'));
+    var kp = $('kpis'); clear(kp);
+    var tm = k.time.metrics, ql = k.quality.metrics, cs = k.cost.metrics;
+    kp.appendChild(kpiCard(1, 'Délais · on time', k.time, p, tm.late !== undefined && k.time.level !== 'none'
+      ? [bar('Avancement réel', tm.progress_pct, '', tm.progress_pct + ' %'), bar('Attendu', tm.planned_pct, 'soft', tm.planned_pct + ' %')] : [], link('gantt', p), 'Voir le planning →', 'time'));
+    var open = ql.open_risks, rest = Math.max(0, open - ql.high_risks);
+    kp.appendChild(kpiCard(2, 'Qualité · on quality', k.quality, p, open > 0 ? [
+      el('div', { class: 'bar-row' }, [el('span', { text: 'Risques ouverts' }), el('div', { class: 'bar2', role: 'img', 'aria-label': plural(open, 'risque ouvert', 'risques ouverts') }, [
+        el('span', { class: 'red', style: 'width:' + 100 * ql.critical_risks / open + '%' }), el('span', { class: 'amber', style: 'width:' + 100 * (ql.high_risks - ql.critical_risks) / open + '%' }), el('span', { class: 'soft', style: 'width:' + 100 * rest / open + '%' })]), el('span', { text: String(open) })])] : [],
+      link('copilote', p, '&tab=suggestions'), 'Voir les suggestions →', 'quality'));
+    kp.appendChild(kpiCard(3, 'Coût · on cost', k.cost, p, cs.engaged_pct !== null && cs.engaged_pct !== undefined ? [bar('Budget externe engagé', Math.min(100, cs.engaged_pct), cs.engaged_pct > 100 ? 'red' : '', cs.engaged_pct + ' %')] : [],
+      link('budget', p), 'Voir le budget →', 'cost'));
+
+    var pf = $('portfolio'); clear(pf);
+    d.projects.forEach(function (x) {
+      pf.appendChild(el('button', { type: 'button', class: 'proj', 'data-id': x.id, 'aria-current': String(x.id === p.id), onclick: function () { select(x.id); } }, [
+        levelDots(x.kpis), el('span', {}, [el('strong', { text: x.code + ' ' + x.name }), el('small', { text: [x.manager, x.status].filter(Boolean).join(' · ') || ' ' })]),
+        el('span', { class: 'muted', text: x.kpis.time.metrics.progress_pct ? x.kpis.time.metrics.progress_pct + ' %' : '' })]));
+    });
+    var det = d.detail, ms = $('milestones'), al = $('alerts'); clear(ms); clear(al);
+    if (det && det.milestones.length) det.milestones.forEach(function (m) { ms.appendChild(el('li', {}, [el('span', { text: m.name }), el('span', { class: 'muted', text: frDate(m.date) + ' · dans ' + plural(m.in_days, 'jour', 'jours') })])); });
+    else ms.appendChild(el('li', {}, [el('span', { class: 'muted', text: 'Aucun jalon dans les 90 prochains jours.' })]));
+    if (det && det.alerts.length) det.alerts.forEach(function (a) { al.appendChild(el('li', {}, [el('span', { text: a.message }), el('span', { class: 'badge ' + (a.severity === 'Alerte' ? 'alert' : 'warn'), text: a.severity })])); });
+    else al.appendChild(el('li', {}, [el('span', { class: 'muted', text: 'Aucune alerte ouverte.' })]));
+    var f = $('facts'); clear(f);
+    [['Début', frDate(p.start_date) || '—'], ['Fin visée', frDate(p.target_end) || '—'], ['Fin du plan', tm.plan_end ? frDate(tm.plan_end) : '—'], ['Éléments terminés', p.done + ' sur ' + p.items], ['Personnes', det ? String(det.people) : '—']]
+      .forEach(function (x) { f.appendChild(el('dt', { text: x[0] })); f.appendChild(el('dd', { text: x[1] })); });
+    try { google.script.history.replace(null, { view: 'overview', project: p.id }); } catch (e) { /* hors web app */ }
+    var base = BOOT.baseUrl || '';
+    Array.prototype.forEach.call(document.querySelectorAll('.ppm-bar [data-view]'), function (n) {
+      var vw = n.getAttribute('data-view');
+      if (['overview', 'gantt', 'structure', 'ressources', 'suivi', 'copilote', 'budget'].indexOf(vw) >= 0) n.setAttribute('href', base + '?view=' + vw + '&project=' + p.id);
+    });
+  }
+
+  function load(projectId) {
+    var ticket = ++state.seq;
+    return call('overview.get', { projectId: projectId || '' }).then(function (d) {
+      if (ticket !== state.seq) return;
+      state.data = d; render();
+    }).catch(function (e) { var k = $('kpis'); clear(k); k.appendChild(el('div', { class: 'empty', style: 'grid-column:1/-1' }, [el('strong', { text: 'Chargement impossible.' }), el('span', { text: (e && e.message) || 'Erreur inconnue.' })])); });
+  }
+  function select(id) { state.data.selected = id; return load(id); }
+
+  // ------------------------------------------------------------ création et renommage
+  function newProject() {
+    var d = state.data;
+    var opt = function (arr, empty) { return [{ value: '', label: empty }].concat(arr); };
+    openForm({
+      title: 'Nouveau projet', ok: 'Créer le projet', note: 'Le chef de projet désigné reçoit le rôle sur ce projet. Le CPN est facultatif et peut être défini plus tard dans Budget.',
+      fields: [
+        { key: 'code', label: 'Code', maxlength: 20, half: true }, { key: 'name', label: 'Nom du projet', maxlength: 120, half: true },
+        { key: 'program_id', label: 'Programme', type: 'select', value: '', options: opt(d.programs.map(function (g) { return { value: g.id, label: g.code + ' — ' + g.name }; }), 'Hors programme') },
+        { key: 'manager_resource_id', label: 'Chef de projet', type: 'select', value: '', options: opt(d.people.map(function (x) { return { value: x.id, label: x.name }; }), 'À désigner plus tard') },
+        { key: 'start_date', label: 'Début', type: 'date', half: true }, { key: 'end_date', label: 'Fin visée', type: 'date', half: true },
+        { key: 'status', label: 'Statut', type: 'select', value: 'Actif', options: d.statuses.filter(function (s) { return s !== 'Clos'; }).map(function (s) { return { value: s, label: s }; }), half: true },
+        { key: 'holiday_country', label: 'Calendrier (jours fériés)', type: 'select', value: 'FR', options: d.countries.map(function (c) { return { value: c, label: c }; }), half: true },
+        { key: 'cpn', label: 'CPN (facultatif)', maxlength: 30, half: true }, { key: 'cpn_label', label: 'Désignation du CPN', maxlength: 120, half: true }
+      ],
+      onSubmit: function (v) {
+        return call('projects.save', { id: '', values: v }, true).then(function (r) { toast('Projet ' + r.code + ' créé.'); return load(r.id); });
+      }
+    });
+  }
+  function editProject() {
+    var p = current(), d = state.data;
+    openForm({
+      title: 'Renommer ou modifier le projet', ok: 'Enregistrer',
+      fields: [
+        { key: 'name', label: 'Nom du projet', value: p.name, maxlength: 120 },
+        { key: 'code', label: 'Code', value: p.code, maxlength: 20, half: true },
+        { key: 'status', label: 'Statut', type: 'select', value: p.status, options: d.statuses.map(function (s) { return { value: s, label: s }; }), half: true },
+        { key: 'start_date', label: 'Début', type: 'date', value: p.start_date, half: true }, { key: 'end_date', label: 'Fin visée', type: 'date', value: p.target_end, half: true }
+      ],
+      onSubmit: function (v) {
+        return call('projects.save', { id: p.id, version: p.version, values: v }, true).then(function (r) { toast('Projet enregistré : ' + r.name + '.'); return load(r.id); });
+      }
+    });
+  }
+
+  $('picker').addEventListener('change', function () { select(this.value); });
+  $('project-new').addEventListener('click', newProject);
+  $('project-edit').addEventListener('click', editProject);
+  $('gf-form').addEventListener('submit', function (e) { e.preventDefault(); submitForm(); });
+  $('gf-cancel').addEventListener('click', function () { closeDialog($('genform')); });
+  load(BOOT.project || '');
+  window.__ppm = { state: state };
+})();
+</script>
+</body>
+</html>

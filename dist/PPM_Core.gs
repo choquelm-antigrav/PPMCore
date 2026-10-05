@@ -1,7 +1,7 @@
 /**
- * PPM Core 0.9.1 — fichier unique à installer (fabriqué par tools/build.js, empreinte 707bf4305691).
+ * PPM Core 0.10.0 — fichier unique à installer (fabriqué par tools/build.js, empreinte 73ddb526f21f).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
- * Contient, dans cet ordre : 00_Config.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 30_Api.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs.
+ * Contient, dans cet ordre : 00_Config.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 30_Api.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs.
  */
 
 // ======================================================================
@@ -15,7 +15,7 @@
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.9.1';
+var PPM_VERSION = '0.10.0';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -137,8 +137,30 @@ function adminEmails() {
 }
 
 /** Domaine autorisé (propriété PPM_DOMAIN, ex. « entreprise.com »). */
+/** Domaines autorisés : PPM_DOMAIN peut en lister plusieurs, séparés par une virgule (ex. entreprise.com, filiale.com). */
+function allowedDomains() {
+  return String(getProp(PROP.DOMAIN, '')).toLowerCase().split(/[\s,;]+/).filter(function (d) { return d; });
+}
+
+/** Une adresse est autorisée si son domaine figure parmi ceux de PPM_DOMAIN. */
+function isAllowedEmail_(email) {
+  var d = String(email || '').toLowerCase().split('@')[1];
+  return !!d && allowedDomains().indexOf(d) >= 0;
+}
+
+/** Message d'un accès refusé : dit pourquoi et ce qu'il faut faire (le visiteur ne voit que sa propre adresse). */
+function accessDeniedMessage_(email) {
+  var allowed = allowedDomains();
+  if (!allowed.length) return 'Le domaine n’est pas réglé : l’administrateur doit renseigner la propriété PPM_DOMAIN du script.';
+  if (!email) {
+    return 'Votre compte Google n’a pas pu être identifié. Ouvrez l’application avec votre compte professionnel (si plusieurs comptes Google sont connectés, utilisez une fenêtre de navigation privée) ; le propriétaire du déploiement et vous devez être dans le même domaine Google Workspace.';
+  }
+  return 'Votre compte (' + email + ') n’est pas dans un domaine autorisé (' + allowed.join(', ') + '). S’il s’agit bien de votre compte professionnel, l’administrateur doit ajouter votre domaine à la propriété PPM_DOMAIN (séparé par une virgule) ; sinon, ouvrez l’application avec le bon compte Google.';
+}
+
+/** Domaine principal (le premier), pour l'affichage. */
 function allowedDomain() {
-  return String(getProp(PROP.DOMAIN, '')).trim().toLowerCase();
+  return allowedDomains()[0] || '';
 }
 
 // ======================================================================
@@ -210,7 +232,7 @@ var SCHEMA = {
   Resource: {
     book: 'data',
     cols: ['id', 'resource_type', 'name', 'email', 'team_id', 'rate_profile', 'supplier',
-      'capacity_days_month', 'country', 'job_function', 'organization'],
+      'capacity_days_month', 'country', 'job_function', 'organization', 'daily_rate'],
     required: ['resource_type', 'name'],
     enums: { resource_type: ['Interne', 'Externe'], country: COUNTRIES }
   },
@@ -247,7 +269,7 @@ var SCHEMA = {
   BudgetLine: {
     book: 'data',
     cols: ['id', 'deliverable_id', 'resource_id', 'cost_type', 'planned_days', 'frozen_rate',
-      'fixed_amount', 'planned_amount', 'phasing_mode'],
+      'fixed_amount', 'planned_amount', 'phasing_mode', 'is_external'],
     required: ['deliverable_id', 'resource_id', 'cost_type'],
     enums: { cost_type: ['TJM', 'Forfait'] }
   },
@@ -604,13 +626,23 @@ function truncate(s, max) {
   return s.length > max ? s.slice(0, max - 1) + '…' : s;
 }
 
+/**
+ * Objet de tous les mails de l'outil : « [PPM✴️] » (✴ + sélecteur d'emoji), quel que soit l'envoi. Un préfixe déjà présent, ancien ou non, n'est pas doublé.
+ * Tout envoi doit passer par cette fonction : un test refuse un MailApp.sendEmail qui l'oublierait.
+ */
+var MAIL_PREFIX = '[PPM\u2734\uFE0F]';
+function mailSubject_(subject) {
+  return MAIL_PREFIX + ' ' + String(subject === undefined || subject === null ? '' : subject).replace(/^\s*\[PPM[^\]]*\]\s*/, '');
+}
+
 /** Envoi d'un mail simple ; en l'absence de MailApp (tests), trace dans la console. */
 var SENT_MAILS = null;
 function notifyUser(email, subject, body) {
   if (isBlank(email) || String(email).indexOf('@') < 0) return false;
-  if (SENT_MAILS) { SENT_MAILS.push({ to: email, subject: subject, body: body }); return true; }
-  if (typeof MailApp === 'undefined') { console.log('[mail] ' + email + ' — ' + subject); return false; }
-  MailApp.sendEmail({ to: email, subject: '[PPM] ' + subject, body: body });
+  var full = mailSubject_(subject);
+  if (SENT_MAILS) { SENT_MAILS.push({ to: email, subject: full, body: body }); return true; }
+  if (typeof MailApp === 'undefined') { console.log('[mail] ' + email + ' — ' + full); return false; }
+  MailApp.sendEmail({ to: email, subject: mailSubject_(subject), body: body });
   return true;
 }
 
@@ -2082,13 +2114,32 @@ function reconcileAll(state, deadlineMs) {
  * puis création des classeurs, déclencheurs (nuit, 7 h) et vérification.
  * Relançable sans risque (après une mise à jour, elle ajoute les nouvelles colonnes).
  */
+/**
+ * À exécuter depuis l'éditeur Apps Script quand « Accès réservé » s'affiche : montre le compte qui exécute, le compte détecté
+ * pour un visiteur et les domaines autorisés, avec la conduite à tenir.
+ */
+function diagnosticAcces() {
+  var effective = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
+  var active = String(Session.getActiveUser().getEmail() || '').toLowerCase();
+  var lines = [
+    'Compte qui exécute le script : ' + (effective || '(inconnu)'),
+    'Compte détecté pour l’utilisateur courant : ' + (active || '(non identifié)'),
+    'Domaines autorisés (PPM_DOMAIN) : ' + (allowedDomains().join(', ') || '(aucun : à renseigner)'),
+    'Administrateurs (PPM_ADMINS) : ' + (adminEmails().join(', ') || '(aucun)'),
+    'Ce compte serait ' + (isAllowedEmail_(active || effective) ? 'ACCEPTÉ.' : 'REFUSÉ : ' + accessDeniedMessage_(active || effective))
+  ];
+  var msg = lines.join('\n');
+  console.log(msg);
+  return msg;
+}
+
 function installerPpm() {
   var me = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
   var notes = [];
   if (!allowedDomain()) {
     if (!me || me.indexOf('@') < 0) throw new PpmError('CONFIG', 'Adresse du compte introuvable : renseigner PPM_DOMAIN et PPM_ADMINS à la main.');
     setProp(PROP.DOMAIN, me.split('@')[1]);
-    notes.push('Domaine réglé sur ' + me.split('@')[1] + ' (propriété PPM_DOMAIN).');
+    notes.push('Domaine réglé sur ' + me.split('@')[1] + ' d’après le compte qui installe (' + me + '). Si les utilisateurs se connectent avec un autre domaine, ajoutez-le à la propriété PPM_DOMAIN, séparé par une virgule ; en cas de doute, exécutez diagnosticAcces.');
   }
   if (!adminEmails().length) {
     setProp(PROP.ADMINS, me);
@@ -2370,10 +2421,7 @@ function handleRequest(body, actorEmail, opts) {
   try {
     body = body || {};
     var email = String(actorEmail || '').toLowerCase();
-    var domain = allowedDomain();
-    if (!email || !domain || email.split('@')[1] !== domain) {
-      throw new PpmError('FORBIDDEN', 'Accès réservé aux comptes du domaine.');
-    }
+    if (!email || !isAllowedEmail_(email)) throw new PpmError('FORBIDDEN', accessDeniedMessage_(email));
     var major = String(body.apiVersion || PPM_API_VERSION).split('.')[0];
     if (major !== PPM_API_VERSION.split('.')[0]) {
       throw new PpmError('VALIDATION', 'Version d’API non prise en charge : ' + body.apiVersion);
@@ -3154,10 +3202,10 @@ function uiCall(action, params, requestId) {
     currentUserEmail_());
 }
 
-var PAGES = { gantt: 'Gantt', structure: 'Structure', suivi: 'Suivi', copilote: 'Copilote', compte: 'Compte', admin: 'Admin', budget: 'Budget' };
-var PAGE_TITLES = { gantt: 'PPM — Planning', structure: 'PPM — Structure', suivi: 'PPM — Suivi', copilote: 'PPM — Copilote', compte: 'PPM — Mon compte', admin: 'PPM — Administration', budget: 'PPM — Budget' };
+var PAGES = { gantt: 'Gantt', structure: 'Structure', suivi: 'Suivi', copilote: 'Copilote', compte: 'Compte', admin: 'Admin', budget: 'Budget', overview: 'Overview', ressources: 'Ressources' };
+var PAGE_TITLES = { gantt: 'PPM — Planning', structure: 'PPM — Structure', suivi: 'PPM — Suivi', copilote: 'PPM — Copilote', compte: 'PPM — Mon compte', admin: 'PPM — Administration', budget: 'PPM — Budget', overview: 'PPM — Overview projet', ressources: 'PPM — Ressources' };
 var PAGE_TABS = { gantt: [''], structure: ['obs', 'wbs'], suivi: ['ecarts', 'changes', 'baselines', 'workspace'], copilote: ['synthese', 'simulation', 'questions', 'suggestions'],
-  compte: ['fiche', 'notifications', 'affichage'], admin: ['reglages', 'sante', 'feries', 'journaux'], budget: ['bilan', 'po', 'budget', 'taux'] };
+  compte: ['fiche', 'notifications', 'affichage'], admin: ['reglages', 'sante', 'feries', 'journaux'], budget: ['bilan', 'po', 'budget'], overview: [''], ressources: [''] };
 
 /** JSON à clés triées : la page et le serveur calculent la même clé pour les mêmes paramètres. */
 function stableJson_(v) {
@@ -3181,6 +3229,7 @@ function preloadFor_(view, boot, email) {
     return res;
   };
   if (view === 'compte') { put('account.get', {}); return pre; }
+  if (view === 'overview') { put('overview.get', { projectId: boot.project || '' }); return pre; }
   if (view === 'admin') { if (boot.isAdmin) put('admin.get', {}); return pre; }
   if (view === 'budget') {
     var bcat = put('planning.catalog', {});
@@ -3213,6 +3262,8 @@ function preloadFor_(view, boot, email) {
       if (list.data.canReadFeed) put('changes.feed', { projectId: first, limit: 1 });
       if (boot.tab === 'ecarts' && list.data.project.active_baseline_id) put('baselines.diff', { projectId: first });
     }
+  } else if (view === 'ressources' && first) {
+    put('ressources.get', { projectId: first });
   } else if (view === 'copilote' && first) {
     put('copilot.status', { projectId: first });
     if (boot.tab === 'synthese') put('copilot.brief', { projectId: first });
@@ -3249,7 +3300,7 @@ function renderPage_(e) {
     view: view,
     version: PPM_VERSION
   };
-  var theme = '', home = 'gantt';
+  var theme = '', home = 'overview';
   try { var ui = loadPrefs_(currentUserEmail_()).ui; theme = ui.theme; home = ui.home; } catch (err) { theme = ''; }
   t.theme = theme === 'dark' || theme === 'light' ? theme : 'auto';
   boot.home = home;
@@ -3384,7 +3435,7 @@ function loadPrefs_(email) {
   var row = userSettingRow_(email);
   var saved = row ? parseJsonSafe(row.view_prefs_json, {}) : {};
   var theme = saved.ui && ['light', 'dark', 'auto'].indexOf(saved.ui.theme) >= 0 ? saved.ui.theme : 'auto';
-  var home = saved.ui && HOME_VIEWS.indexOf(saved.ui.home) >= 0 ? saved.ui.home : 'gantt';
+  var home = saved.ui && HOME_VIEWS.indexOf(saved.ui.home) >= 0 ? saved.ui.home : 'overview';
   return { obs: normalizePrefs_('obs', saved.obs), wbs: normalizePrefs_('wbs', saved.wbs), ui: { theme: theme, home: home } };
 }
 
@@ -4486,14 +4537,14 @@ function projectMembers_(data, projectId, today) {
       (a.scope_type === 'program' && !isBlank(project.program_id) && a.scope_id === project.program_id);
     if (hit) people[a.resource_id] = true;
   });
-  var domain = allowedDomain();
+  var domains = allowedDomains();
   var res = indexBy_(data.resources);
   var out = {};
   Object.keys(people).forEach(function (id) {
     var r = res[id];
     if (!r || isTrue(r.deleted) || isBlank(r.email)) return;
     var m = String(r.email).toLowerCase();
-    if (!domain || m.split('@')[1] === domain) out[m] = true;
+    if (!domains.length || isAllowedEmail_(m)) out[m] = true;
   });
   return Object.keys(out).sort();
 }
@@ -4598,7 +4649,7 @@ function desiredReminders_(data, project, today, links, baseUrl) {
   var res = indexBy_(data.resources), wps = indexBy_(data.workpackages), settings = {};
   (data.settings || []).forEach(function (s) { settings[String(s.user_email).toLowerCase()] = s; });
   var hol = loadHolidayMap(project.holiday_country || 'FR');
-  var domain = allowedDomain();
+  var domains = allowedDomains();
   var out = {};
   data.planitems.forEach(function (i) {
     if (i.project_id !== project.id || isTrue(i.deleted) || i.item_type !== 'Livrable' || isBlank(i.planned_finish)) return;
@@ -4606,7 +4657,7 @@ function desiredReminders_(data, project, today, links, baseUrl) {
     var owner = res[i.owner_resource_id];
     if (!owner || isTrue(owner.deleted) || isBlank(owner.email)) return;
     var email = String(owner.email).toLowerCase();
-    if (domain && email.split('@')[1] !== domain) return;
+    if (domains.length && !isAllowedEmail_(email)) return;
     var rem = reminderFor_(settings[email]);
     if (!rem) return;
     var date = addWorkingDays(i.planned_finish, -rem.days, hol);
@@ -4960,7 +5011,7 @@ function frDate_(s) {
  */
 function buildDigests(data, today, opts) {
   opts = opts || {};
-  var domain = allowedDomain();
+  var domains = allowedDomains();
   var projects = indexBy_(data.projects);
   var live = function (r) { return !isTrue(r.deleted); };
   var activeProject = function (id) { var p = projects[id]; return p && live(p) && p.status !== 'Clos'; };
@@ -4977,7 +5028,7 @@ function buildDigests(data, today, opts) {
   data.resources.filter(live).forEach(function (r) {
     if (isBlank(r.email)) return;
     var email = String(r.email).toLowerCase();
-    if (domain && email.split('@')[1] !== domain) return;
+    if (domains.length && !isAllowedEmail_(email)) return;
     if (opts.onlyEmail && opts.onlyEmail !== email) return;
     var freq = (settings[email] && settings[email].notify_frequency) || 'Quotidien';
     if (!opts.onlyEmail) {
@@ -5115,9 +5166,10 @@ function loadDigestData_() {
 
 /** Envoi d'un mail au format texte et HTML ; capturé dans les tests. */
 function sendMail_(to, subject, text, html) {
-  if (SENT_MAILS) { SENT_MAILS.push({ to: to, subject: subject, body: text, html: html }); return true; }
-  if (typeof MailApp === 'undefined') { console.log('[mail] ' + to + ' — ' + subject); return false; }
-  MailApp.sendEmail({ to: to, subject: '[PPM] ' + subject, body: text, htmlBody: html, name: 'PPM' });
+  var full = mailSubject_(subject);
+  if (SENT_MAILS) { SENT_MAILS.push({ to: to, subject: full, body: text, html: html }); return true; }
+  if (typeof MailApp === 'undefined') { console.log('[mail] ' + to + ' — ' + full); return false; }
+  MailApp.sendEmail({ to: to, subject: mailSubject_(subject), body: text, htmlBody: html, name: 'PPM' });
   return true;
 }
 
@@ -5188,7 +5240,7 @@ defineAction('digest.preview', function (p, ctx) {
   }
   var d = list[0];
   var sent = p.send ? sendMail_(d.to, d.subject + ' (essai)', d.text, d.html) : false;
-  return { subject: d.subject, html: d.html, text: d.text, empty: d.counts.lines === 0, sent: sent };
+  return { subject: mailSubject_(d.subject), html: d.html, text: d.text, empty: d.counts.lines === 0, sent: sent };
 });
 
 // ======================================================================
@@ -5932,7 +5984,7 @@ defineAction('copilot.suggestions', function (p, ctx) {
  * Le manifeste et le déploiement restent dans l'éditeur Apps Script.
  */
 
-var HOME_VIEWS = ['gantt', 'structure', 'suivi', 'copilote'];
+var HOME_VIEWS = ['overview', 'gantt', 'structure', 'ressources', 'suivi', 'copilote', 'budget'];
 var ADMIN_EMAIL_RE_ = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 var TRIGGER_LIST = null; // tests : () => [noms des fonctions déclenchées]
 
@@ -5975,7 +6027,7 @@ defineAction('account.get', function (p, ctx) {
 
 function adminView_() {
   return {
-    admins: adminEmails(), domain: allowedDomain(),
+    admins: adminEmails(), domain: allowedDomains().join(', '),
     ai_mode: aiMode_(), ai_model: getProp(PROP.GEMINI_MODEL, ''), ai_quota: aiQuota_(),
     gemini_key_set: !!getProp(PROP.GEMINI_KEY, ''),
     reminder_on: reminderDefaults_().on, reminder_days: reminderDefaults_().days,
@@ -6008,6 +6060,17 @@ function validateAdminSettings_(v, cur, actor) {
     audit.push({ field: field, old: shown ? shown[0] : String(oldVal), new: shown ? shown[1] : String(newVal === null ? '' : newVal) });
   };
 
+  var domainsNow = allowedDomains();
+  if (v.domains !== undefined) {
+    var dl = (Array.isArray(v.domains) ? v.domains : String(v.domains).split(/[\s,;]+/)).map(function (d) { return String(d).trim().toLowerCase(); }).filter(function (d) { return d; });
+    var uniq = dl.filter(function (d, i) { return dl.indexOf(d) === i; });
+    if (!uniq.length) throw new PpmError('VALIDATION', 'Il faut au moins un domaine autorisé.');
+    if (uniq.length > 5) throw new PpmError('VALIDATION', 'Cinq domaines au plus.');
+    uniq.forEach(function (d) { if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(d)) throw new PpmError('VALIDATION', 'Domaine invalide : ' + d); });
+    if (uniq.indexOf(String(actor).split('@')[1]) < 0) throw new PpmError('VALIDATION', 'Vous ne pouvez pas retirer votre propre domaine : vous perdriez l’accès à l’outil.');
+    change('domains', PROP.DOMAIN, cur.domain.split(/[\s,;]+/).filter(Boolean).join(','), uniq.join(','));
+    domainsNow = uniq;
+  }
   if (v.admins !== undefined) {
     var raw = Array.isArray(v.admins) ? v.admins : String(v.admins).split(/[\s,;]+/);
     var seen = {}, list = [];
@@ -6019,7 +6082,7 @@ function validateAdminSettings_(v, cur, actor) {
     if (list.length > 10) throw new PpmError('VALIDATION', 'Dix administrateurs au plus.');
     list.forEach(function (m) {
       if (!ADMIN_EMAIL_RE_.test(m)) throw new PpmError('VALIDATION', 'Adresse invalide : ' + m);
-      if (cur.domain && m.split('@')[1] !== cur.domain) throw new PpmError('VALIDATION', 'Adresse hors du domaine ' + cur.domain + ' : ' + m);
+      if (domainsNow.length && domainsNow.indexOf(m.split('@')[1]) < 0) throw new PpmError('VALIDATION', 'Adresse hors du domaine ' + domainsNow.join(', ') + ' : ' + m);
     });
     if (list.indexOf(actor) < 0) {
       throw new PpmError('VALIDATION', 'Vous ne pouvez pas vous retirer vous-même des administrateurs : demandez à un autre administrateur de le faire.');
@@ -7094,6 +7157,15 @@ function hookRephase(before, rec) {
 
 // ---------------------------------------------------------------- lignes de budget
 
+/** Une ligne est « externe » si sa ressource l'est (jours × taux ou forfait) ; les anciennes lignes au forfait le sont par nature. */
+function lineIsExternal_(l) { return isTrue(l.is_external) || l.cost_type === 'Forfait'; }
+
+/** Taux journalier d'une personne : celui qu'on a saisi sur sa fiche ; à défaut, la grille (profil, pays, date d'effet), conservée en secours. */
+function dailyRateOf_(res, date) {
+  if (!isBlank(res.daily_rate) && Number(res.daily_rate) > 0) return Number(res.daily_rate);
+  return rateFor_(res.rate_profile, res.country, date);
+}
+
 function budgetNumber_(v, label, max) {
   var n = Number(v);
   if (isBlank(v) || isNaN(n) || n < 0 || n > (max || 1e9)) throw new PpmError('VALIDATION', label + ' : un nombre positif ou nul.');
@@ -7106,7 +7178,7 @@ function lineView_(l, ctx, phasing, resById, projectId) {
   return {
     id: l.id, version: l.version, deliverable_id: l.deliverable_id,
     resource: { id: l.resource_id, name: res ? res.name : '', type: res ? res.resource_type : '' },
-    cost_type: l.cost_type, planned_days: isBlank(l.planned_days) ? null : Number(l.planned_days),
+    external: lineIsExternal_(l), cost_type: l.cost_type, planned_days: isBlank(l.planned_days) ? null : Number(l.planned_days),
     frozen_rate: seeRate && !isBlank(l.frozen_rate) ? Number(l.frozen_rate) : null,
     fixed_amount: isBlank(l.fixed_amount) ? null : Number(l.fixed_amount), planned_amount: Number(l.planned_amount) || 0,
     phasing_mode: l.phasing_mode === 'manuel' ? 'manuel' : 'auto',
@@ -7130,20 +7202,21 @@ defineAction('budget.line.save', function (p, ctx) {
     }
     var out = { resource_id: resId };
     var resourceChanged = !line || line.resource_id !== resId;
-    if (res.resource_type === 'Externe') {
+    var external = res.resource_type === 'Externe';
+    var given = function (k) { return k in v && !isBlank(v[k]); };
+    // Une ressource externe se budgète au forfait OU en jours × taux ; une ressource interne, toujours en jours × taux.
+    var fixed = external && (given('fixed_amount') || (!given('planned_days') && !!line && line.cost_type === 'Forfait'));
+    if (fixed) {
       var amount = budgetNumber_('fixed_amount' in v ? v.fixed_amount : (line ? line.fixed_amount : ''), 'Forfait');
-      Object.assign(out, { cost_type: 'Forfait', fixed_amount: round2(amount), planned_days: '', frozen_rate: '', planned_amount: round2(amount) });
+      Object.assign(out, { cost_type: 'Forfait', fixed_amount: round2(amount), planned_days: '', frozen_rate: '', planned_amount: round2(amount), is_external: true });
     } else {
       var days = budgetNumber_('planned_days' in v ? v.planned_days : (line ? line.planned_days : ''), 'Jours prévus', 100000);
       var rate = line && !resourceChanged && !v.refresh_rate && line.cost_type === 'TJM' ? Number(line.frozen_rate) : null;
       if (rate === null || isNaN(rate)) {
-        rate = rateFor_(res.rate_profile, res.country, todayStr());
-        if (rate === null) {
-          throw new PpmError('VALIDATION', 'Aucun taux journalier pour le profil « ' + (res.rate_profile || 'non renseigné') + ' » (pays ' + (res.country || '?') +
-            ') : à renseigner dans l’onglet Taux, réservé au chef de projet et au DPL.');
-        }
+        rate = dailyRateOf_(res, todayStr());
+        if (rate === null) throw new PpmError('VALIDATION', 'Aucun taux journalier pour « ' + res.name + ' » : à renseigner dans Ressources (réservé au chef de projet et au DPL).');
       }
-      Object.assign(out, { cost_type: 'TJM', planned_days: days, frozen_rate: rate, planned_amount: round2(days * rate), fixed_amount: '' });
+      Object.assign(out, { cost_type: 'TJM', planned_days: days, frozen_rate: rate, planned_amount: round2(days * rate), fixed_amount: '', is_external: external });
     }
     var amountChanged = !line || Number(line.planned_amount) !== out.planned_amount;
     if (!line || amountChanged || line.phasing_mode !== 'manuel') out.phasing_mode = 'auto';
@@ -7243,7 +7316,7 @@ defineAction('budget.get', function (p, ctx) {
     l.phasing.forEach(function (m) { months[m.month] = round2((months[m.month] || 0) + m.amount); });
     var it = byId[l.deliverable_id], w = it ? topWp(it) : null, key = w ? w.id : '';
     var g = byWp[key] = byWp[key] || { wp_id: key, code: w ? w.wbs_code || '' : '', name: w ? w.name : 'Sans workpackage', internal: 0, external: 0, total: 0 };
-    if (l.cost_type === 'Forfait') g.external = round2(g.external + l.planned_amount); else g.internal = round2(g.internal + l.planned_amount);
+    if (l.external) g.external = round2(g.external + l.planned_amount); else g.internal = round2(g.internal + l.planned_amount);
     g.total = round2(g.internal + g.external);
   });
   var withBudget = {}; lines.forEach(function (l) { withBudget[l.deliverable_id] = true; });
@@ -7257,7 +7330,7 @@ defineAction('budget.get', function (p, ctx) {
     return { id: i.id, name: i.name, wp: wpLabel(i), cpn: cpnOf(i), start: i.planned_start || null, finish: i.planned_finish || null, has_budget: !!withBudget[i.id] };
   }).sort(function (a, b) { return String(a.wp).localeCompare(String(b.wp), 'fr', { numeric: true }) || String(a.name).localeCompare(String(b.name), 'fr'); });
   var total = 0, ext = 0;
-  views.forEach(function (l) { total = round2(total + l.planned_amount); if (l.cost_type === 'Forfait') ext = round2(ext + l.planned_amount); });
+  views.forEach(function (l) { total = round2(total + l.planned_amount); if (l.external) ext = round2(ext + l.planned_amount); });
   return {
     project: { id: project.id, code: project.code, name: project.name }, partial: !access.all,
     lines: views, deliverables: deliverables,
@@ -7299,7 +7372,7 @@ function computeBalance_(d) {
     if (!it) return;
     var g = group(cpnOf(it), ''), a = Number(l.planned_amount) || 0;
     g.budget.total += a;
-    if (l.cost_type === 'Forfait') g.budget.external += a; else g.budget.internal += a;
+    if (lineIsExternal_(l)) g.budget.external += a; else g.budget.internal += a;
   });
   d.pos.forEach(function (po) {
     var g = group(normCpn_(po.cpn), ''), a = Number(po.amount) || 0;
@@ -7506,7 +7579,7 @@ defineAction('po.options', function (p, ctx) {
   if (!canPoView_(ctx, project.id)) throw new PpmError('FORBIDDEN', 'Les commandes d’achat sont réservées aux personnes internes nommées dans l’équipe du projet.');
   var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; });
   var wpById = indexBy_(wps);
-  var lines = repoList('BudgetLine', function (l) { return l.cost_type === 'Forfait'; });
+  var lines = repoList('BudgetLine', lineIsExternal_);
   var ext = {};
   lines.forEach(function (l) { ext[l.deliverable_id] = round2((ext[l.deliverable_id] || 0) + (Number(l.planned_amount) || 0)); });
   var resources = repoList('Resource');
@@ -7556,7 +7629,7 @@ function projectEnv_(project, wps, pos) {
   var itemById = indexBy_(items), wpById = indexBy_(wps);
   var ids = {}; items.forEach(function (i) { ids[i.id] = true; });
   var external = {}, committed = {};
-  repoList('BudgetLine', function (l) { return ids[l.deliverable_id] && l.cost_type === 'Forfait'; }).forEach(function (l) { external[l.deliverable_id] = round2((external[l.deliverable_id] || 0) + (Number(l.planned_amount) || 0)); });
+  repoList('BudgetLine', function (l) { return ids[l.deliverable_id] && lineIsExternal_(l); }).forEach(function (l) { external[l.deliverable_id] = round2((external[l.deliverable_id] || 0) + (Number(l.planned_amount) || 0)); });
   pos.forEach(function (o) { if (PO_COMMITTED.indexOf(o.status) >= 0) o.links.forEach(function (l) { committed[l.deliverable_id] = round2((committed[l.deliverable_id] || 0) + l.amount); }); });
   var cpnOf = function (item) {
     var w = item.wp_id ? wpById[item.wp_id] : null, guard = 0;
@@ -7746,3 +7819,422 @@ function poRuleInputs_() {
   });
   return { orders: orders, balances: balances };
 }
+
+// ======================================================================
+// 45_Overview.gs
+// ======================================================================
+
+/**
+ * PPM Core — 0.10.0 : page « Overview Projet ».
+ *
+ *  - projects.save : crée un projet (avec son chef de projet) ou modifie son nom, son code, son statut et ses dates.
+ *  - overview.get  : portefeuille des projets et détail du projet choisi, avec trois indicateurs visuels :
+ *      DÉLAIS  (« on time »)    : retards, dépendances non respectées, glissement sur la baseline, fin visée, avancement réel face au plan ;
+ *      QUALITÉ (« on quality ») : risques ouverts (score), traitements en retard, jalons menacés, signaux faibles, livrables sans responsable ;
+ *      COÛT    (« on cost »)    : PO engagées face au budget externe par CPN, GR en retard ; les montants ne se voient qu'avec le droit budget.
+ *    Chaque indicateur est Maîtrisé, en Vigilance, en Alerte ou Non renseigné. L'ensemble reprend le pire des trois.
+ *  L'indicateur Qualité est une mesure de maîtrise (risques, jalons), faute de mesure de qualité propre dans l'outil : à affiner.
+ * Fonctions pures : timeKpi_, qualityKpi_, costKpi_, overallLevel_.
+ */
+
+var PROJECT_STATUSES = ['Préparation', 'Actif', 'En pause', 'Clos'];
+var KPI_LABELS = { ok: 'Maîtrisé', warn: 'Vigilance', alert: 'Alerte', none: 'Non renseigné' };
+var KPI_RISK_CRITICAL = 20;
+
+function pl_(n, one, many) { return n + ' ' + (n > 1 ? many : one); }
+
+// ---------------------------------------------------------------- indicateurs (fonctions pures)
+
+/** Avancement attendu à la date du jour : pour chaque livrable, part du temps écoulé entre son début et sa fin, pondérée par sa durée. */
+function plannedProgress_(items, today, holFor) {
+  var w = 0, acc = 0;
+  items.forEach(function (it) {
+    if (it.item_type !== 'Livrable' || isBlank(it.planned_finish)) return;
+    var d = Math.max(1, itemDuration(it, holFor(it.project_id)));
+    var start = it.planned_start || it.planned_finish, finish = it.planned_finish;
+    var pct = today >= finish ? 100 : today <= start ? 0 : 100 * (parseYmd(today) - parseYmd(start)) / Math.max(DAY_MS, parseYmd(finish) - parseYmd(start));
+    w += d; acc += d * pct;
+  });
+  return w ? Math.round(acc / w) : 0;
+}
+
+/** DÉLAIS : data = { project, items, deps, baselineEnd, today, holFor }. */
+function timeKpi_(d) {
+  var items = d.items.filter(function (i) { return !isTrue(i.deleted); });
+  if (!items.some(function (i) { return !isBlank(i.planned_finish); })) {
+    return { level: 'none', label: KPI_LABELS.none, headline: 'Pas encore de planning daté', facts: [], metrics: { late: 0, violations: 0, progress_pct: 0, planned_pct: 0 } };
+  }
+  var hol = d.holFor(d.project.id);
+  var done = function (i) { return i.status === 'Terminé' || Number(i.progress_pct) >= 100; };
+  var late = items.filter(function (i) { return !done(i) && !isBlank(i.planned_finish) && i.planned_finish < d.today; }).length;
+  var violations = dependencyViolations(items, d.deps, d.holFor).length;
+  var planEnd = items.reduce(function (a, i) { return !isBlank(i.planned_finish) && i.planned_finish > a ? i.planned_finish : a; }, '');
+  var target = d.project.end_date || '';
+  var beyond = !!target && planEnd > target;
+  var slip = d.baselineEnd && planEnd ? workingDayOffset(d.baselineEnd, planEnd, hol) : null;
+  var progress = weightedProgress_(items, d.holFor), planned = plannedProgress_(items, d.today, d.holFor), gap = planned - progress;
+  var level = 'ok';
+  if (late >= 1 || (slip !== null && slip > 0) || violations > 0 || gap >= 5) level = 'warn';
+  if (beyond || (slip !== null && slip > THRESHOLDS.criticalSlipDays) || late >= 3 || gap >= 15) level = 'alert';
+  var facts = [];
+  if (late) facts.push(pl_(late, 'élément en retard', 'éléments en retard'));
+  if (violations) facts.push(pl_(violations, 'dépendance non respectée', 'dépendances non respectées'));
+  if (slip) facts.push('Fin du plan ' + (slip > 0 ? '+' : '−') + pl_(Math.abs(slip), 'jour ouvré', 'jours ouvrés') + ' sur la baseline');
+  if (beyond) facts.push('Fin du plan après la fin visée (' + frDate_(target) + ')');
+  if (gap >= 5) facts.push('Avancement ' + progress + ' % pour ' + planned + ' % attendus');
+  var headline = level === 'ok' ? 'Planning tenu' : (beyond ? 'La fin du plan dépasse la fin visée' : late ? pl_(late, 'élément en retard', 'éléments en retard') : slip > 0 ? 'Fin du plan en glissement' : violations ? 'Dépendances à revoir' : 'Avancement en deçà du plan');
+  return { level: level, label: KPI_LABELS[level], headline: headline, facts: facts, metrics: { late: late, violations: violations, slip: slip, plan_end: planEnd || null, target_end: target || null, progress_pct: progress, planned_pct: planned } };
+}
+
+/** QUALITÉ (maîtrise) : data = { project, risks, insights, items, today }. */
+function qualityKpi_(d) {
+  var risks = d.risks.filter(function (r) { return !isTrue(r.deleted) && r.kind !== 'Opportunité'; });
+  var open = risks.filter(function (r) { return r.status !== 'Clos'; });
+  var score = function (r) { return Number(r.score) || 0; };
+  var high = open.filter(function (r) { return score(r) >= THRESHOLDS.riskHighMin; }).length;
+  var critical = open.filter(function (r) { return score(r) >= KPI_RISK_CRITICAL; }).length;
+  var overdue = open.filter(function (r) { return !isBlank(r.treatment_due) && String(r.treatment_due) < d.today; }).length;
+  var count = function (rule) { return d.insights.filter(function (x) { return !isTrue(x.deleted) && x.status === 'Nouveau' && x.rule_code === rule; }).length; };
+  var threatened = count('MILESTONE_THREATENED'), weak = count('WEAK_SIGNAL'), ownerless = count('MISSING_OWNER');
+  var metrics = { open_risks: open.length, high_risks: high, critical_risks: critical, overdue_treatments: overdue, threatened_milestones: threatened, weak_signals: weak, no_owner: ownerless };
+  if (!risks.length && !threatened && !weak && !ownerless) {
+    return { level: 'none', label: KPI_LABELS.none, headline: 'Aucun risque saisi', facts: ['Le registre des risques est vide : la maîtrise ne peut pas être évaluée.'], metrics: metrics };
+  }
+  var level = 'ok';
+  if (high > 0 || overdue > 0 || weak > 0 || ownerless > 0) level = 'warn';
+  if (critical > 0 || threatened > 0 || high >= 3) level = 'alert';
+  var facts = [];
+  if (critical) facts.push(pl_(critical, 'risque critique', 'risques critiques'));
+  if (high - critical > 0) facts.push(pl_(high - critical, 'risque élevé', 'risques élevés'));
+  if (threatened) facts.push(pl_(threatened, 'jalon menacé', 'jalons menacés'));
+  if (overdue) facts.push(pl_(overdue, 'traitement de risque en retard', 'traitements de risque en retard'));
+  if (weak) facts.push(pl_(weak, 'signal faible dans les commentaires', 'signaux faibles dans les commentaires'));
+  if (ownerless) facts.push(pl_(ownerless, 'livrable sans responsable', 'livrables sans responsable'));
+  var headline = level === 'ok' ? 'Risques sous contrôle' : critical ? 'Risque critique ouvert' : threatened ? 'Jalon menacé' : high >= 3 ? 'Plusieurs risques élevés' : 'Points de vigilance';
+  return { level: level, label: KPI_LABELS[level], headline: headline, facts: facts, metrics: metrics };
+}
+
+/** COÛT : data = { balance (bilan par CPN ou null), lateGr, withoutBudget, showAmounts }. Aucun montant si showAmounts est faux. */
+function costKpi_(d) {
+  var b = d.balance;
+  if (!b || (!b.totals.budget.total && !b.totals.po.count)) {
+    return { level: 'none', label: KPI_LABELS.none, headline: 'Budget non renseigné', facts: [], metrics: { engaged_pct: null } };
+  }
+  var ext = b.totals.budget.external, committed = b.totals.po.committed;
+  var pct = ext > 0 ? Math.round(100 * committed / ext) : null;
+  var overrun = b.totals.overrun || (ext === 0 && committed > 0);
+  var level = 'ok';
+  if ((pct !== null && pct >= 85) || d.lateGr > 0) level = 'warn';
+  if (overrun) level = 'alert';
+  var facts = [];
+  if (pct !== null) facts.push('Engagé : ' + pct + ' % du budget externe' + (d.showAmounts ? ' (' + eurAmount_(committed) + ' sur ' + eurAmount_(ext) + ')' : ''));
+  if (ext === 0 && committed > 0) facts.push('Des PO sont engagées sans budget externe');
+  b.cpns.filter(function (g) { return g.overrun && g.cpn; }).forEach(function (g) { facts.push('CPN ' + g.cpn + ' : budget externe dépassé'); });
+  if (d.lateGr) facts.push(pl_(d.lateGr, 'GR en retard', 'GR en retard'));
+  if (d.withoutBudget) facts.push(pl_(d.withoutBudget, 'livrable sans budget', 'livrables sans budget'));
+  var headline = level === 'ok' ? 'Budget externe maîtrisé' : overrun ? 'Budget externe dépassé' : d.lateGr ? 'GR en retard' : 'Budget externe bientôt consommé';
+  return { level: level, label: KPI_LABELS[level], headline: headline, facts: facts, metrics: { engaged_pct: pct, late_gr: d.lateGr, without_budget: d.withoutBudget } };
+}
+
+function eurAmount_(n) { return Math.round(Number(n) || 0).toLocaleString('fr-FR') + ' €'; }
+
+/** Le pire des trois, en ignorant « non renseigné » (qui ne l'emporte que s'il n'y a rien d'autre). */
+function overallLevel_(levels) {
+  var order = { none: 0, ok: 1, warn: 2, alert: 3 }, worst = 'none';
+  levels.forEach(function (l) { if (order[l] > order[worst]) worst = l; });
+  return worst;
+}
+
+// ---------------------------------------------------------------- données
+
+function loadOverviewData_() {
+  var data = {
+    projects: repoList('Project'), programs: repoList('Program'), workpackages: repoList('WorkPackage'), planitems: repoList('PlanItem'),
+    dependencies: repoList('Dependency'), resources: repoList('Resource'), insights: repoList('Insight'), risks: repoList('RiskOpportunity'),
+    lines: repoList('BudgetLine'), orders: attachLinks_(repoList('PurchaseOrder')), holidaySets: repoList('HolidaySet')
+  };
+  data.holFor = holidayResolver(data);
+  return data;
+}
+
+function baselineEndOf_(project) {
+  var b = activeBaselineOf_(project);
+  if (!b) return '';
+  var end = '';
+  Object.keys(b.snap.PlanItem || {}).forEach(function (id) { var f = b.snap.PlanItem[id].planned_finish; if (!isBlank(f) && f > end) end = f; });
+  return end;
+}
+
+/** Indicateurs d'un projet à partir des données déjà chargées. */
+function projectKpis_(data, project, today, ctx) {
+  var items = data.planitems.filter(function (i) { return i.project_id === project.id; });
+  var ids = {}; items.forEach(function (i) { ids[i.id] = true; });
+  var deps = data.dependencies.filter(function (x) { return ids[x.predecessor_id] && ids[x.successor_id]; });
+  var wps = data.workpackages.filter(function (w) { return w.project_id === project.id; });
+  var lines = data.lines.filter(function (l) { return ids[l.deliverable_id]; });
+  var pos = projectOrdersFrom_(data.orders, project, wps);
+  var deliverables = items.filter(function (i) { return i.item_type === 'Livrable'; });
+  var hasLine = {}; lines.forEach(function (l) { hasLine[l.deliverable_id] = true; });
+  var balance = lines.length || pos.length ? computeBalance_({ project: project, wps: wps, items: deliverables, lines: lines, pos: pos }) : null;
+  var lateGr = pos.filter(function (o) { return o.status === 'Lancée' && !isBlank(o.gr_due_date) && String(o.gr_due_date) < today; }).length;
+  var showAmounts = !!ctx && (ctx.isAdmin || can(ctx, 'budget.edit', { type: 'project', id: project.id }));
+  var time = timeKpi_({ project: project, items: items, deps: deps, baselineEnd: baselineEndOf_(project), today: today, holFor: data.holFor });
+  var quality = qualityKpi_({ project: project, risks: data.risks.filter(function (r) { return r.project_id === project.id; }), insights: data.insights.filter(function (x) { return x.project_id === project.id; }), items: items, today: today });
+  var cost = costKpi_({ balance: balance, lateGr: lateGr, withoutBudget: lines.length ? deliverables.filter(function (i) { return !hasLine[i.id]; }).length : 0, showAmounts: showAmounts });
+  return { time: time, quality: quality, cost: cost, overall: overallLevel_([time.level, quality.level, cost.level]) };
+}
+
+/** PO d'un projet à partir d'une liste déjà chargée (même règle que projectOrders_ : par CPN du projet et de ses sous-projets). */
+function projectOrdersFrom_(orders, project, wps) {
+  var set = {};
+  projectCpns_(project, wps).forEach(function (c) { set[c.cpn] = true; });
+  return orders.filter(function (o) { return set[normCpn_(o.cpn)]; });
+}
+
+function projectSummary_(data, project, today, ctx) {
+  var res = indexBy_(data.resources), programs = indexBy_(data.programs);
+  var manager = res[project.manager_resource_id];
+  var items = data.planitems.filter(function (i) { return i.project_id === project.id && !isTrue(i.deleted); });
+  var done = items.filter(function (i) { return i.status === 'Terminé' || Number(i.progress_pct) >= 100; }).length;
+  return {
+    id: project.id, code: project.code, name: project.name, status: project.status || '', version: project.version,
+    program: project.program_id && programs[project.program_id] ? programs[project.program_id].name : '',
+    manager: manager ? manager.name : '', cpn: project.cpn || '', cpn_label: project.cpn_label || '',
+    start_date: project.start_date || '', target_end: project.end_date || '', items: items.length, done: done,
+    canEdit: !!ctx && can(ctx, 'wbs.edit', { type: 'project', id: project.id }),
+    kpis: projectKpis_(data, project, today, ctx)
+  };
+}
+
+// ---------------------------------------------------------------- actions
+
+/** Portefeuille (tous les projets) et détail du projet demandé (ou du premier projet actif). */
+defineAction('overview.get', function (p, ctx) {
+  var today = todayStr();
+  var data = loadOverviewData_();
+  var order = { Actif: 0, 'Préparation': 1, 'En pause': 2, Clos: 3 };
+  var projects = data.projects.slice().sort(function (a, b) {
+    return ((order[a.status] === undefined ? 1 : order[a.status]) - (order[b.status] === undefined ? 1 : order[b.status])) || String(a.code).localeCompare(String(b.code), 'fr', { numeric: true });
+  });
+  var summaries = projects.map(function (pr) { return projectSummary_(data, pr, today, ctx); });
+  var chosen = summaries.filter(function (s) { return s.id === p.projectId; })[0] || summaries[0] || null;
+  var detail = null;
+  if (chosen) {
+    var pr = indexBy_(data.projects)[chosen.id];
+    var items = data.planitems.filter(function (i) { return i.project_id === pr.id && !isTrue(i.deleted); });
+    var done = function (i) { return i.status === 'Terminé' || Number(i.progress_pct) >= 100; };
+    var horizon = addCalendarDays(today, 90);
+    detail = {
+      id: chosen.id,
+      milestones: items.filter(function (i) { return i.item_type === 'Jalon' && !done(i) && !isBlank(i.planned_finish) && i.planned_finish >= today && i.planned_finish <= horizon; })
+        .sort(function (a, b) { return String(a.planned_finish).localeCompare(String(b.planned_finish)); }).slice(0, 4)
+        .map(function (m) { return { name: m.name, date: m.planned_finish, in_days: Math.round((parseYmd(m.planned_finish) - parseYmd(today)) / DAY_MS) }; }),
+      alerts: data.insights.filter(function (x) { return x.project_id === pr.id && !isTrue(x.deleted) && x.status === 'Nouveau' && x.severity !== 'Info'; })
+        .sort(function (a, b) { return (a.severity === 'Alerte' ? 0 : 1) - (b.severity === 'Alerte' ? 0 : 1); }).slice(0, 5)
+        .map(function (x) { return { severity: x.severity, message: x.message }; }),
+      people: projectMembers_({ projects: data.projects, workpackages: data.workpackages, planitems: data.planitems, resources: data.resources, assignments: repoList('RoleAssignment') }, pr.id, today).length
+    };
+  }
+  var programs = data.programs.map(function (g) { return { id: g.id, code: g.code, name: g.name }; });
+  var canCreate = ctx.isAdmin || can(ctx, 'project.create', { type: 'global' });
+  return { today: today, projects: summaries, selected: chosen ? chosen.id : '', detail: detail, programs: programs, canCreate: canCreate,
+    people: data.resources.filter(function (r) { return r.resource_type === 'Interne'; }).map(function (r) { return { id: r.id, name: r.name }; })
+      .sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); }), countries: COUNTRIES, statuses: PROJECT_STATUSES };
+});
+
+function projectCode_(v, currentId) {
+  var s = String(v === undefined || v === null ? '' : v).replace(/\s+/g, ' ').trim();
+  if (!s) throw new PpmError('VALIDATION', 'Le code du projet est obligatoire.');
+  if (!/^[A-Za-z0-9][A-Za-z0-9 ._\/-]{0,19}$/.test(s)) throw new PpmError('VALIDATION', 'Code invalide : 20 caractères au plus, lettres, chiffres, espace, point, tiret, barre oblique.');
+  if (repoList('Project', function (x) { return x.id !== currentId && String(x.code).toLowerCase() === s.toLowerCase(); }).length) {
+    throw new PpmError('VALIDATION', 'Le code ' + s + ' est déjà utilisé par un autre projet.');
+  }
+  return s;
+}
+
+/**
+ * Crée un projet (droit project.create), avec son chef de projet s'il est désigné ; ou modifie nom, code, statut et dates d'un projet
+ * existant (droit d'édition du projet). id vide = création.
+ */
+defineAction('projects.save', function (p, ctx) {
+  var v = p.values || {};
+  var cur = isBlank(p.id) ? null : mustGet('Project', p.id);
+  return withLock(function () {
+    var out = {};
+    if (!cur || 'name' in v) out.name = wbsName_(v.name);
+    if (!cur || 'code' in v) out.code = projectCode_(v.code, cur ? cur.id : '');
+    if ('status' in v || !cur) {
+      var st = isBlank(v.status) ? 'Actif' : v.status;
+      if (PROJECT_STATUSES.indexOf(st) < 0) throw new PpmError('VALIDATION', 'Statut inconnu : ' + PROJECT_STATUSES.join(', ') + '.');
+      out.status = st;
+    }
+    var start = 'start_date' in v ? wbsDate_(v.start_date, 'Début') : (cur ? cur.start_date || '' : '');
+    var end = 'end_date' in v ? wbsDate_(v.end_date, 'Fin visée') : (cur ? cur.end_date || '' : '');
+    if (start && end && start > end) throw new PpmError('VALIDATION', 'La fin visée ne peut pas précéder le début.');
+    if ('start_date' in v || !cur) out.start_date = start;
+    if ('end_date' in v || !cur) out.end_date = end;
+    if (cur) {
+      requireCan(ctx, 'wbs.edit', { type: 'project', id: cur.id });
+      var rec0 = repoUpdate('Project', cur.id, out, p.version, ctx.actx);
+      return { id: rec0.id, version: rec0.version, code: rec0.code, name: rec0.name, created: false };
+    }
+    if (!isBlank(v.program_id)) mustGet('Program', v.program_id);
+    requireCan(ctx, 'project.create', isBlank(v.program_id) ? { type: 'global' } : { type: 'program', id: v.program_id });
+    var manager = '';
+    if (!isBlank(v.manager_resource_id)) {
+      var m = repoGet('Resource', v.manager_resource_id);
+      if (!m || isTrue(m.deleted) || m.resource_type !== 'Interne') throw new PpmError('VALIDATION', 'Le chef de projet doit être une personne interne.');
+      manager = m.id;
+    }
+    var country = isBlank(v.holiday_country) ? 'FR' : v.holiday_country;
+    if (COUNTRIES.indexOf(country) < 0) throw new PpmError('VALIDATION', 'Pays inconnu : ' + COUNTRIES.join(', ') + '.');
+    var cpn = checkCpnValue_(v.cpn);
+    assertCpnFree_(cpn, '');
+    var rec = repoInsert('Project', Object.assign(out, {
+      program_id: isBlank(v.program_id) ? '' : v.program_id, manager_resource_id: manager, holiday_country: country,
+      cpn: cpn, cpn_label: cpn ? wbsShortText_(v.cpn_label, 120, 'Désignation du CPN') : ''
+    }), ctx.actx);
+    if (manager) repoInsert('RoleAssignment', { resource_id: manager, role_code: 'CP', scope_type: 'project', scope_id: rec.id, start_date: todayStr() }, ctx.actx);
+    return { id: rec.id, version: rec.version, code: rec.code, name: rec.name, created: true };
+  });
+});
+
+// ======================================================================
+// 46_Resources.gs
+// ======================================================================
+
+/**
+ * PPM Core — 0.10.0 : page « Ressources ».
+ *
+ * Un seul écran pour les personnes, les équipes, le rôle dans le projet et le taux journalier :
+ *   - ressources.get        : personnes (avec leur équipe, leurs rôles dans le projet choisi, leur taux si on y a droit) et équipes ;
+ *   - people.setProjectRole : « Chef de projet » ou « Membre » sur un projet (met fin à l'ancien rôle de projet, garde le chef de projet du projet à jour) ;
+ *   - people.setRate        : taux journalier d'une personne, interne ou externe (réservé au chef de projet et au DPL).
+ * Le taux saisi sur la fiche remplace la grille profil × pays × date, qui ne sert plus que de secours.
+ * La création et la modification des personnes et des équipes passent par resources.* et teams.* (42_Org.gs).
+ */
+
+var PROJECT_ROLE_CHOICES = [{ code: 'CP', label: 'Chef de projet' }, { code: 'MEMBER', label: 'Membre affecté' }];
+
+function canSeeRates_(ctx) { return ctx.isAdmin || can(ctx, 'ratecard.manage', { type: 'global' }); }
+
+/** Équipes à plat, dans l'ordre de l'arborescence, avec leur profondeur et leur nombre de membres. */
+function teamsFlat_(teams, resources) {
+  var byParent = {}, count = {};
+  resources.forEach(function (r) { if (!isBlank(r.team_id)) count[r.team_id] = (count[r.team_id] || 0) + 1; });
+  teams.forEach(function (t) { var k = isBlank(t.parent_team_id) ? '' : t.parent_team_id; (byParent[k] = byParent[k] || []).push(t); });
+  var res = indexBy_(resources), out = [], seen = {};
+  var walk = function (parent, depth) {
+    (byParent[parent] || []).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); }).forEach(function (t) {
+      if (seen[t.id]) return;
+      seen[t.id] = true;
+      var mgr = res[t.manager_resource_id];
+      out.push({ id: t.id, version: t.version, name: t.name, parent_team_id: t.parent_team_id || '', depth: depth, cost_center: t.cost_center || '',
+        manager_id: t.manager_resource_id || '', manager: mgr ? mgr.name : '', members: count[t.id] || 0 });
+      walk(t.id, depth + 1);
+    });
+  };
+  walk('', 0);
+  teams.forEach(function (t) { if (!seen[t.id]) { seen[t.id] = true; out.push({ id: t.id, version: t.version, name: t.name, parent_team_id: '', depth: 0, cost_center: t.cost_center || '', manager_id: '', manager: '', members: count[t.id] || 0 }); } });
+  return out;
+}
+
+defineAction('ressources.get', function (p, ctx) {
+  var project = isBlank(p.projectId) ? null : mustGet('Project', p.projectId);
+  var today = todayStr();
+  var resources = repoList('Resource'), teams = repoList('HierarchicalTeam');
+  var teamById = indexBy_(teams);
+  var data = { programs: repoList('Program'), projects: repoList('Project'), workpackages: repoList('WorkPackage') };
+  var canRates = canSeeRates_(ctx);
+  var scope = project ? { type: 'project', id: project.id } : null;
+  var wpIds = {};
+  if (project) data.workpackages.forEach(function (w) { if (w.project_id === project.id) wpIds[w.id] = true; });
+  var roles = {};
+  if (project) {
+    repoList('RoleAssignment').forEach(function (a) {
+      if (!isBlank(a.end_date) && String(a.end_date) < today) return;
+      var hit = (a.scope_type === 'project' && a.scope_id === project.id) || (a.scope_type === 'workpackage' && wpIds[a.scope_id]) ||
+        (a.scope_type === 'program' && !isBlank(project.program_id) && a.scope_id === project.program_id);
+      if (!hit) return;
+      var list = roles[a.resource_id] = roles[a.resource_id] || [];
+      var key = a.role_code + '|' + a.scope_type + '|' + a.scope_id;
+      if (list.some(function (x) { return x.key === key; })) return;
+      list.push({ key: key, code: a.role_code, label: ROLE_LABELS[a.role_code] || a.role_code, scope_type: a.scope_type, scope: scopeLabel_(data, a.scope_type, a.scope_id), rank: ROLE_RANK[a.role_code] });
+    });
+  }
+  var editAll = canEditResources_(ctx);
+  var people = resources.map(function (r) {
+    var mine = (roles[r.id] || []).sort(function (a, b) { return a.rank - b.rank; });
+    var projectLevel = mine.filter(function (x) { return x.scope_type === 'project' && (x.code === 'CP' || x.code === 'MEMBER'); }).map(function (x) { return x.code; });
+    return {
+      resource_id: r.id, version: r.version, name: r.name, email: r.email || '', job_function: r.job_function || '', organization: r.organization || '',
+      access: isBlank(r.email) ? 'none' : (isAllowedEmail_(r.email) ? 'ok' : 'outside'),
+      resource_type: r.resource_type, supplier: r.supplier || '', country: r.country || '', capacity: isBlank(r.capacity_days_month) ? '' : Number(r.capacity_days_month),
+      team_id: r.team_id || '', team: teamById[r.team_id] ? teamById[r.team_id].name : '',
+      roles: mine.map(function (x) { return { code: x.code, label: x.label, scope: x.scope, scope_type: x.scope_type }; }),
+      project_role: projectLevel.indexOf('CP') >= 0 ? 'CP' : projectLevel.indexOf('MEMBER') >= 0 ? 'MEMBER' : '',
+      daily_rate: canRates && !isBlank(r.daily_rate) ? Number(r.daily_rate) : null,
+      rate_source: canRates ? (!isBlank(r.daily_rate) ? 'fiche' : (rateFor_(r.rate_profile, r.country, today) !== null ? 'grille' : '')) : ''
+    };
+  }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
+  var canAssign = !!scope && can(ctx, 'roles.assign', scope);
+  var best = canAssign && !ctx.isAdmin ? bestRankOn_(ctx, scope) : 0;
+  return {
+    project: project ? { id: project.id, code: project.code, name: project.name, manager_id: project.manager_resource_id || '' } : null,
+    people: people, teams: teamsFlat_(teams, resources),
+    canEdit: editAll, canRates: canRates, canAssign: canAssign,
+    roleChoices: canAssign ? PROJECT_ROLE_CHOICES.filter(function (c) { return ROLE_RANK[c.code] >= best; }) : [],
+    countries: COUNTRIES, domains: allowedDomains()
+  };
+});
+
+/** Rôle de projet d'une personne : 'CP' (chef de projet), 'MEMBER' (membre affecté) ou '' (aucun). Les rôles sur un workpackage ne bougent pas. */
+defineAction('people.setProjectRole', function (p, ctx) {
+  var project = mustGet('Project', requireParam(p, 'projectId'));
+  var person = mustGet('Resource', requireParam(p, 'resourceId'));
+  var role = isBlank(p.role) ? '' : p.role;
+  if (['', 'CP', 'MEMBER'].indexOf(role) < 0) throw new PpmError('VALIDATION', 'Rôle de projet inconnu : chef de projet ou membre affecté.');
+  var scope = { type: 'project', id: project.id };
+  requireCan(ctx, 'roles.assign', scope);
+  var best = ctx.isAdmin ? 0 : bestRankOn_(ctx, scope);
+  if (role && ROLE_RANK[role] < best) throw new PpmError('FORBIDDEN', 'Vous ne pouvez pas attribuer un rôle plus élevé que le vôtre.');
+  if (role === 'CP' && person.resource_type !== 'Interne') throw new PpmError('VALIDATION', 'Le chef de projet doit être une personne interne.');
+  return withLock(function () {
+    var today = todayStr(), yesterday = addCalendarDays(today, -1);
+    var active = repoList('RoleAssignment', function (a) {
+      return a.resource_id === person.id && a.scope_type === 'project' && a.scope_id === project.id && (a.role_code === 'CP' || a.role_code === 'MEMBER') && (isBlank(a.end_date) || String(a.end_date) >= today);
+    });
+    var same = active.length === 1 && active[0].role_code === role;
+    if (!same) {
+      active.forEach(function (a) {
+        if (ROLE_RANK[a.role_code] < best) throw new PpmError('FORBIDDEN', 'Vous ne pouvez pas retirer un rôle plus élevé que le vôtre.');
+      });
+      active.forEach(function (a) { repoUpdate('RoleAssignment', a.id, { end_date: yesterday }, null, ctx.actx); });
+      if (role) repoInsert('RoleAssignment', { resource_id: person.id, role_code: role, scope_type: 'project', scope_id: project.id, start_date: today }, ctx.actx);
+    }
+    // le chef de projet du projet suit les affectations : celui qui n'est plus chef de projet est remplacé par un autre, ou aucun
+    var cps = repoList('RoleAssignment', function (a) {
+      return a.role_code === 'CP' && a.scope_type === 'project' && a.scope_id === project.id && (isBlank(a.end_date) || String(a.end_date) >= today);
+    }).map(function (a) { return a.resource_id; });
+    var current = repoGet('Project', project.id);
+    var manager = current.manager_resource_id || '';
+    if (manager && cps.indexOf(manager) < 0) manager = '';
+    if (!manager && cps.length) manager = cps[0];
+    if (manager !== (current.manager_resource_id || '')) repoUpdate('Project', project.id, { manager_resource_id: manager }, null, ctx.actx);
+    return { role: role, manager_id: manager, changed: !same };
+  });
+});
+
+/** Taux journalier d'une personne (vide pour l'effacer). Le chef de projet et le DPL seuls le voient et le fixent. */
+defineAction('people.setRate', function (p, ctx) {
+  if (!canSeeRates_(ctx)) throw new PpmError('FORBIDDEN', 'Les taux journaliers sont réservés au chef de projet et au DPL.');
+  var r = mustGet('Resource', requireParam(p, 'resourceId'));
+  var value = '';
+  if (!(p.daily_rate === null || p.daily_rate === undefined || String(p.daily_rate).trim() === '')) {
+    var n = Number(String(p.daily_rate).replace(',', '.'));
+    if (isNaN(n) || n <= 0 || n > 100000) throw new PpmError('VALIDATION', 'Taux journalier : un nombre positif en euros par jour.');
+    value = round2(n);
+  }
+  repoUpdate('Resource', r.id, { daily_rate: value }, p.version, ctx.actx);
+  return { resource_id: r.id, daily_rate: value === '' ? null : value };
+});

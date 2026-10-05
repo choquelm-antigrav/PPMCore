@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.9.1">
+<meta name="ppm-version" content="0.10.0">
 <?!= include('Style') ?>
 <style>
   .panel { padding: 8px 24px 32px; max-width: 880px; }
@@ -59,7 +59,7 @@ var BOOT = <?!= boot ?>;
 
   var state = { tab: 'fiche', acct: null, suggestions: null };
   var $ = function (id) { return document.getElementById(id); };
-  var HOMES = [['gantt', 'Planning'], ['structure', 'Structure'], ['suivi', 'Suivi'], ['copilote', 'Copilote']];
+  var HOMES = [['overview', 'Overview projet'], ['gantt', 'Planning'], ['structure', 'Structure'], ['ressources', 'Ressources'], ['suivi', 'Suivi'], ['copilote', 'Copilote'], ['budget', 'Budget']];
 
   // ------------------------------------------------------------ outils
   function el(tag, attrs, children) {

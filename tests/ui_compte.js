@@ -117,7 +117,7 @@ function openPage(file, user, boot) {
   // ---------------------------------------------------------------- Affichage
   p.tab('affichage');
   await p.until(() => p.doc.getElementById('home'));
-  check(p.doc.querySelector('input[name=theme][value="auto"]').checked && p.doc.getElementById('home').value === 'gantt', 'réglages par défaut : automatique, Planning');
+  check(p.doc.querySelector('input[name=theme][value="auto"]').checked && p.doc.getElementById('home').value === 'overview', 'réglages par défaut : automatique, Overview projet');
   const dark = p.doc.querySelector('input[name=theme][value="dark"]');
   dark.checked = true; p.change(dark);
   await p.until(() => c.loadPrefs_(RWP).ui.theme === 'dark');

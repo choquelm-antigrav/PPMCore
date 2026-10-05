@@ -6,15 +6,15 @@ module.exports = function () {
   console.log('\nFabrication du fichier unique et installation');
   const root = path.join(__dirname, '..');
 
-  test('Fabrication : 9 fichiers, sources dans l’ordre, style et bannière intégrés, versions cohérentes', () => {
+  test('Fabrication : 11 fichiers, sources dans l’ordre, style et bannière intégrés, versions cohérentes', () => {
     const r = require('../tools/build').build();
-    eq(r.out, ['Admin.html', 'Budget.html', 'Compte.html', 'Copilote.html', 'Gantt.html', 'PPM_Core.gs', 'Structure.html', 'Suivi.html', 'appsscript.json']);
+    eq(r.out, ['Admin.html', 'Budget.html', 'Compte.html', 'Copilote.html', 'Gantt.html', 'Overview.html', 'PPM_Core.gs', 'Ressources.html', 'Structure.html', 'Suivi.html', 'appsscript.json']);
     const core = fs.readFileSync(path.join(root, 'dist', 'PPM_Core.gs'), 'utf8');
     const gs = fs.readdirSync(path.join(root, 'src')).filter((f) => f.endsWith('.gs')).sort();
     const pos = gs.map((f) => core.indexOf('// ' + f + '\n'));
     ok(pos.every((p) => p > 0) && pos.every((p, i) => i === 0 || p > pos[i - 1]), 'tous les fichiers, dans l’ordre de leur numéro');
     const c = freshCore();
-    ['Gantt', 'Structure', 'Suivi', 'Copilote', 'Compte', 'Admin', 'Budget'].forEach((p) => {
+    ['Gantt', 'Structure', 'Suivi', 'Copilote', 'Compte', 'Admin', 'Budget', 'Overview', 'Ressources'].forEach((p) => {
       const html = fs.readFileSync(path.join(root, 'dist', p + '.html'), 'utf8');
       ok(html.indexOf("include('") < 0 && html.indexOf('.ppm-bar {') > 0 && html.indexOf('id="ppm-theme"') > 0, p + ' : style et bannière intégrés');
       ok(html.indexOf('family=Inter') > 0 && html.indexOf('data-theme="<?= theme ?>"') > 0, p + ' : police Inter, thème appliqué au chargement');

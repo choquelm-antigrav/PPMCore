@@ -16,13 +16,32 @@
  * puis création des classeurs, déclencheurs (nuit, 7 h) et vérification.
  * Relançable sans risque (après une mise à jour, elle ajoute les nouvelles colonnes).
  */
+/**
+ * À exécuter depuis l'éditeur Apps Script quand « Accès réservé » s'affiche : montre le compte qui exécute, le compte détecté
+ * pour un visiteur et les domaines autorisés, avec la conduite à tenir.
+ */
+function diagnosticAcces() {
+  var effective = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
+  var active = String(Session.getActiveUser().getEmail() || '').toLowerCase();
+  var lines = [
+    'Compte qui exécute le script : ' + (effective || '(inconnu)'),
+    'Compte détecté pour l’utilisateur courant : ' + (active || '(non identifié)'),
+    'Domaines autorisés (PPM_DOMAIN) : ' + (allowedDomains().join(', ') || '(aucun : à renseigner)'),
+    'Administrateurs (PPM_ADMINS) : ' + (adminEmails().join(', ') || '(aucun)'),
+    'Ce compte serait ' + (isAllowedEmail_(active || effective) ? 'ACCEPTÉ.' : 'REFUSÉ : ' + accessDeniedMessage_(active || effective))
+  ];
+  var msg = lines.join('\n');
+  console.log(msg);
+  return msg;
+}
+
 function installerPpm() {
   var me = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
   var notes = [];
   if (!allowedDomain()) {
     if (!me || me.indexOf('@') < 0) throw new PpmError('CONFIG', 'Adresse du compte introuvable : renseigner PPM_DOMAIN et PPM_ADMINS à la main.');
     setProp(PROP.DOMAIN, me.split('@')[1]);
-    notes.push('Domaine réglé sur ' + me.split('@')[1] + ' (propriété PPM_DOMAIN).');
+    notes.push('Domaine réglé sur ' + me.split('@')[1] + ' d’après le compte qui installe (' + me + '). Si les utilisateurs se connectent avec un autre domaine, ajoutez-le à la propriété PPM_DOMAIN, séparé par une virgule ; en cas de doute, exécutez diagnosticAcces.');
   }
   if (!adminEmails().length) {
     setProp(PROP.ADMINS, me);

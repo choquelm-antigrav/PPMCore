@@ -5,7 +5,7 @@
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.9.1';
+var PPM_VERSION = '0.10.0';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -127,6 +127,28 @@ function adminEmails() {
 }
 
 /** Domaine autorisé (propriété PPM_DOMAIN, ex. « entreprise.com »). */
+/** Domaines autorisés : PPM_DOMAIN peut en lister plusieurs, séparés par une virgule (ex. entreprise.com, filiale.com). */
+function allowedDomains() {
+  return String(getProp(PROP.DOMAIN, '')).toLowerCase().split(/[\s,;]+/).filter(function (d) { return d; });
+}
+
+/** Une adresse est autorisée si son domaine figure parmi ceux de PPM_DOMAIN. */
+function isAllowedEmail_(email) {
+  var d = String(email || '').toLowerCase().split('@')[1];
+  return !!d && allowedDomains().indexOf(d) >= 0;
+}
+
+/** Message d'un accès refusé : dit pourquoi et ce qu'il faut faire (le visiteur ne voit que sa propre adresse). */
+function accessDeniedMessage_(email) {
+  var allowed = allowedDomains();
+  if (!allowed.length) return 'Le domaine n’est pas réglé : l’administrateur doit renseigner la propriété PPM_DOMAIN du script.';
+  if (!email) {
+    return 'Votre compte Google n’a pas pu être identifié. Ouvrez l’application avec votre compte professionnel (si plusieurs comptes Google sont connectés, utilisez une fenêtre de navigation privée) ; le propriétaire du déploiement et vous devez être dans le même domaine Google Workspace.';
+  }
+  return 'Votre compte (' + email + ') n’est pas dans un domaine autorisé (' + allowed.join(', ') + '). S’il s’agit bien de votre compte professionnel, l’administrateur doit ajouter votre domaine à la propriété PPM_DOMAIN (séparé par une virgule) ; sinon, ouvrez l’application avec le bon compte Google.';
+}
+
+/** Domaine principal (le premier), pour l'affichage. */
 function allowedDomain() {
-  return String(getProp(PROP.DOMAIN, '')).trim().toLowerCase();
+  return allowedDomains()[0] || '';
 }

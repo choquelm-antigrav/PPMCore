@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.9.1)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.10.0)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -9,7 +9,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | Dossier | Rôle |
 | --- | --- |
 | `src/` | Les sources, modulaires : un fichier par sujet. C'est ici qu'on modifie le code. |
-| `dist/` | La version à installer, fabriquée depuis `src/` par `node tools/build.js` : **9 fichiers** (`PPM_Core.gs`, sept pages, le manifeste). Ne jamais la modifier à la main. |
+| `dist/` | La version à installer, fabriquée depuis `src/` par `node tools/build.js` : **11 fichiers** (`PPM_Core.gs`, neuf pages, le manifeste). Ne jamais la modifier à la main. |
 | `tools/` | `build.js`, qui fabrique `dist/` |
 | `PREMIERS_PAS.md` | Installation et premiers essais, pas à pas |
 | `tests/` | Tests hors ligne (Node 18+) : `node tests/run.js` |
@@ -38,6 +38,8 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `36_Digest.gs` | Lot 2 : mail récapitulatif (un par personne, quotidien ou hebdomadaire), réglages personnels |
 | `37_Simulation.gs` | Lot 4 : simulation « et si… », synthèse chiffrée d'un projet, signaux faibles (sans IA) |
 | `43_Budget.gs` | 0.9.0 : CPN (projet et sous-projet), grille de taux, lignes de budget et étalement, bilan par CPN |
+| `45_Overview.gs` | 0.10.0 : page Overview : création et renommage de projet, indicateurs délais, qualité et coût |
+| `46_Resources.gs` | 0.10.0 : page Ressources : personnes, équipes, rôle de projet, taux journalier par personne |
 | `44_Orders.gs` | 0.9.0 : commandes d'achat (PO) : saisie, statuts, répartition par livrable, constats et rappels de GR |
 | `42_Org.gs` | 0.8.0 : dépendances d'un élément (`deps.item`), rôles attribuables (`roles.options`), retrait d'une personne, équipes hiérarchiques (`teams.*`) |
 | `41_Edit.gs` | 0.7.0 : création, modification, déplacement et suppression sûre du WBS (`wbs.create`, `wbs.update`, `wbs.delete`) |
@@ -47,7 +49,9 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `Gantt.html` | Page du planning (Frappe Gantt 0.6.1, chargé depuis jsDelivr) |
 | `Structure.html` | Page Structure : OBS et WBS dessinés en SVG, sans bibliothèque externe |
 | `Suivi.html` | Page Suivi : écarts à la baseline, changements à valider, baselines, agenda et Drive, mes notifications |
-| `Budget.html` | Page Budget : bilan par CPN, achats (PO), lignes de budget, taux |
+| `Overview.html` | Page d'accueil : verdict, indicateurs délais, qualité, coût, portefeuille, création de projet |
+| `Ressources.html` | Page Ressources : personnes, équipes, rôle dans le projet, taux, accès |
+| `Budget.html` | Page Budget : bilan par CPN, achats (PO), lignes de budget |
 | `Compte.html` | Page Mon compte : fiche, rôles en lecture seule, notifications, affichage (thème, page d'accueil) |
 | `Admin.html` | Page Administration (réservée aux administrateurs) : réglages, santé, jours fériés, journaux |
 | `Copilote.html` | Page Copilote : synthèse, simulation, questions, suggestions |
@@ -60,11 +64,11 @@ Le pas à pas détaillé est dans `PREMIERS_PAS.md`. En résumé :
 
 1. **Ranger dans un Drive partagé** : créer un Drive partagé « PPM » et y placer le projet Apps Script, les classeurs, les sauvegardes et un dossier « PPM Sources ». L'outil n'est alors pas lié à un compte personnel.
 2. **Créer le projet** : sur script.google.com, *Nouveau projet* nommé **PPM Core**, puis cocher « Afficher le fichier manifeste » dans *Paramètres du projet*.
-3. **Copier les 9 fichiers de `dist/`** : `PPM_Core.gs` (à la place de `Code.gs`), les pages `Gantt`, `Structure`, `Suivi`, `Copilote`, `Compte`, `Admin`, `Budget` (fichiers *HTML*, sans l'extension) et `appsscript.json` (il active le service avancé « Google Calendar API », qui sert à partager l'agenda d'un projet à ses membres). Ou bien les envoyer d'un coup avec `clasp` (voir `PREMIERS_PAS.md`).
+3. **Copier les 11 fichiers de `dist/`** : `PPM_Core.gs` (à la place de `Code.gs`), les pages `Gantt`, `Structure`, `Suivi`, `Copilote`, `Compte`, `Admin`, `Budget`, `Overview`, `Ressources` (fichiers *HTML*, sans l'extension) et `appsscript.json` (il active le service avancé « Google Calendar API », qui sert à partager l'agenda d'un projet à ses membres). Ou bien les envoyer d'un coup avec `clasp` (voir `PREMIERS_PAS.md`).
 4. **Installer** : exécuter `installerPpm` et accepter les autorisations. Il règle le domaine et l'administrateur d'après ton compte (propriétés `PPM_DOMAIN`, `PPM_ADMINS`, sans rien écraser s'ils existent), crée les classeurs **PPM Données** et **PPM Historique**, installe les déclencheurs (nuit à 2 h, récapitulatif à 7 h) et vérifie l'installation. Ajouter ensuite un second administrateur dans `PPM_ADMINS` (adresses séparées par des virgules) et déplacer les classeurs dans le Drive partagé.
 5. **Données d'essai** (facultatif) : exécuter `seedDemo`.
 6. **Publier** : *Déployer → Nouveau déploiement → Application Web*, « Exécuter en tant que : moi », « Accès : tous les utilisateurs du domaine ». Noter l'URL `/exec`.
-7. **Ouvrir les pages** : `<URL /exec>?view=gantt`, `?view=structure`, `?view=suivi`, `?view=copilote`, `?view=compte`, `?view=admin`, `?view=budget` (avec `&project=<id>` pour un projet précis ; `&tab=…` pour un onglet).
+7. **Ouvrir les pages** : `<URL /exec>?view=gantt`, `?view=structure`, `?view=suivi`, `?view=copilote`, `?view=compte`, `?view=admin`, `?view=budget`, `?view=overview` (page d'accueil), `?view=ressources` (avec `&project=<id>` pour un projet précis ; `&tab=…` pour un onglet).
 8. **AppSheet** : suivre `appsheet/APPSHEET_SETUP.md` (sections 1 à 9, puis 10 et 11 pour le lot 1, 12 pour le lot 2). `PPM_APPSHEET_URL` (propriété facultative) = l'URL de l'application, une fois créée.
 
 **Pourquoi un fichier unique ?** Apps Script n'a pas de modules : tous les fichiers `.gs` partagent le même espace et sont chargés dans l'ordre où ils apparaissent dans l'éditeur. Réunir les sources dans `PPM_Core.gs` ne change rien au fonctionnement (la suite de tests tourne à l'identique sur les deux : `PPM_BUNDLE=dist/PPM_Core.gs node tests/run.js`), supprime le risque d'un mauvais ordre de fichiers (qui empêche tout le script de se charger) et ramène l'installation à 6 copier-coller. La modularité reste entière dans `src/`, où l'on travaille.
@@ -87,9 +91,9 @@ Le dépôt Git est la référence du code ; Apps Script n'en est que le lieu d'e
 
 1. Travailler sur une branche : `git switch -c ma-modification`.
 2. Modifier `src/`, tester hors ligne : `node tests/run.js` doit rester entièrement vert.
-3. Changer `PPM_VERSION` (`00_Config.gs`) et la balise `ppm-version` des sept pages, puis fabriquer : `node tools/build.js` (il refuse une page dont la version ne correspond pas). `dist/` est versionné : il doit toujours correspondre aux sources.
+3. Changer `PPM_VERSION` (`00_Config.gs`) et la balise `ppm-version` des neuf pages, puis fabriquer : `node tools/build.js` (il refuse une page dont la version ne correspond pas). `dist/` est versionné : il doit toujours correspondre aux sources.
 4. Valider et pousser : `git add -A && git commit -m "…" && git push`, puis fusionner la branche.
-5. Mettre en production : remplacer le contenu des 9 fichiers du dossier `dist/` dans le projet Apps Script (ou `clasp push -f` depuis `dist/`), puis exécuter `installerPpm`.
+5. Mettre en production : remplacer le contenu des 11 fichiers du dossier `dist/` dans le projet Apps Script (ou `clasp push -f` depuis `dist/`), puis exécuter `installerPpm`.
 6. *Déployer → Gérer les déploiements → Modifier (crayon) → Version : nouvelle version*. L'URL `/exec` ne change pas, AppSheet continue de fonctionner.
 7. Poser une étiquette sur la version publiée : `git tag v0.5.1 && git push --tags`. Elle remplace l'archive déposée dans « PPM Sources » (on peut en garder une copie).
 8. Retour arrière : même écran Apps Script, choisir la version précédente ; côté code, `git revert`.
@@ -131,10 +135,10 @@ Actions disponibles :
 ## Tests
 
 ```bash
-node tests/run.js                    # 144 tests : calendriers, graphe, droits, journal, règles, API, marges, vues, personnes, OBS, WBS,
+node tests/run.js                    # 162 tests : calendriers, graphe, droits, journal, règles, API, marges, vues, personnes, OBS, WBS,
                                      # préférences, baselines, écarts, fil des changements, agenda, Drive, annuaire, récapitulatif,
                                      # simulation, synthèse, copilote (faux modèle), signaux faibles, fabrication, installation
-node tools/build.js                  # fabrique dist/ (9 fichiers)
+node tools/build.js                  # fabrique dist/ (11 fichiers)
 PPM_BUNDLE=dist/PPM_Core.gs node tests/run.js   # la même suite, sur le fichier unique
 node tests/gen_appsheet_columns.js   # régénère appsheet/COLONNES.md après une évolution du schéma
 
@@ -147,13 +151,33 @@ node tests/ui_copilote.js     # page Copilote, dans les trois modes
 node tests/ui_compte.js       # pages Mon compte et Administration
 node tests/ui_edit.js         # création et édition du WBS dans la page Structure
 node tests/ui_org.js          # dépendances, rôles, personnes et équipes dans la page Structure
-node tests/ui_budget.js       # page Budget : bilan, PO, lignes de budget, taux
+node tests/ui_budget.js       # page Budget : bilan, PO, lignes de budget
+node tests/ui_overview.js     # page Overview : indicateurs, création et renommage de projet
+node tests/ui_ressources.js   # page Ressources : personnes, équipes, rôles, taux, accès
+node tests/ui_nav.js          # menu des onglets de la bannière, projet courant d'une page à l'autre
 
 # Aperçu visuel des pages avec un jeu de données fourni, Agenda et Drive simulés (hors production) :
 node tests/preview_server.js 8123   # puis http://localhost:8123/?view=suivi&project=p1 (ou view=gantt, view=structure)
 ```
 
 Les tests chargent les fichiers `.gs` tels quels, avec des tables en mémoire à la place de Sheets et de faux services Agenda, Drive et annuaire. Tout changement du Core doit les garder verts.
+
+## Overview, Ressources, charte et accès (0.10.0)
+
+**Charte graphique** : reprise de la diapositive Airbus fournie (dégradé marine → bleu `#00205B` / `#00377A` / `#0085CA`, accent `#5FB4E5`, orange `#E8820C` réservé aux mises en garde, police Inter, libellés en capitales espacées, cartes à liseré bleu, pastilles numérotées). Les jetons sont dans `src/Style.html` ; thème nuit conservé.
+
+**Overview projet** (`?view=overview`, page d'accueil par défaut) : créer un projet (code, nom, programme, chef de projet, dates, CPN), le renommer, et lire en un coup d'œil trois indicateurs, chacun *Maîtrisé*, en *Vigilance*, en *Alerte* ou *Non renseigné* ; le verdict global reprend le pire des trois.
+- **Délais** : éléments en retard, dépendances non respectées, glissement de la fin du plan sur la baseline (alerte au-delà de 5 jours ouvrés), fin du plan face à la fin visée, avancement réel face à l'avancement attendu (alerte à 15 points d'écart).
+- **Qualité** : *mesure de maîtrise*, faute de mesure de qualité propre : risques ouverts (élevé à partir de 15, critique à partir de 20), traitements en retard, jalons menacés, signaux faibles, livrables sans responsable. Registre des risques vide : non renseigné.
+- **Coût** : PO engagées face au budget externe de chaque CPN (vigilance à 85 %, alerte au dépassement), GR en retard. Les montants ne s'affichent qu'avec le droit budget ; les autres voient le niveau et le pourcentage.
+
+**Ressources** (`?view=ressources`) : un seul écran pour les personnes (créer, modifier, retirer), les équipes, le **rôle dans le projet** (chef de projet, membre, aucun : l'ancien rôle de projet est terminé et le chef de projet du projet suit) et le **taux journalier de chaque personne, interne ou externe**. Ce taux, saisi sur la fiche, remplace la grille profil × pays × date, conservée en secours côté serveur sans écran ; il se fige dans chaque ligne de budget à sa création, et ne se voit que du chef de projet et du DPL. Une ressource externe se budgète au forfait ou en jours × taux. La colonne **Accès** dit si la personne peut se connecter (adresse dans un domaine autorisé), est hors domaine ou n'a pas d'adresse.
+
+**Menu des onglets** : Suivi, Copilote et Budget gardent leurs pages et leurs onglets ; une flèche ▾ dans la bannière donne accès direct à chaque onglet, sans recharger la page quand on y est déjà. Le projet courant suit d'une page à l'autre.
+
+**Mails** : tous les objets commencent par `[PPM✴️]` (`mailSubject_`, un test refuse tout envoi qui le contournerait).
+
+**Accès par domaine** : `PPM_DOMAIN` accepte plusieurs domaines séparés par une virgule (réglables dans Administration → Réglages, sans pouvoir retirer le sien). Un refus indique le compte détecté et la marche à suivre. En cas de doute, exécuter `diagnosticAcces` depuis l'éditeur Apps Script : il montre le compte qui exécute, le compte détecté et les domaines autorisés.
 
 ## Rappels avant livraison (0.9.1)
 

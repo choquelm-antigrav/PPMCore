@@ -15,7 +15,7 @@ module.exports = function () {
     const cp = w.call(CP, 'account.get', {});
     eq([cp.email, cp.isAdmin, cp.person.name, cp.person.job_function, cp.person.canEdit], [CP, false, 'Carla', 'Cheffe de projet', true]);
     eq(cp.roles.map((r) => [r.role_code, r.role_label, r.scope_label]), [['CP', 'Chef de projet', 'P1 — Projet 1']]);
-    eq([cp.settings, cp.ui], [{ notify_frequency: 'Quotidien', calendar_invites: false, reminder_off: false, reminder_days: null, reminder_default: { on: true, days: 10 } }, { theme: 'auto', home: 'gantt' }]);
+    eq([cp.settings, cp.ui], [{ notify_frequency: 'Quotidien', calendar_invites: false, reminder_off: false, reminder_days: null, reminder_default: { on: true, days: 10 } }, { theme: 'auto', home: 'overview' }]);
     const remi = w.call(RWP, 'account.get', {});
     eq(remi.roles.map((r) => [r.role_code, r.scope_label]), [['RWP', '1 Conception']]);
     ok(!JSON.stringify(cp).includes('rate_profile'), 'aucun profil tarifaire');
@@ -33,10 +33,10 @@ module.exports = function () {
 
   test('Affichage : thème et page d’accueil se mémorisent ensemble, sans s’écraser', () => {
     const w = lot2World();
-    eq(w.call(MEMBER, 'ui.set', { theme: 'dark' }), { theme: 'dark', home: 'gantt' });
+    eq(w.call(MEMBER, 'ui.set', { theme: 'dark' }), { theme: 'dark', home: 'overview' });
     eq(w.call(MEMBER, 'ui.set', { home: 'suivi' }), { theme: 'dark', home: 'suivi' });
     eq(w.c.loadPrefs_(MEMBER).ui, { theme: 'dark', home: 'suivi' });
-    eq(w.c.loadPrefs_(CP).ui, { theme: 'auto', home: 'gantt' }, 'les choix d’un autre utilisateur ne bougent pas');
+    eq(w.c.loadPrefs_(CP).ui, { theme: 'auto', home: 'overview' }, 'les choix d’un autre utilisateur ne bougent pas');
     eq(w.raw(MEMBER, 'ui.set', { home: 'admin' }).error.code, 'VALIDATION');
     eq(w.raw(MEMBER, 'ui.set', { theme: 'rose' }).error.code, 'VALIDATION');
     eq(w.raw(MEMBER, 'ui.set', {}).error.code, 'VALIDATION');

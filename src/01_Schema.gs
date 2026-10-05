@@ -63,7 +63,7 @@ var SCHEMA = {
   Resource: {
     book: 'data',
     cols: ['id', 'resource_type', 'name', 'email', 'team_id', 'rate_profile', 'supplier',
-      'capacity_days_month', 'country', 'job_function', 'organization'],
+      'capacity_days_month', 'country', 'job_function', 'organization', 'daily_rate'],
     required: ['resource_type', 'name'],
     enums: { resource_type: ['Interne', 'Externe'], country: COUNTRIES }
   },
@@ -100,7 +100,7 @@ var SCHEMA = {
   BudgetLine: {
     book: 'data',
     cols: ['id', 'deliverable_id', 'resource_id', 'cost_type', 'planned_days', 'frozen_rate',
-      'fixed_amount', 'planned_amount', 'phasing_mode'],
+      'fixed_amount', 'planned_amount', 'phasing_mode', 'is_external'],
     required: ['deliverable_id', 'resource_id', 'cost_type'],
     enums: { cost_type: ['TJM', 'Forfait'] }
   },

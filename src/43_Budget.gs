@@ -219,6 +219,15 @@ function hookRephase(before, rec) {
 
 // ---------------------------------------------------------------- lignes de budget
 
+/** Une ligne est « externe » si sa ressource l'est (jours × taux ou forfait) ; les anciennes lignes au forfait le sont par nature. */
+function lineIsExternal_(l) { return isTrue(l.is_external) || l.cost_type === 'Forfait'; }
+
+/** Taux journalier d'une personne : celui qu'on a saisi sur sa fiche ; à défaut, la grille (profil, pays, date d'effet), conservée en secours. */
+function dailyRateOf_(res, date) {
+  if (!isBlank(res.daily_rate) && Number(res.daily_rate) > 0) return Number(res.daily_rate);
+  return rateFor_(res.rate_profile, res.country, date);
+}
+
 function budgetNumber_(v, label, max) {
   var n = Number(v);
   if (isBlank(v) || isNaN(n) || n < 0 || n > (max || 1e9)) throw new PpmError('VALIDATION', label + ' : un nombre positif ou nul.');
@@ -231,7 +240,7 @@ function lineView_(l, ctx, phasing, resById, projectId) {
   return {
     id: l.id, version: l.version, deliverable_id: l.deliverable_id,
     resource: { id: l.resource_id, name: res ? res.name : '', type: res ? res.resource_type : '' },
-    cost_type: l.cost_type, planned_days: isBlank(l.planned_days) ? null : Number(l.planned_days),
+    external: lineIsExternal_(l), cost_type: l.cost_type, planned_days: isBlank(l.planned_days) ? null : Number(l.planned_days),
     frozen_rate: seeRate && !isBlank(l.frozen_rate) ? Number(l.frozen_rate) : null,
     fixed_amount: isBlank(l.fixed_amount) ? null : Number(l.fixed_amount), planned_amount: Number(l.planned_amount) || 0,
     phasing_mode: l.phasing_mode === 'manuel' ? 'manuel' : 'auto',
@@ -255,20 +264,21 @@ defineAction('budget.line.save', function (p, ctx) {
     }
     var out = { resource_id: resId };
     var resourceChanged = !line || line.resource_id !== resId;
-    if (res.resource_type === 'Externe') {
+    var external = res.resource_type === 'Externe';
+    var given = function (k) { return k in v && !isBlank(v[k]); };
+    // Une ressource externe se budgète au forfait OU en jours × taux ; une ressource interne, toujours en jours × taux.
+    var fixed = external && (given('fixed_amount') || (!given('planned_days') && !!line && line.cost_type === 'Forfait'));
+    if (fixed) {
       var amount = budgetNumber_('fixed_amount' in v ? v.fixed_amount : (line ? line.fixed_amount : ''), 'Forfait');
-      Object.assign(out, { cost_type: 'Forfait', fixed_amount: round2(amount), planned_days: '', frozen_rate: '', planned_amount: round2(amount) });
+      Object.assign(out, { cost_type: 'Forfait', fixed_amount: round2(amount), planned_days: '', frozen_rate: '', planned_amount: round2(amount), is_external: true });
     } else {
       var days = budgetNumber_('planned_days' in v ? v.planned_days : (line ? line.planned_days : ''), 'Jours prévus', 100000);
       var rate = line && !resourceChanged && !v.refresh_rate && line.cost_type === 'TJM' ? Number(line.frozen_rate) : null;
       if (rate === null || isNaN(rate)) {
-        rate = rateFor_(res.rate_profile, res.country, todayStr());
-        if (rate === null) {
-          throw new PpmError('VALIDATION', 'Aucun taux journalier pour le profil « ' + (res.rate_profile || 'non renseigné') + ' » (pays ' + (res.country || '?') +
-            ') : à renseigner dans l’onglet Taux, réservé au chef de projet et au DPL.');
-        }
+        rate = dailyRateOf_(res, todayStr());
+        if (rate === null) throw new PpmError('VALIDATION', 'Aucun taux journalier pour « ' + res.name + ' » : à renseigner dans Ressources (réservé au chef de projet et au DPL).');
       }
-      Object.assign(out, { cost_type: 'TJM', planned_days: days, frozen_rate: rate, planned_amount: round2(days * rate), fixed_amount: '' });
+      Object.assign(out, { cost_type: 'TJM', planned_days: days, frozen_rate: rate, planned_amount: round2(days * rate), fixed_amount: '', is_external: external });
     }
     var amountChanged = !line || Number(line.planned_amount) !== out.planned_amount;
     if (!line || amountChanged || line.phasing_mode !== 'manuel') out.phasing_mode = 'auto';
@@ -368,7 +378,7 @@ defineAction('budget.get', function (p, ctx) {
     l.phasing.forEach(function (m) { months[m.month] = round2((months[m.month] || 0) + m.amount); });
     var it = byId[l.deliverable_id], w = it ? topWp(it) : null, key = w ? w.id : '';
     var g = byWp[key] = byWp[key] || { wp_id: key, code: w ? w.wbs_code || '' : '', name: w ? w.name : 'Sans workpackage', internal: 0, external: 0, total: 0 };
-    if (l.cost_type === 'Forfait') g.external = round2(g.external + l.planned_amount); else g.internal = round2(g.internal + l.planned_amount);
+    if (l.external) g.external = round2(g.external + l.planned_amount); else g.internal = round2(g.internal + l.planned_amount);
     g.total = round2(g.internal + g.external);
   });
   var withBudget = {}; lines.forEach(function (l) { withBudget[l.deliverable_id] = true; });
@@ -382,7 +392,7 @@ defineAction('budget.get', function (p, ctx) {
     return { id: i.id, name: i.name, wp: wpLabel(i), cpn: cpnOf(i), start: i.planned_start || null, finish: i.planned_finish || null, has_budget: !!withBudget[i.id] };
   }).sort(function (a, b) { return String(a.wp).localeCompare(String(b.wp), 'fr', { numeric: true }) || String(a.name).localeCompare(String(b.name), 'fr'); });
   var total = 0, ext = 0;
-  views.forEach(function (l) { total = round2(total + l.planned_amount); if (l.cost_type === 'Forfait') ext = round2(ext + l.planned_amount); });
+  views.forEach(function (l) { total = round2(total + l.planned_amount); if (l.external) ext = round2(ext + l.planned_amount); });
   return {
     project: { id: project.id, code: project.code, name: project.name }, partial: !access.all,
     lines: views, deliverables: deliverables,
@@ -424,7 +434,7 @@ function computeBalance_(d) {
     if (!it) return;
     var g = group(cpnOf(it), ''), a = Number(l.planned_amount) || 0;
     g.budget.total += a;
-    if (l.cost_type === 'Forfait') g.budget.external += a; else g.budget.internal += a;
+    if (lineIsExternal_(l)) g.budget.external += a; else g.budget.internal += a;
   });
   d.pos.forEach(function (po) {
     var g = group(normCpn_(po.cpn), ''), a = Number(po.amount) || 0;

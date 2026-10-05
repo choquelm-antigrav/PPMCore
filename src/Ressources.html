@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="<?= theme ?>">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="ppm-version" content="0.10.0">
+<?!= include('Style') ?>
+<style>
+  main { padding: 16px 24px 28px; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
+  .box { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px; }
+  .box h2.sec { margin: 0 0 12px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 0 0 12px; }
+  .filters input[type=search], .filters select { padding: 7px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--ink); }
+  .filters input[type=search] { min-width: 220px; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 100px; font-size: 12px; background: var(--tint); color: var(--ink); white-space: nowrap; }
+  .badge.ext { background: var(--warn-bg); color: var(--warn-ink); } .badge.ok { background: var(--ok-bg); color: var(--ok-ink); } .badge.warn { background: var(--warn-bg); color: var(--warn-ink); }
+  td small { display: block; color: var(--muted); }
+  td.num { text-align: right; white-space: nowrap; }
+  select.inline, input.inline { padding: 4px 8px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--ink); max-width: 100%; }
+  input.rate-input { width: 96px; text-align: right; }
+  .actions-cell { display: flex; gap: 6px; flex-wrap: wrap; }
+  .actions-cell .btn { padding: 3px 10px; font-size: 13.5px; }
+  .teams { list-style: none; margin: 0; padding: 0; }
+  .teams li { padding: 8px 0; border-bottom: 1px solid var(--rule); }
+  .teams li:last-child { border-bottom: 0; }
+  .teams .t-name { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--ink); cursor: pointer; text-align: left; }
+  .teams .t-name[aria-pressed="true"] { color: var(--accent); }
+  .teams small { display: block; color: var(--muted); }
+  .teams .t-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .teams .t-actions .btn { padding: 2px 8px; font-size: 12.5px; }
+  .note { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+  #genform { width: min(540px, calc(100% - 32px)); max-width: none; }
+  .ed-grid { display: grid; gap: 12px; }
+  .ed-grid label.lbl { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
+  .ed-grid input, .ed-grid select { padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--ink); min-width: 0; width: 100%; }
+  .ed-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .ed-error { margin: 12px 0 0; color: var(--red); font-weight: 500; }
+  .btn.danger { background: var(--red); border-color: var(--red); color: #FFFFFF; }
+  dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; padding: 12px; } .ed-row2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<?!= include('Header') ?>
+<header>
+  <div class="title">
+    <h1 id="title">Ressources</h1>
+    <span class="context" id="context"></span>
+  </div>
+  <div class="controls">
+    <label class="field">Rôles dans le projet <select id="picker" aria-label="Projet"></select></label>
+    <button type="button" class="btn" id="team-add" hidden>Ajouter une équipe</button>
+    <button type="button" class="btn primary" id="person-add" hidden>Ajouter une personne</button>
+  </div>
+</header>
+
+<main>
+  <section class="box" aria-label="Personnes">
+    <h2 class="sec">Personnes</h2>
+    <div class="filters">
+      <input type="search" id="res-search" placeholder="Rechercher un nom, une fonction…" aria-label="Rechercher">
+      <select id="team-filter" aria-label="Équipe"></select>
+      <select id="type-filter" aria-label="Statut"><option value="">Internes et externes</option><option value="Interne">Internes</option><option value="Externe">Externes</option></select>
+      <span class="muted" id="count"></span>
+    </div>
+    <div id="people"></div>
+    <p class="note" id="people-note"></p>
+  </section>
+  <aside class="box" aria-label="Équipes">
+    <h2 class="sec">Équipes</h2>
+    <ul class="teams" id="teams-list"></ul>
+    <p class="note" id="teams-note"></p>
+  </aside>
+</main>
+
+<dialog id="genform" aria-labelledby="gf-title">
+  <form id="gf-form" novalidate>
+    <h2 id="gf-title"></h2>
+    <div class="ed-grid" id="gf-body"></div>
+    <p class="ed-error" id="gf-error" role="alert" hidden></p>
+    <div class="actions">
+      <button type="button" class="btn" id="gf-cancel">Annuler</button>
+      <button type="submit" class="btn primary" id="gf-ok">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="confirm" aria-labelledby="confirm-title">
+  <h2 id="confirm-title"></h2>
+  <p id="confirm-text"></p>
+  <p class="ed-error" id="confirm-error" role="alert" hidden></p>
+  <div class="actions">
+    <button type="button" class="btn" id="confirm-cancel">Annuler</button>
+    <button type="button" class="btn danger" id="confirm-ok">Retirer</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+var BOOT = <?!= boot ?>;
+</script>
+<script>
+(function () {
+  'use strict';
+
+  var state = { data: null, projectId: '', team: '', catalog: null, seq: 0 };
+  var $ = function (id) { return document.getElementById(id); };
+  var COUNTRY_LIST = [['FR', 'France'], ['DE', 'Allemagne'], ['UK', 'Royaume-Uni'], ['IN', 'Inde']];
+
+  // ------------------------------------------------------------ outils
+  function el(tag, attrs, children) {
+    var n = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (k === 'text') n.textContent = attrs[k];
+      else if (k === 'class') n.className = attrs[k];
+      else if (k.indexOf('on') === 0) n.addEventListener(k.slice(2), attrs[k]);
+      else n.setAttribute(k, attrs[k]);
+    });
+    (children || []).forEach(function (c) { if (c !== null && c !== undefined) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return n;
+  }
+  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+  function uuid() { return window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2); }
+  var toastTimer = null;
+  function toast(msg, isError) {
+    var t = $('toast');
+    t.textContent = msg; t.className = 'toast' + (isError ? ' error' : ''); t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.hidden = true; }, isError ? 8000 : 3500);
+  }
+  function call(action, params, write) {
+    var pre = window.ppmPreloaded && window.ppmPreloaded(action, params, write);
+    if (pre) return pre;
+    return new Promise(function (resolve, reject) {
+      document.body.classList.add('busy');
+      google.script.run
+        .withSuccessHandler(function (res) {
+          document.body.classList.remove('busy');
+          if (res && res.ok) resolve(res.data); else reject(res && res.error ? res.error : { code: 'INTERNAL', message: 'Réponse inattendue du serveur.' });
+        })
+        .withFailureHandler(function (err) {
+          document.body.classList.remove('busy');
+          reject({ code: 'NETWORK', message: 'Le serveur ne répond pas. Vérifiez la connexion puis rechargez la page.', details: String(err) });
+        })
+        .uiCall(action, params || {}, write ? uuid() : null);
+    });
+  }
+  function plural(n, one, many) { return n + ' ' + (Math.abs(n) > 1 ? many : one); }
+  function fail(e) { toast(ppmErrorText(e), true); }
+  function openDialog(d) { if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
+  function closeDialog(d) { if (d.close) d.close(); else d.removeAttribute('open'); }
+
+  // ------------------------------------------------------------ formulaire générique et confirmation
+  function fillSelect(sel, options, value) {
+    clear(sel);
+    options.forEach(function (o) { sel.appendChild(el('option', { value: o.value, text: o.label })); });
+    sel.value = value === undefined || value === null ? (options[0] ? options[0].value : '') : value;
+  }
+  function openForm(spec) {
+    $('gf-title').textContent = spec.title;
+    var body = $('gf-body'); clear(body);
+    var inputs = {}, pending = null;
+    var flush = function () { if (pending) { body.appendChild(el('div', { class: 'ed-row2' }, pending)); pending = null; } };
+    spec.fields.forEach(function (f) {
+      var c;
+      if (f.type === 'select') { c = el('select', { id: 'gf-' + f.key }); fillSelect(c, f.options || [], f.value); }
+      else {
+        var a = { type: f.type || 'text', id: 'gf-' + f.key, autocomplete: 'off' };
+        if (f.maxlength) a.maxlength = String(f.maxlength);
+        if (f.type === 'number') { a.min = '0'; a.step = 'any'; }
+        c = el('input', a); c.value = f.value === undefined || f.value === null ? '' : f.value;
+      }
+      inputs[f.key] = c;
+      var lab = el('label', { class: 'lbl' }, [f.label, c]);
+      if (f.half) { pending = pending || []; pending.push(lab); if (pending.length === 2) flush(); } else { flush(); body.appendChild(lab); }
+    });
+    flush();
+    if (spec.note) body.appendChild(el('p', { class: 'note', text: spec.note }));
+    state.gform = { spec: spec, inputs: inputs };
+    $('gf-error').hidden = true; $('gf-ok').textContent = spec.ok || 'Enregistrer'; $('gf-ok').disabled = false;
+    openDialog($('genform'));
+    var first = body.querySelector('input, select'); if (first) first.focus();
+  }
+  function submitForm() {
+    var g = state.gform;
+    if (!g) return;
+    var values = {};
+    Object.keys(g.inputs).forEach(function (k) { values[k] = g.inputs[k].value; });
+    $('gf-ok').disabled = true;
+    Promise.resolve().then(function () { return g.spec.onSubmit(values); }).then(function () { closeDialog($('genform')); }).catch(function (err) {
+      $('gf-ok').disabled = false;
+      var m = $('gf-error'); m.textContent = err && err.code === 'CONFLICT' ? 'Modifié entre-temps par quelqu’un d’autre : fermez, actualisez puis recommencez.' : ppmErrorText(err); m.hidden = false;
+    });
+  }
+  function openConfirm(title, text, okLabel, action) {
+    $('confirm-title').textContent = title; $('confirm-text').textContent = text;
+    $('confirm-ok').textContent = okLabel; $('confirm-error').hidden = true; $('confirm-ok').disabled = false;
+    state.confirmAction = function () {
+      $('confirm-ok').disabled = true;
+      return action().then(function () { closeDialog($('confirm')); }).catch(function (err) { $('confirm-ok').disabled = false; var m = $('confirm-error'); m.textContent = ppmErrorText(err); m.hidden = false; });
+    };
+    openDialog($('confirm'));
+  }
+
+  // ------------------------------------------------------------ chargement et rendu
+  function load() {
+    var ticket = ++state.seq;
+    return call('ressources.get', { projectId: state.projectId }).then(function (d) {
+      if (ticket !== state.seq) return;
+      state.data = d; render();
+    }).catch(function (e) { var p = $('people'); clear(p); p.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Chargement impossible.' }), el('span', { text: (e && e.message) || 'Erreur inconnue.' })])); });
+  }
+
+  function teamOptions(emptyLabel) {
+    return [{ value: '', label: emptyLabel }].concat(state.data.teams.map(function (t) { return { value: t.id, label: new Array(t.depth + 1).join('— ') + t.name }; }));
+  }
+
+  function visiblePeople() {
+    var q = $('res-search').value.trim().toLowerCase(), type = $('type-filter').value, team = state.team;
+    return state.data.people.filter(function (p) {
+      if (type && p.resource_type !== type) return false;
+      if (team === '__none') { if (p.team_id) return false; } else if (team && p.team_id !== team) return false;
+      return !q || (p.name + ' ' + p.job_function + ' ' + p.organization + ' ' + p.supplier).toLowerCase().indexOf(q) >= 0;
+    });
+  }
+
+  /** Peut-elle se connecter ? Il faut une adresse e-mail dans un domaine autorisé ; le rôle dit ensuite ce qu'elle peut faire. */
+  function accessBadge(p) {
+    var d = state.data;
+    if (p.access === 'ok') return el('span', { class: 'badge ok', text: 'Peut se connecter', title: p.email });
+    if (p.access === 'outside') return el('span', { class: 'badge warn', text: 'Hors domaine', title: p.email + ' : hors des domaines autorisés (' + d.domains.join(', ') + ')' });
+    return el('span', { class: 'badge warn', text: 'Sans adresse', title: 'Sans adresse e-mail professionnelle, la personne figure dans les listes mais ne peut pas se connecter.' });
+  }
+
+  function roleCell(p) {
+    var d = state.data;
+    if (!state.projectId) return el('span', { class: 'muted', text: '—' });
+    if (d.canAssign) {
+      var sel = el('select', { class: 'inline role-select', 'data-id': p.resource_id, 'aria-label': 'Rôle de ' + p.name + ' dans le projet' });
+      fillSelect(sel, [{ value: '', label: 'Aucun' }].concat(d.roleChoices.map(function (c) { return { value: c.code, label: c.label }; })), p.project_role);
+      // un rôle que l'on ne peut pas attribuer (plus élevé que le sien) reste affiché, sans pouvoir être modifié
+      if (p.project_role && !d.roleChoices.some(function (c) { return c.code === p.project_role; })) { sel.disabled = true; sel.appendChild(el('option', { value: p.project_role, text: p.project_role === 'CP' ? 'Chef de projet' : 'Membre affecté' })); sel.value = p.project_role; }
+      sel.addEventListener('change', function () {
+        call('people.setProjectRole', { projectId: state.projectId, resourceId: p.resource_id, role: sel.value }, true)
+          .then(function () { toast(p.name + ' : ' + (sel.value ? sel.options[sel.selectedIndex].text.toLowerCase() : 'plus de rôle de projet') + '.'); return load(); })
+          .catch(function (e) { fail(e); return load(); });
+      });
+      return sel;
+    }
+    return el('span', { text: p.project_role === 'CP' ? 'Chef de projet' : p.project_role === 'MEMBER' ? 'Membre affecté' : '—' });
+  }
+
+  function rateCell(p) {
+    var d = state.data;
+    if (!d.canRates) return null;
+    var inp = el('input', { type: 'number', class: 'inline rate-input', min: '0', step: 'any', 'data-id': p.resource_id, 'aria-label': 'Taux journalier de ' + p.name, placeholder: '—' });
+    inp.value = p.daily_rate === null ? '' : p.daily_rate;
+    inp.addEventListener('change', function () {
+      call('people.setRate', { resourceId: p.resource_id, daily_rate: inp.value }, true)
+        .then(function (r) { p.daily_rate = r.daily_rate; toast('Taux de ' + p.name + ' enregistré.'); return load(); })
+        .catch(function (e) { fail(e); inp.value = p.daily_rate === null ? '' : p.daily_rate; });
+    });
+    return el('span', {}, [inp, p.rate_source === 'grille' ? el('small', { text: 'de la grille' }) : null]);
+  }
+
+  function render() {
+    var d = state.data;
+    $('title').textContent = d.project ? 'Ressources de ' + d.project.name : 'Ressources';
+    $('context').textContent = d.project ? d.project.code : '';
+    $('person-add').hidden = !d.canEdit; $('team-add').hidden = !d.canEdit;
+    var tf = $('team-filter'), cur = state.team;
+    fillSelect(tf, [{ value: '', label: 'Toutes les équipes' }, { value: '__none', label: 'Sans équipe' }].concat(d.teams.map(function (t) { return { value: t.id, label: new Array(t.depth + 1).join('— ') + t.name }; })), cur);
+    var rows = visiblePeople();
+    $('count').textContent = plural(rows.length, 'personne', 'personnes');
+    var host = $('people'); clear(host);
+    if (!rows.length) host.appendChild(el('div', { class: 'empty' }, [el('strong', { text: d.people.length ? 'Aucune personne ne correspond.' : 'Aucune personne pour l’instant.' }), el('span', { text: d.canEdit && !d.people.length ? 'Ajoutez la première avec « Ajouter une personne ».' : '' })]));
+    else {
+      var head = ['Nom', 'Statut', 'Accès', 'Équipe', 'Rôle dans le projet', 'Autres rôles'];
+      if (d.canRates) head.push('Taux journalier (€)');
+      if (d.canEdit) head.push('');
+      host.appendChild(el('div', { class: 'table-wrap' }, [el('table', { id: 'res-table' }, [
+        el('thead', {}, [el('tr', {}, head.map(function (h, i) { return el('th', { scope: 'col', class: h.indexOf('Taux') === 0 ? 'num' : '', text: h }); }))]),
+        el('tbody', {}, rows.map(function (p) {
+          var others = p.roles.filter(function (r) { return !(r.scope_type === 'project' && (r.code === 'CP' || r.code === 'MEMBER')); });
+          var cells = [
+            el('td', {}, [p.name, el('small', { text: [p.job_function, p.resource_type === 'Externe' ? (p.supplier || p.organization) : p.organization].filter(Boolean).join(' · ') || ' ' })]),
+            el('td', {}, [el('span', { class: 'badge' + (p.resource_type === 'Externe' ? ' ext' : ''), text: p.resource_type })]),
+            el('td', {}, [accessBadge(p)]),
+            el('td', { text: p.team || '—' }), el('td', {}, [roleCell(p)]),
+            el('td', { text: others.length ? others.map(function (r) { return r.label + (r.scope ? ' (' + r.scope + ')' : ''); }).join(', ') : '—' })
+          ];
+          if (d.canRates) cells.push(el('td', { class: 'num' }, [rateCell(p)]));
+          if (d.canEdit) cells.push(el('td', {}, [el('div', { class: 'actions-cell' }, [
+            el('button', { type: 'button', class: 'btn person-edit', 'data-id': p.resource_id, text: 'Modifier', onclick: function () { openPersonForm(p); } }),
+            el('button', { type: 'button', class: 'btn person-remove', 'data-id': p.resource_id, text: 'Retirer', onclick: function () { removePerson(p); } })])]));
+          return el('tr', { 'data-id': p.resource_id }, cells);
+        }))])]));
+    }
+    $('people-note').textContent = 'Pour qu’une personne intervienne : une fiche avec son adresse e-mail professionnelle, puis un rôle. ' + (d.canRates ? 'Le taux journalier de la fiche sert de base au budget, interne ou externe ; il est figé dans chaque ligne de budget à sa création. Seuls le chef de projet et le DPL le voient.' : '');
+    var tl = $('teams-list'); clear(tl);
+    if (!d.teams.length) tl.appendChild(el('li', {}, [el('span', { class: 'muted', text: 'Aucune équipe.' })]));
+    d.teams.forEach(function (t) {
+      var li = el('li', { 'data-team': t.id, style: 'padding-left:' + (t.depth * 14) + 'px' }, [
+        el('button', { type: 'button', class: 't-name', 'aria-pressed': String(state.team === t.id), text: t.name, onclick: function () { state.team = state.team === t.id ? '' : t.id; render(); } }),
+        el('small', { text: plural(t.members, 'membre', 'membres') + (t.manager ? ' · ' + t.manager : '') + (t.cost_center ? ' · ' + t.cost_center : '') })]);
+      if (d.canEdit) li.appendChild(el('div', { class: 't-actions' }, [
+        el('button', { type: 'button', class: 'btn team-edit', text: 'Modifier', onclick: function () { openTeamForm(t, null); } }),
+        el('button', { type: 'button', class: 'btn team-sub', text: 'Sous-équipe', onclick: function () { openTeamForm(null, t); } }),
+        el('button', { type: 'button', class: 'btn team-del', text: 'Supprimer', onclick: function () { deleteTeam(t); } })]));
+      tl.appendChild(li);
+    });
+    $('teams-note').textContent = d.canEdit ? 'Cliquez sur une équipe pour filtrer les personnes. Une équipe ne se supprime que vide.' : '';
+    try { google.script.history.replace(null, { view: 'ressources', project: state.projectId }); } catch (e) { /* hors web app */ }
+    var base = BOOT.baseUrl || '';
+    Array.prototype.forEach.call(document.querySelectorAll('.ppm-bar [data-view]'), function (n) {
+      var vw = n.getAttribute('data-view');
+      if (state.projectId && ['overview', 'gantt', 'structure', 'ressources', 'suivi', 'copilote', 'budget'].indexOf(vw) >= 0) n.setAttribute('href', base + '?view=' + vw + '&project=' + state.projectId);
+    });
+  }
+
+  // ------------------------------------------------------------ personnes
+  function openPersonForm(p) {
+    var d = state.data, create = !p;
+    p = p || {};
+    var fields = [
+      { key: 'name', label: 'Nom', value: p.name, maxlength: 120 },
+      { key: 'resource_type', label: 'Statut', type: 'select', value: p.resource_type || 'Interne', options: [{ value: 'Interne', label: 'Interne' }, { value: 'Externe', label: 'Externe' }], half: true },
+      { key: 'country', label: 'Pays', type: 'select', value: p.country || '', options: [{ value: '', label: '—' }].concat(COUNTRY_LIST.map(function (c) { return { value: c[0], label: c[1] }; })), half: true },
+      { key: 'job_function', label: 'Fonction', value: p.job_function, maxlength: 80, half: true },
+      { key: 'organization', label: 'Organisation', value: p.organization, maxlength: 80, half: true },
+      { key: 'supplier', label: 'Fournisseur (si externe)', value: p.supplier, maxlength: 80, half: true },
+      { key: 'team_id', label: 'Équipe', type: 'select', value: p.team_id || '', options: teamOptions('Aucune'), half: true }
+    ];
+    if (create) fields.splice(1, 0, { key: 'email', label: 'Adresse e-mail (facultative)', value: '', maxlength: 120 });
+    if (d.canRates) fields.push({ key: 'daily_rate', label: 'Taux journalier (€, facultatif)', type: 'number', value: p.daily_rate === null || p.daily_rate === undefined ? '' : p.daily_rate });
+    openForm({
+      title: create ? 'Ajouter une personne' : 'Modifier ' + p.name, ok: create ? 'Ajouter' : 'Enregistrer',
+      note: create ? 'L’adresse e-mail professionnelle (domaine : ' + d.domains.join(', ') + ') donne accès à l’outil ; le rôle dans le projet se choisit ensuite dans le tableau.' : 'L’adresse e-mail ne se modifie que par l’administrateur.',
+      fields: fields,
+      onSubmit: function (v) {
+        var values = { name: v.name, resource_type: v.resource_type, country: v.country, job_function: v.job_function, organization: v.organization, supplier: v.supplier, team_id: v.team_id };
+        var req;
+        if (create) { if (v.email.trim()) values.email = v.email.trim(); req = call('resources.create', { values: values }, true); }
+        else req = call('resources.update', { id: p.resource_id, version: p.version, patch: values }, true);
+        return req.then(function (rec) {
+          var id = create ? rec.id : p.resource_id;
+          var rate = v.daily_rate === undefined ? null : v.daily_rate;
+          if (d.canRates && rate !== null && String(rate) !== String(p.daily_rate === null || p.daily_rate === undefined ? '' : p.daily_rate)) return call('people.setRate', { resourceId: id, daily_rate: rate }, true);
+        }).then(function () { toast(create ? 'Personne ajoutée.' : 'Fiche enregistrée.'); return load(); });
+      }
+    });
+  }
+
+  function removePerson(p) {
+    call('people.remove', { id: p.resource_id, dryRun: true }).then(function (s) {
+      var parts = [];
+      if (s.roles) parts.push(plural(s.roles, 'rôle terminé', 'rôles terminés'));
+      if (s.teams) parts.push(plural(s.teams, 'équipe sans responsable', 'équipes sans responsable'));
+      if (s.wps) parts.push(plural(s.wps, 'workpackage', 'workpackages') + ' à réattribuer');
+      if (s.items) parts.push(plural(s.items, 'livrable ou jalon', 'livrables et jalons') + ' à réattribuer');
+      openConfirm('Retirer ' + s.name + ' ?', s.name + ' ne sera plus dans les listes' + (parts.length ? ' : ' + parts.join(', ') : '') + '. La fiche reste dans l’historique.', 'Retirer', function () {
+        return call('people.remove', { id: p.resource_id, version: p.version }, true).then(function () { toast(s.name + ' retiré(e).'); return load(); });
+      });
+    }).catch(fail);
+  }
+
+  // ------------------------------------------------------------ équipes
+  function openTeamForm(team, parent) {
+    var d = state.data, create = !team;
+    openForm({
+      title: create ? (parent ? 'Nouvelle sous-équipe de « ' + parent.name + ' »' : 'Nouvelle équipe') : 'Modifier l’équipe', ok: create ? 'Créer' : 'Enregistrer',
+      fields: [
+        { key: 'name', label: 'Nom', value: team ? team.name : '', maxlength: 80 },
+        { key: 'parent_team_id', label: 'Équipe parente', type: 'select', value: team ? team.parent_team_id : (parent ? parent.id : ''),
+          options: [{ value: '', label: 'Aucune (racine)' }].concat(d.teams.filter(function (t) { return !team || t.id !== team.id; }).map(function (t) { return { value: t.id, label: new Array(t.depth + 1).join('— ') + t.name }; })) },
+        { key: 'manager_resource_id', label: 'Responsable', type: 'select', value: team ? team.manager_id : '', options: [{ value: '', label: '—' }].concat(d.people.filter(function (p) { return p.resource_type === 'Interne'; }).map(function (p) { return { value: p.resource_id, label: p.name }; })) },
+        { key: 'cost_center', label: 'Centre de coût', value: team ? team.cost_center : '', maxlength: 40 }
+      ],
+      onSubmit: function (v) {
+        var req = create ? call('teams.create', { values: v }, true) : call('teams.update', { id: team.id, version: team.version, patch: v }, true);
+        return req.then(function () { toast(create ? 'Équipe créée.' : 'Équipe enregistrée.'); return load(); });
+      }
+    });
+  }
+  function deleteTeam(t) {
+    openConfirm('Supprimer l’équipe ?', 'L’équipe « ' + t.name + ' » sera supprimée. Elle doit être vide : ni membres ni sous-équipes.', 'Supprimer', function () {
+      return call('teams.delete', { id: t.id, version: t.version }, true).then(function () { toast('Équipe supprimée.'); if (state.team === t.id) state.team = ''; return load(); });
+    });
+  }
+
+  // ------------------------------------------------------------ démarrage
+  $('res-search').addEventListener('input', function () { render(); });
+  $('type-filter').addEventListener('change', function () { render(); });
+  $('team-filter').addEventListener('change', function () { state.team = this.value; render(); });
+  $('picker').addEventListener('change', function () { state.projectId = this.value; load(); });
+  $('person-add').addEventListener('click', function () { openPersonForm(null); });
+  $('team-add').addEventListener('click', function () { openTeamForm(null, null); });
+  $('gf-form').addEventListener('submit', function (e) { e.preventDefault(); submitForm(); });
+  $('gf-cancel').addEventListener('click', function () { closeDialog($('genform')); });
+  $('confirm-cancel').addEventListener('click', function () { closeDialog($('confirm')); });
+  $('confirm-ok').addEventListener('click', function () { if (state.confirmAction) state.confirmAction(); });
+
+  call('planning.catalog', {}).then(function (cat) {
+    state.catalog = cat;
+    var sel = $('picker'); clear(sel);
+    var sortCode = function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); };
+    cat.projects.slice().sort(sortCode).forEach(function (p) { sel.appendChild(el('option', { value: p.id, text: p.code + ' ' + p.name + (p.status === 'Clos' ? ' (clos)' : '') })); });
+    state.projectId = BOOT.project || (cat.projects.filter(function (p) { return p.status !== 'Clos'; })[0] || cat.projects[0] || {}).id || '';
+    sel.value = state.projectId;
+    return load();
+  }).catch(function (e) { $('people').appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Chargement impossible.' }), el('span', { text: (e && e.message) || '' })])); });
+
+  window.__ppm = { state: state };
+})();
+</script>
+</body>
+</html>

@@ -172,14 +172,14 @@ function projectMembers_(data, projectId, today) {
       (a.scope_type === 'program' && !isBlank(project.program_id) && a.scope_id === project.program_id);
     if (hit) people[a.resource_id] = true;
   });
-  var domain = allowedDomain();
+  var domains = allowedDomains();
   var res = indexBy_(data.resources);
   var out = {};
   Object.keys(people).forEach(function (id) {
     var r = res[id];
     if (!r || isTrue(r.deleted) || isBlank(r.email)) return;
     var m = String(r.email).toLowerCase();
-    if (!domain || m.split('@')[1] === domain) out[m] = true;
+    if (!domains.length || isAllowedEmail_(m)) out[m] = true;
   });
   return Object.keys(out).sort();
 }
@@ -284,7 +284,7 @@ function desiredReminders_(data, project, today, links, baseUrl) {
   var res = indexBy_(data.resources), wps = indexBy_(data.workpackages), settings = {};
   (data.settings || []).forEach(function (s) { settings[String(s.user_email).toLowerCase()] = s; });
   var hol = loadHolidayMap(project.holiday_country || 'FR');
-  var domain = allowedDomain();
+  var domains = allowedDomains();
   var out = {};
   data.planitems.forEach(function (i) {
     if (i.project_id !== project.id || isTrue(i.deleted) || i.item_type !== 'Livrable' || isBlank(i.planned_finish)) return;
@@ -292,7 +292,7 @@ function desiredReminders_(data, project, today, links, baseUrl) {
     var owner = res[i.owner_resource_id];
     if (!owner || isTrue(owner.deleted) || isBlank(owner.email)) return;
     var email = String(owner.email).toLowerCase();
-    if (domain && email.split('@')[1] !== domain) return;
+    if (domains.length && !isAllowedEmail_(email)) return;
     var rem = reminderFor_(settings[email]);
     if (!rem) return;
     var date = addWorkingDays(i.planned_finish, -rem.days, hol);

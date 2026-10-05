@@ -33,7 +33,7 @@ function frDate_(s) {
  */
 function buildDigests(data, today, opts) {
   opts = opts || {};
-  var domain = allowedDomain();
+  var domains = allowedDomains();
   var projects = indexBy_(data.projects);
   var live = function (r) { return !isTrue(r.deleted); };
   var activeProject = function (id) { var p = projects[id]; return p && live(p) && p.status !== 'Clos'; };
@@ -50,7 +50,7 @@ function buildDigests(data, today, opts) {
   data.resources.filter(live).forEach(function (r) {
     if (isBlank(r.email)) return;
     var email = String(r.email).toLowerCase();
-    if (domain && email.split('@')[1] !== domain) return;
+    if (domains.length && !isAllowedEmail_(email)) return;
     if (opts.onlyEmail && opts.onlyEmail !== email) return;
     var freq = (settings[email] && settings[email].notify_frequency) || 'Quotidien';
     if (!opts.onlyEmail) {
@@ -188,9 +188,10 @@ function loadDigestData_() {
 
 /** Envoi d'un mail au format texte et HTML ; capturé dans les tests. */
 function sendMail_(to, subject, text, html) {
-  if (SENT_MAILS) { SENT_MAILS.push({ to: to, subject: subject, body: text, html: html }); return true; }
-  if (typeof MailApp === 'undefined') { console.log('[mail] ' + to + ' — ' + subject); return false; }
-  MailApp.sendEmail({ to: to, subject: '[PPM] ' + subject, body: text, htmlBody: html, name: 'PPM' });
+  var full = mailSubject_(subject);
+  if (SENT_MAILS) { SENT_MAILS.push({ to: to, subject: full, body: text, html: html }); return true; }
+  if (typeof MailApp === 'undefined') { console.log('[mail] ' + to + ' — ' + full); return false; }
+  MailApp.sendEmail({ to: to, subject: mailSubject_(subject), body: text, htmlBody: html, name: 'PPM' });
   return true;
 }
 
@@ -261,5 +262,5 @@ defineAction('digest.preview', function (p, ctx) {
   }
   var d = list[0];
   var sent = p.send ? sendMail_(d.to, d.subject + ' (essai)', d.text, d.html) : false;
-  return { subject: d.subject, html: d.html, text: d.text, empty: d.counts.lines === 0, sent: sent };
+  return { subject: mailSubject_(d.subject), html: d.html, text: d.text, empty: d.counts.lines === 0, sent: sent };
 });

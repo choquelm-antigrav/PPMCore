@@ -147,7 +147,7 @@ defineAction('po.options', function (p, ctx) {
   if (!canPoView_(ctx, project.id)) throw new PpmError('FORBIDDEN', 'Les commandes d’achat sont réservées aux personnes internes nommées dans l’équipe du projet.');
   var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; });
   var wpById = indexBy_(wps);
-  var lines = repoList('BudgetLine', function (l) { return l.cost_type === 'Forfait'; });
+  var lines = repoList('BudgetLine', lineIsExternal_);
   var ext = {};
   lines.forEach(function (l) { ext[l.deliverable_id] = round2((ext[l.deliverable_id] || 0) + (Number(l.planned_amount) || 0)); });
   var resources = repoList('Resource');
@@ -197,7 +197,7 @@ function projectEnv_(project, wps, pos) {
   var itemById = indexBy_(items), wpById = indexBy_(wps);
   var ids = {}; items.forEach(function (i) { ids[i.id] = true; });
   var external = {}, committed = {};
-  repoList('BudgetLine', function (l) { return ids[l.deliverable_id] && l.cost_type === 'Forfait'; }).forEach(function (l) { external[l.deliverable_id] = round2((external[l.deliverable_id] || 0) + (Number(l.planned_amount) || 0)); });
+  repoList('BudgetLine', function (l) { return ids[l.deliverable_id] && lineIsExternal_(l); }).forEach(function (l) { external[l.deliverable_id] = round2((external[l.deliverable_id] || 0) + (Number(l.planned_amount) || 0)); });
   pos.forEach(function (o) { if (PO_COMMITTED.indexOf(o.status) >= 0) o.links.forEach(function (l) { committed[l.deliverable_id] = round2((committed[l.deliverable_id] || 0) + l.amount); }); });
   var cpnOf = function (item) {
     var w = item.wp_id ? wpById[item.wp_id] : null, guard = 0;

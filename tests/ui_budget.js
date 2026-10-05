@@ -12,8 +12,7 @@ const c = w.c;
 let t0 = Date.parse('2026-10-14T08:00:00Z');
 c.CLOCK = () => (t0 += 1);
 const CP = 'carla@entreprise.com', RWP = 'remi@entreprise.com', MEMBER = 'mia@entreprise.com', NOBODY = 'personne@entreprise.com';
-w.call(CP, 'rates.set', { values: { profile: 'Ingénieur', country: 'FR', daily_rate: 520, effective_date: '2026-01-01' } });
-w.call(CP, 'rates.assign', { resource_id: w.remi.id, rate_profile: 'Ingénieur' });
+w.call(CP, 'people.setRate', { resourceId: w.remi.id, daily_rate: 520 });
 w.call(CP, 'cpn.set', { projectId: w.p1.id, cpn: 'CPN-100', cpn_label: 'Nacelle moteur' });
 w.call(CP, 'wbs.update', { kind: 'wp', id: w.w2.id, patch: { cpn: 'CPN-200', cpn_label: 'Essais en vol' } });
 w.call(CP, 'budget.line.save', { values: { deliverable_id: w.b.id, resource_id: w.remi.id, planned_days: 10 } });
@@ -71,7 +70,7 @@ function openPage(user, startTab) {
   let p = openPage(CP);
   await p.until(() => p.$('bal-table'));
   check(p.text('title') === 'P1 Projet 1' && p.text('cpn-chip') === 'CPN-100 — Nacelle moteur', 'titre et CPN du projet : ' + p.text('cpn-chip'));
-  check(JSON.stringify(p.tabs()) === JSON.stringify(['bilan', 'po', 'budget', 'taux']), 'le chef de projet voit les quatre onglets');
+  check(JSON.stringify(p.tabs()) === JSON.stringify(['bilan', 'po', 'budget']), 'le chef de projet voit les trois onglets (les taux se règlent dans Ressources)');
   const bal = [...p.doc.querySelectorAll('#bal-table tbody tr[data-cpn]')].map((r) => r.getAttribute('data-cpn'));
   check(JSON.stringify(bal) === JSON.stringify(['CPN-100', 'CPN-200']), 'une ligne par CPN : ' + bal.join(', '));
   check(/8 000 €/.test(p.text('bal-table')) && /5 200 €/.test(p.text('bal-table')), 'budget externe (8 000 €) et interne (5 200 €) par CPN');
@@ -148,10 +147,10 @@ function openPage(user, startTab) {
   p.set('gf-deliverable_id', w.a.id); p.set('gf-resource_id', w.remi.id); p.change(p.$('gf-resource_id'));
   check(p.$('gf-fixed_amount').parentNode.hidden && !p.$('gf-planned_days').parentNode.hidden, 'interne : jours seulement');
   p.set('gf-resource_id', w.xavier.id); p.change(p.$('gf-resource_id'));
-  check(!p.$('gf-fixed_amount').parentNode.hidden && p.$('gf-planned_days').parentNode.hidden, 'externe : forfait seulement');
+  check(!p.$('gf-fixed_amount').parentNode.hidden && !p.$('gf-planned_days').parentNode.hidden, 'externe : forfait ou jours');
   p.set('gf-resource_id', w.mia.id); p.change(p.$('gf-resource_id')); p.set('gf-planned_days', '3'); p.submitGf();
   await p.until(() => !p.$('gf-error').hidden);
-  check(/Aucun taux journalier pour le profil/.test(p.text('gf-error')), 'sans taux : message explicite : ' + p.text('gf-error'));
+  check(/Aucun taux journalier pour « Mia »/.test(p.text('gf-error')), 'sans taux : message explicite : ' + p.text('gf-error'));
   p.set('gf-resource_id', w.remi.id); p.change(p.$('gf-resource_id')); p.set('gf-planned_days', '4'); p.submitGf();
   await p.until(() => c.repoList('BudgetLine').length === 3);
   const l3 = c.repoList('BudgetLine').find((l) => l.deliverable_id === w.a.id);
@@ -173,23 +172,6 @@ function openPage(user, startTab) {
   p.click(p.$('confirm-ok'));
   await p.until(() => c.repoList('BudgetLine').length === 2);
   check(true, 'ligne supprimée');
-
-  // ---------------------------------------------------------------- taux
-  p.tab('taux');
-  await p.until(() => p.$('rates-table'));
-  check(p.doc.querySelectorAll('#rates-table tbody tr').length === 1, 'grille des taux');
-  p.click(p.$('rate-add'));
-  await p.until(() => p.$('genform').open);
-  p.set('gf-profile', 'Architecte'); p.set('gf-country', 'FR'); p.set('gf-daily_rate', '0'); p.submitGf();
-  await p.until(() => !p.$('gf-error').hidden);
-  check(/Taux journalier/.test(p.text('gf-error')), 'taux nul refusé');
-  p.set('gf-daily_rate', '700'); p.submitGf();
-  await p.until(() => p.doc.querySelectorAll('#rates-table tbody tr').length === 2);
-  check(c.repoList('RateCard').some((r) => r.profile === 'Architecte' && Number(r.daily_rate) === 700), 'taux ajouté');
-  const inp = p.doc.querySelector('.people-profile[data-id="' + w.mia.id + '"]');
-  inp.value = 'Architecte'; p.change(inp);
-  await p.until(() => c.repoGet('Resource', w.mia.id).rate_profile === 'Architecte');
-  check(true, 'profil tarifaire d’une personne enregistré');
 
   // ---------------------------------------------------------------- CPN du projet
   w.call(CP, 'po.save', { values: { po_number: 'CB-100', cpn: 'CPN-100', resource_id: w.xavier.id, amount: 400, status: 'À faire', gr_due_date: '2026-12-15' } });

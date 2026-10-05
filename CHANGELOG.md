@@ -1,5 +1,15 @@
 # Journal des versions
 
+## 0.10.0 — Overview, Ressources, charte Airbus, menu des onglets, accès par domaine
+
+- **Charte** reprise de la diapositive Airbus fournie, sur toutes les pages (hero dégradé, libellés en capitales espacées, cartes à liseré, pastilles numérotées, orange réservé aux mises en garde).
+- **Overview projet**, nouvelle page d'accueil : créer et renommer un projet, verdict global et trois indicateurs (délais, qualité, coût), portefeuille, jalons et alertes. L'indicateur qualité mesure la maîtrise (risques, jalons), faute de mesure de qualité propre.
+- **Ressources**, nouvelle page : personnes, équipes, rôle dans le projet (chef de projet, membre), taux journalier par personne interne ou externe, colonne Accès. Le taux de la fiche remplace la grille (conservée en secours) ; l'onglet Taux de Budget disparaît. Une ressource externe se budgète au forfait ou en jours × taux.
+- **Menu des onglets** : Suivi, Copilote et Budget gardent leurs pages ; une flèche ▾ de la bannière ouvre directement chaque onglet. Correctif : le projet courant se transmet désormais à tous les liens de la bannière (Overview, Ressources et Budget l'oubliaient depuis le Planning et la Structure).
+- **Mails** : tous les objets commencent par `[PPM✴️]`, avec un test garde-fou.
+- **Accès** : `PPM_DOMAIN` accepte plusieurs domaines, réglables dans Administration ; le refus dit pourquoi et quoi faire ; fonction `diagnosticAcces` à lancer depuis l'éditeur. Corrige « Accès réservé aux comptes du domaine » quand l'installation avait fixé un autre domaine que celui de l'utilisateur.
+- `dist/` : 11 fichiers. Tests : 162, plus les essais de pages.
+
 ## 0.9.1 — rappels avant livraison dans l'agenda du responsable
 
 - Un rappel est ajouté à l'agenda du projet, **N jours ouvrés avant la livraison** de chaque livrable non terminé, avec son responsable invité (il le voit dans son Google Agenda). N vaut 10 par défaut.

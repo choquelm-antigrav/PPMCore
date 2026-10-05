@@ -70,7 +70,7 @@ module.exports = function () {
     c.getTable('Dependency').appendRows([{ id: 'loop', predecessor_id: b.id, successor_id: a.id, dep_type: 'FS' }]);
     c.onRowChanged('Dependency', 'loop', 'bob@entreprise.com');
     ok(c.isTrue(c.repoGet('Dependency', 'loop').deleted), 'dépendance annulée');
-    eq(c.SENT_MAILS.map((m) => [m.to, m.subject]), [['bob@entreprise.com', 'Dépendance annulée']]);
+    eq(c.SENT_MAILS.map((m) => [m.to, m.subject]), [['bob@entreprise.com', '[PPM✴️] Dépendance annulée']]);
   });
 
   test('Déclaration d’avancement : la dernière fait foi', () => {

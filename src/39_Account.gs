@@ -12,7 +12,7 @@
  * Le manifeste et le déploiement restent dans l'éditeur Apps Script.
  */
 
-var HOME_VIEWS = ['gantt', 'structure', 'suivi', 'copilote'];
+var HOME_VIEWS = ['overview', 'gantt', 'structure', 'ressources', 'suivi', 'copilote', 'budget'];
 var ADMIN_EMAIL_RE_ = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 var TRIGGER_LIST = null; // tests : () => [noms des fonctions déclenchées]
 
@@ -55,7 +55,7 @@ defineAction('account.get', function (p, ctx) {
 
 function adminView_() {
   return {
-    admins: adminEmails(), domain: allowedDomain(),
+    admins: adminEmails(), domain: allowedDomains().join(', '),
     ai_mode: aiMode_(), ai_model: getProp(PROP.GEMINI_MODEL, ''), ai_quota: aiQuota_(),
     gemini_key_set: !!getProp(PROP.GEMINI_KEY, ''),
     reminder_on: reminderDefaults_().on, reminder_days: reminderDefaults_().days,
@@ -88,6 +88,17 @@ function validateAdminSettings_(v, cur, actor) {
     audit.push({ field: field, old: shown ? shown[0] : String(oldVal), new: shown ? shown[1] : String(newVal === null ? '' : newVal) });
   };
 
+  var domainsNow = allowedDomains();
+  if (v.domains !== undefined) {
+    var dl = (Array.isArray(v.domains) ? v.domains : String(v.domains).split(/[\s,;]+/)).map(function (d) { return String(d).trim().toLowerCase(); }).filter(function (d) { return d; });
+    var uniq = dl.filter(function (d, i) { return dl.indexOf(d) === i; });
+    if (!uniq.length) throw new PpmError('VALIDATION', 'Il faut au moins un domaine autorisé.');
+    if (uniq.length > 5) throw new PpmError('VALIDATION', 'Cinq domaines au plus.');
+    uniq.forEach(function (d) { if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(d)) throw new PpmError('VALIDATION', 'Domaine invalide : ' + d); });
+    if (uniq.indexOf(String(actor).split('@')[1]) < 0) throw new PpmError('VALIDATION', 'Vous ne pouvez pas retirer votre propre domaine : vous perdriez l’accès à l’outil.');
+    change('domains', PROP.DOMAIN, cur.domain.split(/[\s,;]+/).filter(Boolean).join(','), uniq.join(','));
+    domainsNow = uniq;
+  }
   if (v.admins !== undefined) {
     var raw = Array.isArray(v.admins) ? v.admins : String(v.admins).split(/[\s,;]+/);
     var seen = {}, list = [];
@@ -99,7 +110,7 @@ function validateAdminSettings_(v, cur, actor) {
     if (list.length > 10) throw new PpmError('VALIDATION', 'Dix administrateurs au plus.');
     list.forEach(function (m) {
       if (!ADMIN_EMAIL_RE_.test(m)) throw new PpmError('VALIDATION', 'Adresse invalide : ' + m);
-      if (cur.domain && m.split('@')[1] !== cur.domain) throw new PpmError('VALIDATION', 'Adresse hors du domaine ' + cur.domain + ' : ' + m);
+      if (domainsNow.length && domainsNow.indexOf(m.split('@')[1]) < 0) throw new PpmError('VALIDATION', 'Adresse hors du domaine ' + domainsNow.join(', ') + ' : ' + m);
     });
     if (list.indexOf(actor) < 0) {
       throw new PpmError('VALIDATION', 'Vous ne pouvez pas vous retirer vous-même des administrateurs : demandez à un autre administrateur de le faire.');

@@ -256,54 +256,58 @@
   @media (max-width: 900px) { header { padding: 14px 12px 12px; } header .title h1 { font-size: 22px; } }
 </style>
 <style>
-  .panel { padding: 16px 24px 32px; }
-  .panel[hidden] { display: none; }
-  .bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 20px; margin: 0 0 16px; }
-  .bar label.field { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
-  .bar select { min-width: 220px; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 0 0 16px; }
-  .card { padding: 12px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
-  .card .k { margin: 0; color: var(--muted); font-size: 13px; }
-  .card .v { margin: 2px 0 0; font-size: 20px; font-weight: 600; }
-  .card .s { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
-  .card.alert .v { color: var(--red); }
-  .late { color: var(--red); font-weight: 500; }
-  .early { color: var(--green); }
-  .muted { color: var(--muted); }
-  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12.5px; background: var(--tint); color: var(--ink); white-space: nowrap; }
-  .badge.active { background: var(--summary); color: #FFFFFF; }
-  .badge.pending { background: var(--warn-bg); color: var(--warn-ink); }
-  .badge.refused { background: var(--alert-bg); color: var(--alert-ink); }
-  .badge.added { background: var(--ok-bg); color: var(--ok-ink); }
-  .badge.removed { background: var(--alert-bg); color: var(--alert-ink); }
-  .badge.changed { background: var(--warn-bg); color: var(--warn-ink); }
-  td .actions { display: flex; flex-wrap: wrap; gap: 6px; }
-  td .btn { padding: 3px 10px; font-size: 13.5px; }
-  .note { margin: 0 0 16px; color: var(--muted); max-width: 70ch; }
-  .table-wrap + .note { margin-top: 10px; }
-  .intro { margin: 0 0 16px; max-width: 70ch; }
-  .ws { display: grid; gap: 12px; max-width: 720px; }
-  .ws .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px;
-    padding: 12px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
-  .ws .row strong { display: block; }
-  .report { margin: 0; padding-left: 18px; }
-  dialog label.lbl { display: grid; gap: 2px; margin: 0 0 10px; font-size: 13px; color: var(--muted); }
-  dialog input[type=text], dialog textarea { padding: 6px 8px; border: 1px solid var(--rule); border-radius: 4px; color: var(--ink); }
-  dialog textarea { min-height: 76px; resize: vertical; }
-  dialog fieldset { margin: 0 0 12px; padding: 0; border: 0; }
-  dialog legend { margin: 0 0 4px; font-weight: 600; }
-  dialog .opt { display: flex; align-items: flex-start; gap: 8px; margin: 4px 0; cursor: pointer; }
-  .th-check { width: 32px; }
-  @media (max-width: 700px) {
-    .panel { padding: 12px; }
-    .status .seg { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
-    .status .seg button { border-left: 0; border-top: 1px solid var(--rule); }
-    .status .seg button:nth-child(-n+2) { border-top: 0; }
-    .status .seg button:nth-child(even) { border-left: 1px solid var(--rule); }
-    #reload { margin-left: 0 !important; }
-    .bar select { min-width: 0; width: 100%; }
-    .bar label.field { width: 100%; }
-  }
+  header .title { flex: 1 1 360px; }
+  header .chips-row { display: flex; flex-wrap: wrap; gap: 6px; flex: 0 0 100%; margin-top: 6px; }
+  header .chips-row .badge { background: rgba(255, 255, 255, .14); color: #FFFFFF; border: 1px solid rgba(255, 255, 255, .28); }
+  .hero-note[data-level="ok"] .lv { color: #7FE0A8; } .hero-note[data-level="warn"] .lv { color: #FFC074; } .hero-note[data-level="alert"] .lv { color: #FFA7A0; }
+  .hero-note .lv { font-weight: 800; }
+  main { display: block; padding: 0 0 24px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 16px; padding: 20px 24px 8px; }
+  .kpi { --lvl: var(--accent-2); display: grid; grid-template-columns: 52px 1fr; gap: 14px; background: var(--surface); border: 1px solid var(--rule); border-left-color: var(--lvl); padding: 16px 18px; }
+  .kpi[data-level="ok"] { --lvl: var(--green); } .kpi[data-level="warn"] { --lvl: var(--amber); } .kpi[data-level="alert"] { --lvl: var(--red); } .kpi[data-level="none"] { --lvl: var(--line-strong); }
+  .kpi .k-title { margin: 0 0 2px; font-size: 12px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--brand-2); }
+  :root.dark .kpi .k-title { color: var(--accent-2); }
+  .kpi .k-head { margin: 4px 0 8px; font-size: 19px; font-weight: 700; line-height: 1.25; }
+  .pill-level { display: inline-block; padding: 3px 10px; border-radius: 100px; font-size: 11px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; color: #FFFFFF; background: var(--lvl); vertical-align: middle; margin-left: 8px; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 100px; font-size: 12px; background: var(--tint); color: var(--ink); white-space: nowrap; }
+  .badge.alert { background: var(--alert-bg); color: var(--alert-ink); } .badge.warn { background: var(--warn-bg); color: var(--warn-ink); }
+  .bars { display: grid; gap: 6px; margin: 8px 0; }
+  .bar-row { display: grid; grid-template-columns: 112px 1fr 46px; gap: 8px; align-items: center; font-size: 12.5px; color: var(--muted); }
+  .bar2 { height: 8px; background: var(--tint); border-radius: 4px; overflow: hidden; display: flex; }
+  .bar2 > span { display: block; height: 100%; background: var(--lvl); }
+  .bar2 > span.soft { background: var(--accent-2); }
+  .bar2 > span.red { background: var(--red); } .bar2 > span.amber { background: var(--amber); }
+  .kpi .callout { margin-top: 8px; font-size: 13.5px; flex-direction: column; gap: 3px; }
+  .kpi .callout ul { margin: 0; padding-left: 16px; }
+  .kpi .calm { margin: 8px 0 0; color: var(--muted); font-size: 13.5px; }
+  .kpi a.more { display: inline-block; margin-top: 10px; font-size: 13px; font-weight: 600; text-decoration: none; }
+  .cols { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px; padding: 12px 24px 0; }
+  .panel-box { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px; }
+  .panel-box h2.sec { margin: 0 0 12px; }
+  .proj { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; width: 100%; padding: 9px 10px; border: 0; border-bottom: 1px solid var(--rule); background: transparent; text-align: left; cursor: pointer; color: var(--ink); }
+  .proj:hover { background: var(--hover); }
+  .proj[aria-current="true"] { background: var(--tint); box-shadow: inset 4px 0 0 var(--accent); }
+  .proj small { display: block; color: var(--muted); }
+  .dots { display: inline-flex; gap: 4px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--line-strong); }
+  .dot[data-level="ok"] { background: var(--green); } .dot[data-level="warn"] { background: var(--amber); } .dot[data-level="alert"] { background: var(--red); }
+  .list { margin: 0; padding: 0; list-style: none; }
+  .list li { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--rule); }
+  .list li:last-child { border-bottom: 0; }
+  .muted { color: var(--muted); } .note { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+  .facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; font-size: 14px; }
+  .facts dt { color: var(--muted); } .facts dd { margin: 0; }
+  .mission { margin: 20px 24px 0; background: var(--grad-hero); color: #FFFFFF; border-radius: var(--radius); padding: 16px 22px 16px 24px; border-left: 5px solid var(--accent-2); box-shadow: var(--shadow); }
+  .mission .k { font-size: 10.5px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: var(--accent-2); margin: 0 0 6px; }
+  .mission .m { margin: 0; font-size: 14.5px; line-height: 1.5; font-weight: 400; } .mission .m b { font-weight: 800; }
+  #genform { width: min(540px, calc(100% - 32px)); max-width: none; }
+  .ed-grid { display: grid; gap: 12px; }
+  .ed-grid label.lbl { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
+  .ed-grid input, .ed-grid select { padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--ink); min-width: 0; width: 100%; }
+  .ed-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .ed-error { margin: 12px 0 0; color: var(--red); font-weight: 500; }
+  dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; padding: 12px; } .kpis { padding: 14px 12px 4px; } .mission { margin: 16px 12px 0; } .bar-row { grid-template-columns: 78px 1fr 40px; } .ed-row2 { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -527,38 +531,46 @@
 </script>
 <header>
   <div class="title">
-    <h1 id="title">Suivi</h1>
-    <p class="context" id="context"></p>
+    <h1 id="title">Overview projet</h1>
+    <div class="chips-row" id="chips"></div>
+  </div>
+  <div class="hero-note" id="verdict" hidden>
+    <p class="k">Verdict global</p>
+    <p class="t" id="verdict-text"></p>
   </div>
   <div class="controls">
     <select id="picker" aria-label="Projet"></select>
+    <button type="button" class="btn" id="project-edit" hidden>Renommer / modifier</button>
+    <button type="button" class="btn primary" id="project-new" hidden>Nouveau projet</button>
   </div>
 </header>
 
-<div class="status">
-  <div class="seg" role="tablist" aria-label="Rubriques">
-    <button type="button" role="tab" data-tab="ecarts" aria-pressed="true">Écarts à la baseline</button>
-    <button type="button" role="tab" data-tab="changes" aria-pressed="false" id="tab-changes">Changements à valider</button>
-    <button type="button" role="tab" data-tab="baselines" aria-pressed="false">Baselines</button>
-    <button type="button" role="tab" data-tab="workspace" aria-pressed="false">Agenda et Drive</button>
+<main>
+  <section class="kpis" id="kpis" aria-label="Indicateurs du projet"></section>
+  <div class="cols">
+    <section class="panel-box" aria-label="Portefeuille"><h2 class="sec">Portefeuille</h2><div id="portfolio"></div></section>
+    <div>
+      <section class="panel-box" aria-label="Prochains jalons"><h2 class="sec">Prochains jalons</h2><ul class="list" id="milestones"></ul></section>
+      <section class="panel-box" style="margin-top:20px" aria-label="Alertes ouvertes"><h2 class="sec">Alertes ouvertes</h2><ul class="list" id="alerts"></ul></section>
+      <section class="panel-box" style="margin-top:20px" aria-label="Repères"><h2 class="sec">Repères</h2><dl class="facts" id="facts"></dl></section>
+    </div>
   </div>
-  <button type="button" class="icon-btn" id="reload" style="margin-left:auto" aria-label="Actualiser" title="Actualiser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
-</div>
+  <section class="mission" aria-label="Comment lire ces indicateurs">
+    <p class="k">Comment lire ces indicateurs</p>
+    <p class="m"><b>Délais</b> : retards, dépendances non respectées, glissement sur la baseline, fin visée et avancement face au plan. <b>Qualité</b> : maîtrise des risques et des jalons (risques élevés, traitements en retard, jalons menacés, signaux faibles) ; l’outil ne mesure pas encore la qualité des livrables eux-mêmes. <b>Coût</b> : commandes d’achat engagées face au budget externe de chaque CPN, GR en retard. Chaque indicateur est <b>Maîtrisé</b>, en <b>Vigilance</b> ou en <b>Alerte</b> ; le verdict global reprend le pire des trois.</p>
+  </section>
+</main>
 
-<section class="panel" id="panel-ecarts" aria-label="Écarts à la baseline"></section>
-<section class="panel" id="panel-changes" aria-label="Changements à valider" hidden></section>
-<section class="panel" id="panel-baselines" aria-label="Baselines" hidden></section>
-<section class="panel" id="panel-workspace" aria-label="Agenda et Drive" hidden></section>
-
-<dialog id="form">
-  <h2 id="form-title"></h2>
-  <p id="form-text"></p>
-  <label class="lbl" id="form-label-wrap">Libellé (facultatif)<input type="text" id="form-label" maxlength="60"></label>
-  <label class="lbl"><span id="form-reason-label">Justification</span><textarea id="form-reason" maxlength="500"></textarea></label>
-  <div class="actions">
-    <button type="button" class="btn" id="form-cancel">Annuler</button>
-    <button type="button" class="btn primary" id="form-ok">Valider</button>
-  </div>
+<dialog id="genform" aria-labelledby="gf-title">
+  <form id="gf-form" novalidate>
+    <h2 id="gf-title"></h2>
+    <div class="ed-grid" id="gf-body"></div>
+    <p class="ed-error" id="gf-error" role="alert" hidden></p>
+    <div class="actions">
+      <button type="button" class="btn" id="gf-cancel">Annuler</button>
+      <button type="submit" class="btn primary" id="gf-ok">Enregistrer</button>
+    </div>
+  </form>
 </dialog>
 
 <div class="toast" id="toast" role="status" hidden></div>
@@ -570,9 +582,10 @@ var BOOT = <?!= boot ?>;
 (function () {
   'use strict';
 
-  var state = { tab: 'ecarts', projectId: '', catalog: null, list: null, diff: null, compare: { base: '', to: '' },
-    onlyChanges: true, feed: null, showAll: false, selected: {}, ws: null, wsReport: null, form: null, seq: 0 };
+  var state = { data: null, selected: '', seq: 0 };
   var $ = function (id) { return document.getElementById(id); };
+  var LEVEL_LABEL = { ok: 'Maîtrisé', warn: 'Vigilance', alert: 'Alerte', none: 'Non renseigné' };
+  var VERDICT_PHRASE = { ok: 'maîtrisé', warn: 'en vigilance', alert: 'en alerte', none: 'non évalué' };
 
   // ------------------------------------------------------------ outils
   function el(tag, attrs, children) {
@@ -587,41 +600,13 @@ var BOOT = <?!= boot ?>;
     return n;
   }
   function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
-  function uuid() {
-    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
-    return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2);
-  }
-  function frDate(s) {
-    if (!s) return '';
-    var p = String(s).slice(0, 10).split('-');
-    return p[2] + '/' + p[1] + '/' + p[0];
-  }
-  function frDateTime(s) {
-    if (!s) return '';
-    var d = new Date(s);
-    if (isNaN(d.getTime())) return frDate(s);
-    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
-    return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-  }
-  function isoDate(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v)); }
-  function plural(n, one, many) { return n + ' ' + (Math.abs(n) > 1 ? many : one); }
-  function days(n) {
-    if (n === null || n === undefined) return '';
-    if (n === 0) return '=';
-    return (n > 0 ? '+' : '−') + plural(Math.abs(n), 'jour', 'jours');
-  }
-  function euros(n) {
-    if (n === null || n === undefined) return '';
-    return Number(n).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
-  }
+  function uuid() { return window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2); }
   var toastTimer = null;
   function toast(msg, isError) {
     var t = $('toast');
-    t.textContent = msg;
-    t.className = 'toast' + (isError ? ' error' : '');
-    t.hidden = false;
+    t.textContent = msg; t.className = 'toast' + (isError ? ' error' : ''); t.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { t.hidden = true; }, isError ? 7000 : 3500);
+    toastTimer = setTimeout(function () { t.hidden = true; }, isError ? 8000 : 3500);
   }
   function call(action, params, write) {
     var pre = window.ppmPreloaded && window.ppmPreloaded(action, params, write);
@@ -631,433 +616,201 @@ var BOOT = <?!= boot ?>;
       google.script.run
         .withSuccessHandler(function (res) {
           document.body.classList.remove('busy');
-          if (res && res.ok) resolve(res.data);
-          else reject(res && res.error ? res.error : { code: 'INTERNAL', message: 'Réponse inattendue du serveur.' });
+          if (res && res.ok) resolve(res.data); else reject(res && res.error ? res.error : { code: 'INTERNAL', message: 'Réponse inattendue du serveur.' });
         })
         .withFailureHandler(function (err) {
           document.body.classList.remove('busy');
-          reject({ code: 'NETWORK', message: 'Le serveur ne répond pas. Vérifiez la connexion puis cliquez sur Actualiser.', details: String(err) });
+          reject({ code: 'NETWORK', message: 'Le serveur ne répond pas. Vérifiez la connexion puis rechargez la page.', details: String(err) });
         })
         .uiCall(action, params || {}, write ? uuid() : null);
     });
   }
-  function loading(panel) { clear(panel); panel.appendChild(el('p', { class: 'loading', text: 'Chargement…' })); }
-  function empty(panel, title, text, extra) {
-    clear(panel);
-    panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: title }), el('span', { text: text }), extra || null]));
-  }
-  function failed(panel, err) {
-    empty(panel, 'Chargement impossible.', (err && err.message) || 'Erreur inconnue.');
-  }
-  function badge(text, cls) { return el('span', { class: 'badge ' + (cls || ''), text: text }); }
-  function card(k, v, s, alert) {
-    return el('div', { class: 'card' + (alert ? ' alert' : '') }, [el('p', { class: 'k', text: k }), el('p', { class: 'v', text: v }), s ? el('p', { class: 's', text: s }) : null]);
-  }
-  function table(head, rows) {
-    return el('div', { class: 'table-wrap' }, [el('table', {}, [
-      el('thead', {}, [el('tr', {}, head.map(function (h) { return typeof h === 'string' ? el('th', { scope: 'col', text: h }) : h; }))]),
-      el('tbody', {}, rows)
-    ])]);
-  }
+  function frDate(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+  function plural(n, one, many) { return n + ' ' + (Math.abs(n) > 1 ? many : one); }
+  function openDialog(d) { if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
+  function closeDialog(d) { if (d.close) d.close(); else d.removeAttribute('open'); }
 
-  // ------------------------------------------------------------ navigation
-  function remember() {
-    var base = BOOT.baseUrl || '';
-    $('nav-plan').setAttribute('href', base + '?view=gantt' + (state.projectId ? '&project=' + state.projectId : ''));
-    $('nav-struct').setAttribute('href', base + '?view=structure' + (state.projectId ? '&project=' + state.projectId : ''));
-    $('nav-suivi').setAttribute('href', base + '?view=suivi' + (state.projectId ? '&project=' + state.projectId : '') + '&tab=' + state.tab);
-    $('nav-copilot').setAttribute('href', base + '?view=copilote' + (state.projectId ? '&project=' + state.projectId : ''));
-    try { google.script.history.replace(null, { view: 'suivi', project: state.projectId, tab: state.tab }); } catch (e) { /* hors web app */ }
-    if (window.ppmTab) ppmTab('suivi', state.tab);
+  // ------------------------------------------------------------ formulaire générique
+  function fillSelect(sel, options, value) {
+    clear(sel);
+    options.forEach(function (o) { sel.appendChild(el('option', { value: o.value, text: o.label })); });
+    sel.value = value === undefined || value === null ? (options[0] ? options[0].value : '') : value;
   }
-  function fillPicker() {
-    var sel = $('picker'); clear(sel);
-    var cat = state.catalog, byProgram = {};
-    cat.projects.forEach(function (p) { (byProgram[p.program_id || ''] = byProgram[p.program_id || ''] || []).push(p); });
-    var sortCode = function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); };
-    var group = function (label, list) {
-      if (!list || !list.length) return;
-      var og = el('optgroup', { label: label });
-      list.sort(sortCode).forEach(function (p) { og.appendChild(el('option', { value: p.id, text: p.code + ' ' + p.name + (p.status === 'Clos' ? ' (clos)' : '') })); });
-      sel.appendChild(og);
-    };
-    cat.programs.slice().sort(sortCode).forEach(function (g) { group(g.code + ' ' + g.name, byProgram[g.id]); });
-    group('Hors programme', byProgram['']);
-    sel.value = state.projectId;
-  }
-  function syncTabs() {
-    Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) {
-      b.setAttribute('aria-pressed', String(b.getAttribute('data-tab') === state.tab));
-    });
-    ['ecarts', 'changes', 'baselines', 'workspace'].forEach(function (t) { $('panel-' + t).hidden = t !== state.tab; });
-    var l = state.list;
-    $('tab-changes').hidden = !!l && !l.canReadFeed;
-  }
-  function setTab(t) {
-    if (t === 'changes' && state.list && !state.list.canReadFeed) t = 'ecarts';
-    state.tab = t; syncTabs(); remember(); return loadTab();
-  }
-
-  // ------------------------------------------------------------ chargement
-  function loadProject(id) {
-    state.projectId = id; state.selected = {}; state.compare = { base: '', to: '' }; state.wsReport = null;
-    $('picker').value = id;
-    remember();
-    var ticket = ++state.seq;
-    loading($('panel-' + state.tab));
-    return call('baselines.list', { projectId: id }).then(function (l) {
-      if (ticket !== state.seq) return;
-      state.list = l;
-      renderHeader();
-      if (state.tab === 'changes' && !l.canReadFeed) state.tab = 'ecarts';
-      syncTabs(); remember();
-      if (l.canReadFeed) refreshPending();
-      return loadTab();
-    }).catch(function (e) { failed($('panel-' + state.tab), e); toast(e.message || 'Erreur.', true); });
-  }
-  function reloadList() {
-    return call('baselines.list', { projectId: state.projectId }).then(function (l) { state.list = l; renderHeader(); syncTabs(); });
-  }
-  function loadTab() {
-    if (!state.list) return Promise.resolve();
-    if (state.tab === 'ecarts') return loadDiff();
-    if (state.tab === 'changes') return loadFeed();
-    if (state.tab === 'baselines') { renderBaselines(); return Promise.resolve(); }
-    return loadWorkspace();
-  }
-  function activeBaseline() { return (state.list.baselines || []).filter(function (b) { return b.status === 'Active'; })[0] || null; }
-
-  function renderHeader() {
-    var l = state.list, p = l.project;
-    $('title').textContent = p.code + ' ' + p.name;
-    var a = activeBaseline();
-    var pending = l.baselines.filter(function (b) { return b.status === 'Demandée'; }).length;
-    var ctx = $('context'); clear(ctx);
-    ctx.appendChild(el('span', { class: 'chip' + (a ? '' : ' warn'), text: a ? a.label + ' active' : 'Pas de baseline',
-      title: a ? 'Figée le ' + frDate(a.decided_at) + ' par ' + a.decided_by : '' }));
-    if (pending) ctx.appendChild(el('span', { class: 'chip warn', text: plural(pending, 'demande en attente', 'demandes en attente') }));
-  }
-  function refreshPending() {
-    call('changes.feed', { projectId: state.projectId, limit: 1 }).then(function (f) {
-      $('tab-changes').textContent = 'Changements à valider' + (f.pending ? ' (' + f.pending + ')' : '');
-    }).catch(function () { /* onglet laissé tel quel */ });
-  }
-
-  // ------------------------------------------------------------ écarts
-  function loadDiff() {
-    var panel = $('panel-ecarts');
-    var a = activeBaseline();
-    if (!a && !state.compare.base) { renderNoBaseline(panel); return Promise.resolve(); }
-    loading(panel);
-    var params = { projectId: state.projectId };
-    if (state.compare.base) params.baselineId = state.compare.base;
-    if (state.compare.to) params.compareTo = state.compare.to;
-    return call('baselines.diff', params).then(function (d) { state.diff = d; renderDiff(); }).catch(function (e) { failed(panel, e); });
-  }
-  function renderNoBaseline(panel) {
-    var l = state.list, extra = null;
-    if (l.canManage) extra = el('p', {}, [el('button', { type: 'button', class: 'btn primary', text: 'Figer la baseline B0', onclick: function () { openCreate(null); } })]);
-    else if (l.canRequest) extra = el('p', {}, [el('button', { type: 'button', class: 'btn', text: 'Demander une baseline', onclick: openRequest })]);
-    empty(panel, 'Pas encore de baseline pour ce projet.',
-      'Une baseline fige les dates, les responsables, le budget et le périmètre du projet ; les écarts se mesurent ensuite par rapport à elle.', extra);
-  }
-  function renderDiff() {
-    var panel = $('panel-ecarts'), d = state.diff, t = d.totals;
-    clear(panel);
-    var frozen = state.list.baselines.filter(function (b) { return b.status === 'Active' || b.status === 'Archivée'; });
-    var baseSel = el('select', { id: 'cmp-base', 'aria-label': 'Baseline de référence' });
-    frozen.forEach(function (b) { baseSel.appendChild(el('option', { value: b.id, text: b.label + (b.status === 'Active' ? ' (active)' : '') + ' — ' + frDate(b.decided_at) })); });
-    baseSel.value = d.baseline.id;
-    var toSel = el('select', { id: 'cmp-to', 'aria-label': 'Comparée à' });
-    toSel.appendChild(el('option', { value: '', text: 'Le planning d’aujourd’hui' }));
-    frozen.forEach(function (b) { if (b.id !== d.baseline.id) toSel.appendChild(el('option', { value: b.id, text: 'La baseline ' + b.label })); });
-    toSel.value = d.compareTo ? d.compareTo.id : '';
-    baseSel.addEventListener('change', function () { state.compare.base = baseSel.value; if (state.compare.to === baseSel.value) state.compare.to = ''; loadDiff(); });
-    toSel.addEventListener('change', function () { state.compare.to = toSel.value; loadDiff(); });
-    var only = el('input', { type: 'checkbox', id: 'only-changes' });
-    only.checked = state.onlyChanges;
-    only.addEventListener('change', function () { state.onlyChanges = only.checked; renderDiff(); });
-    panel.appendChild(el('div', { class: 'bar' }, [
-      el('label', { class: 'field' }, ['Référence', baseSel]), el('label', { class: 'field' }, ['Comparée à', toSel]),
-      el('label', { class: 'toggle' }, [only, 'Seulement les éléments qui ont changé'])
-    ]));
-
-    var cards = el('div', { class: 'cards' });
-    cards.appendChild(card('Fin du plan', t.end ? frDate(t.end) : '—',
-      t.end_slip === null ? 'Référence : ' + frDate(t.end_base) : (t.end_slip === 0 ? 'Comme la référence' : days(t.end_slip) + ' ouvrés (référence ' + frDate(t.end_base) + ')'), t.end_slip > 0));
-    cards.appendChild(card('Éléments glissés', String(t.slipped), t.slipped ? 'jusqu’à ' + plural(t.max_slip, 'jour ouvré', 'jours ouvrés') : (t.advanced ? plural(t.advanced, 'élément avancé', 'éléments avancés') : 'aucun'), t.slipped > 0));
-    cards.appendChild(card('Périmètre', (t.added ? '+' + t.added : '0') + ' / ' + (t.removed ? '−' + t.removed : '0'), 'ajoutés / retirés', t.added + t.removed > 0));
-    cards.appendChild(card('Responsables changés', String(t.owner_changes), ''));
-    var hasBudget = d.seeBudget && (t.budget || t.budget_base);
-    if (hasBudget) cards.appendChild(card('Budget prévu', euros(t.budget), t.budget_delta ? (t.budget_delta > 0 ? '+' : '') + euros(t.budget_delta) + ' par rapport à la référence' : 'Comme la référence', t.budget_delta > 0));
-    panel.appendChild(cards);
-
-    var items = d.items.filter(function (i) { return !state.onlyChanges || i.state !== 'same'; });
-    if (!items.length) {
-      panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucun écart.' }), el('span', { text: 'Le planning comparé est identique à la référence.' })]));
-      return;
-    }
-    var stateText = { added: ['Ajouté', 'added'], removed: ['Retiré', 'removed'], changed: ['Modifié', 'changed'], same: ['Identique', ''] };
-    var dateCell = function (s, f, type) { return !f ? '—' : (type === 'Jalon' || s === f || !s ? frDate(f) : frDate(s) + ' → ' + frDate(f)); };
-    var head = ['Élément', 'Référence', 'Comparé', 'Glissement', 'Responsable'];
-    if (hasBudget) head.push('Budget');
-    head.push('État');
-    var rows = items.map(function (i) {
-      var slip = i.slip === null || i.slip === undefined ? '' : days(i.slip);
-      var owner = i.owner_changed ? i.base_owner_name + ' → ' + i.owner_name : (i.owner_name || i.base_owner_name || '—');
-      var cells = [
-        el('td', {}, [i.name, el('div', { class: 'muted', text: i.item_type + (i.wp_name ? ' · WP ' + i.wp_name : '') })]),
-        el('td', { text: i.state === 'added' ? '—' : dateCell(i.base_start, i.base_finish, i.item_type) }),
-        el('td', { text: i.state === 'removed' ? '—' : dateCell(i.start, i.finish, i.item_type) }),
-        el('td', { class: 'num' + (i.slip > 0 ? ' late' : i.slip < 0 ? ' early' : ''), text: slip }),
-        el('td', { text: owner })
-      ];
-      if (hasBudget) cells.push(el('td', { class: 'num', text: i.budget_delta ? (i.budget_delta > 0 ? '+' : '') + euros(i.budget_delta) : (i.budget ? euros(i.budget) : '') }));
-      cells.push(el('td', {}, [badge(stateText[i.state][0], stateText[i.state][1])]));
-      return el('tr', { 'data-item': i.id }, cells);
-    });
-    panel.appendChild(table(head, rows));
-    panel.appendChild(el('p', { class: 'note', text: 'Glissement de la fin, en jours ouvrés du calendrier du projet : positif = plus tard que la référence.' }));
-  }
-
-  // ------------------------------------------------------------ changements à valider
-  function loadFeed() {
-    var panel = $('panel-changes');
-    loading(panel);
-    return call('changes.feed', { projectId: state.projectId, all: state.showAll }).then(function (f) {
-      state.feed = f; state.selected = {}; renderFeed();
-      $('tab-changes').textContent = 'Changements à valider' + (f.pending ? ' (' + f.pending + ')' : '');
-    }).catch(function (e) { failed(panel, e); });
-  }
-  function valueText(v) { return v === '' || v === null || v === undefined ? '(vide)' : isoDate(v) ? frDate(v) : String(v); }
-  function renderFeed() {
-    var panel = $('panel-changes'), f = state.feed;
-    clear(panel);
-    if (!f.baseline) {
-      empty(panel, 'Pas de baseline active.', 'Le fil des changements démarre quand une baseline est figée : chaque modification des dates, responsables, budget ou périmètre y apparaît jusqu’à sa validation.');
-      return;
-    }
-    if (!f.canAck) panel.appendChild(el('p', { class: 'note', text: 'Lecture seule : le chef de projet et le DPL valident.' }));
-    var all = el('input', { type: 'checkbox', id: 'show-all' });
-    all.checked = state.showAll;
-    all.addEventListener('change', function () { state.showAll = all.checked; loadFeed(); });
-    var bar = el('div', { class: 'bar' }, [el('label', { class: 'toggle' }, [all, 'Afficher aussi les changements déjà validés'])]);
-    if (f.canAck && f.pending) {
-      bar.appendChild(el('button', { type: 'button', class: 'btn', id: 'ack-selected', text: 'Valider la sélection', onclick: ackSelected }));
-      bar.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'ack-all', text: 'Tout valider (' + f.pending + ')', onclick: ackAll }));
-    }
-    panel.appendChild(bar);
-    if (!f.items.length) {
-      panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Rien à valider.' }), el('span', { text: 'Aucune modification des données figées depuis la dernière validation.' })]));
-      return;
-    }
-    var head = [];
-    if (f.canAck) head.push(el('th', { scope: 'col', class: 'th-check' }, [el('span', { class: 'muted', text: '✓' })]));
-    head = head.concat(['Quand', 'Qui', 'Élément', 'Changement', 'État']);
-    var rows = f.items.map(function (e) {
-      var change;
-      if (e.what === 'modification') change = [e.field_label + ' : ', el('span', { class: 'muted', text: valueText(e.old_value) }), ' → ', el('strong', { text: valueText(e.new_value) })];
-      else change = [e.what === 'ajout' ? 'Ajouté' : e.what === 'suppression' ? 'Supprimé' : 'Rétabli'];
-      var cells = [];
-      if (f.canAck) {
-        var box = el('input', { type: 'checkbox', 'data-event': e.id, 'aria-label': 'Sélectionner : ' + e.entity });
-        box.checked = !!state.selected[e.id];
-        box.disabled = e.acknowledged;
-        box.addEventListener('change', function () { if (box.checked) state.selected[e.id] = true; else delete state.selected[e.id]; });
-        cells.push(el('td', {}, [box]));
+  function openForm(spec) {
+    $('gf-title').textContent = spec.title;
+    var body = $('gf-body'); clear(body);
+    var inputs = {}, pending = null;
+    var flush = function () { if (pending) { body.appendChild(el('div', { class: 'ed-row2' }, pending)); pending = null; } };
+    spec.fields.forEach(function (f) {
+      var c;
+      if (f.type === 'select') { c = el('select', { id: 'gf-' + f.key }); fillSelect(c, f.options || [], f.value); }
+      else {
+        var a = { type: f.type || 'text', id: 'gf-' + f.key, autocomplete: 'off' };
+        if (f.maxlength) a.maxlength = String(f.maxlength);
+        c = el('input', a); c.value = f.value === undefined || f.value === null ? '' : f.value;
       }
-      cells.push(el('td', { text: frDateTime(e.at) }), el('td', { text: e.actor_name || e.actor, title: e.actor }), el('td', { text: e.entity }), el('td', {}, change),
-        el('td', {}, [e.acknowledged ? badge('Validé' + (e.acknowledged_by ? ' par ' + e.acknowledged_by : '')) : badge('À valider', 'pending')]));
-      return el('tr', { 'data-event-row': e.id }, cells);
+      inputs[f.key] = c;
+      var lab = el('label', { class: 'lbl' }, [f.label, c]);
+      if (f.half) { pending = pending || []; pending.push(lab); if (pending.length === 2) flush(); } else { flush(); body.appendChild(lab); }
     });
-    panel.appendChild(table(head, rows));
+    flush();
+    if (spec.note) body.appendChild(el('p', { class: 'note', text: spec.note }));
+    state.gform = { spec: spec, inputs: inputs };
+    $('gf-error').hidden = true; $('gf-ok').textContent = spec.ok || 'Enregistrer'; $('gf-ok').disabled = false;
+    openDialog($('genform'));
+    var first = body.querySelector('input, select'); if (first) first.focus();
   }
-  function ackSelected() {
-    var ids = Object.keys(state.selected);
-    if (!ids.length) { toast('Cochez d’abord les changements à valider.', true); return; }
-    call('changes.ack', { ids: ids }, true).then(function (r) {
-      toast(plural(r.acknowledged, 'changement validé', 'changements validés') + '.'); return loadFeed();
-    }).catch(function (e) { toast(e.message || 'Validation impossible.', true); });
-  }
-  function ackAll() {
-    call('changes.ack', { projectId: state.projectId, all: true }, true).then(function (r) {
-      toast(plural(r.acknowledged, 'changement validé', 'changements validés') + '.'); return loadFeed();
-    }).catch(function (e) { toast(e.message || 'Validation impossible.', true); });
-  }
-
-  // ------------------------------------------------------------ baselines
-  var STATUS = { 'Active': 'active', 'Demandée': 'pending', 'Refusée': 'refused', 'Archivée': '' };
-  function renderBaselines() {
-    var panel = $('panel-baselines'), l = state.list;
-    clear(panel);
-    var bar = el('div', { class: 'bar' });
-    if (l.canManage) bar.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'create-btn', text: activeBaseline() ? 'Figer une nouvelle baseline' : 'Figer la baseline B0', onclick: function () { openCreate(null); } }));
-    else if (l.canRequest) bar.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'request-btn', text: 'Demander une nouvelle baseline', onclick: openRequest }));
-    panel.appendChild(bar);
-    if (!l.baselines.length) {
-      panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucune baseline ni demande.' })]));
-      return;
-    }
-    var rows = l.baselines.map(function (b) {
-      var actions = el('div', { class: 'actions' });
-      if (b.status === 'Demandée' && l.canManage) {
-        actions.appendChild(el('button', { type: 'button', class: 'btn primary', text: 'Figer', onclick: function () { openCreate(b); } }));
-        actions.appendChild(el('button', { type: 'button', class: 'btn', text: 'Refuser', onclick: function () { openRefuse(b); } }));
-      }
-      if (b.status === 'Archivée' && l.canManage) actions.appendChild(el('button', { type: 'button', class: 'btn', text: 'Réactiver', onclick: function () { openActivate(b); } }));
-      if (b.status === 'Active' || b.status === 'Archivée') {
-        actions.appendChild(el('button', { type: 'button', class: 'btn', text: 'Voir les écarts', onclick: function () {
-          state.compare = { base: b.id, to: '' };
-          setTab('ecarts');
-        } }));
-      }
-      var who = b.status === 'Demandée' ? 'Demandée par ' + b.requested_by + ' le ' + frDate(b.created_at)
-        : (b.decided_by ? (b.status === 'Refusée' ? 'Refusée' : 'Figée') + ' par ' + b.decided_by + ' le ' + frDate(b.decided_at) : '');
-      return el('tr', { 'data-baseline': b.id }, [
-        el('td', {}, [el('strong', { text: b.label || 'Demande' }), b.items ? el('div', { class: 'muted', text: plural(b.items, 'élément figé', 'éléments figés') }) : null]),
-        el('td', {}, [badge(b.status, STATUS[b.status])]),
-        el('td', { text: b.justification }),
-        el('td', { text: who }),
-        el('td', {}, [actions])
-      ]);
-    });
-    panel.appendChild(table(['Baseline', 'État', 'Justification', 'Décision', ''], rows));
-  }
-
-  // Boîte de saisie commune (figer, demander, refuser, réactiver).
-  function openForm(opts) {
-    state.form = opts;
-    $('form-title').textContent = opts.title;
-    $('form-text').textContent = opts.text || '';
-    $('form-label-wrap').hidden = !opts.label;
-    $('form-label').value = opts.labelValue || '';
-    $('form-reason-label').textContent = opts.reasonLabel || 'Justification';
-    $('form-reason').value = opts.reasonValue || '';
-    $('form-ok').textContent = opts.ok || 'Valider';
-    $('form-ok').disabled = false;
-    var d = $('form');
-    if (d.showModal) d.showModal(); else d.setAttribute('open', '');
-    $('form-reason').focus();
-  }
-  function closeForm() { state.form = null; var d = $('form'); if (d.open) { if (d.close) d.close(); else d.removeAttribute('open'); } }
   function submitForm() {
-    var f = state.form;
-    if (!f) return;
-    var reason = $('form-reason').value.trim();
-    if (!reason && !f.reasonOptional) { toast((f.reasonLabel || 'La justification') + ' est obligatoire.', true); $('form-reason').focus(); return; }
-    $('form-ok').disabled = true;
-    f.submit(reason, $('form-label').value.trim()).then(function (msg) {
-      closeForm(); toast(msg);
-      return reloadList().then(loadTab).then(function () { if (state.list.canReadFeed) refreshPending(); });
-    }).catch(function (e) { $('form-ok').disabled = false; toast(e.message || 'Opération impossible.', true); });
+    var g = state.gform;
+    if (!g) return;
+    var values = {};
+    Object.keys(g.inputs).forEach(function (k) { values[k] = g.inputs[k].value; });
+    $('gf-ok').disabled = true;
+    Promise.resolve().then(function () { return g.spec.onSubmit(values); }).then(function () { closeDialog($('genform')); }).catch(function (err) {
+      $('gf-ok').disabled = false;
+      var m = $('gf-error'); m.textContent = err && err.code === 'CONFLICT' ? 'Modifié entre-temps par quelqu’un d’autre : fermez, actualisez puis recommencez.' : ppmErrorText(err); m.hidden = false;
+    });
   }
-  function nextLabel() {
-    var nums = state.list.baselines.filter(function (b) { return b.number !== null && (b.status === 'Active' || b.status === 'Archivée'); }).map(function (b) { return b.number; });
-    return 'B' + (nums.length ? Math.max.apply(null, nums) + 1 : 0);
+
+  // ------------------------------------------------------------ rendu
+  function levelDots(k) {
+    return el('span', { class: 'dots', title: 'Délais : ' + LEVEL_LABEL[k.time.level] + ' · Qualité : ' + LEVEL_LABEL[k.quality.level] + ' · Coût : ' + LEVEL_LABEL[k.cost.level] },
+      [k.time, k.quality, k.cost].map(function (x) { return el('span', { class: 'dot', 'data-level': x.level }); }));
   }
-  function openCreate(request) {
-    var label = nextLabel();
+  function current() { return state.data.projects.filter(function (p) { return p.id === state.data.selected; })[0] || null; }
+  function link(view, p, extra) { return (BOOT.baseUrl || '') + '?view=' + view + '&project=' + p.id + (extra || ''); }
+
+  function bar(label, value, cls, shown) {
+    return el('div', { class: 'bar-row' }, [el('span', { text: label }), el('div', { class: 'bar2', role: 'img', 'aria-label': label + ' ' + shown }, [el('span', { class: cls || '', style: 'width:' + Math.max(0, Math.min(100, value)) + '%' })]), el('span', { text: shown })]);
+  }
+
+  function kpiCard(n, title, kpi, p, bars, href, hrefLabel, id) {
+    var card = el('article', { class: 'kpi', 'data-kpi': id, 'data-level': kpi.level }, [
+      el('span', { class: 'num-dot', text: String(n), 'aria-hidden': 'true' }),
+      el('div', {}, [
+        el('p', { class: 'k-title' }, [title, el('span', { class: 'pill-level', text: kpi.label })]),
+        el('p', { class: 'k-head', text: kpi.headline }), bars && bars.length ? el('div', { class: 'bars' }, bars) : null
+      ])
+    ]);
+    var body = card.lastChild;
+    if (kpi.facts.length) {
+      var box = el('div', { class: kpi.level === 'ok' || kpi.level === 'none' ? 'calm' : 'callout' });
+      if (kpi.level === 'warn' || kpi.level === 'alert') box.appendChild(el('span', { class: 'tag-warn', text: kpi.level === 'alert' ? 'Alerte' : 'À surveiller' }));
+      box.appendChild(el('ul', {}, kpi.facts.map(function (t) { return el('li', { text: t }); })));
+      body.appendChild(box);
+    }
+    if (href) body.appendChild(el('a', { class: 'more', href: href, text: hrefLabel }));
+    return card;
+  }
+
+  function render() {
+    var d = state.data, p = current();
+    var sel = $('picker'); clear(sel);
+    d.projects.forEach(function (x) { sel.appendChild(el('option', { value: x.id, text: x.code + ' ' + x.name + (x.status === 'Clos' ? ' (clos)' : '') })); });
+    $('project-new').hidden = !d.canCreate;
+    if (!p) {
+      $('title').textContent = 'Overview projet'; clear($('chips')); $('verdict').hidden = true; $('project-edit').hidden = true;
+      clear($('kpis')); $('kpis').appendChild(el('div', { class: 'empty', style: 'grid-column:1/-1' }, [el('strong', { text: 'Aucun projet pour l’instant.' }), el('span', { text: d.canCreate ? 'Créez le premier projet avec « Nouveau projet ».' : 'Un Program Leader ou un DPL peut créer le premier projet.' })]));
+      return;
+    }
+    sel.value = p.id;
+    $('title').textContent = p.name;
+    var chips = $('chips'); clear(chips);
+    [p.code, p.status, p.cpn ? 'CPN ' + p.cpn : '', p.program, p.manager ? 'Chef de projet : ' + p.manager : ''].filter(Boolean).forEach(function (t) { chips.appendChild(el('span', { class: 'badge', text: t })); });
+    $('project-edit').hidden = !p.canEdit;
+    var k = p.kpis, v = $('verdict');
+    v.hidden = false; v.setAttribute('data-level', k.overall);
+    var t = $('verdict-text'); clear(t);
+    t.appendChild(document.createTextNode('Projet '));
+    t.appendChild(el('span', { class: 'lv', text: VERDICT_PHRASE[k.overall] }));
+    var weak = [['délais', k.time], ['qualité', k.quality], ['coût', k.cost]].filter(function (x) { return x[1].level === 'warn' || x[1].level === 'alert'; });
+    t.appendChild(document.createTextNode(weak.length ? ' : à regarder — ' + weak.map(function (x) { return x[0]; }).join(', ') + '.' : '.'));
+    var kp = $('kpis'); clear(kp);
+    var tm = k.time.metrics, ql = k.quality.metrics, cs = k.cost.metrics;
+    kp.appendChild(kpiCard(1, 'Délais · on time', k.time, p, tm.late !== undefined && k.time.level !== 'none'
+      ? [bar('Avancement réel', tm.progress_pct, '', tm.progress_pct + ' %'), bar('Attendu', tm.planned_pct, 'soft', tm.planned_pct + ' %')] : [], link('gantt', p), 'Voir le planning →', 'time'));
+    var open = ql.open_risks, rest = Math.max(0, open - ql.high_risks);
+    kp.appendChild(kpiCard(2, 'Qualité · on quality', k.quality, p, open > 0 ? [
+      el('div', { class: 'bar-row' }, [el('span', { text: 'Risques ouverts' }), el('div', { class: 'bar2', role: 'img', 'aria-label': plural(open, 'risque ouvert', 'risques ouverts') }, [
+        el('span', { class: 'red', style: 'width:' + 100 * ql.critical_risks / open + '%' }), el('span', { class: 'amber', style: 'width:' + 100 * (ql.high_risks - ql.critical_risks) / open + '%' }), el('span', { class: 'soft', style: 'width:' + 100 * rest / open + '%' })]), el('span', { text: String(open) })])] : [],
+      link('copilote', p, '&tab=suggestions'), 'Voir les suggestions →', 'quality'));
+    kp.appendChild(kpiCard(3, 'Coût · on cost', k.cost, p, cs.engaged_pct !== null && cs.engaged_pct !== undefined ? [bar('Budget externe engagé', Math.min(100, cs.engaged_pct), cs.engaged_pct > 100 ? 'red' : '', cs.engaged_pct + ' %')] : [],
+      link('budget', p), 'Voir le budget →', 'cost'));
+
+    var pf = $('portfolio'); clear(pf);
+    d.projects.forEach(function (x) {
+      pf.appendChild(el('button', { type: 'button', class: 'proj', 'data-id': x.id, 'aria-current': String(x.id === p.id), onclick: function () { select(x.id); } }, [
+        levelDots(x.kpis), el('span', {}, [el('strong', { text: x.code + ' ' + x.name }), el('small', { text: [x.manager, x.status].filter(Boolean).join(' · ') || ' ' })]),
+        el('span', { class: 'muted', text: x.kpis.time.metrics.progress_pct ? x.kpis.time.metrics.progress_pct + ' %' : '' })]));
+    });
+    var det = d.detail, ms = $('milestones'), al = $('alerts'); clear(ms); clear(al);
+    if (det && det.milestones.length) det.milestones.forEach(function (m) { ms.appendChild(el('li', {}, [el('span', { text: m.name }), el('span', { class: 'muted', text: frDate(m.date) + ' · dans ' + plural(m.in_days, 'jour', 'jours') })])); });
+    else ms.appendChild(el('li', {}, [el('span', { class: 'muted', text: 'Aucun jalon dans les 90 prochains jours.' })]));
+    if (det && det.alerts.length) det.alerts.forEach(function (a) { al.appendChild(el('li', {}, [el('span', { text: a.message }), el('span', { class: 'badge ' + (a.severity === 'Alerte' ? 'alert' : 'warn'), text: a.severity })])); });
+    else al.appendChild(el('li', {}, [el('span', { class: 'muted', text: 'Aucune alerte ouverte.' })]));
+    var f = $('facts'); clear(f);
+    [['Début', frDate(p.start_date) || '—'], ['Fin visée', frDate(p.target_end) || '—'], ['Fin du plan', tm.plan_end ? frDate(tm.plan_end) : '—'], ['Éléments terminés', p.done + ' sur ' + p.items], ['Personnes', det ? String(det.people) : '—']]
+      .forEach(function (x) { f.appendChild(el('dt', { text: x[0] })); f.appendChild(el('dd', { text: x[1] })); });
+    try { google.script.history.replace(null, { view: 'overview', project: p.id }); } catch (e) { /* hors web app */ }
+    var base = BOOT.baseUrl || '';
+    Array.prototype.forEach.call(document.querySelectorAll('.ppm-bar [data-view]'), function (n) {
+      var vw = n.getAttribute('data-view');
+      if (['overview', 'gantt', 'structure', 'ressources', 'suivi', 'copilote', 'budget'].indexOf(vw) >= 0) n.setAttribute('href', base + '?view=' + vw + '&project=' + p.id);
+    });
+  }
+
+  function load(projectId) {
+    var ticket = ++state.seq;
+    return call('overview.get', { projectId: projectId || '' }).then(function (d) {
+      if (ticket !== state.seq) return;
+      state.data = d; render();
+    }).catch(function (e) { var k = $('kpis'); clear(k); k.appendChild(el('div', { class: 'empty', style: 'grid-column:1/-1' }, [el('strong', { text: 'Chargement impossible.' }), el('span', { text: (e && e.message) || 'Erreur inconnue.' })])); });
+  }
+  function select(id) { state.data.selected = id; return load(id); }
+
+  // ------------------------------------------------------------ création et renommage
+  function newProject() {
+    var d = state.data;
+    var opt = function (arr, empty) { return [{ value: '', label: empty }].concat(arr); };
     openForm({
-      title: 'Figer la baseline ' + label,
-      text: request ? 'Demande de ' + request.requested_by + ' : « ' + request.justification + ' ». ' : '',
-      label: true, labelValue: label, reasonValue: request ? request.justification : '',
-      ok: 'Figer ' + label,
-      submit: function (reason, lbl) {
-        var params = { projectId: state.projectId, justification: reason, label: lbl };
-        if (request) { params.requestId = request.id; params.version = request.version; }
-        return call('baselines.create', params, true).then(function (b) {
-          state.compare = { base: '', to: '' };
-          return 'Baseline ' + b.label + ' figée : ' + plural(b.items, 'élément', 'éléments') + '.';
-        });
+      title: 'Nouveau projet', ok: 'Créer le projet', note: 'Le chef de projet désigné reçoit le rôle sur ce projet. Le CPN est facultatif et peut être défini plus tard dans Budget.',
+      fields: [
+        { key: 'code', label: 'Code', maxlength: 20, half: true }, { key: 'name', label: 'Nom du projet', maxlength: 120, half: true },
+        { key: 'program_id', label: 'Programme', type: 'select', value: '', options: opt(d.programs.map(function (g) { return { value: g.id, label: g.code + ' — ' + g.name }; }), 'Hors programme') },
+        { key: 'manager_resource_id', label: 'Chef de projet', type: 'select', value: '', options: opt(d.people.map(function (x) { return { value: x.id, label: x.name }; }), 'À désigner plus tard') },
+        { key: 'start_date', label: 'Début', type: 'date', half: true }, { key: 'end_date', label: 'Fin visée', type: 'date', half: true },
+        { key: 'status', label: 'Statut', type: 'select', value: 'Actif', options: d.statuses.filter(function (s) { return s !== 'Clos'; }).map(function (s) { return { value: s, label: s }; }), half: true },
+        { key: 'holiday_country', label: 'Calendrier (jours fériés)', type: 'select', value: 'FR', options: d.countries.map(function (c) { return { value: c, label: c }; }), half: true },
+        { key: 'cpn', label: 'CPN (facultatif)', maxlength: 30, half: true }, { key: 'cpn_label', label: 'Désignation du CPN', maxlength: 120, half: true }
+      ],
+      onSubmit: function (v) {
+        return call('projects.save', { id: '', values: v }, true).then(function (r) { toast('Projet ' + r.code + ' créé.'); return load(r.id); });
       }
     });
-    $('form-text').textContent += 'Les dates, responsables, budget et périmètre actuels deviennent la référence ; la baseline active actuelle sera archivée.';
   }
-  function openRequest() {
-    openForm({ title: 'Demander une nouvelle baseline', text: 'Le chef de projet recevra votre demande et décidera de figer ou non une nouvelle référence.',
-      ok: 'Envoyer la demande', submit: function (reason) {
-        return call('baselines.request', { projectId: state.projectId, justification: reason }, true).then(function () { return 'Demande envoyée.'; });
-      } });
-  }
-  function openRefuse(b) {
-    openForm({ title: 'Refuser la demande', text: 'Demande de ' + b.requested_by + ' : « ' + b.justification + ' ».', reasonLabel: 'Motif du refus', ok: 'Refuser',
-      submit: function (reason) { return call('baselines.refuse', { id: b.id, reason: reason, version: b.version }, true).then(function () { return 'Demande refusée.'; }); } });
-  }
-  function openActivate(b) {
-    openForm({ title: 'Réactiver ' + b.label, text: 'Elle redevient la référence des écarts ; la baseline active actuelle sera archivée.', reasonLabel: 'Motif', ok: 'Réactiver ' + b.label,
-      submit: function (reason) { return call('baselines.activate', { id: b.id, reason: reason, version: b.version }, true).then(function () { return b.label + ' réactivée.'; }); } });
-  }
-
-  // ------------------------------------------------------------ agenda et Drive
-  function loadWorkspace() {
-    var panel = $('panel-workspace');
-    loading(panel);
-    return call('workspace.status', { projectId: state.projectId }).then(function (st) { state.ws = st; renderWorkspace(); }).catch(function (e) { failed(panel, e); });
-  }
-  function renderWorkspace() {
-    var panel = $('panel-workspace'), st = state.ws;
-    clear(panel);
-    var box = el('div', { class: 'ws' });
-    box.appendChild(el('div', { class: 'row' }, [
-      el('div', {}, [el('strong', { text: 'Agenda du projet' }), el('span', { class: 'muted', text: st.calendar_id ? 'En service.' : 'Pas encore créé.' })]),
-      st.calendar_url ? el('a', { class: 'btn', href: st.calendar_url, target: '_blank', rel: 'noopener', text: 'Ouvrir l’agenda' }) : null
-    ]));
-    box.appendChild(el('div', { class: 'row' }, [
-      el('div', {}, [el('strong', { text: 'Dossier Drive du projet' }), el('span', { class: 'muted', text: st.drive_folder_id ? 'En service.' : 'Pas encore créé.' })]),
-      st.drive_url ? el('a', { class: 'btn', href: st.drive_url, target: '_blank', rel: 'noopener', text: 'Ouvrir le dossier' }) : null
-    ]));
-    panel.appendChild(box);
-    var bar = el('div', { class: 'bar', style: 'margin-top:16px' });
-    if (st.canManage && st.available !== false) {
-      if (!st.calendar_id || !st.drive_folder_id) bar.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'ws-enable', text: 'Créer l’agenda et le dossier du projet', onclick: function () { runWorkspace('workspace.enable'); } }));
-      else bar.appendChild(el('button', { type: 'button', class: 'btn', id: 'ws-sync', text: 'Synchroniser maintenant', onclick: function () { runWorkspace('workspace.sync'); } }));
-    } else if (!st.canManage) {
-      bar.appendChild(el('p', { class: 'note', text: 'Seuls le chef de projet, le DPL et le Program Leader activent l’agenda et le dossier.' }));
-    }
-    panel.appendChild(bar);
-    if (state.wsReport) {
-      var r = state.wsReport, lines = [];
-      lines.push(plural(r.created, 'événement créé', 'événements créés') + ', ' + plural(r.updated, 'mis à jour', 'mis à jour') + ', ' + plural(r.removed, 'retiré', 'retirés') + '.');
-      lines.push(plural(r.folders, 'dossier créé ou renommé', 'dossiers créés ou renommés') + '.');
-      lines.push('Partagés avec les ' + plural(r.members || 0, 'membre', 'membres') + ' du projet' + (r.shared ? ' (' + plural(r.shared, 'nouvel accès', 'nouveaux accès') + ')' : '') + '.');
-      var list = el('ul', { class: 'report', id: 'ws-report' }, lines.map(function (t) { return el('li', { text: t }); }));
-      r.errors.forEach(function (e) { list.appendChild(el('li', { class: 'late', text: e })); });
-      panel.appendChild(list);
-    }
-  }
-  function runWorkspace(action) {
-    var btn = $('ws-enable') || $('ws-sync');
-    if (btn) btn.disabled = true;
-    call(action, { projectId: state.projectId }, true).then(function (st) {
-      state.wsReport = st.report;
-      toast(action === 'workspace.enable' ? 'Agenda et dossier en service.' : 'Synchronisation terminée.');
-      return loadWorkspace();
-    }).catch(function (e) { if (btn) btn.disabled = false; toast(e.message || 'Opération impossible.', true); });
+  function editProject() {
+    var p = current(), d = state.data;
+    openForm({
+      title: 'Renommer ou modifier le projet', ok: 'Enregistrer',
+      fields: [
+        { key: 'name', label: 'Nom du projet', value: p.name, maxlength: 120 },
+        { key: 'code', label: 'Code', value: p.code, maxlength: 20, half: true },
+        { key: 'status', label: 'Statut', type: 'select', value: p.status, options: d.statuses.map(function (s) { return { value: s, label: s }; }), half: true },
+        { key: 'start_date', label: 'Début', type: 'date', value: p.start_date, half: true }, { key: 'end_date', label: 'Fin visée', type: 'date', value: p.target_end, half: true }
+      ],
+      onSubmit: function (v) {
+        return call('projects.save', { id: p.id, version: p.version, values: v }, true).then(function (r) { toast('Projet enregistré : ' + r.name + '.'); return load(r.id); });
+      }
+    });
   }
 
-  // ------------------------------------------------------------ événements
-  Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) {
-    b.addEventListener('click', function () { setTab(b.getAttribute('data-tab')); });
-  });
-  $('picker').addEventListener('change', function () { loadProject(this.value); });
-  $('reload').addEventListener('click', function () { loadProject(state.projectId); });
-  $('form-ok').addEventListener('click', submitForm);
-  $('form-cancel').addEventListener('click', closeForm);
-  $('form').addEventListener('cancel', function (e) { e.preventDefault(); closeForm(); });
-
-  // ------------------------------------------------------------ démarrage
-  state.tab = BOOT.tab || 'ecarts';
-  syncTabs();
-  call('planning.catalog', {}).then(function (cat) {
-    state.catalog = cat;
-    var first = BOOT.project || (cat.projects.filter(function (p) { return p.status !== 'Clos'; })[0] || cat.projects[0] || {}).id;
-    if (!first) { empty($('panel-' + state.tab), 'Aucun projet pour l’instant.', 'Créez un projet dans l’application AppSheet, puis revenez ici.'); return; }
-    state.projectId = first;
-    fillPicker();
-    return loadProject(first);
-  }).catch(function (e) { failed($('panel-' + state.tab), e); });
-
-  window.__ppm = { state: state, setTab: setTab, loadProject: loadProject };
+  $('picker').addEventListener('change', function () { select(this.value); });
+  $('project-new').addEventListener('click', newProject);
+  $('project-edit').addEventListener('click', editProject);
+  $('gf-form').addEventListener('submit', function (e) { e.preventDefault(); submitForm(); });
+  $('gf-cancel').addEventListener('click', function () { closeDialog($('genform')); });
+  load(BOOT.project || '');
+  window.__ppm = { state: state };
 })();
 </script>
 </body>

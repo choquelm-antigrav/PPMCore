@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.9.1">
+<meta name="ppm-version" content="0.10.0">
 <?!= include('Style') ?>
 <style>
   .panel { padding: 16px 24px 32px; }
@@ -201,6 +201,7 @@ var BOOT = <?!= boot ?>;
     $('nav-suivi').setAttribute('href', base + '?view=suivi' + (state.projectId ? '&project=' + state.projectId : '') + '&tab=' + state.tab);
     $('nav-copilot').setAttribute('href', base + '?view=copilote' + (state.projectId ? '&project=' + state.projectId : ''));
     try { google.script.history.replace(null, { view: 'suivi', project: state.projectId, tab: state.tab }); } catch (e) { /* hors web app */ }
+    if (window.ppmTab) ppmTab('suivi', state.tab);
   }
   function fillPicker() {
     var sel = $('picker'); clear(sel);

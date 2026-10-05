@@ -256,54 +256,38 @@
   @media (max-width: 900px) { header { padding: 14px 12px 12px; } header .title h1 { font-size: 22px; } }
 </style>
 <style>
-  .panel { padding: 16px 24px 32px; }
-  .panel[hidden] { display: none; }
-  .bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 20px; margin: 0 0 16px; }
-  .bar label.field { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
-  .bar select { min-width: 220px; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 0 0 16px; }
-  .card { padding: 12px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
-  .card .k { margin: 0; color: var(--muted); font-size: 13px; }
-  .card .v { margin: 2px 0 0; font-size: 20px; font-weight: 600; }
-  .card .s { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
-  .card.alert .v { color: var(--red); }
-  .late { color: var(--red); font-weight: 500; }
-  .early { color: var(--green); }
-  .muted { color: var(--muted); }
-  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12.5px; background: var(--tint); color: var(--ink); white-space: nowrap; }
-  .badge.active { background: var(--summary); color: #FFFFFF; }
-  .badge.pending { background: var(--warn-bg); color: var(--warn-ink); }
-  .badge.refused { background: var(--alert-bg); color: var(--alert-ink); }
-  .badge.added { background: var(--ok-bg); color: var(--ok-ink); }
-  .badge.removed { background: var(--alert-bg); color: var(--alert-ink); }
-  .badge.changed { background: var(--warn-bg); color: var(--warn-ink); }
-  td .actions { display: flex; flex-wrap: wrap; gap: 6px; }
-  td .btn { padding: 3px 10px; font-size: 13.5px; }
-  .note { margin: 0 0 16px; color: var(--muted); max-width: 70ch; }
-  .table-wrap + .note { margin-top: 10px; }
-  .intro { margin: 0 0 16px; max-width: 70ch; }
-  .ws { display: grid; gap: 12px; max-width: 720px; }
-  .ws .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px;
-    padding: 12px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
-  .ws .row strong { display: block; }
-  .report { margin: 0; padding-left: 18px; }
-  dialog label.lbl { display: grid; gap: 2px; margin: 0 0 10px; font-size: 13px; color: var(--muted); }
-  dialog input[type=text], dialog textarea { padding: 6px 8px; border: 1px solid var(--rule); border-radius: 4px; color: var(--ink); }
-  dialog textarea { min-height: 76px; resize: vertical; }
-  dialog fieldset { margin: 0 0 12px; padding: 0; border: 0; }
-  dialog legend { margin: 0 0 4px; font-weight: 600; }
-  dialog .opt { display: flex; align-items: flex-start; gap: 8px; margin: 4px 0; cursor: pointer; }
-  .th-check { width: 32px; }
-  @media (max-width: 700px) {
-    .panel { padding: 12px; }
-    .status .seg { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
-    .status .seg button { border-left: 0; border-top: 1px solid var(--rule); }
-    .status .seg button:nth-child(-n+2) { border-top: 0; }
-    .status .seg button:nth-child(even) { border-left: 1px solid var(--rule); }
-    #reload { margin-left: 0 !important; }
-    .bar select { min-width: 0; width: 100%; }
-    .bar label.field { width: 100%; }
-  }
+  main { padding: 16px 24px 28px; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
+  .box { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px; }
+  .box h2.sec { margin: 0 0 12px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 0 0 12px; }
+  .filters input[type=search], .filters select { padding: 7px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--ink); }
+  .filters input[type=search] { min-width: 220px; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 100px; font-size: 12px; background: var(--tint); color: var(--ink); white-space: nowrap; }
+  .badge.ext { background: var(--warn-bg); color: var(--warn-ink); } .badge.ok { background: var(--ok-bg); color: var(--ok-ink); } .badge.warn { background: var(--warn-bg); color: var(--warn-ink); }
+  td small { display: block; color: var(--muted); }
+  td.num { text-align: right; white-space: nowrap; }
+  select.inline, input.inline { padding: 4px 8px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--ink); max-width: 100%; }
+  input.rate-input { width: 96px; text-align: right; }
+  .actions-cell { display: flex; gap: 6px; flex-wrap: wrap; }
+  .actions-cell .btn { padding: 3px 10px; font-size: 13.5px; }
+  .teams { list-style: none; margin: 0; padding: 0; }
+  .teams li { padding: 8px 0; border-bottom: 1px solid var(--rule); }
+  .teams li:last-child { border-bottom: 0; }
+  .teams .t-name { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--ink); cursor: pointer; text-align: left; }
+  .teams .t-name[aria-pressed="true"] { color: var(--accent); }
+  .teams small { display: block; color: var(--muted); }
+  .teams .t-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .teams .t-actions .btn { padding: 2px 8px; font-size: 12.5px; }
+  .note { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+  #genform { width: min(540px, calc(100% - 32px)); max-width: none; }
+  .ed-grid { display: grid; gap: 12px; }
+  .ed-grid label.lbl { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
+  .ed-grid input, .ed-grid select { padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--ink); min-width: 0; width: 100%; }
+  .ed-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .ed-error { margin: 12px 0 0; color: var(--red); font-weight: 500; }
+  .btn.danger { background: var(--red); border-color: var(--red); color: #FFFFFF; }
+  dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; padding: 12px; } .ed-row2 { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -527,37 +511,54 @@
 </script>
 <header>
   <div class="title">
-    <h1 id="title">Suivi</h1>
-    <p class="context" id="context"></p>
+    <h1 id="title">Ressources</h1>
+    <span class="context" id="context"></span>
   </div>
   <div class="controls">
-    <select id="picker" aria-label="Projet"></select>
+    <label class="field">Rôles dans le projet <select id="picker" aria-label="Projet"></select></label>
+    <button type="button" class="btn" id="team-add" hidden>Ajouter une équipe</button>
+    <button type="button" class="btn primary" id="person-add" hidden>Ajouter une personne</button>
   </div>
 </header>
 
-<div class="status">
-  <div class="seg" role="tablist" aria-label="Rubriques">
-    <button type="button" role="tab" data-tab="ecarts" aria-pressed="true">Écarts à la baseline</button>
-    <button type="button" role="tab" data-tab="changes" aria-pressed="false" id="tab-changes">Changements à valider</button>
-    <button type="button" role="tab" data-tab="baselines" aria-pressed="false">Baselines</button>
-    <button type="button" role="tab" data-tab="workspace" aria-pressed="false">Agenda et Drive</button>
-  </div>
-  <button type="button" class="icon-btn" id="reload" style="margin-left:auto" aria-label="Actualiser" title="Actualiser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
-</div>
+<main>
+  <section class="box" aria-label="Personnes">
+    <h2 class="sec">Personnes</h2>
+    <div class="filters">
+      <input type="search" id="res-search" placeholder="Rechercher un nom, une fonction…" aria-label="Rechercher">
+      <select id="team-filter" aria-label="Équipe"></select>
+      <select id="type-filter" aria-label="Statut"><option value="">Internes et externes</option><option value="Interne">Internes</option><option value="Externe">Externes</option></select>
+      <span class="muted" id="count"></span>
+    </div>
+    <div id="people"></div>
+    <p class="note" id="people-note"></p>
+  </section>
+  <aside class="box" aria-label="Équipes">
+    <h2 class="sec">Équipes</h2>
+    <ul class="teams" id="teams-list"></ul>
+    <p class="note" id="teams-note"></p>
+  </aside>
+</main>
 
-<section class="panel" id="panel-ecarts" aria-label="Écarts à la baseline"></section>
-<section class="panel" id="panel-changes" aria-label="Changements à valider" hidden></section>
-<section class="panel" id="panel-baselines" aria-label="Baselines" hidden></section>
-<section class="panel" id="panel-workspace" aria-label="Agenda et Drive" hidden></section>
+<dialog id="genform" aria-labelledby="gf-title">
+  <form id="gf-form" novalidate>
+    <h2 id="gf-title"></h2>
+    <div class="ed-grid" id="gf-body"></div>
+    <p class="ed-error" id="gf-error" role="alert" hidden></p>
+    <div class="actions">
+      <button type="button" class="btn" id="gf-cancel">Annuler</button>
+      <button type="submit" class="btn primary" id="gf-ok">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
 
-<dialog id="form">
-  <h2 id="form-title"></h2>
-  <p id="form-text"></p>
-  <label class="lbl" id="form-label-wrap">Libellé (facultatif)<input type="text" id="form-label" maxlength="60"></label>
-  <label class="lbl"><span id="form-reason-label">Justification</span><textarea id="form-reason" maxlength="500"></textarea></label>
+<dialog id="confirm" aria-labelledby="confirm-title">
+  <h2 id="confirm-title"></h2>
+  <p id="confirm-text"></p>
+  <p class="ed-error" id="confirm-error" role="alert" hidden></p>
   <div class="actions">
-    <button type="button" class="btn" id="form-cancel">Annuler</button>
-    <button type="button" class="btn primary" id="form-ok">Valider</button>
+    <button type="button" class="btn" id="confirm-cancel">Annuler</button>
+    <button type="button" class="btn danger" id="confirm-ok">Retirer</button>
   </div>
 </dialog>
 
@@ -570,9 +571,9 @@ var BOOT = <?!= boot ?>;
 (function () {
   'use strict';
 
-  var state = { tab: 'ecarts', projectId: '', catalog: null, list: null, diff: null, compare: { base: '', to: '' },
-    onlyChanges: true, feed: null, showAll: false, selected: {}, ws: null, wsReport: null, form: null, seq: 0 };
+  var state = { data: null, projectId: '', team: '', catalog: null, seq: 0 };
   var $ = function (id) { return document.getElementById(id); };
+  var COUNTRY_LIST = [['FR', 'France'], ['DE', 'Allemagne'], ['UK', 'Royaume-Uni'], ['IN', 'Inde']];
 
   // ------------------------------------------------------------ outils
   function el(tag, attrs, children) {
@@ -587,41 +588,13 @@ var BOOT = <?!= boot ?>;
     return n;
   }
   function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
-  function uuid() {
-    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
-    return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2);
-  }
-  function frDate(s) {
-    if (!s) return '';
-    var p = String(s).slice(0, 10).split('-');
-    return p[2] + '/' + p[1] + '/' + p[0];
-  }
-  function frDateTime(s) {
-    if (!s) return '';
-    var d = new Date(s);
-    if (isNaN(d.getTime())) return frDate(s);
-    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
-    return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-  }
-  function isoDate(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v)); }
-  function plural(n, one, many) { return n + ' ' + (Math.abs(n) > 1 ? many : one); }
-  function days(n) {
-    if (n === null || n === undefined) return '';
-    if (n === 0) return '=';
-    return (n > 0 ? '+' : '−') + plural(Math.abs(n), 'jour', 'jours');
-  }
-  function euros(n) {
-    if (n === null || n === undefined) return '';
-    return Number(n).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
-  }
+  function uuid() { return window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2); }
   var toastTimer = null;
   function toast(msg, isError) {
     var t = $('toast');
-    t.textContent = msg;
-    t.className = 'toast' + (isError ? ' error' : '');
-    t.hidden = false;
+    t.textContent = msg; t.className = 'toast' + (isError ? ' error' : ''); t.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { t.hidden = true; }, isError ? 7000 : 3500);
+    toastTimer = setTimeout(function () { t.hidden = true; }, isError ? 8000 : 3500);
   }
   function call(action, params, write) {
     var pre = window.ppmPreloaded && window.ppmPreloaded(action, params, write);
@@ -631,433 +604,281 @@ var BOOT = <?!= boot ?>;
       google.script.run
         .withSuccessHandler(function (res) {
           document.body.classList.remove('busy');
-          if (res && res.ok) resolve(res.data);
-          else reject(res && res.error ? res.error : { code: 'INTERNAL', message: 'Réponse inattendue du serveur.' });
+          if (res && res.ok) resolve(res.data); else reject(res && res.error ? res.error : { code: 'INTERNAL', message: 'Réponse inattendue du serveur.' });
         })
         .withFailureHandler(function (err) {
           document.body.classList.remove('busy');
-          reject({ code: 'NETWORK', message: 'Le serveur ne répond pas. Vérifiez la connexion puis cliquez sur Actualiser.', details: String(err) });
+          reject({ code: 'NETWORK', message: 'Le serveur ne répond pas. Vérifiez la connexion puis rechargez la page.', details: String(err) });
         })
         .uiCall(action, params || {}, write ? uuid() : null);
     });
   }
-  function loading(panel) { clear(panel); panel.appendChild(el('p', { class: 'loading', text: 'Chargement…' })); }
-  function empty(panel, title, text, extra) {
-    clear(panel);
-    panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: title }), el('span', { text: text }), extra || null]));
-  }
-  function failed(panel, err) {
-    empty(panel, 'Chargement impossible.', (err && err.message) || 'Erreur inconnue.');
-  }
-  function badge(text, cls) { return el('span', { class: 'badge ' + (cls || ''), text: text }); }
-  function card(k, v, s, alert) {
-    return el('div', { class: 'card' + (alert ? ' alert' : '') }, [el('p', { class: 'k', text: k }), el('p', { class: 'v', text: v }), s ? el('p', { class: 's', text: s }) : null]);
-  }
-  function table(head, rows) {
-    return el('div', { class: 'table-wrap' }, [el('table', {}, [
-      el('thead', {}, [el('tr', {}, head.map(function (h) { return typeof h === 'string' ? el('th', { scope: 'col', text: h }) : h; }))]),
-      el('tbody', {}, rows)
-    ])]);
-  }
+  function plural(n, one, many) { return n + ' ' + (Math.abs(n) > 1 ? many : one); }
+  function fail(e) { toast(ppmErrorText(e), true); }
+  function openDialog(d) { if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
+  function closeDialog(d) { if (d.close) d.close(); else d.removeAttribute('open'); }
 
-  // ------------------------------------------------------------ navigation
-  function remember() {
-    var base = BOOT.baseUrl || '';
-    $('nav-plan').setAttribute('href', base + '?view=gantt' + (state.projectId ? '&project=' + state.projectId : ''));
-    $('nav-struct').setAttribute('href', base + '?view=structure' + (state.projectId ? '&project=' + state.projectId : ''));
-    $('nav-suivi').setAttribute('href', base + '?view=suivi' + (state.projectId ? '&project=' + state.projectId : '') + '&tab=' + state.tab);
-    $('nav-copilot').setAttribute('href', base + '?view=copilote' + (state.projectId ? '&project=' + state.projectId : ''));
-    try { google.script.history.replace(null, { view: 'suivi', project: state.projectId, tab: state.tab }); } catch (e) { /* hors web app */ }
-    if (window.ppmTab) ppmTab('suivi', state.tab);
+  // ------------------------------------------------------------ formulaire générique et confirmation
+  function fillSelect(sel, options, value) {
+    clear(sel);
+    options.forEach(function (o) { sel.appendChild(el('option', { value: o.value, text: o.label })); });
+    sel.value = value === undefined || value === null ? (options[0] ? options[0].value : '') : value;
   }
-  function fillPicker() {
-    var sel = $('picker'); clear(sel);
-    var cat = state.catalog, byProgram = {};
-    cat.projects.forEach(function (p) { (byProgram[p.program_id || ''] = byProgram[p.program_id || ''] || []).push(p); });
-    var sortCode = function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); };
-    var group = function (label, list) {
-      if (!list || !list.length) return;
-      var og = el('optgroup', { label: label });
-      list.sort(sortCode).forEach(function (p) { og.appendChild(el('option', { value: p.id, text: p.code + ' ' + p.name + (p.status === 'Clos' ? ' (clos)' : '') })); });
-      sel.appendChild(og);
-    };
-    cat.programs.slice().sort(sortCode).forEach(function (g) { group(g.code + ' ' + g.name, byProgram[g.id]); });
-    group('Hors programme', byProgram['']);
-    sel.value = state.projectId;
-  }
-  function syncTabs() {
-    Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) {
-      b.setAttribute('aria-pressed', String(b.getAttribute('data-tab') === state.tab));
-    });
-    ['ecarts', 'changes', 'baselines', 'workspace'].forEach(function (t) { $('panel-' + t).hidden = t !== state.tab; });
-    var l = state.list;
-    $('tab-changes').hidden = !!l && !l.canReadFeed;
-  }
-  function setTab(t) {
-    if (t === 'changes' && state.list && !state.list.canReadFeed) t = 'ecarts';
-    state.tab = t; syncTabs(); remember(); return loadTab();
-  }
-
-  // ------------------------------------------------------------ chargement
-  function loadProject(id) {
-    state.projectId = id; state.selected = {}; state.compare = { base: '', to: '' }; state.wsReport = null;
-    $('picker').value = id;
-    remember();
-    var ticket = ++state.seq;
-    loading($('panel-' + state.tab));
-    return call('baselines.list', { projectId: id }).then(function (l) {
-      if (ticket !== state.seq) return;
-      state.list = l;
-      renderHeader();
-      if (state.tab === 'changes' && !l.canReadFeed) state.tab = 'ecarts';
-      syncTabs(); remember();
-      if (l.canReadFeed) refreshPending();
-      return loadTab();
-    }).catch(function (e) { failed($('panel-' + state.tab), e); toast(e.message || 'Erreur.', true); });
-  }
-  function reloadList() {
-    return call('baselines.list', { projectId: state.projectId }).then(function (l) { state.list = l; renderHeader(); syncTabs(); });
-  }
-  function loadTab() {
-    if (!state.list) return Promise.resolve();
-    if (state.tab === 'ecarts') return loadDiff();
-    if (state.tab === 'changes') return loadFeed();
-    if (state.tab === 'baselines') { renderBaselines(); return Promise.resolve(); }
-    return loadWorkspace();
-  }
-  function activeBaseline() { return (state.list.baselines || []).filter(function (b) { return b.status === 'Active'; })[0] || null; }
-
-  function renderHeader() {
-    var l = state.list, p = l.project;
-    $('title').textContent = p.code + ' ' + p.name;
-    var a = activeBaseline();
-    var pending = l.baselines.filter(function (b) { return b.status === 'Demandée'; }).length;
-    var ctx = $('context'); clear(ctx);
-    ctx.appendChild(el('span', { class: 'chip' + (a ? '' : ' warn'), text: a ? a.label + ' active' : 'Pas de baseline',
-      title: a ? 'Figée le ' + frDate(a.decided_at) + ' par ' + a.decided_by : '' }));
-    if (pending) ctx.appendChild(el('span', { class: 'chip warn', text: plural(pending, 'demande en attente', 'demandes en attente') }));
-  }
-  function refreshPending() {
-    call('changes.feed', { projectId: state.projectId, limit: 1 }).then(function (f) {
-      $('tab-changes').textContent = 'Changements à valider' + (f.pending ? ' (' + f.pending + ')' : '');
-    }).catch(function () { /* onglet laissé tel quel */ });
-  }
-
-  // ------------------------------------------------------------ écarts
-  function loadDiff() {
-    var panel = $('panel-ecarts');
-    var a = activeBaseline();
-    if (!a && !state.compare.base) { renderNoBaseline(panel); return Promise.resolve(); }
-    loading(panel);
-    var params = { projectId: state.projectId };
-    if (state.compare.base) params.baselineId = state.compare.base;
-    if (state.compare.to) params.compareTo = state.compare.to;
-    return call('baselines.diff', params).then(function (d) { state.diff = d; renderDiff(); }).catch(function (e) { failed(panel, e); });
-  }
-  function renderNoBaseline(panel) {
-    var l = state.list, extra = null;
-    if (l.canManage) extra = el('p', {}, [el('button', { type: 'button', class: 'btn primary', text: 'Figer la baseline B0', onclick: function () { openCreate(null); } })]);
-    else if (l.canRequest) extra = el('p', {}, [el('button', { type: 'button', class: 'btn', text: 'Demander une baseline', onclick: openRequest })]);
-    empty(panel, 'Pas encore de baseline pour ce projet.',
-      'Une baseline fige les dates, les responsables, le budget et le périmètre du projet ; les écarts se mesurent ensuite par rapport à elle.', extra);
-  }
-  function renderDiff() {
-    var panel = $('panel-ecarts'), d = state.diff, t = d.totals;
-    clear(panel);
-    var frozen = state.list.baselines.filter(function (b) { return b.status === 'Active' || b.status === 'Archivée'; });
-    var baseSel = el('select', { id: 'cmp-base', 'aria-label': 'Baseline de référence' });
-    frozen.forEach(function (b) { baseSel.appendChild(el('option', { value: b.id, text: b.label + (b.status === 'Active' ? ' (active)' : '') + ' — ' + frDate(b.decided_at) })); });
-    baseSel.value = d.baseline.id;
-    var toSel = el('select', { id: 'cmp-to', 'aria-label': 'Comparée à' });
-    toSel.appendChild(el('option', { value: '', text: 'Le planning d’aujourd’hui' }));
-    frozen.forEach(function (b) { if (b.id !== d.baseline.id) toSel.appendChild(el('option', { value: b.id, text: 'La baseline ' + b.label })); });
-    toSel.value = d.compareTo ? d.compareTo.id : '';
-    baseSel.addEventListener('change', function () { state.compare.base = baseSel.value; if (state.compare.to === baseSel.value) state.compare.to = ''; loadDiff(); });
-    toSel.addEventListener('change', function () { state.compare.to = toSel.value; loadDiff(); });
-    var only = el('input', { type: 'checkbox', id: 'only-changes' });
-    only.checked = state.onlyChanges;
-    only.addEventListener('change', function () { state.onlyChanges = only.checked; renderDiff(); });
-    panel.appendChild(el('div', { class: 'bar' }, [
-      el('label', { class: 'field' }, ['Référence', baseSel]), el('label', { class: 'field' }, ['Comparée à', toSel]),
-      el('label', { class: 'toggle' }, [only, 'Seulement les éléments qui ont changé'])
-    ]));
-
-    var cards = el('div', { class: 'cards' });
-    cards.appendChild(card('Fin du plan', t.end ? frDate(t.end) : '—',
-      t.end_slip === null ? 'Référence : ' + frDate(t.end_base) : (t.end_slip === 0 ? 'Comme la référence' : days(t.end_slip) + ' ouvrés (référence ' + frDate(t.end_base) + ')'), t.end_slip > 0));
-    cards.appendChild(card('Éléments glissés', String(t.slipped), t.slipped ? 'jusqu’à ' + plural(t.max_slip, 'jour ouvré', 'jours ouvrés') : (t.advanced ? plural(t.advanced, 'élément avancé', 'éléments avancés') : 'aucun'), t.slipped > 0));
-    cards.appendChild(card('Périmètre', (t.added ? '+' + t.added : '0') + ' / ' + (t.removed ? '−' + t.removed : '0'), 'ajoutés / retirés', t.added + t.removed > 0));
-    cards.appendChild(card('Responsables changés', String(t.owner_changes), ''));
-    var hasBudget = d.seeBudget && (t.budget || t.budget_base);
-    if (hasBudget) cards.appendChild(card('Budget prévu', euros(t.budget), t.budget_delta ? (t.budget_delta > 0 ? '+' : '') + euros(t.budget_delta) + ' par rapport à la référence' : 'Comme la référence', t.budget_delta > 0));
-    panel.appendChild(cards);
-
-    var items = d.items.filter(function (i) { return !state.onlyChanges || i.state !== 'same'; });
-    if (!items.length) {
-      panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucun écart.' }), el('span', { text: 'Le planning comparé est identique à la référence.' })]));
-      return;
-    }
-    var stateText = { added: ['Ajouté', 'added'], removed: ['Retiré', 'removed'], changed: ['Modifié', 'changed'], same: ['Identique', ''] };
-    var dateCell = function (s, f, type) { return !f ? '—' : (type === 'Jalon' || s === f || !s ? frDate(f) : frDate(s) + ' → ' + frDate(f)); };
-    var head = ['Élément', 'Référence', 'Comparé', 'Glissement', 'Responsable'];
-    if (hasBudget) head.push('Budget');
-    head.push('État');
-    var rows = items.map(function (i) {
-      var slip = i.slip === null || i.slip === undefined ? '' : days(i.slip);
-      var owner = i.owner_changed ? i.base_owner_name + ' → ' + i.owner_name : (i.owner_name || i.base_owner_name || '—');
-      var cells = [
-        el('td', {}, [i.name, el('div', { class: 'muted', text: i.item_type + (i.wp_name ? ' · WP ' + i.wp_name : '') })]),
-        el('td', { text: i.state === 'added' ? '—' : dateCell(i.base_start, i.base_finish, i.item_type) }),
-        el('td', { text: i.state === 'removed' ? '—' : dateCell(i.start, i.finish, i.item_type) }),
-        el('td', { class: 'num' + (i.slip > 0 ? ' late' : i.slip < 0 ? ' early' : ''), text: slip }),
-        el('td', { text: owner })
-      ];
-      if (hasBudget) cells.push(el('td', { class: 'num', text: i.budget_delta ? (i.budget_delta > 0 ? '+' : '') + euros(i.budget_delta) : (i.budget ? euros(i.budget) : '') }));
-      cells.push(el('td', {}, [badge(stateText[i.state][0], stateText[i.state][1])]));
-      return el('tr', { 'data-item': i.id }, cells);
-    });
-    panel.appendChild(table(head, rows));
-    panel.appendChild(el('p', { class: 'note', text: 'Glissement de la fin, en jours ouvrés du calendrier du projet : positif = plus tard que la référence.' }));
-  }
-
-  // ------------------------------------------------------------ changements à valider
-  function loadFeed() {
-    var panel = $('panel-changes');
-    loading(panel);
-    return call('changes.feed', { projectId: state.projectId, all: state.showAll }).then(function (f) {
-      state.feed = f; state.selected = {}; renderFeed();
-      $('tab-changes').textContent = 'Changements à valider' + (f.pending ? ' (' + f.pending + ')' : '');
-    }).catch(function (e) { failed(panel, e); });
-  }
-  function valueText(v) { return v === '' || v === null || v === undefined ? '(vide)' : isoDate(v) ? frDate(v) : String(v); }
-  function renderFeed() {
-    var panel = $('panel-changes'), f = state.feed;
-    clear(panel);
-    if (!f.baseline) {
-      empty(panel, 'Pas de baseline active.', 'Le fil des changements démarre quand une baseline est figée : chaque modification des dates, responsables, budget ou périmètre y apparaît jusqu’à sa validation.');
-      return;
-    }
-    if (!f.canAck) panel.appendChild(el('p', { class: 'note', text: 'Lecture seule : le chef de projet et le DPL valident.' }));
-    var all = el('input', { type: 'checkbox', id: 'show-all' });
-    all.checked = state.showAll;
-    all.addEventListener('change', function () { state.showAll = all.checked; loadFeed(); });
-    var bar = el('div', { class: 'bar' }, [el('label', { class: 'toggle' }, [all, 'Afficher aussi les changements déjà validés'])]);
-    if (f.canAck && f.pending) {
-      bar.appendChild(el('button', { type: 'button', class: 'btn', id: 'ack-selected', text: 'Valider la sélection', onclick: ackSelected }));
-      bar.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'ack-all', text: 'Tout valider (' + f.pending + ')', onclick: ackAll }));
-    }
-    panel.appendChild(bar);
-    if (!f.items.length) {
-      panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Rien à valider.' }), el('span', { text: 'Aucune modification des données figées depuis la dernière validation.' })]));
-      return;
-    }
-    var head = [];
-    if (f.canAck) head.push(el('th', { scope: 'col', class: 'th-check' }, [el('span', { class: 'muted', text: '✓' })]));
-    head = head.concat(['Quand', 'Qui', 'Élément', 'Changement', 'État']);
-    var rows = f.items.map(function (e) {
-      var change;
-      if (e.what === 'modification') change = [e.field_label + ' : ', el('span', { class: 'muted', text: valueText(e.old_value) }), ' → ', el('strong', { text: valueText(e.new_value) })];
-      else change = [e.what === 'ajout' ? 'Ajouté' : e.what === 'suppression' ? 'Supprimé' : 'Rétabli'];
-      var cells = [];
-      if (f.canAck) {
-        var box = el('input', { type: 'checkbox', 'data-event': e.id, 'aria-label': 'Sélectionner : ' + e.entity });
-        box.checked = !!state.selected[e.id];
-        box.disabled = e.acknowledged;
-        box.addEventListener('change', function () { if (box.checked) state.selected[e.id] = true; else delete state.selected[e.id]; });
-        cells.push(el('td', {}, [box]));
+  function openForm(spec) {
+    $('gf-title').textContent = spec.title;
+    var body = $('gf-body'); clear(body);
+    var inputs = {}, pending = null;
+    var flush = function () { if (pending) { body.appendChild(el('div', { class: 'ed-row2' }, pending)); pending = null; } };
+    spec.fields.forEach(function (f) {
+      var c;
+      if (f.type === 'select') { c = el('select', { id: 'gf-' + f.key }); fillSelect(c, f.options || [], f.value); }
+      else {
+        var a = { type: f.type || 'text', id: 'gf-' + f.key, autocomplete: 'off' };
+        if (f.maxlength) a.maxlength = String(f.maxlength);
+        if (f.type === 'number') { a.min = '0'; a.step = 'any'; }
+        c = el('input', a); c.value = f.value === undefined || f.value === null ? '' : f.value;
       }
-      cells.push(el('td', { text: frDateTime(e.at) }), el('td', { text: e.actor_name || e.actor, title: e.actor }), el('td', { text: e.entity }), el('td', {}, change),
-        el('td', {}, [e.acknowledged ? badge('Validé' + (e.acknowledged_by ? ' par ' + e.acknowledged_by : '')) : badge('À valider', 'pending')]));
-      return el('tr', { 'data-event-row': e.id }, cells);
+      inputs[f.key] = c;
+      var lab = el('label', { class: 'lbl' }, [f.label, c]);
+      if (f.half) { pending = pending || []; pending.push(lab); if (pending.length === 2) flush(); } else { flush(); body.appendChild(lab); }
     });
-    panel.appendChild(table(head, rows));
+    flush();
+    if (spec.note) body.appendChild(el('p', { class: 'note', text: spec.note }));
+    state.gform = { spec: spec, inputs: inputs };
+    $('gf-error').hidden = true; $('gf-ok').textContent = spec.ok || 'Enregistrer'; $('gf-ok').disabled = false;
+    openDialog($('genform'));
+    var first = body.querySelector('input, select'); if (first) first.focus();
   }
-  function ackSelected() {
-    var ids = Object.keys(state.selected);
-    if (!ids.length) { toast('Cochez d’abord les changements à valider.', true); return; }
-    call('changes.ack', { ids: ids }, true).then(function (r) {
-      toast(plural(r.acknowledged, 'changement validé', 'changements validés') + '.'); return loadFeed();
-    }).catch(function (e) { toast(e.message || 'Validation impossible.', true); });
-  }
-  function ackAll() {
-    call('changes.ack', { projectId: state.projectId, all: true }, true).then(function (r) {
-      toast(plural(r.acknowledged, 'changement validé', 'changements validés') + '.'); return loadFeed();
-    }).catch(function (e) { toast(e.message || 'Validation impossible.', true); });
-  }
-
-  // ------------------------------------------------------------ baselines
-  var STATUS = { 'Active': 'active', 'Demandée': 'pending', 'Refusée': 'refused', 'Archivée': '' };
-  function renderBaselines() {
-    var panel = $('panel-baselines'), l = state.list;
-    clear(panel);
-    var bar = el('div', { class: 'bar' });
-    if (l.canManage) bar.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'create-btn', text: activeBaseline() ? 'Figer une nouvelle baseline' : 'Figer la baseline B0', onclick: function () { openCreate(null); } }));
-    else if (l.canRequest) bar.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'request-btn', text: 'Demander une nouvelle baseline', onclick: openRequest }));
-    panel.appendChild(bar);
-    if (!l.baselines.length) {
-      panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucune baseline ni demande.' })]));
-      return;
-    }
-    var rows = l.baselines.map(function (b) {
-      var actions = el('div', { class: 'actions' });
-      if (b.status === 'Demandée' && l.canManage) {
-        actions.appendChild(el('button', { type: 'button', class: 'btn primary', text: 'Figer', onclick: function () { openCreate(b); } }));
-        actions.appendChild(el('button', { type: 'button', class: 'btn', text: 'Refuser', onclick: function () { openRefuse(b); } }));
-      }
-      if (b.status === 'Archivée' && l.canManage) actions.appendChild(el('button', { type: 'button', class: 'btn', text: 'Réactiver', onclick: function () { openActivate(b); } }));
-      if (b.status === 'Active' || b.status === 'Archivée') {
-        actions.appendChild(el('button', { type: 'button', class: 'btn', text: 'Voir les écarts', onclick: function () {
-          state.compare = { base: b.id, to: '' };
-          setTab('ecarts');
-        } }));
-      }
-      var who = b.status === 'Demandée' ? 'Demandée par ' + b.requested_by + ' le ' + frDate(b.created_at)
-        : (b.decided_by ? (b.status === 'Refusée' ? 'Refusée' : 'Figée') + ' par ' + b.decided_by + ' le ' + frDate(b.decided_at) : '');
-      return el('tr', { 'data-baseline': b.id }, [
-        el('td', {}, [el('strong', { text: b.label || 'Demande' }), b.items ? el('div', { class: 'muted', text: plural(b.items, 'élément figé', 'éléments figés') }) : null]),
-        el('td', {}, [badge(b.status, STATUS[b.status])]),
-        el('td', { text: b.justification }),
-        el('td', { text: who }),
-        el('td', {}, [actions])
-      ]);
-    });
-    panel.appendChild(table(['Baseline', 'État', 'Justification', 'Décision', ''], rows));
-  }
-
-  // Boîte de saisie commune (figer, demander, refuser, réactiver).
-  function openForm(opts) {
-    state.form = opts;
-    $('form-title').textContent = opts.title;
-    $('form-text').textContent = opts.text || '';
-    $('form-label-wrap').hidden = !opts.label;
-    $('form-label').value = opts.labelValue || '';
-    $('form-reason-label').textContent = opts.reasonLabel || 'Justification';
-    $('form-reason').value = opts.reasonValue || '';
-    $('form-ok').textContent = opts.ok || 'Valider';
-    $('form-ok').disabled = false;
-    var d = $('form');
-    if (d.showModal) d.showModal(); else d.setAttribute('open', '');
-    $('form-reason').focus();
-  }
-  function closeForm() { state.form = null; var d = $('form'); if (d.open) { if (d.close) d.close(); else d.removeAttribute('open'); } }
   function submitForm() {
-    var f = state.form;
-    if (!f) return;
-    var reason = $('form-reason').value.trim();
-    if (!reason && !f.reasonOptional) { toast((f.reasonLabel || 'La justification') + ' est obligatoire.', true); $('form-reason').focus(); return; }
-    $('form-ok').disabled = true;
-    f.submit(reason, $('form-label').value.trim()).then(function (msg) {
-      closeForm(); toast(msg);
-      return reloadList().then(loadTab).then(function () { if (state.list.canReadFeed) refreshPending(); });
-    }).catch(function (e) { $('form-ok').disabled = false; toast(e.message || 'Opération impossible.', true); });
+    var g = state.gform;
+    if (!g) return;
+    var values = {};
+    Object.keys(g.inputs).forEach(function (k) { values[k] = g.inputs[k].value; });
+    $('gf-ok').disabled = true;
+    Promise.resolve().then(function () { return g.spec.onSubmit(values); }).then(function () { closeDialog($('genform')); }).catch(function (err) {
+      $('gf-ok').disabled = false;
+      var m = $('gf-error'); m.textContent = err && err.code === 'CONFLICT' ? 'Modifié entre-temps par quelqu’un d’autre : fermez, actualisez puis recommencez.' : ppmErrorText(err); m.hidden = false;
+    });
   }
-  function nextLabel() {
-    var nums = state.list.baselines.filter(function (b) { return b.number !== null && (b.status === 'Active' || b.status === 'Archivée'); }).map(function (b) { return b.number; });
-    return 'B' + (nums.length ? Math.max.apply(null, nums) + 1 : 0);
+  function openConfirm(title, text, okLabel, action) {
+    $('confirm-title').textContent = title; $('confirm-text').textContent = text;
+    $('confirm-ok').textContent = okLabel; $('confirm-error').hidden = true; $('confirm-ok').disabled = false;
+    state.confirmAction = function () {
+      $('confirm-ok').disabled = true;
+      return action().then(function () { closeDialog($('confirm')); }).catch(function (err) { $('confirm-ok').disabled = false; var m = $('confirm-error'); m.textContent = ppmErrorText(err); m.hidden = false; });
+    };
+    openDialog($('confirm'));
   }
-  function openCreate(request) {
-    var label = nextLabel();
+
+  // ------------------------------------------------------------ chargement et rendu
+  function load() {
+    var ticket = ++state.seq;
+    return call('ressources.get', { projectId: state.projectId }).then(function (d) {
+      if (ticket !== state.seq) return;
+      state.data = d; render();
+    }).catch(function (e) { var p = $('people'); clear(p); p.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Chargement impossible.' }), el('span', { text: (e && e.message) || 'Erreur inconnue.' })])); });
+  }
+
+  function teamOptions(emptyLabel) {
+    return [{ value: '', label: emptyLabel }].concat(state.data.teams.map(function (t) { return { value: t.id, label: new Array(t.depth + 1).join('— ') + t.name }; }));
+  }
+
+  function visiblePeople() {
+    var q = $('res-search').value.trim().toLowerCase(), type = $('type-filter').value, team = state.team;
+    return state.data.people.filter(function (p) {
+      if (type && p.resource_type !== type) return false;
+      if (team === '__none') { if (p.team_id) return false; } else if (team && p.team_id !== team) return false;
+      return !q || (p.name + ' ' + p.job_function + ' ' + p.organization + ' ' + p.supplier).toLowerCase().indexOf(q) >= 0;
+    });
+  }
+
+  /** Peut-elle se connecter ? Il faut une adresse e-mail dans un domaine autorisé ; le rôle dit ensuite ce qu'elle peut faire. */
+  function accessBadge(p) {
+    var d = state.data;
+    if (p.access === 'ok') return el('span', { class: 'badge ok', text: 'Peut se connecter', title: p.email });
+    if (p.access === 'outside') return el('span', { class: 'badge warn', text: 'Hors domaine', title: p.email + ' : hors des domaines autorisés (' + d.domains.join(', ') + ')' });
+    return el('span', { class: 'badge warn', text: 'Sans adresse', title: 'Sans adresse e-mail professionnelle, la personne figure dans les listes mais ne peut pas se connecter.' });
+  }
+
+  function roleCell(p) {
+    var d = state.data;
+    if (!state.projectId) return el('span', { class: 'muted', text: '—' });
+    if (d.canAssign) {
+      var sel = el('select', { class: 'inline role-select', 'data-id': p.resource_id, 'aria-label': 'Rôle de ' + p.name + ' dans le projet' });
+      fillSelect(sel, [{ value: '', label: 'Aucun' }].concat(d.roleChoices.map(function (c) { return { value: c.code, label: c.label }; })), p.project_role);
+      // un rôle que l'on ne peut pas attribuer (plus élevé que le sien) reste affiché, sans pouvoir être modifié
+      if (p.project_role && !d.roleChoices.some(function (c) { return c.code === p.project_role; })) { sel.disabled = true; sel.appendChild(el('option', { value: p.project_role, text: p.project_role === 'CP' ? 'Chef de projet' : 'Membre affecté' })); sel.value = p.project_role; }
+      sel.addEventListener('change', function () {
+        call('people.setProjectRole', { projectId: state.projectId, resourceId: p.resource_id, role: sel.value }, true)
+          .then(function () { toast(p.name + ' : ' + (sel.value ? sel.options[sel.selectedIndex].text.toLowerCase() : 'plus de rôle de projet') + '.'); return load(); })
+          .catch(function (e) { fail(e); return load(); });
+      });
+      return sel;
+    }
+    return el('span', { text: p.project_role === 'CP' ? 'Chef de projet' : p.project_role === 'MEMBER' ? 'Membre affecté' : '—' });
+  }
+
+  function rateCell(p) {
+    var d = state.data;
+    if (!d.canRates) return null;
+    var inp = el('input', { type: 'number', class: 'inline rate-input', min: '0', step: 'any', 'data-id': p.resource_id, 'aria-label': 'Taux journalier de ' + p.name, placeholder: '—' });
+    inp.value = p.daily_rate === null ? '' : p.daily_rate;
+    inp.addEventListener('change', function () {
+      call('people.setRate', { resourceId: p.resource_id, daily_rate: inp.value }, true)
+        .then(function (r) { p.daily_rate = r.daily_rate; toast('Taux de ' + p.name + ' enregistré.'); return load(); })
+        .catch(function (e) { fail(e); inp.value = p.daily_rate === null ? '' : p.daily_rate; });
+    });
+    return el('span', {}, [inp, p.rate_source === 'grille' ? el('small', { text: 'de la grille' }) : null]);
+  }
+
+  function render() {
+    var d = state.data;
+    $('title').textContent = d.project ? 'Ressources de ' + d.project.name : 'Ressources';
+    $('context').textContent = d.project ? d.project.code : '';
+    $('person-add').hidden = !d.canEdit; $('team-add').hidden = !d.canEdit;
+    var tf = $('team-filter'), cur = state.team;
+    fillSelect(tf, [{ value: '', label: 'Toutes les équipes' }, { value: '__none', label: 'Sans équipe' }].concat(d.teams.map(function (t) { return { value: t.id, label: new Array(t.depth + 1).join('— ') + t.name }; })), cur);
+    var rows = visiblePeople();
+    $('count').textContent = plural(rows.length, 'personne', 'personnes');
+    var host = $('people'); clear(host);
+    if (!rows.length) host.appendChild(el('div', { class: 'empty' }, [el('strong', { text: d.people.length ? 'Aucune personne ne correspond.' : 'Aucune personne pour l’instant.' }), el('span', { text: d.canEdit && !d.people.length ? 'Ajoutez la première avec « Ajouter une personne ».' : '' })]));
+    else {
+      var head = ['Nom', 'Statut', 'Accès', 'Équipe', 'Rôle dans le projet', 'Autres rôles'];
+      if (d.canRates) head.push('Taux journalier (€)');
+      if (d.canEdit) head.push('');
+      host.appendChild(el('div', { class: 'table-wrap' }, [el('table', { id: 'res-table' }, [
+        el('thead', {}, [el('tr', {}, head.map(function (h, i) { return el('th', { scope: 'col', class: h.indexOf('Taux') === 0 ? 'num' : '', text: h }); }))]),
+        el('tbody', {}, rows.map(function (p) {
+          var others = p.roles.filter(function (r) { return !(r.scope_type === 'project' && (r.code === 'CP' || r.code === 'MEMBER')); });
+          var cells = [
+            el('td', {}, [p.name, el('small', { text: [p.job_function, p.resource_type === 'Externe' ? (p.supplier || p.organization) : p.organization].filter(Boolean).join(' · ') || ' ' })]),
+            el('td', {}, [el('span', { class: 'badge' + (p.resource_type === 'Externe' ? ' ext' : ''), text: p.resource_type })]),
+            el('td', {}, [accessBadge(p)]),
+            el('td', { text: p.team || '—' }), el('td', {}, [roleCell(p)]),
+            el('td', { text: others.length ? others.map(function (r) { return r.label + (r.scope ? ' (' + r.scope + ')' : ''); }).join(', ') : '—' })
+          ];
+          if (d.canRates) cells.push(el('td', { class: 'num' }, [rateCell(p)]));
+          if (d.canEdit) cells.push(el('td', {}, [el('div', { class: 'actions-cell' }, [
+            el('button', { type: 'button', class: 'btn person-edit', 'data-id': p.resource_id, text: 'Modifier', onclick: function () { openPersonForm(p); } }),
+            el('button', { type: 'button', class: 'btn person-remove', 'data-id': p.resource_id, text: 'Retirer', onclick: function () { removePerson(p); } })])]));
+          return el('tr', { 'data-id': p.resource_id }, cells);
+        }))])]));
+    }
+    $('people-note').textContent = 'Pour qu’une personne intervienne : une fiche avec son adresse e-mail professionnelle, puis un rôle. ' + (d.canRates ? 'Le taux journalier de la fiche sert de base au budget, interne ou externe ; il est figé dans chaque ligne de budget à sa création. Seuls le chef de projet et le DPL le voient.' : '');
+    var tl = $('teams-list'); clear(tl);
+    if (!d.teams.length) tl.appendChild(el('li', {}, [el('span', { class: 'muted', text: 'Aucune équipe.' })]));
+    d.teams.forEach(function (t) {
+      var li = el('li', { 'data-team': t.id, style: 'padding-left:' + (t.depth * 14) + 'px' }, [
+        el('button', { type: 'button', class: 't-name', 'aria-pressed': String(state.team === t.id), text: t.name, onclick: function () { state.team = state.team === t.id ? '' : t.id; render(); } }),
+        el('small', { text: plural(t.members, 'membre', 'membres') + (t.manager ? ' · ' + t.manager : '') + (t.cost_center ? ' · ' + t.cost_center : '') })]);
+      if (d.canEdit) li.appendChild(el('div', { class: 't-actions' }, [
+        el('button', { type: 'button', class: 'btn team-edit', text: 'Modifier', onclick: function () { openTeamForm(t, null); } }),
+        el('button', { type: 'button', class: 'btn team-sub', text: 'Sous-équipe', onclick: function () { openTeamForm(null, t); } }),
+        el('button', { type: 'button', class: 'btn team-del', text: 'Supprimer', onclick: function () { deleteTeam(t); } })]));
+      tl.appendChild(li);
+    });
+    $('teams-note').textContent = d.canEdit ? 'Cliquez sur une équipe pour filtrer les personnes. Une équipe ne se supprime que vide.' : '';
+    try { google.script.history.replace(null, { view: 'ressources', project: state.projectId }); } catch (e) { /* hors web app */ }
+    var base = BOOT.baseUrl || '';
+    Array.prototype.forEach.call(document.querySelectorAll('.ppm-bar [data-view]'), function (n) {
+      var vw = n.getAttribute('data-view');
+      if (state.projectId && ['overview', 'gantt', 'structure', 'ressources', 'suivi', 'copilote', 'budget'].indexOf(vw) >= 0) n.setAttribute('href', base + '?view=' + vw + '&project=' + state.projectId);
+    });
+  }
+
+  // ------------------------------------------------------------ personnes
+  function openPersonForm(p) {
+    var d = state.data, create = !p;
+    p = p || {};
+    var fields = [
+      { key: 'name', label: 'Nom', value: p.name, maxlength: 120 },
+      { key: 'resource_type', label: 'Statut', type: 'select', value: p.resource_type || 'Interne', options: [{ value: 'Interne', label: 'Interne' }, { value: 'Externe', label: 'Externe' }], half: true },
+      { key: 'country', label: 'Pays', type: 'select', value: p.country || '', options: [{ value: '', label: '—' }].concat(COUNTRY_LIST.map(function (c) { return { value: c[0], label: c[1] }; })), half: true },
+      { key: 'job_function', label: 'Fonction', value: p.job_function, maxlength: 80, half: true },
+      { key: 'organization', label: 'Organisation', value: p.organization, maxlength: 80, half: true },
+      { key: 'supplier', label: 'Fournisseur (si externe)', value: p.supplier, maxlength: 80, half: true },
+      { key: 'team_id', label: 'Équipe', type: 'select', value: p.team_id || '', options: teamOptions('Aucune'), half: true }
+    ];
+    if (create) fields.splice(1, 0, { key: 'email', label: 'Adresse e-mail (facultative)', value: '', maxlength: 120 });
+    if (d.canRates) fields.push({ key: 'daily_rate', label: 'Taux journalier (€, facultatif)', type: 'number', value: p.daily_rate === null || p.daily_rate === undefined ? '' : p.daily_rate });
     openForm({
-      title: 'Figer la baseline ' + label,
-      text: request ? 'Demande de ' + request.requested_by + ' : « ' + request.justification + ' ». ' : '',
-      label: true, labelValue: label, reasonValue: request ? request.justification : '',
-      ok: 'Figer ' + label,
-      submit: function (reason, lbl) {
-        var params = { projectId: state.projectId, justification: reason, label: lbl };
-        if (request) { params.requestId = request.id; params.version = request.version; }
-        return call('baselines.create', params, true).then(function (b) {
-          state.compare = { base: '', to: '' };
-          return 'Baseline ' + b.label + ' figée : ' + plural(b.items, 'élément', 'éléments') + '.';
-        });
+      title: create ? 'Ajouter une personne' : 'Modifier ' + p.name, ok: create ? 'Ajouter' : 'Enregistrer',
+      note: create ? 'L’adresse e-mail professionnelle (domaine : ' + d.domains.join(', ') + ') donne accès à l’outil ; le rôle dans le projet se choisit ensuite dans le tableau.' : 'L’adresse e-mail ne se modifie que par l’administrateur.',
+      fields: fields,
+      onSubmit: function (v) {
+        var values = { name: v.name, resource_type: v.resource_type, country: v.country, job_function: v.job_function, organization: v.organization, supplier: v.supplier, team_id: v.team_id };
+        var req;
+        if (create) { if (v.email.trim()) values.email = v.email.trim(); req = call('resources.create', { values: values }, true); }
+        else req = call('resources.update', { id: p.resource_id, version: p.version, patch: values }, true);
+        return req.then(function (rec) {
+          var id = create ? rec.id : p.resource_id;
+          var rate = v.daily_rate === undefined ? null : v.daily_rate;
+          if (d.canRates && rate !== null && String(rate) !== String(p.daily_rate === null || p.daily_rate === undefined ? '' : p.daily_rate)) return call('people.setRate', { resourceId: id, daily_rate: rate }, true);
+        }).then(function () { toast(create ? 'Personne ajoutée.' : 'Fiche enregistrée.'); return load(); });
       }
     });
-    $('form-text').textContent += 'Les dates, responsables, budget et périmètre actuels deviennent la référence ; la baseline active actuelle sera archivée.';
-  }
-  function openRequest() {
-    openForm({ title: 'Demander une nouvelle baseline', text: 'Le chef de projet recevra votre demande et décidera de figer ou non une nouvelle référence.',
-      ok: 'Envoyer la demande', submit: function (reason) {
-        return call('baselines.request', { projectId: state.projectId, justification: reason }, true).then(function () { return 'Demande envoyée.'; });
-      } });
-  }
-  function openRefuse(b) {
-    openForm({ title: 'Refuser la demande', text: 'Demande de ' + b.requested_by + ' : « ' + b.justification + ' ».', reasonLabel: 'Motif du refus', ok: 'Refuser',
-      submit: function (reason) { return call('baselines.refuse', { id: b.id, reason: reason, version: b.version }, true).then(function () { return 'Demande refusée.'; }); } });
-  }
-  function openActivate(b) {
-    openForm({ title: 'Réactiver ' + b.label, text: 'Elle redevient la référence des écarts ; la baseline active actuelle sera archivée.', reasonLabel: 'Motif', ok: 'Réactiver ' + b.label,
-      submit: function (reason) { return call('baselines.activate', { id: b.id, reason: reason, version: b.version }, true).then(function () { return b.label + ' réactivée.'; }); } });
   }
 
-  // ------------------------------------------------------------ agenda et Drive
-  function loadWorkspace() {
-    var panel = $('panel-workspace');
-    loading(panel);
-    return call('workspace.status', { projectId: state.projectId }).then(function (st) { state.ws = st; renderWorkspace(); }).catch(function (e) { failed(panel, e); });
-  }
-  function renderWorkspace() {
-    var panel = $('panel-workspace'), st = state.ws;
-    clear(panel);
-    var box = el('div', { class: 'ws' });
-    box.appendChild(el('div', { class: 'row' }, [
-      el('div', {}, [el('strong', { text: 'Agenda du projet' }), el('span', { class: 'muted', text: st.calendar_id ? 'En service.' : 'Pas encore créé.' })]),
-      st.calendar_url ? el('a', { class: 'btn', href: st.calendar_url, target: '_blank', rel: 'noopener', text: 'Ouvrir l’agenda' }) : null
-    ]));
-    box.appendChild(el('div', { class: 'row' }, [
-      el('div', {}, [el('strong', { text: 'Dossier Drive du projet' }), el('span', { class: 'muted', text: st.drive_folder_id ? 'En service.' : 'Pas encore créé.' })]),
-      st.drive_url ? el('a', { class: 'btn', href: st.drive_url, target: '_blank', rel: 'noopener', text: 'Ouvrir le dossier' }) : null
-    ]));
-    panel.appendChild(box);
-    var bar = el('div', { class: 'bar', style: 'margin-top:16px' });
-    if (st.canManage && st.available !== false) {
-      if (!st.calendar_id || !st.drive_folder_id) bar.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'ws-enable', text: 'Créer l’agenda et le dossier du projet', onclick: function () { runWorkspace('workspace.enable'); } }));
-      else bar.appendChild(el('button', { type: 'button', class: 'btn', id: 'ws-sync', text: 'Synchroniser maintenant', onclick: function () { runWorkspace('workspace.sync'); } }));
-    } else if (!st.canManage) {
-      bar.appendChild(el('p', { class: 'note', text: 'Seuls le chef de projet, le DPL et le Program Leader activent l’agenda et le dossier.' }));
-    }
-    panel.appendChild(bar);
-    if (state.wsReport) {
-      var r = state.wsReport, lines = [];
-      lines.push(plural(r.created, 'événement créé', 'événements créés') + ', ' + plural(r.updated, 'mis à jour', 'mis à jour') + ', ' + plural(r.removed, 'retiré', 'retirés') + '.');
-      lines.push(plural(r.folders, 'dossier créé ou renommé', 'dossiers créés ou renommés') + '.');
-      lines.push('Partagés avec les ' + plural(r.members || 0, 'membre', 'membres') + ' du projet' + (r.shared ? ' (' + plural(r.shared, 'nouvel accès', 'nouveaux accès') + ')' : '') + '.');
-      var list = el('ul', { class: 'report', id: 'ws-report' }, lines.map(function (t) { return el('li', { text: t }); }));
-      r.errors.forEach(function (e) { list.appendChild(el('li', { class: 'late', text: e })); });
-      panel.appendChild(list);
-    }
-  }
-  function runWorkspace(action) {
-    var btn = $('ws-enable') || $('ws-sync');
-    if (btn) btn.disabled = true;
-    call(action, { projectId: state.projectId }, true).then(function (st) {
-      state.wsReport = st.report;
-      toast(action === 'workspace.enable' ? 'Agenda et dossier en service.' : 'Synchronisation terminée.');
-      return loadWorkspace();
-    }).catch(function (e) { if (btn) btn.disabled = false; toast(e.message || 'Opération impossible.', true); });
+  function removePerson(p) {
+    call('people.remove', { id: p.resource_id, dryRun: true }).then(function (s) {
+      var parts = [];
+      if (s.roles) parts.push(plural(s.roles, 'rôle terminé', 'rôles terminés'));
+      if (s.teams) parts.push(plural(s.teams, 'équipe sans responsable', 'équipes sans responsable'));
+      if (s.wps) parts.push(plural(s.wps, 'workpackage', 'workpackages') + ' à réattribuer');
+      if (s.items) parts.push(plural(s.items, 'livrable ou jalon', 'livrables et jalons') + ' à réattribuer');
+      openConfirm('Retirer ' + s.name + ' ?', s.name + ' ne sera plus dans les listes' + (parts.length ? ' : ' + parts.join(', ') : '') + '. La fiche reste dans l’historique.', 'Retirer', function () {
+        return call('people.remove', { id: p.resource_id, version: p.version }, true).then(function () { toast(s.name + ' retiré(e).'); return load(); });
+      });
+    }).catch(fail);
   }
 
-  // ------------------------------------------------------------ événements
-  Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) {
-    b.addEventListener('click', function () { setTab(b.getAttribute('data-tab')); });
-  });
-  $('picker').addEventListener('change', function () { loadProject(this.value); });
-  $('reload').addEventListener('click', function () { loadProject(state.projectId); });
-  $('form-ok').addEventListener('click', submitForm);
-  $('form-cancel').addEventListener('click', closeForm);
-  $('form').addEventListener('cancel', function (e) { e.preventDefault(); closeForm(); });
+  // ------------------------------------------------------------ équipes
+  function openTeamForm(team, parent) {
+    var d = state.data, create = !team;
+    openForm({
+      title: create ? (parent ? 'Nouvelle sous-équipe de « ' + parent.name + ' »' : 'Nouvelle équipe') : 'Modifier l’équipe', ok: create ? 'Créer' : 'Enregistrer',
+      fields: [
+        { key: 'name', label: 'Nom', value: team ? team.name : '', maxlength: 80 },
+        { key: 'parent_team_id', label: 'Équipe parente', type: 'select', value: team ? team.parent_team_id : (parent ? parent.id : ''),
+          options: [{ value: '', label: 'Aucune (racine)' }].concat(d.teams.filter(function (t) { return !team || t.id !== team.id; }).map(function (t) { return { value: t.id, label: new Array(t.depth + 1).join('— ') + t.name }; })) },
+        { key: 'manager_resource_id', label: 'Responsable', type: 'select', value: team ? team.manager_id : '', options: [{ value: '', label: '—' }].concat(d.people.filter(function (p) { return p.resource_type === 'Interne'; }).map(function (p) { return { value: p.resource_id, label: p.name }; })) },
+        { key: 'cost_center', label: 'Centre de coût', value: team ? team.cost_center : '', maxlength: 40 }
+      ],
+      onSubmit: function (v) {
+        var req = create ? call('teams.create', { values: v }, true) : call('teams.update', { id: team.id, version: team.version, patch: v }, true);
+        return req.then(function () { toast(create ? 'Équipe créée.' : 'Équipe enregistrée.'); return load(); });
+      }
+    });
+  }
+  function deleteTeam(t) {
+    openConfirm('Supprimer l’équipe ?', 'L’équipe « ' + t.name + ' » sera supprimée. Elle doit être vide : ni membres ni sous-équipes.', 'Supprimer', function () {
+      return call('teams.delete', { id: t.id, version: t.version }, true).then(function () { toast('Équipe supprimée.'); if (state.team === t.id) state.team = ''; return load(); });
+    });
+  }
 
   // ------------------------------------------------------------ démarrage
-  state.tab = BOOT.tab || 'ecarts';
-  syncTabs();
+  $('res-search').addEventListener('input', function () { render(); });
+  $('type-filter').addEventListener('change', function () { render(); });
+  $('team-filter').addEventListener('change', function () { state.team = this.value; render(); });
+  $('picker').addEventListener('change', function () { state.projectId = this.value; load(); });
+  $('person-add').addEventListener('click', function () { openPersonForm(null); });
+  $('team-add').addEventListener('click', function () { openTeamForm(null, null); });
+  $('gf-form').addEventListener('submit', function (e) { e.preventDefault(); submitForm(); });
+  $('gf-cancel').addEventListener('click', function () { closeDialog($('genform')); });
+  $('confirm-cancel').addEventListener('click', function () { closeDialog($('confirm')); });
+  $('confirm-ok').addEventListener('click', function () { if (state.confirmAction) state.confirmAction(); });
+
   call('planning.catalog', {}).then(function (cat) {
     state.catalog = cat;
-    var first = BOOT.project || (cat.projects.filter(function (p) { return p.status !== 'Clos'; })[0] || cat.projects[0] || {}).id;
-    if (!first) { empty($('panel-' + state.tab), 'Aucun projet pour l’instant.', 'Créez un projet dans l’application AppSheet, puis revenez ici.'); return; }
-    state.projectId = first;
-    fillPicker();
-    return loadProject(first);
-  }).catch(function (e) { failed($('panel-' + state.tab), e); });
+    var sel = $('picker'); clear(sel);
+    var sortCode = function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); };
+    cat.projects.slice().sort(sortCode).forEach(function (p) { sel.appendChild(el('option', { value: p.id, text: p.code + ' ' + p.name + (p.status === 'Clos' ? ' (clos)' : '') })); });
+    state.projectId = BOOT.project || (cat.projects.filter(function (p) { return p.status !== 'Clos'; })[0] || cat.projects[0] || {}).id || '';
+    sel.value = state.projectId;
+    return load();
+  }).catch(function (e) { $('people').appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Chargement impossible.' }), el('span', { text: (e && e.message) || '' })])); });
 
-  window.__ppm = { state: state, setTab: setTab, loadProject: loadProject };
+  window.__ppm = { state: state };
 })();
 </script>
 </body>

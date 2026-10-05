@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.9.1">
+<meta name="ppm-version" content="0.10.0">
 <?!= include('Style') ?>
 <style>
   .panel { padding: 8px 24px 32px; max-width: 1240px; }
@@ -64,14 +64,12 @@
     <button type="button" data-tab="bilan" aria-pressed="true" hidden>Bilan par CPN</button>
     <button type="button" data-tab="po" aria-pressed="false" hidden>Achats (PO)</button>
     <button type="button" data-tab="budget" aria-pressed="false" hidden>Budget</button>
-    <button type="button" data-tab="taux" aria-pressed="false" hidden>Taux</button>
   </div>
 </div>
 
 <section class="panel" id="panel-bilan" aria-label="Bilan par CPN"></section>
 <section class="panel" id="panel-po" aria-label="Achats" hidden></section>
 <section class="panel" id="panel-budget" aria-label="Budget" hidden></section>
-<section class="panel" id="panel-taux" aria-label="Taux" hidden></section>
 
 <dialog id="genform" aria-labelledby="gf-title">
   <form id="gf-form" novalidate>
@@ -117,8 +115,8 @@ var BOOT = <?!= boot ?>;
 (function () {
   'use strict';
 
-  var TABS = ['bilan', 'po', 'budget', 'taux'];
-  var ACCESS_KEY = { bilan: 'all', po: 'po', budget: 'budget', taux: 'rates' };
+  var TABS = ['bilan', 'po', 'budget'];
+  var ACCESS_KEY = { bilan: 'all', po: 'po', budget: 'budget' };
   var state = { tab: '', projectId: '', catalog: null, access: null, balance: null, po: null, budget: null, rates: null, people: null, outside: null, resources: null, seq: 0 };
   var $ = function (id) { return document.getElementById(id); };
   var STATUS_TONE = { 'À faire': '', 'Lancée': 'warn', 'GR': 'ok', 'Terminée': 'ok' };
@@ -251,6 +249,7 @@ var BOOT = <?!= boot ?>;
     });
     TABS.forEach(function (t) { $('panel-' + t).hidden = t !== state.tab; });
     try { google.script.history.replace(null, { view: 'budget', project: state.projectId, tab: state.tab }); } catch (e) { /* hors web app */ }
+    if (window.ppmTab) ppmTab('budget', state.tab);
     var base = BOOT.baseUrl || '';
     Array.prototype.forEach.call(document.querySelectorAll('.ppm-bar [data-view]'), function (n) {
       var v = n.getAttribute('data-view');
@@ -259,7 +258,7 @@ var BOOT = <?!= boot ?>;
   }
   function firstAllowed() {
     var a = state.access;
-    return a.all ? 'bilan' : a.po ? 'po' : a.budget ? 'budget' : a.rates ? 'taux' : '';
+    return a.all ? 'bilan' : a.po ? 'po' : a.budget ? 'budget' : '';
   }
   function setTab(t) { state.tab = t; syncTabs(); return loadTab(); }
   function invalidate() { state.balance = null; state.po = null; state.budget = null; state.outside = null; }
@@ -294,8 +293,7 @@ var BOOT = <?!= boot ?>;
   function loadTab() {
     if (state.tab === 'bilan') return loadBalance();
     if (state.tab === 'po') return loadPo();
-    if (state.tab === 'budget') return loadBudget();
-    return loadRates();
+    return loadBudget();
   }
   function reload() { invalidate(); return loadTab(); }
 
@@ -522,7 +520,7 @@ var BOOT = <?!= boot ?>;
     });
     panel.appendChild(table('lines-table', head, sorted.map(function (l) {
       var d = dById[l.deliverable_id] || { name: '(livrable)', wp: '' };
-      var cells = [cell([d.name, d.wp ? el('small', { text: d.wp + (d.cpn ? ' · ' + d.cpn : '') }) : null]), cell(l.resource.name), cell(l.cost_type === 'Forfait' ? 'Forfait (externe)' : 'Jours × taux'),
+      var cells = [cell([d.name, d.wp ? el('small', { text: d.wp + (d.cpn ? ' · ' + d.cpn : '') }) : null]), cell(l.resource.name), cell(l.cost_type === 'Forfait' ? 'Forfait (externe)' : 'Jours × taux' + (l.external ? ' (externe)' : '')),
         cell(l.planned_days === null ? '—' : String(l.planned_days), 'num')];
       if (seeRate) cells.push(cell(l.frozen_rate === null ? '—' : eur(l.frozen_rate), 'num'));
       cells.push(cell(eur(l.planned_amount), 'num'));
@@ -546,18 +544,18 @@ var BOOT = <?!= boot ?>;
       var typeOf = {}; people.forEach(function (p) { typeOf[p.resource_id] = p.resource_type; });
       openForm({
         title: create ? 'Nouvelle ligne de budget' : 'Modifier la ligne de budget', ok: create ? 'Ajouter' : 'Enregistrer',
-        note: 'Interne : jours × taux journalier, figé à la création de la ligne. Externe : forfait. L’échéancier se calcule seul et reste modifiable.',
+        note: 'Interne : jours × taux journalier de sa fiche (Ressources), figé à la création de la ligne. Externe : un forfait, ou des jours × son taux. L’échéancier se calcule seul et reste modifiable.',
         fields: [
           create ? { key: 'deliverable_id', label: 'Livrable', type: 'select', value: '', options: [{ value: '', label: 'Choisir un livrable' }].concat(b.deliverables.map(function (d) { return { value: d.id, label: d.name + (d.wp ? ' (' + d.wp + ')' : '') }; })) }
             : { key: 'deliverable_id', label: 'Livrable', type: 'select', value: l.deliverable_id, options: b.deliverables.filter(function (d) { return d.id === l.deliverable_id; }).map(function (d) { return { value: d.id, label: d.name }; }) },
           { key: 'resource_id', label: 'Ressource', type: 'select', value: create ? '' : l.resource.id, options: [{ value: '', label: 'Choisir une ressource' }].concat(people.map(function (p) { return { value: p.resource_id, label: p.name + ' (' + (p.resource_type === 'Externe' ? 'externe' : 'interne') + ')' }; })) },
-          { key: 'planned_days', label: 'Jours prévus (interne)', type: 'number', value: create || l.planned_days === null ? '' : l.planned_days, half: true },
-          { key: 'fixed_amount', label: 'Forfait en € (externe)', type: 'number', value: create || l.fixed_amount === null ? '' : l.fixed_amount, half: true }
+          { key: 'planned_days', label: 'Jours prévus', type: 'number', value: create || l.planned_days === null ? '' : l.planned_days, half: true },
+          { key: 'fixed_amount', label: 'Forfait en € (externe seulement)', type: 'number', value: create || l.fixed_amount === null ? '' : l.fixed_amount, half: true }
         ],
         after: function (i) {
           var sync = function () {
             var ext = typeOf[i.resource_id.value] === 'Externe', chosen = !!i.resource_id.value;
-            i.planned_days.parentNode.hidden = chosen && ext; i.fixed_amount.parentNode.hidden = chosen && !ext;
+            i.fixed_amount.parentNode.hidden = chosen && !ext;
           };
           i.resource_id.addEventListener('change', sync); sync();
         },
@@ -565,7 +563,7 @@ var BOOT = <?!= boot ?>;
           if (create && !v.deliverable_id) return Promise.reject({ message: 'Choisissez un livrable.' });
           if (!v.resource_id) return Promise.reject({ message: 'Choisissez une ressource.' });
           var values = { resource_id: v.resource_id };
-          if (typeOf[v.resource_id] === 'Externe') values.fixed_amount = v.fixed_amount; else values.planned_days = v.planned_days;
+          if (typeOf[v.resource_id] === 'Externe' && v.fixed_amount !== '') values.fixed_amount = v.fixed_amount; else values.planned_days = v.planned_days;
           if (create) values.deliverable_id = v.deliverable_id;
           return call('budget.line.save', { id: create ? '' : l.id, version: create ? undefined : l.version, values: values }, true).then(function () { toast(create ? 'Ligne ajoutée.' : 'Ligne enregistrée.'); return reload(); });
         }
@@ -587,60 +585,6 @@ var BOOT = <?!= boot ?>;
       onSubmit: function (v) {
         var months = v.text.split('\n').map(function (x) { return x.trim(); }).filter(Boolean).map(function (x) { var p = x.split(/\s+/); return { month: p[0], amount: (p[1] || '').replace(',', '.') }; });
         return call('budget.phasing.set', { lineId: l.id, months: months }, true).then(function () { toast('Échéancier enregistré.'); return reload(); });
-      }
-    });
-  }
-
-  // ------------------------------------------------------------ Taux
-  function loadRates() {
-    var panel = $('panel-taux');
-    if (state.rates && state.people) { renderRates(); return Promise.resolve(); }
-    loading(panel);
-    return Promise.all([call('rates.list', {}), call('rates.people', {})]).then(function (r) { state.rates = r[0]; state.people = r[1]; renderRates(); }).catch(function (e) { failed(panel, e); });
-  }
-  function renderRates() {
-    var panel = $('panel-taux'), r = state.rates;
-    clear(panel);
-    panel.appendChild(el('div', { class: 'row' }, [el('button', { type: 'button', class: 'btn primary', id: 'rate-add', text: 'Ajouter un taux', onclick: function () { openRateForm(null); } })]));
-    if (!r.rates.length) panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucun taux journalier.' }), el('span', { text: 'Un taux par profil et par pays, avec sa date d’effet. Il est figé dans chaque ligne de budget à sa création.' })]));
-    else panel.appendChild(table('rates-table', ['Profil', 'Pays', { t: 'Taux journalier' }, 'Date d’effet', ''], r.rates.map(function (x) {
-      return el('tr', { 'data-rate': x.id }, [cell(x.profile), cell(x.country), cell(eur2(x.daily_rate), 'num'), cell(x.effective_date ? frDate(x.effective_date) : 'depuis toujours'), cell(el('div', { class: 'actions-cell' }, [
-        el('button', { type: 'button', class: 'btn rate-edit', text: 'Modifier', onclick: function () { openRateForm(x); } }),
-        el('button', { type: 'button', class: 'btn rate-del', text: 'Supprimer', onclick: function () {
-          openConfirm('Supprimer ce taux ?', x.profile + ' (' + x.country + ') : ' + eur2(x.daily_rate) + '. Les lignes de budget déjà créées gardent leur taux figé.', 'Supprimer', function () {
-            return call('rates.delete', { id: x.id, version: x.version }, true).then(function () { toast('Taux supprimé.'); state.rates = null; return loadRates(); });
-          });
-        } })]))]);
-    })));
-    panel.appendChild(el('p', { class: 'note', text: 'Les taux ne sont visibles que du chef de projet et du DPL.' }));
-    panel.appendChild(el('h2', { class: 'sec', text: 'Profil tarifaire des personnes internes' }));
-    var listId = 'profiles-list';
-    var rows = state.people.map(function (p) {
-      var inp = el('input', { type: 'text', class: 'inline people-profile', list: listId, 'data-id': p.resource_id, 'aria-label': 'Profil de ' + p.name, maxlength: '60' });
-      inp.value = p.rate_profile;
-      inp.addEventListener('change', function () {
-        call('rates.assign', { resource_id: p.resource_id, rate_profile: inp.value }, true).then(function () { toast('Profil de ' + p.name + ' enregistré.'); p.rate_profile = inp.value.trim(); })
-          .catch(function (e) { fail(e); inp.value = p.rate_profile; });
-      });
-      var known = r.rates.some(function (x) { return x.profile.toLowerCase() === (p.rate_profile || '').toLowerCase() && x.country === p.country; });
-      return el('tr', {}, [cell(p.name), cell(p.country || '—'), cell(inp), cell(p.rate_profile ? (known ? el('span', { class: 'badge ok', text: 'taux connu' }) : el('span', { class: 'badge warn', text: 'aucun taux pour ce pays' })) : el('span', { class: 'badge warn', text: 'profil à renseigner' }))]);
-    });
-    panel.appendChild(table('people-table', ['Personne', 'Pays', 'Profil tarifaire', ''], rows));
-    panel.appendChild(el('datalist', { id: listId }, r.profiles.map(function (x) { return el('option', { value: x }); })));
-  }
-  function openRateForm(x) {
-    var create = !x, r = state.rates;
-    openForm({
-      title: create ? 'Nouveau taux journalier' : 'Modifier le taux', ok: create ? 'Ajouter' : 'Enregistrer',
-      fields: [
-        { key: 'profile', label: 'Profil', value: create ? '' : x.profile, maxlength: 60, list: 'gf-profiles' },
-        { key: 'country', label: 'Pays', type: 'select', value: create ? 'FR' : x.country, options: r.countries.map(function (c) { return { value: c, label: c }; }), half: true },
-        { key: 'daily_rate', label: 'Taux journalier (€)', type: 'number', value: create ? '' : x.daily_rate, half: true },
-        { key: 'effective_date', label: 'Date d’effet (facultative)', type: 'date', value: create ? '' : x.effective_date }
-      ],
-      datalists: [{ id: 'gf-profiles', values: r.profiles }],
-      onSubmit: function (v) {
-        return call('rates.set', { id: create ? '' : x.id, version: create ? undefined : x.version, values: v }, true).then(function () { toast('Taux enregistré.'); state.rates = null; return loadRates(); });
       }
     });
   }

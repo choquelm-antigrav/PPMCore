@@ -115,12 +115,22 @@ function truncate(s, max) {
   return s.length > max ? s.slice(0, max - 1) + '…' : s;
 }
 
+/**
+ * Objet de tous les mails de l'outil : « [PPM✴️] » (✴ + sélecteur d'emoji), quel que soit l'envoi. Un préfixe déjà présent, ancien ou non, n'est pas doublé.
+ * Tout envoi doit passer par cette fonction : un test refuse un MailApp.sendEmail qui l'oublierait.
+ */
+var MAIL_PREFIX = '[PPM\u2734\uFE0F]';
+function mailSubject_(subject) {
+  return MAIL_PREFIX + ' ' + String(subject === undefined || subject === null ? '' : subject).replace(/^\s*\[PPM[^\]]*\]\s*/, '');
+}
+
 /** Envoi d'un mail simple ; en l'absence de MailApp (tests), trace dans la console. */
 var SENT_MAILS = null;
 function notifyUser(email, subject, body) {
   if (isBlank(email) || String(email).indexOf('@') < 0) return false;
-  if (SENT_MAILS) { SENT_MAILS.push({ to: email, subject: subject, body: body }); return true; }
-  if (typeof MailApp === 'undefined') { console.log('[mail] ' + email + ' — ' + subject); return false; }
-  MailApp.sendEmail({ to: email, subject: '[PPM] ' + subject, body: body });
+  var full = mailSubject_(subject);
+  if (SENT_MAILS) { SENT_MAILS.push({ to: email, subject: full, body: body }); return true; }
+  if (typeof MailApp === 'undefined') { console.log('[mail] ' + email + ' — ' + full); return false; }
+  MailApp.sendEmail({ to: email, subject: mailSubject_(subject), body: body });
   return true;
 }

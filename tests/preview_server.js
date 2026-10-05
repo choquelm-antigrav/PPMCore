@@ -94,12 +94,14 @@ call('admin@entreprise.com', 'admin.set', { values: { ai_quota: 40, logo_url: 'h
   const link = (name, amount) => ({ deliverable_id: byName(name).id, amount });
   call(A, 'po.save', { values: { po_number: 'CB-458812', cpn: 'CPN-2402', resource_id: res('Carl Weber').id, description: 'Essais statiques, banc 2', start_date: '2026-09-01', end_date: '2026-12-18', amount: 15000, status: 'Lancée', gr_due_date: '2026-10-01' }, links: [link('Rapport d’essais statiques', 15000)] });
   call(A, 'po.save', { values: { po_number: 'CB-459107', cpn: 'CPN-2402', resource_id: res('Carl Weber').id, description: 'Plan d’essais', start_date: '2026-10-05', end_date: '2026-11-13', amount: 6500, status: 'Lancée', gr_due_date: '2026-10-09' }, links: [link('Plan d’essais statiques', 6500)] });
+  c.repoInsert('RiskOpportunity', { project_id: pid, kind: 'Risque', title: 'Retard du banc d’essais', probability: 4, impact: 5, score: 20, status: 'Ouvert' }, S);
+  c.repoInsert('RiskOpportunity', { project_id: pid, kind: 'Risque', title: 'Données matière tardives', probability: 3, impact: 3, score: 9, status: 'Ouvert' }, S);
   call(A, 'po.save', { values: { po_number: 'CB-460001', cpn: 'CPN-2402', resource_id: res('Dora Schmidt').id, description: 'Qualification', amount: 4000, status: 'À faire', gr_due_date: '2027-01-20' }, links: [] });
 }
 
 const src = (f) => fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8');
 const deps = process.env.UI_DEPS || path.join(__dirname, '..', 'node_modules');
-const pages = { structure: 'Structure.html', suivi: 'Suivi.html', gantt: 'Gantt.html', copilote: 'Copilote.html', compte: 'Compte.html', admin: 'Admin.html', budget: 'Budget.html' };
+const pages = { structure: 'Structure.html', suivi: 'Suivi.html', gantt: 'Gantt.html', copilote: 'Copilote.html', compte: 'Compte.html', admin: 'Admin.html', budget: 'Budget.html', overview: 'Overview.html', ressources: 'Ressources.html' };
 function template(view) {
   let html = src(pages[view] || 'Structure.html').replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Header') ?>", src('Header.html'));
   if (view === 'gantt') {
@@ -121,7 +123,7 @@ const server = http.createServer((req, res) => {
     }); return;
   }
   const view = url.searchParams.get('view') || 'structure';
-  const defTab = { structure: 'obs', suivi: 'ecarts', gantt: '', copilote: 'synthese', compte: 'fiche', admin: 'reglages', budget: 'bilan' }[view];
+  const defTab = { structure: 'obs', suivi: 'ecarts', gantt: '', copilote: 'synthese', compte: 'fiche', admin: 'reglages', budget: 'bilan', overview: '', ressources: '' }[view];
   const boot = { project: url.searchParams.get('project') === 'p1' ? p1.id : (url.searchParams.get('project') || ''), program: '', tab: url.searchParams.get('tab') || defTab, mode: url.searchParams.get('mode') || '', baseUrl: '', appsheetUrl: '', version: 'preview', view: view, home: 'gantt', isAdmin: (url.searchParams.get('as') || user) === 'admin@entreprise.com', canBudget: true };
   if (url.searchParams.get('program')) boot.program = prog.id;
   const as = url.searchParams.get('as');

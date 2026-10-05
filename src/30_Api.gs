@@ -41,10 +41,7 @@ function handleRequest(body, actorEmail, opts) {
   try {
     body = body || {};
     var email = String(actorEmail || '').toLowerCase();
-    var domain = allowedDomain();
-    if (!email || !domain || email.split('@')[1] !== domain) {
-      throw new PpmError('FORBIDDEN', 'Accès réservé aux comptes du domaine.');
-    }
+    if (!email || !isAllowedEmail_(email)) throw new PpmError('FORBIDDEN', accessDeniedMessage_(email));
     var major = String(body.apiVersion || PPM_API_VERSION).split('.')[0];
     if (major !== PPM_API_VERSION.split('.')[0]) {
       throw new PpmError('VALIDATION', 'Version d’API non prise en charge : ' + body.apiVersion);

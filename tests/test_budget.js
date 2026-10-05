@@ -68,7 +68,7 @@ module.exports = function () {
     eq(c.data.phasing, [{ month: '2026-10', amount: 2600 }, { month: '2026-11', amount: 2600 }], 'étalé au prorata des jours ouvrés de chaque mois');
     const x = w.line(CP, { deliverable_id: w.cc.id, resource_id: w.xavier.id, fixed_amount: 8000 });
     eq([x.data.cost_type, x.data.frozen_rate, x.data.planned_amount, x.data.phasing], ['Forfait', null, 8000, [{ month: '2026-11', amount: 8000 }]], 'forfait : en totalité le mois de livraison');
-    ok(/Aucun taux journalier pour le profil/.test(w.line(CP, { deliverable_id: w.a.id, resource_id: w.mia.id, planned_days: 3 }).error.message), 'sans profil ni taux : message clair');
+    ok(/Aucun taux journalier pour « Mia » : à renseigner dans Ressources/.test(w.line(CP, { deliverable_id: w.a.id, resource_id: w.mia.id, planned_days: 3 }).error.message), 'sans taux : message clair, qui renvoie vers Ressources');
     ok(/déjà une ligne/.test(w.line(CP, { deliverable_id: w.b.id, resource_id: w.remi.id, planned_days: 2 }).error.message));
     ok(/pas à un jalon/.test(w.line(CP, { deliverable_id: w.j.id, resource_id: w.remi.id, planned_days: 2 }).error.message));
     eq(w.line(CP, { deliverable_id: w.a.id, resource_id: w.remi.id, planned_days: -1 }).error.code, 'VALIDATION');
@@ -253,6 +253,6 @@ module.exports = function () {
     const w = world();
     const keys = Object.keys(w.c.preloadFor_('budget', { project: '', program: '', tab: 'bilan', mode: '', isAdmin: false }, CP));
     eq(keys, ['planning.catalog|{}', 'budget.access|{"projectId":"' + w.p1.id + '"}']);
-    eq([w.c.PAGES.budget, w.c.PAGE_TABS.budget], ['Budget', ['bilan', 'po', 'budget', 'taux']]);
+    eq([w.c.PAGES.budget, w.c.PAGE_TABS.budget], ['Budget', ['bilan', 'po', 'budget']]);
   });
 };
