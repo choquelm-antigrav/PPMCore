@@ -239,13 +239,9 @@
   .hero-note .t b { font-weight: 700; }
   .btn.primary { background: var(--brand); border-color: var(--brand); }
   .btn.primary:hover { background: var(--accent); border-color: var(--accent); }
-  .ppm-nav .ppm-caret { align-self: stretch; margin-left: -8px; padding: 0 8px 0 4px; background: none; border: 0; border-bottom: 3px solid transparent; color: rgba(255, 255, 255, .78); font-size: 11px; cursor: pointer; }
-  .ppm-nav .ppm-caret:hover, .ppm-nav .ppm-caret[aria-expanded="true"] { color: #fff; }
-  .ppm-nav .ppm-caret[hidden] { display: none; }
-  .ppm-sub { position: fixed; z-index: 40; min-width: 230px; margin: 0; padding: 6px 0; list-style: none; background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); }
-  .ppm-sub[hidden] { display: none; }
-  .ppm-sub a { display: block; padding: 9px 18px; color: var(--ink); text-decoration: none; font-size: 14.5px; border-left: 3px solid transparent; }
-  .ppm-sub a:hover, .ppm-sub a:focus { background: var(--hover); outline: none; }
-  .ppm-sub a[aria-current="true"] { font-weight: 700; border-left-color: var(--accent); background: var(--tint); }
-  @media (max-width: 900px) { header { padding: 14px 12px 12px; } header .title h1 { font-size: 22px; } }
+  /* Plus d'onglets : chaque rubrique est une zone de la page, avec son titre */
+  .zone { padding: 22px 24px 0; }
+  .zone h2.sec { margin: 0; }
+  .zone[hidden] { display: none; }
+  @media (max-width: 900px) { header { padding: 14px 12px 12px; } header .title h1 { font-size: 22px; } .zone { padding: 16px 12px 0; } }
 </style>

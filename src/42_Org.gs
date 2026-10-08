@@ -105,6 +105,19 @@ defineAction('roles.options', function (p, ctx) {
 // ---------------------------------------------------------------- personnes
 
 /**
+ * Personnes sans aucun rôle en cours, nulle part : celles qu'on vient de créer et qu'il reste à positionner dans l'organigramme.
+ * Renvoyées avec l'organigramme (par rôles comme par équipes) pour être proposées à l'attribution d'un rôle.
+ */
+function unplacedPeople_(data, ctx, today) {
+  var has = {};
+  (data.assignments || []).forEach(function (a) { if (isBlank(a.end_date) || String(a.end_date) >= today) has[a.resource_id] = true; });
+  var teamsById = indexBy_(data.teams || []), editAll = canEditResources_(ctx);
+  var list = (data.resources || []).filter(function (r) { return !isTrue(r.deleted) && !has[r.id]; })
+    .sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
+  return { total: list.length, people: list.slice(0, 60).map(function (r) { return personCard_(r, teamsById, ctx, editAll); }) };
+}
+
+/**
  * Retire une personne : ses rôles se terminent, elle cesse de diriger une équipe, ses responsabilités sont libérées
  * (les éléments et workpackages qu'elle portait redeviennent « à désigner » et remontent dans les constats).
  * dryRun = true : annonce ce qui se passerait, sans rien changer.

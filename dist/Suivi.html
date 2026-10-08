@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.10.0">
+<meta name="ppm-version" content="0.11.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -245,15 +245,11 @@
   .hero-note .t b { font-weight: 700; }
   .btn.primary { background: var(--brand); border-color: var(--brand); }
   .btn.primary:hover { background: var(--accent); border-color: var(--accent); }
-  .ppm-nav .ppm-caret { align-self: stretch; margin-left: -8px; padding: 0 8px 0 4px; background: none; border: 0; border-bottom: 3px solid transparent; color: rgba(255, 255, 255, .78); font-size: 11px; cursor: pointer; }
-  .ppm-nav .ppm-caret:hover, .ppm-nav .ppm-caret[aria-expanded="true"] { color: #fff; }
-  .ppm-nav .ppm-caret[hidden] { display: none; }
-  .ppm-sub { position: fixed; z-index: 40; min-width: 230px; margin: 0; padding: 6px 0; list-style: none; background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); }
-  .ppm-sub[hidden] { display: none; }
-  .ppm-sub a { display: block; padding: 9px 18px; color: var(--ink); text-decoration: none; font-size: 14.5px; border-left: 3px solid transparent; }
-  .ppm-sub a:hover, .ppm-sub a:focus { background: var(--hover); outline: none; }
-  .ppm-sub a[aria-current="true"] { font-weight: 700; border-left-color: var(--accent); background: var(--tint); }
-  @media (max-width: 900px) { header { padding: 14px 12px 12px; } header .title h1 { font-size: 22px; } }
+  /* Plus d'onglets : chaque rubrique est une zone de la page, avec son titre */
+  .zone { padding: 22px 24px 0; }
+  .zone h2.sec { margin: 0; }
+  .zone[hidden] { display: none; }
+  @media (max-width: 900px) { header { padding: 14px 12px 12px; } header .title h1 { font-size: 22px; } .zone { padding: 16px 12px 0; } }
 </style>
 <style>
   .panel { padding: 16px 24px 32px; }
@@ -315,7 +311,7 @@
   <nav class="ppm-nav" aria-label="Pages de l’outil">
     <a id="nav-overview" data-view="overview" href="#">Overview</a>
     <a id="nav-plan" data-view="gantt" href="#">Planning</a>
-    <a id="nav-struct" data-view="structure" href="#">Structure</a>
+    <a id="nav-struct" data-view="structure" href="#">OBS/WBS</a>
     <a id="nav-res" data-view="ressources" href="#">Ressources</a>
     <a id="nav-suivi" data-view="suivi" href="#">Suivi</a>
     <a id="nav-copilot" data-view="copilote" href="#">Copilote</a>
@@ -408,10 +404,6 @@
     }
   })();
 
-  /** Dernier onglet connu de chaque page (les pages le signalent) : sert à marquer l'onglet courant dans le menu. */
-  var currentTab = {};
-  window.ppmTab = function (view, tab) { currentTab[view] = tab; };
-
   function init() {
     var B = window.BOOT || {};
     var base = B.baseUrl || '';
@@ -431,7 +423,8 @@
     });
     document.getElementById('ppm-admin').hidden = !B.isAdmin;
     document.getElementById('nav-budget').hidden = !B.canBudget;
-    var EYEBROW = { overview: 'Overview · Projet', gantt: 'Planning · Gantt', structure: 'Structure · OBS et WBS', ressources: 'Ressources · Équipes et rôles', suivi: 'Suivi · Baselines', copilote: 'Copilote · Analyse', budget: 'Budget · CPN et achats', compte: 'Mon compte', admin: 'Administration' };
+    document.getElementById('nav-copilot').hidden = !B.copilot; // copilote en suspens tant que PPM_COPILOT n'est pas « oui »
+    var EYEBROW = { overview: 'Overview · Projet', gantt: 'Planning · Gantt', structure: 'OBS/WBS · Organisation et découpage', ressources: 'Ressources · Équipes et rôles', suivi: 'Suivi · Baselines', copilote: 'Copilote · Analyse', budget: 'Budget · CPN et achats', compte: 'Mon compte', admin: 'Administration' };
     var titleBox = document.querySelector('header .title');
     if (titleBox && EYEBROW[B.view] && !titleBox.querySelector('.eyebrow')) {
       var eb = document.createElement('span');
@@ -461,54 +454,6 @@
     if (navBox && window.MutationObserver) new MutationObserver(propagateProject).observe(navBox, { subtree: true, attributes: true, attributeFilter: ['href'] });
     propagateProject();
 
-    // Onglets de Suivi, Copilote et Budget : accessibles directement depuis la bannière, sans recharger la page quand on y est déjà
-    var SUBMENUS = {
-      suivi: [['ecarts', 'Écarts à la baseline'], ['changes', 'Changements à valider'], ['baselines', 'Baselines'], ['workspace', 'Agenda et Drive']],
-      copilote: [['synthese', 'Synthèse'], ['simulation', 'Simulation « et si… »'], ['questions', 'Questions'], ['suggestions', 'Suggestions']],
-      budget: [['bilan', 'Bilan par CPN'], ['po', 'Achats (PO)'], ['budget', 'Budget']]
-    };
-    var menu = document.createElement('ul');
-    menu.className = 'ppm-sub'; menu.id = 'ppm-sub'; menu.setAttribute('role', 'menu'); menu.hidden = true;
-    document.body.appendChild(menu);
-    var openBtn = null;
-    function closeMenu() { menu.hidden = true; if (openBtn) { openBtn.setAttribute('aria-expanded', 'false'); openBtn = null; } }
-    function openMenu(view, caret) {
-      var link = document.querySelector('.ppm-nav a[data-view="' + view + '"]');
-      var href = link ? (link.getAttribute('href') || '') : '';
-      var project = new URLSearchParams(href.indexOf('?') >= 0 ? href.slice(href.indexOf('?') + 1) : '').get('project') || '';
-      while (menu.firstChild) menu.removeChild(menu.firstChild);
-      SUBMENUS[view].forEach(function (it) {
-        var li = document.createElement('li');
-        li.setAttribute('role', 'none');
-        var a = document.createElement('a');
-        a.setAttribute('role', 'menuitem'); a.setAttribute('data-tab', it[0]); a.textContent = it[1];
-        a.href = base + '?view=' + view + '&tab=' + it[0] + (project ? '&project=' + project : '');
-        if (B.view === view && currentTab[view] === it[0]) a.setAttribute('aria-current', 'true');
-        a.addEventListener('click', function (e) {
-          if (B.view === view && window.__ppm && typeof window.__ppm.setTab === 'function') { e.preventDefault(); closeMenu(); window.__ppm.setTab(it[0]); }
-        });
-        li.appendChild(a); menu.appendChild(li);
-      });
-      var r = caret.getBoundingClientRect();
-      menu.style.top = Math.round(r.bottom) + 'px';
-      menu.style.left = Math.max(8, Math.min(Math.round(r.left), window.innerWidth - 250)) + 'px';
-      menu.hidden = false; caret.setAttribute('aria-expanded', 'true'); openBtn = caret;
-      var first = menu.querySelector('a'); if (first) first.focus();
-    }
-    Object.keys(SUBMENUS).forEach(function (view) {
-      var link = document.querySelector('.ppm-nav a[data-view="' + view + '"]');
-      if (!link) return;
-      var caret = document.createElement('button');
-      caret.type = 'button'; caret.className = 'ppm-caret'; caret.setAttribute('data-menu', view);
-      caret.setAttribute('aria-haspopup', 'menu'); caret.setAttribute('aria-expanded', 'false');
-      caret.setAttribute('aria-label', 'Onglets de ' + link.textContent.trim());
-      caret.textContent = '▾'; caret.hidden = link.hidden;
-      link.parentNode.insertBefore(caret, link.nextSibling);
-      caret.addEventListener('click', function (e) { e.stopPropagation(); if (openBtn === caret) closeMenu(); else openMenu(view, caret); });
-    });
-    document.addEventListener('click', function (e) { if (!menu.hidden && !menu.contains(e.target)) closeMenu(); });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !menu.hidden) { var b = openBtn; closeMenu(); if (b) b.focus(); } });
-    window.addEventListener('resize', closeMenu);
     var here = document.querySelector('.ppm-bar [data-view="' + (B.view || '') + '"]');
     if (here) here.setAttribute('aria-current', 'page');
     document.getElementById('ppm-brand').setAttribute('href', base + '?view=' + (B.home || 'overview'));
@@ -536,19 +481,17 @@
 </header>
 
 <div class="status">
-  <div class="seg" role="tablist" aria-label="Rubriques">
-    <button type="button" role="tab" data-tab="ecarts" aria-pressed="true">Écarts à la baseline</button>
-    <button type="button" role="tab" data-tab="changes" aria-pressed="false" id="tab-changes">Changements à valider</button>
-    <button type="button" role="tab" data-tab="baselines" aria-pressed="false">Baselines</button>
-    <button type="button" role="tab" data-tab="workspace" aria-pressed="false">Agenda et Drive</button>
-  </div>
   <button type="button" class="icon-btn" id="reload" style="margin-left:auto" aria-label="Actualiser" title="Actualiser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
 </div>
 
+<div class="zone" id="zone-ecarts"><h2 class="sec">Écarts à la baseline</h2></div>
 <section class="panel" id="panel-ecarts" aria-label="Écarts à la baseline"></section>
-<section class="panel" id="panel-changes" aria-label="Changements à valider" hidden></section>
-<section class="panel" id="panel-baselines" aria-label="Baselines" hidden></section>
-<section class="panel" id="panel-workspace" aria-label="Agenda et Drive" hidden></section>
+<div class="zone" id="zone-changes"><h2 class="sec" id="tab-changes">Changements à valider</h2></div>
+<section class="panel" id="panel-changes" aria-label="Changements à valider"></section>
+<div class="zone" id="zone-baselines"><h2 class="sec">Baselines</h2></div>
+<section class="panel" id="panel-baselines" aria-label="Baselines"></section>
+<div class="zone" id="zone-workspace"><h2 class="sec">Agenda et Drive</h2></div>
+<section class="panel" id="panel-workspace" aria-label="Agenda et Drive"></section>
 
 <dialog id="form">
   <h2 id="form-title"></h2>
@@ -665,10 +608,9 @@ var BOOT = <?!= boot ?>;
     var base = BOOT.baseUrl || '';
     $('nav-plan').setAttribute('href', base + '?view=gantt' + (state.projectId ? '&project=' + state.projectId : ''));
     $('nav-struct').setAttribute('href', base + '?view=structure' + (state.projectId ? '&project=' + state.projectId : ''));
-    $('nav-suivi').setAttribute('href', base + '?view=suivi' + (state.projectId ? '&project=' + state.projectId : '') + '&tab=' + state.tab);
+    $('nav-suivi').setAttribute('href', base + '?view=suivi' + (state.projectId ? '&project=' + state.projectId : ''));
     $('nav-copilot').setAttribute('href', base + '?view=copilote' + (state.projectId ? '&project=' + state.projectId : ''));
-    try { google.script.history.replace(null, { view: 'suivi', project: state.projectId, tab: state.tab }); } catch (e) { /* hors web app */ }
-    if (window.ppmTab) ppmTab('suivi', state.tab);
+    try { google.script.history.replace(null, { view: 'suivi', project: state.projectId }); } catch (e) { /* hors web app */ }
   }
   function fillPicker() {
     var sel = $('picker'); clear(sel);
@@ -685,45 +627,43 @@ var BOOT = <?!= boot ?>;
     group('Hors programme', byProgram['']);
     sel.value = state.projectId;
   }
-  function syncTabs() {
-    Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) {
-      b.setAttribute('aria-pressed', String(b.getAttribute('data-tab') === state.tab));
-    });
-    ['ecarts', 'changes', 'baselines', 'workspace'].forEach(function (t) { $('panel-' + t).hidden = t !== state.tab; });
-    var l = state.list;
-    $('tab-changes').hidden = !!l && !l.canReadFeed;
+  /** Plus d'onglets : toutes les zones s'affichent ; celle des changements est réservée à ceux qui peuvent les lire. */
+  function syncZones() {
+    var show = !state.list || !!state.list.canReadFeed;
+    $('zone-changes').hidden = !show; $('panel-changes').hidden = !show;
   }
-  function setTab(t) {
-    if (t === 'changes' && state.list && !state.list.canReadFeed) t = 'ecarts';
-    state.tab = t; syncTabs(); remember(); return loadTab();
+  /** « Voir les écarts » d'une baseline : on règle la comparaison puis on va à la zone des écarts. */
+  function showDiff() {
+    var p = loadDiff();
+    var z = $('zone-ecarts');
+    if (z.scrollIntoView) z.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return p;
   }
-
   // ------------------------------------------------------------ chargement
   function loadProject(id) {
     state.projectId = id; state.selected = {}; state.compare = { base: '', to: '' }; state.wsReport = null;
     $('picker').value = id;
     remember();
     var ticket = ++state.seq;
-    loading($('panel-' + state.tab));
+    ['ecarts', 'changes', 'baselines', 'workspace'].forEach(function (t) { loading($('panel-' + t)); });
     return call('baselines.list', { projectId: id }).then(function (l) {
       if (ticket !== state.seq) return;
       state.list = l;
       renderHeader();
-      if (state.tab === 'changes' && !l.canReadFeed) state.tab = 'ecarts';
-      syncTabs(); remember();
+      syncZones(); remember();
       if (l.canReadFeed) refreshPending();
-      return loadTab();
-    }).catch(function (e) { failed($('panel-' + state.tab), e); toast(e.message || 'Erreur.', true); });
+      return loadAll();
+    }).catch(function (e) { failed($('panel-ecarts'), e); toast(e.message || 'Erreur.', true); });
   }
   function reloadList() {
-    return call('baselines.list', { projectId: state.projectId }).then(function (l) { state.list = l; renderHeader(); syncTabs(); });
+    return call('baselines.list', { projectId: state.projectId }).then(function (l) { state.list = l; renderHeader(); syncZones(); });
   }
-  function loadTab() {
+  function loadAll() {
     if (!state.list) return Promise.resolve();
-    if (state.tab === 'ecarts') return loadDiff();
-    if (state.tab === 'changes') return loadFeed();
-    if (state.tab === 'baselines') { renderBaselines(); return Promise.resolve(); }
-    return loadWorkspace();
+    renderBaselines();
+    var jobs = [loadDiff(), loadWorkspace()];
+    if (state.list.canReadFeed) jobs.push(loadFeed());
+    return Promise.all(jobs);
   }
   function activeBaseline() { return (state.list.baselines || []).filter(function (b) { return b.status === 'Active'; })[0] || null; }
 
@@ -908,7 +848,7 @@ var BOOT = <?!= boot ?>;
       if (b.status === 'Active' || b.status === 'Archivée') {
         actions.appendChild(el('button', { type: 'button', class: 'btn', text: 'Voir les écarts', onclick: function () {
           state.compare = { base: b.id, to: '' };
-          setTab('ecarts');
+          showDiff();
         } }));
       }
       var who = b.status === 'Demandée' ? 'Demandée par ' + b.requested_by + ' le ' + frDate(b.created_at)
@@ -948,7 +888,7 @@ var BOOT = <?!= boot ?>;
     $('form-ok').disabled = true;
     f.submit(reason, $('form-label').value.trim()).then(function (msg) {
       closeForm(); toast(msg);
-      return reloadList().then(loadTab).then(function () { if (state.list.canReadFeed) refreshPending(); });
+      return reloadList().then(loadAll).then(function () { if (state.list.canReadFeed) refreshPending(); });
     }).catch(function (e) { $('form-ok').disabled = false; toast(e.message || 'Opération impossible.', true); });
   }
   function nextLabel() {
@@ -1036,9 +976,6 @@ var BOOT = <?!= boot ?>;
   }
 
   // ------------------------------------------------------------ événements
-  Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) {
-    b.addEventListener('click', function () { setTab(b.getAttribute('data-tab')); });
-  });
   $('picker').addEventListener('change', function () { loadProject(this.value); });
   $('reload').addEventListener('click', function () { loadProject(state.projectId); });
   $('form-ok').addEventListener('click', submitForm);
@@ -1046,18 +983,16 @@ var BOOT = <?!= boot ?>;
   $('form').addEventListener('cancel', function (e) { e.preventDefault(); closeForm(); });
 
   // ------------------------------------------------------------ démarrage
-  state.tab = BOOT.tab || 'ecarts';
-  syncTabs();
   call('planning.catalog', {}).then(function (cat) {
     state.catalog = cat;
     var first = BOOT.project || (cat.projects.filter(function (p) { return p.status !== 'Clos'; })[0] || cat.projects[0] || {}).id;
-    if (!first) { empty($('panel-' + state.tab), 'Aucun projet pour l’instant.', 'Créez un projet dans l’application AppSheet, puis revenez ici.'); return; }
+    if (!first) { empty($('panel-ecarts'), 'Aucun projet pour l’instant.', 'Créez un projet dans l’application AppSheet, puis revenez ici.'); return; }
     state.projectId = first;
     fillPicker();
     return loadProject(first);
-  }).catch(function (e) { failed($('panel-' + state.tab), e); });
+  }).catch(function (e) { failed($('panel-ecarts'), e); });
 
-  window.__ppm = { state: state, setTab: setTab, loadProject: loadProject };
+  window.__ppm = { state: state, loadProject: loadProject };
 })();
 </script>
 </body>

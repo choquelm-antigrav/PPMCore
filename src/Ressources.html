@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.10.0">
+<meta name="ppm-version" content="0.11.0">
 <?!= include('Style') ?>
 <style>
   main { padding: 16px 24px 28px; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
@@ -288,7 +288,8 @@ var BOOT = <?!= boot ?>;
             el('td', {}, [el('span', { class: 'badge' + (p.resource_type === 'Externe' ? ' ext' : ''), text: p.resource_type })]),
             el('td', {}, [accessBadge(p)]),
             el('td', { text: p.team || '—' }), el('td', {}, [roleCell(p)]),
-            el('td', { text: others.length ? others.map(function (r) { return r.label + (r.scope ? ' (' + r.scope + ')' : ''); }).join(', ') : '—' })
+            el('td', {}, [others.length ? others.map(function (r) { return r.label + (r.scope ? ' (' + r.scope + ')' : ''); }).join(', ') : (p.unplaced ? null : '—'),
+              p.unplaced ? el('a', { class: 'badge warn', href: (BOOT.baseUrl || '') + '?view=structure&project=' + state.projectId, title: 'Aucun rôle pour l’instant : la positionner dans l’organigramme', text: 'À positionner dans l’OBS' }) : null])
           ];
           if (d.canRates) cells.push(el('td', { class: 'num' }, [rateCell(p)]));
           if (d.canEdit) cells.push(el('td', {}, [el('div', { class: 'actions-cell' }, [
@@ -336,7 +337,7 @@ var BOOT = <?!= boot ?>;
     if (d.canRates) fields.push({ key: 'daily_rate', label: 'Taux journalier (€, facultatif)', type: 'number', value: p.daily_rate === null || p.daily_rate === undefined ? '' : p.daily_rate });
     openForm({
       title: create ? 'Ajouter une personne' : 'Modifier ' + p.name, ok: create ? 'Ajouter' : 'Enregistrer',
-      note: create ? 'L’adresse e-mail professionnelle (domaine : ' + d.domains.join(', ') + ') donne accès à l’outil ; le rôle dans le projet se choisit ensuite dans le tableau.' : 'L’adresse e-mail ne se modifie que par l’administrateur.',
+      note: create ? 'L’adresse e-mail professionnelle (domaine : ' + d.domains.join(', ') + ') donne accès à l’outil. Le rôle dans le projet se choisit ensuite dans le tableau ; la personne apparaît aussi parmi les « Ressources à positionner » de la page OBS/WBS.' : 'L’adresse e-mail ne se modifie que par l’administrateur.',
       fields: fields,
       onSubmit: function (v) {
         var values = { name: v.name, resource_type: v.resource_type, country: v.country, job_function: v.job_function, organization: v.organization, supplier: v.supplier, team_id: v.team_id };

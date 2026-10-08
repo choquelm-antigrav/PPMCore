@@ -45,10 +45,10 @@ function openPage(user) {
   const win = dom.window, doc = win.document;
   const until = async (cond, ms = 3000) => { const s = Date.now(); while (Date.now() - s < ms) { if (cond()) return true; await wait(10); } return false; };
   const click = (n) => n.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-  const $ = (id) => doc.getElementById(id);
+  const $ = (id) => doc.getElementById(id + '-wbs') || doc.getElementById(id); // le découpage est la zone « -wbs »
   const text = (id) => ($(id) || { textContent: '' }).textContent;
-  const node = (id) => doc.querySelector('#canvas .node[data-id="' + id + '"]');
-  const nodes = () => doc.querySelectorAll('#canvas .node').length;
+  const node = (id) => doc.querySelector('#canvas-wbs .node[data-id="' + id + '"]');
+  const nodes = () => doc.querySelectorAll('#canvas-wbs .node').length;
   const submit = () => $('editor-form').dispatchEvent(new win.Event('submit', { cancelable: true }));
   const pick = async (id, title) => { await until(() => node(id)); click(node(id)); await until(() => !$('details').hidden && (!title || text('details').includes(title))); };
   const buttons = () => [...doc.querySelectorAll('#wbs-actions button')].map((b) => b.textContent);
@@ -194,7 +194,7 @@ function openPage(user) {
   await p.until(() => /Supprimé : 2 workpackages/.test(p.text('toast')));
   check(/Supprimé : 2 workpackages, 1 livrable ou jalon, 2 dépendances/.test(p.text('toast')), 'suppression en cascade : ' + p.text('toast'));
   check(c.repoList('WorkPackage').every((x) => x.id !== w.w11.id) && c.repoList('PlanItem').every((x) => x.id !== w.b.id) && c.repoList('Dependency').length === 0, 'sous-workpackage, élément et dépendances supprimés ensemble');
-  await p.until(() => p.nodes() > 0 && !p.doc.querySelector('#canvas [data-id="wp:' + w.w1.id + '"]'));
+  await p.until(() => p.nodes() > 0 && !p.doc.querySelector('#canvas-wbs [data-id="wp:' + w.w1.id + '"]'));
   const tree = c.uiCall('wbs.tree', { projectId: w.p1.id }, null);
   const ids = new Set(tree.data.nodes.map((n) => n.id));
   check(tree.data.nodes.every((n) => !n.parent || ids.has(n.parent)), 'aucun élément orphelin dans l’arbre');

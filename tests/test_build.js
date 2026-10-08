@@ -32,12 +32,12 @@ module.exports = function () {
     c.setupPpm = () => { calls.push('setup'); return 'Installation terminée'; };
     c.installTriggers = () => { calls.push('triggers'); return 'Déclencheurs installés'; };
     c.selfCheck = () => { calls.push('check'); return 'Installation conforme'; };
-    const msg = c.installerPpm();
+    const msg = c.A1_INSTALLER_PPM();
     eq(calls, ['setup', 'triggers', 'check']);
     eq([c.allowedDomain(), c.adminEmails()], ['entreprise.com', ['max.martin@entreprise.com']]);
     ok(/Domaine réglé sur entreprise\.com/.test(msg) && /Application Web/.test(msg), msg);
     c.setProp(c.PROP.ADMINS, 'a@entreprise.com,b@entreprise.com');
-    c.installerPpm();
+    c.A1_INSTALLER_PPM();
     eq(c.adminEmails(), ['a@entreprise.com', 'b@entreprise.com'], 'des réglages existants ne sont jamais écrasés');
   });
 };

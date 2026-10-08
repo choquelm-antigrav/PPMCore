@@ -451,11 +451,17 @@ defineAction('ui.set', function (p, ctx) {
 });
 
 defineAction('obs.tree', function (p, ctx) {
-  return buildObsTree(loadObsData_(), requireParam(p, 'scopeType'), requireParam(p, 'scopeId'), todayStr(), ctx);
+  var data = loadObsData_();
+  var out = buildObsTree(data, requireParam(p, 'scopeType'), requireParam(p, 'scopeId'), todayStr(), ctx);
+  out.unplaced = unplacedPeople_(data, ctx, todayStr());
+  return out;
 });
 
 defineAction('obs.teams', function (p, ctx) {
-  return buildTeamTree(loadObsData_(), p.rootTeamId || '', ctx);
+  var data = loadObsData_();
+  var out = buildTeamTree(data, p.rootTeamId || '', ctx);
+  out.unplaced = unplacedPeople_(data, ctx, todayStr());
+  return out;
 });
 
 defineAction('wbs.tree', function (p, ctx) {

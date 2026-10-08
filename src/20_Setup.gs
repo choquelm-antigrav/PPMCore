@@ -20,7 +20,7 @@
  * À exécuter depuis l'éditeur Apps Script quand « Accès réservé » s'affiche : montre le compte qui exécute, le compte détecté
  * pour un visiteur et les domaines autorisés, avec la conduite à tenir.
  */
-function diagnosticAcces() {
+function diagnosticAcces_() {
   var effective = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
   var active = String(Session.getActiveUser().getEmail() || '').toLowerCase();
   var lines = [
@@ -35,20 +35,20 @@ function diagnosticAcces() {
   return msg;
 }
 
-function installerPpm() {
+function installerPpm_() {
   var me = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
   var notes = [];
   if (!allowedDomain()) {
     if (!me || me.indexOf('@') < 0) throw new PpmError('CONFIG', 'Adresse du compte introuvable : renseigner PPM_DOMAIN et PPM_ADMINS à la main.');
     setProp(PROP.DOMAIN, me.split('@')[1]);
-    notes.push('Domaine réglé sur ' + me.split('@')[1] + ' d’après le compte qui installe (' + me + '). Si les utilisateurs se connectent avec un autre domaine, ajoutez-le à la propriété PPM_DOMAIN, séparé par une virgule ; en cas de doute, exécutez diagnosticAcces.');
+    notes.push('Domaine réglé sur ' + me.split('@')[1] + ' d’après le compte qui installe (' + me + '). Si les utilisateurs se connectent avec un autre domaine, ajoutez-le à la propriété PPM_DOMAIN, séparé par une virgule ; en cas de doute, exécutez A4_DIAGNOSTIC_ACCES.');
   }
   if (!adminEmails().length) {
     setProp(PROP.ADMINS, me);
     notes.push('Administrateur : ' + me + ' (propriété PPM_ADMINS ; ajoutez un second administrateur séparé par une virgule).');
   }
   var out = [setupPpm(), installTriggers(), selfCheck()];
-  var msg = notes.concat(out).join('\n\n') + '\n\nÉtape suivante : Déployer > Nouveau déploiement > Application Web. Pour des données d’essai : exécuter seedDemo.';
+  var msg = notes.concat(out).join('\n\n') + '\n\nÉtape suivante : Déployer > Nouveau déploiement > Application Web. Pour des données d’essai : exécuter A2_SEED_DEMO.';
   console.log(msg);
   return msg;
 }
@@ -217,56 +217,6 @@ function checkPageVersions_() {
     }
   });
   return out;
-}
-
-/**
- * Jeu de démonstration : un programme, un projet pilote, deux WP, quatre livrables,
- * un jalon, des dépendances. Le compte qui l'exécute devient chef de projet du pilote.
- */
-function seedDemo() {
-  var me = String(Session.getActiveUser().getEmail() || adminEmails()[0]).toLowerCase();
-  var a = { actor: me, source: 'setup' };
-  var res = findResourceByEmail(me) || repoInsert('Resource', {
-    resource_type: 'Interne', name: me.split('@')[0], email: me, country: 'FR', capacity_days_month: 18,
-    job_function: 'Chef de projet', organization: 'Bureau d’études'
-  }, a);
-  var prog = repoInsert('Program', { code: 'DEMO', name: 'Programme de démonstration', status: 'Actif', leader_resource_id: res.id }, a);
-  var proj = repoInsert('Project', {
-    code: 'PILOTE', name: 'Projet pilote', program_id: prog.id, manager_resource_id: res.id,
-    status: 'Actif', holiday_country: 'FR', start_date: todayStr()
-  }, a);
-  repoInsert('RoleAssignment', { resource_id: res.id, role_code: 'CP', scope_type: 'project', scope_id: proj.id }, a);
-  // Deux personnes fictives (sans adresse : elles ne peuvent pas se connecter) pour que l'OBS et le WBS aient du contenu.
-  var conceptrice = repoInsert('Resource', { resource_type: 'Interne', name: 'Camille Durand', country: 'FR',
-    job_function: 'Ingénieure structure', organization: 'Bureau d’études' }, a);
-  var testeur = repoInsert('Resource', { resource_type: 'Externe', name: 'Sam Weber', country: 'DE',
-    job_function: 'Responsable essais', organization: 'Sous-traitant Alpha', supplier: 'Alpha Test GmbH' }, a);
-  var wp1 = repoInsert('WorkPackage', { project_id: proj.id, wbs_code: '1', name: 'Conception', owner_resource_id: conceptrice.id, charge_code: 'PIL-001' }, a);
-  var wp2 = repoInsert('WorkPackage', { project_id: proj.id, wbs_code: '2', name: 'Validation', owner_resource_id: testeur.id, charge_code: 'PIL-002' }, a);
-  repoInsert('RoleAssignment', { resource_id: conceptrice.id, role_code: 'RWP', scope_type: 'workpackage', scope_id: wp1.id }, a);
-  repoInsert('RoleAssignment', { resource_id: testeur.id, role_code: 'RWP', scope_type: 'workpackage', scope_id: wp2.id }, a);
-  var hol = loadHolidayMap('FR');
-  var d0 = nextWorkingDay(todayStr(), hol);
-  function item(wp, name, startOffset, duration, type) {
-    var start = addWorkingDays(d0, startOffset, hol);
-    return repoInsert('PlanItem', {
-      project_id: proj.id, wp_id: wp.id, item_type: type || 'Livrable', name: name, owner_resource_id: res.id,
-      planned_start: start, planned_finish: type === 'Jalon' ? start : addWorkingDays(start, duration - 1, hol),
-      progress_pct: 0, status: 'À faire', milestone_category: type === 'Jalon' ? 'Revue' : ''
-    }, a);
-  }
-  var l1 = item(wp1, 'Spécification', 0, 10);
-  var l2 = item(wp1, 'Maquette', 10, 15);
-  var l3 = item(wp2, 'Plan de tests', 10, 5);
-  var l4 = item(wp2, 'Rapport de tests', 25, 10);
-  var j1 = item(wp2, 'Revue de conception', 35, 0, 'Jalon');
-  [[l1, l2], [l1, l3], [l2, l4], [l3, l4], [l4, j1]].forEach(function (p) {
-    repoInsert('Dependency', { predecessor_id: p[0].id, successor_id: p[1].id, dep_type: 'FS', lag_days: 0 }, a);
-  });
-  [l2, l4].forEach(function (l) { repoInsert('MilestoneRequirement', { milestone_id: j1.id, deliverable_id: l.id }, a); });
-  var msg = 'Démo créée : projet ' + proj.code + ' (' + proj.id + ')';
-  console.log(msg);
-  return msg;
 }
 
 function findResourceByEmail(email) {

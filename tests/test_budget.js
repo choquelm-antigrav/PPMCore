@@ -252,7 +252,8 @@ module.exports = function () {
   test('Préchargement de la page Budget ; version des pages', () => {
     const w = world();
     const keys = Object.keys(w.c.preloadFor_('budget', { project: '', program: '', tab: 'bilan', mode: '', isAdmin: false }, CP));
-    eq(keys, ['planning.catalog|{}', 'budget.access|{"projectId":"' + w.p1.id + '"}']);
-    eq([w.c.PAGES.budget, w.c.PAGE_TABS.budget], ['Budget', ['bilan', 'po', 'budget']]);
+    const pj = '{"projectId":"' + w.p1.id + '"}';
+    eq(keys, ['planning.catalog|{}', 'budget.access|' + pj, 'budget.balance|' + pj, 'po.list|' + pj, 'po.list|{"scope":"outside"}', 'budget.get|' + pj], 'plus d’onglets : toutes les zones autorisées sont préparées avec la page');
+    eq([w.c.PAGES.budget, w.c.PAGE_TABS.budget], ['Budget', ['']], 'plus d’onglets : bilan, achats et budget en zones');
   });
 };

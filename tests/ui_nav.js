@@ -1,5 +1,5 @@
 /**
- * Essai du menu des onglets dans la bannière : chaque onglet de Suivi, Copilote et Budget est accessible depuis n'importe quelle page (jsdom, vrai Core).
+ * Essai de la barre du haut : plus de menu d'onglets, le projet courant se transmet de lien en lien, le lien du copilote suit sa suspension (jsdom, vrai Core).
  *   npm i --no-save jsdom@24 && node tests/ui_nav.js
  */
 const fs = require('fs');
@@ -21,10 +21,10 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 function openPage(file, view, boot) {
   const html = src(file).replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Header') ?>", src('Header.html'))
     .replace('<?= theme ?>', 'auto')
-    .replace('<?!= boot ?>', JSON.stringify(Object.assign({ project: w.p1.id, program: '', tab: '', mode: '', baseUrl: 'https://app.test/exec', appsheetUrl: '', version: 'test', view: view, home: 'overview', isAdmin: false, canBudget: true }, boot || {})))
+    .replace('<?!= boot ?>', JSON.stringify(Object.assign({ project: w.p1.id, program: '', tab: '', mode: '', baseUrl: 'https://app.test/exec', appsheetUrl: '', version: 'test', view: view, home: 'overview', isAdmin: false, canBudget: true, copilot: false }, boot || {})))
     .replace(/<link rel="stylesheet" href="https:[^"]+">/g, '').replace(/<link rel="preconnect"[^>]*>/g, '');
   const vc = new VirtualConsole();
-  vc.on('jsdomError', (e) => { if (!/Not implemented: navigation/.test(e.message)) console.error(e.message); }); // suivre un lien vers une autre page est voulu
+  vc.on('jsdomError', (e) => { if (!/Not implemented/.test(e.message)) console.error(e.message); });
   const dom = new JSDOM(html, {
     virtualConsole: vc, runScripts: 'dangerously', pretendToBeVisual: true,
     beforeParse(window) {
@@ -44,93 +44,40 @@ function openPage(file, view, boot) {
       window.onerror = (m) => { failed++; console.error('Erreur dans la page :', m); };
     }
   });
-  const win = dom.window, doc = win.document;
-  const click = (n) => n.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true }));
-  const caret = (v) => doc.querySelector('.ppm-nav .ppm-caret[data-menu="' + v + '"]');
-  const items = () => [...doc.querySelectorAll('#ppm-sub a')];
-  const open = () => !doc.getElementById('ppm-sub').hidden;
-  const pressed = (t) => { const b = doc.querySelector('.seg [data-tab="' + t + '"]'); return !!b && b.getAttribute('aria-pressed') === 'true'; };
-  return { win, doc, click, caret, items, open, pressed };
+  const doc = dom.window.document;
+  const link = (v) => doc.querySelector('.ppm-nav a[data-view="' + v + '"]');
+  return { doc, link };
 }
 
 (async () => {
-  console.log('\nMenu des onglets dans la bannière (jsdom)');
+  console.log('\nBarre du haut (jsdom)');
 
-  // Suivi : quatre onglets, changement instantané, onglet courant marqué
-  let p = openPage('Suivi.html', 'suivi', { tab: 'ecarts' });
-  await wait(900);
-  check(!!p.caret('suivi') && !!p.caret('copilote') && !!p.caret('budget'), 'une flèche de menu à côté de Suivi, Copilote et Budget');
-  check(!p.caret('gantt') && !p.caret('structure'), 'pas de menu pour les pages sans onglets de ce type');
-  p.click(p.caret('suivi'));
-  check(p.open() && p.items().map((a) => a.getAttribute('data-tab')).join() === 'ecarts,changes,baselines,workspace', 'le menu de Suivi liste ses quatre onglets : ' + p.items().map((a) => a.textContent).join(' | '));
-  check(p.items()[0].getAttribute('aria-current') === 'true', 'l’onglet courant (Écarts) est marqué');
-  check(p.items()[2].getAttribute('href') === 'https://app.test/exec?view=suivi&tab=baselines&project=' + w.p1.id, 'chaque entrée est un lien direct vers l’onglet : ' + p.items()[2].getAttribute('href'));
-  const ev = new p.win.MouseEvent('click', { bubbles: true, cancelable: true });
-  p.items()[2].dispatchEvent(ev);
-  await wait(300);
-  check(ev.defaultPrevented && !p.open() && p.pressed('baselines'), 'sur la même page : l’onglet change sans recharger, le menu se ferme');
-  p.click(p.caret('suivi'));
-  check(p.items()[2].getAttribute('aria-current') === 'true' && p.items()[0].getAttribute('aria-current') === null, 'l’onglet courant suit');
-  p.items()[3].dispatchEvent(new p.win.MouseEvent('click', { bubbles: true, cancelable: true }));
-  await wait(300);
-  check(p.pressed('workspace'), 'Agenda et Drive atteint depuis le menu');
-
-  // depuis Suivi, les onglets de Budget et de Copilote sont des liens vers l'autre page
-  p.click(p.caret('budget'));
-  check(p.open() && p.items().map((a) => a.getAttribute('data-tab')).join() === 'bilan,po,budget', 'le menu de Budget : bilan, achats, budget');
-  const other = new p.win.MouseEvent('click', { bubbles: true, cancelable: true });
-  p.items()[1].dispatchEvent(other);
-  check(!other.defaultPrevented && p.items()[1].getAttribute('href') === 'https://app.test/exec?view=budget&tab=po&project=' + w.p1.id, 'depuis une autre page : on suit le lien (la page s’ouvre sur le bon onglet)');
-  p.win.document.dispatchEvent(new p.win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-  check(!p.open(), 'Échap ferme le menu');
-  p.click(p.caret('copilote'));
-  check(p.open() && p.items().length === 4, 'menu de Copilote ouvert');
-  p.click(p.win.document.body);
-  check(!p.open(), 'un clic ailleurs ferme le menu');
-  p.click(p.caret('suivi')); p.click(p.caret('suivi'));
-  check(!p.open(), 'recliquer la flèche referme le menu');
-
-  // Copilote
-  p = openPage('Copilote.html', 'copilote', { tab: 'synthese' });
-  await wait(900);
-  p.click(p.caret('copilote'));
-  check(p.items().map((a) => a.getAttribute('data-tab')).join() === 'synthese,simulation,questions,suggestions' && p.items()[0].getAttribute('aria-current') === 'true', 'Copilote : quatre onglets, Synthèse marquée');
-  p.items()[2].dispatchEvent(new p.win.MouseEvent('click', { bubbles: true, cancelable: true }));
-  await wait(300);
-  check(p.pressed('questions') && !p.open(), 'Copilote : Questions atteint sans recharger');
-  p.click(p.caret('copilote'));
-  p.items()[1].dispatchEvent(new p.win.MouseEvent('click', { bubbles: true, cancelable: true }));
-  await wait(300);
-  check(p.pressed('simulation'), 'Copilote : Simulation atteinte');
-
-  // Budget
-  p = openPage('Budget.html', 'budget', { tab: 'bilan' });
-  await wait(900);
-  p.click(p.caret('budget'));
-  check(p.items().map((a) => a.getAttribute('data-tab')).join() === 'bilan,po,budget' && p.items()[0].getAttribute('aria-current') === 'true', 'Budget : trois onglets, Bilan marqué');
-  p.items()[1].dispatchEvent(new p.win.MouseEvent('click', { bubbles: true, cancelable: true }));
-  await wait(400);
-  check(p.pressed('po') && !p.open(), 'Budget : Achats atteint sans recharger');
-  p.click(p.caret('budget'));
-  p.items()[2].dispatchEvent(new p.win.MouseEvent('click', { bubbles: true, cancelable: true }));
-  await wait(400);
-  check(p.pressed('budget'), 'Budget : lignes de budget atteintes');
-
-  // le projet courant suit : depuis le Planning ou la Structure, Overview, Ressources et Budget s'ouvrent sur le même projet
-  for (const [file, view] of [['Gantt.html', 'gantt'], ['Structure.html', 'structure']]) {
-    p = openPage(file, view, {});
-    await wait(1100);
-    const ok3 = ['overview', 'ressources', 'budget', 'suivi', 'copilote'].every((v) => (p.doc.querySelector('.ppm-nav a[data-view="' + v + '"]').getAttribute('href') || '').indexOf('project=' + w.p1.id) >= 0);
-    check(ok3, file + ' : tous les liens de la bannière reprennent le projet courant : ' + ['overview', 'ressources', 'budget'].map((v) => p.doc.querySelector('.ppm-nav a[data-view="' + v + '"]').getAttribute('href')).join(' | '));
+  // plus de menu d'onglets : une page = un lien, ses rubriques sont des zones de la page
+  for (const [file, view] of [['Suivi.html', 'suivi'], ['Budget.html', 'budget'], ['Structure.html', 'structure']]) {
+    const p = openPage(file, view, {});
+    await wait(700);
+    check(!p.doc.querySelector('.ppm-caret') && !p.doc.getElementById('ppm-sub') && !p.doc.querySelector('.ppm-nav [aria-haspopup]'), file + ' : aucune flèche de menu dans la barre du haut');
   }
-  p.click(p.caret('budget'));
-  check(p.items()[1].getAttribute('href') === 'https://app.test/exec?view=budget&tab=po&project=' + w.p1.id, 'et le menu d’onglets aussi, depuis la Structure');
 
-  // la flèche de Budget suit l'accès à la page
-  p = openPage('Suivi.html', 'suivi', { tab: 'ecarts', canBudget: false });
+  // le projet courant suit de lien en lien
+  for (const [file, view] of [['Gantt.html', 'gantt'], ['Structure.html', 'structure'], ['Suivi.html', 'suivi']]) {
+    const p = openPage(file, view, {});
+    await wait(1100);
+    const ok3 = ['overview', 'ressources', 'budget', 'suivi'].every((v) => (p.link(v).getAttribute('href') || '').indexOf('project=' + w.p1.id) >= 0);
+    check(ok3, file + ' : tous les liens de la barre reprennent le projet courant : ' + ['overview', 'ressources', 'budget'].map((v) => p.link(v).getAttribute('href')).join(' | '));
+  }
+
+  // le copilote est en suspens : pas de lien ; réactivé : le lien revient
+  let p = openPage('Overview.html', 'overview', { copilot: false });
   await wait(300);
-  check(p.caret('budget').hidden && !p.caret('suivi').hidden, 'sans accès au budget : ni lien ni flèche pour Budget');
+  check(p.link('copilote').hidden, 'copilote en suspens : le lien est masqué');
+  p = openPage('Overview.html', 'overview', { copilot: true });
+  await wait(300);
+  check(!p.link('copilote').hidden, 'copilote réactivé : le lien revient');
+  p = openPage('Suivi.html', 'suivi', { canBudget: false });
+  await wait(300);
+  check(p.link('budget').hidden, 'sans accès au budget : pas de lien Budget');
 
-  console.log(failed ? '\n' + failed + ' échec(s).' : '\nMenu des onglets : tout est conforme.');
+  console.log(failed ? '\n' + failed + ' échec(s).' : '\nBarre du haut : tout est conforme.');
   process.exit(failed ? 1 : 0);
 })();

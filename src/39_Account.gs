@@ -56,7 +56,7 @@ defineAction('account.get', function (p, ctx) {
 function adminView_() {
   return {
     admins: adminEmails(), domain: allowedDomains().join(', '),
-    ai_mode: aiMode_(), ai_model: getProp(PROP.GEMINI_MODEL, ''), ai_quota: aiQuota_(),
+    copilot_enabled: copilotEnabled_(), ai_mode: aiMode_(), ai_model: getProp(PROP.GEMINI_MODEL, ''), ai_quota: aiQuota_(),
     gemini_key_set: !!getProp(PROP.GEMINI_KEY, ''),
     reminder_on: reminderDefaults_().on, reminder_days: reminderDefaults_().days,
     appsheet_url: getProp(PROP.APPSHEET_URL, ''), logo_url: getProp(PROP.LOGO_URL, ''),
@@ -224,6 +224,7 @@ defineAction('admin.health', function (p, ctx) {
     night: night, running: running ? { step: NIGHTLY_STEPS[running.step] || '', startedAt: running.startedAt || '' } : null,
     digest: digest, triggers: triggers,
     mail_quota: typeof MailApp !== 'undefined' ? MailApp.getRemainingDailyQuota() : null,
+    copilot_enabled: copilotEnabled_(),
     ai: { mode: aiMode_(), used_today: repoList('AiLog', function (l) { return l.mode === 'api' && String(l.at).slice(0, 10) === today; }).length, per_person_limit: aiQuota_() },
     cache: !!scriptCache_(),
     counts: {
@@ -255,7 +256,7 @@ defineAction('admin.logs', function (p, ctx) {
   var ai = repoList('AiLog').sort(byRecent).slice(0, Math.min(limit, 50)).map(function (l) {
     return { at: l.at, actor: l.actor, purpose: l.purpose, mode: l.mode, unverified: l.unverified || '', feedback: l.feedback || '', excerpt: truncate(l.response, 160) };
   });
-  return { changes: changes, ai: ai };
+  return { changes: changes, ai: ai, copilot_enabled: copilotEnabled_() };
 });
 
 // ---------------------------------------------------------------- Administration : jours fériés

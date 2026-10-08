@@ -281,6 +281,7 @@ function copilotTools_(data, projectId, brief) {
 // ---------------------------------------------------------------- actions
 
 defineAction('copilot.status', function (p, ctx) {
+  requireCopilot_();
   var mode = aiMode_();
   return {
     mode: mode, model: mode === 'api' ? getProp(PROP.GEMINI_MODEL, '') : '',
@@ -291,6 +292,7 @@ defineAction('copilot.status', function (p, ctx) {
 
 /** Synthèse du projet : faits et phrases du Core ; ai = true ajoute la rédaction du copilote (ou le texte à copier). */
 defineAction('copilot.brief', function (p, ctx) {
+  requireCopilot_();
   var projectId = requireParam(p, 'projectId');
   var data = loadCopilotData_(projectId);
   var brief = buildProjectBrief(data, projectId, todayStr(), data.holFor);
@@ -302,6 +304,7 @@ defineAction('copilot.brief', function (p, ctx) {
 
 /** Simulation « et si… » : changes = [{ itemId, shiftDays } | { itemId, finish }]. Rien n'est enregistré. */
 defineAction('simulations.run', function (p, ctx) {
+  requireCopilot_();
   var projectId = requireParam(p, 'projectId');
   if (!Array.isArray(p.changes) || !p.changes.length || p.changes.length > 20) {
     throw new PpmError('VALIDATION', 'Indiquez entre 1 et 20 hypothèses de décalage.');
@@ -318,6 +321,7 @@ defineAction('simulations.run', function (p, ctx) {
 
 /** Question en langage naturel : le modèle consulte les données par des fonctions en lecture seule. */
 defineAction('copilot.ask', function (p, ctx) {
+  requireCopilot_();
   var projectId = requireParam(p, 'projectId');
   var question = String(p.question || '').trim();
   if (!question) throw new PpmError('VALIDATION', 'Posez une question.');
@@ -334,6 +338,7 @@ defineAction('copilot.ask', function (p, ctx) {
 
 /** Avis de l'utilisateur sur une réponse du copilote (mesure de la pertinence). */
 defineAction('copilot.feedback', function (p, ctx) {
+  requireCopilot_();
   var id = requireParam(p, 'logId');
   var t = getTable('AiLog');
   var n = t.findRow(id);
@@ -355,6 +360,7 @@ defineAction('insights.decide', function (p, ctx) {
 
 /** Suggestions du projet et taux d'acceptation, par règle, plus l'avis sur les réponses de l'IA. */
 defineAction('copilot.suggestions', function (p, ctx) {
+  requireCopilot_();
   var projectId = requireParam(p, 'projectId');
   var all = repoList('Insight', function (x) { return x.project_id === projectId; });
   var order = { Alerte: 0, Vigilance: 1, Info: 2 };

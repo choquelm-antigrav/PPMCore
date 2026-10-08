@@ -100,9 +100,8 @@ module.exports = function () {
     };
     const id = w.p1.id;
     eq(keys('gantt'), ['planning.catalog|{}', 'gantt.project|{"projectId":"' + id + '"}']);
-    eq(keys('structure'), ['planning.catalog|{}', 'views.config|{}', 'obs.tree|{"scopeId":"' + id + '","scopeType":"project"}']);
-    eq(keys('structure', { tab: 'wbs' }).pop(), 'wbs.tree|{"projectId":"' + id + '"}');
-    eq(keys('suivi'), ['planning.catalog|{}', 'baselines.list|{"projectId":"' + id + '"}', 'changes.feed|{"limit":1,"projectId":"' + id + '"}', 'baselines.diff|{"projectId":"' + id + '"}']);
+    eq(keys('structure'), ['planning.catalog|{}', 'views.config|{}', 'wbs.tree|{"projectId":"' + id + '"}', 'obs.tree|{"scopeId":"' + id + '","scopeType":"project"}'], 'plus d’onglets : l’organisation et le découpage se chargent ensemble');
+    eq(keys('suivi'), ['planning.catalog|{}', 'baselines.list|{"projectId":"' + id + '"}', 'changes.feed|{"limit":1,"projectId":"' + id + '"}', 'changes.feed|{"all":false,"projectId":"' + id + '"}', 'baselines.diff|{"projectId":"' + id + '"}', 'workspace.status|{"projectId":"' + id + '"}'], 'plus d’onglets : toutes les zones de Suivi sont préparées avec la page');
     eq(keys('copilote'), ['planning.catalog|{}', 'copilot.status|{"projectId":"' + id + '"}', 'copilot.brief|{"projectId":"' + id + '"}']);
     eq(keys('gantt', { program: w.prog.id }).pop(), 'gantt.program|{"programId":"' + w.prog.id + '"}');
     eq(w.c.stableJson_({ b: [2, { d: 1, c: null }], a: 'x' }), '{"a":"x","b":[2,{"c":null,"d":1}]}');

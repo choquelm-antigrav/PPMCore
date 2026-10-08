@@ -69,8 +69,10 @@ function openPage(user, boot) {
   const w = dom.window, doc = w.document;
   const until = async (cond, ms = 3000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (cond()) return true; await wait(10); } return false; };
   const click = (n) => n.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
-  const texts = () => [...doc.querySelectorAll('#canvas .node text')].map((t) => t.textContent);
-  const nodes = () => [...doc.querySelectorAll('#canvas .node')];
+  let side = ''; // '' = zone de l'organisation, '-wbs' = zone du découpage
+  const sel = (q) => q.replace(/#(canvas|opt-attrs|opt-colors|details|legend)\b/g, '#$1' + side);
+  const texts = () => [...doc.querySelectorAll(sel('#canvas .node text'))].map((t) => t.textContent);
+  const nodes = () => [...doc.querySelectorAll(sel('#canvas .node'))];
   const box = (g) => {
     const m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(g.getAttribute('transform'));
     const r = g.querySelector('rect.card');
@@ -83,9 +85,9 @@ function openPage(user, boot) {
     }
     return null;
   };
-  const checkbox = (key) => doc.querySelector('#opt-attrs input[data-attr="' + key + '"]');
+  const checkbox = (key) => doc.querySelector(sel('#opt-attrs input[data-attr="' + key + '"]'));
   const setChecked = (input, v) => { input.checked = v; input.dispatchEvent(new w.Event('change', { bubbles: true })); };
-  return { w, doc, calls, until, click, texts, nodes, box, overlaps, checkbox, setChecked };
+  return { w, doc, calls, until, click, texts, nodes, box, overlaps, checkbox, setChecked, sel, setSide: (v) => { side = v; } };
 }
 
 (async () => {
@@ -94,10 +96,17 @@ function openPage(user, boot) {
   // ---------------------------------------------------------------- OBS par rôles
   let p = openPage('alice@entreprise.com');
   await p.until(() => p.nodes().length > 0);
+  // une seule page, sans onglets : l'organisation au-dessus du découpage, les deux affichés ensemble
+  await p.until(() => p.doc.querySelectorAll('#canvas-wbs .node').length > 0);
+  const zoneObs = p.doc.getElementById('zone-obs'), zoneWbs = p.doc.getElementById('zone-wbs');
+  check(!p.doc.querySelector('[data-tab]') && !zoneObs.hidden && !zoneWbs.hidden && !!(zoneObs.compareDocumentPosition(zoneWbs) & p.w.Node.DOCUMENT_POSITION_FOLLOWING), 'plus d’onglets : l’organisation est au-dessus du découpage, les deux zones sont affichées');
+  check(p.doc.querySelectorAll('#canvas .node').length > 0 && p.doc.querySelectorAll('#canvas-wbs .node').length > 0 && p.calls.includes('obs.tree') && p.calls.includes('wbs.tree'), 'les deux schémas sont chargés avec la page');
+  check(p.doc.querySelectorAll('#picker').length === 1 && p.doc.querySelectorAll('.scope-pick').length === 1, 'un seul sélecteur de périmètre, partagé par les deux zones');
+  check(p.doc.getElementById('ztitle').textContent.startsWith('Organisation') && p.doc.getElementById('ztitle-wbs').textContent.startsWith('Découpage'), 'chaque zone a son titre : ' + p.doc.getElementById('ztitle-wbs').textContent);
   check(p.nodes().length === 6, 'organigramme : 6 rôles (PL, DPL, CP, RWP et deux affectations de membre) — ' + p.nodes().length);
   check(p.doc.querySelectorAll('#canvas .edge').length === 5, 'cinq liens hiérarchiques');
   check(!p.overlaps(), 'aucune carte ne recouvre une autre');
-  check(p.doc.getElementById('title').textContent === 'Organisation — P1 — Nacelle', 'titre : ' + p.doc.getElementById('title').textContent);
+  check(p.doc.getElementById('ztitle').textContent === 'Organisation — P1 — Nacelle', 'titre : ' + p.doc.getElementById('ztitle').textContent);
   let t = p.texts();
   check(t.includes('Fonction : Ingénieur essais') && t.includes('Organisation : Sous-traitant Alpha'), 'fonction et organisation affichées par défaut');
   check(t.includes('Fonction : —'), 'une fonction absente est signalée par un tiret');
@@ -128,10 +137,10 @@ function openPage(user, boot) {
   // couleurs
   const radio = (v) => p.doc.querySelector('#opt-colors input[value="' + v + '"]');
   radio('organization').checked = true; radio('organization').dispatchEvent(new p.w.Event('change', { bubbles: true }));
-  let legend = [...p.doc.querySelectorAll('#legend li')].map((l) => l.textContent);
+  let legend = [...p.doc.querySelectorAll(p.sel('#legend li'))].map((l) => l.textContent);
   check(['Bureau d’études', 'Maison mère', 'Sous-traitant Alpha', 'Non renseignée'].every((x) => legend.includes(x)), 'légende par organisation : ' + legend.join(', '));
   radio('role').checked = true; radio('role').dispatchEvent(new p.w.Event('change', { bubbles: true }));
-  legend = [...p.doc.querySelectorAll('#legend li')].map((l) => l.textContent);
+  legend = [...p.doc.querySelectorAll(p.sel('#legend li'))].map((l) => l.textContent);
   check(legend.includes('Chef de projet') && legend.length === 5, 'légende par rôle');
 
   // repli d'une branche
@@ -166,7 +175,7 @@ function openPage(user, boot) {
   // ---------------------------------------------------------------- OBS par équipes
   p.click(p.doc.querySelector('[data-mode="teams"]'));
   await p.until(() => p.calls.includes('obs.teams') && p.nodes().length > 0);
-  check(p.doc.getElementById('scope-pick').hidden && !p.doc.getElementById('team-pick').hidden, 'vue par équipes : sélecteur d’équipe à la place du périmètre');
+  check(!p.doc.getElementById('scope-pick').hidden && !p.doc.getElementById('team-pick').hidden, 'vue par équipes : le sélecteur d’équipe s’ajoute ; le périmètre reste visible pour le découpage');
   t = p.texts();
   check(t.includes('Bureau d’études') && t.includes('Conception') && t.includes('Sans équipe'), 'équipes et « Sans équipe » affichées : ' + t.filter((x) => !x.includes(' : ')).join(' | '));
   check(t.some((x) => /membres?$/.test(x)), 'nombre de membres par défaut');
@@ -176,10 +185,10 @@ function openPage(user, boot) {
   await wait(800);
 
   // ---------------------------------------------------------------- WBS
-  p.click(p.doc.querySelector('[data-tab="wbs"]'));
+  p.setSide('-wbs'); // plus d'onglets : le découpage est la seconde zone de la même page, chargée en même temps
   await p.until(() => p.calls.includes('wbs.tree') && p.nodes().length > 0);
   check(p.nodes().length === 6, 'WBS : projet, 2 WP, 3 éléments — ' + p.nodes().length);
-  check(p.doc.querySelectorAll('#canvas .edge').length === 5 && !p.overlaps(), 'liens du WBS, sans chevauchement');
+  check(p.doc.querySelectorAll(p.sel('#canvas .edge')).length === 5 && !p.overlaps(), 'liens du WBS, sans chevauchement');
   t = p.texts();
   check(t.includes('1 Conception') && t.includes('1.1 Structure') && t.includes('Responsable : Alice'), 'code WBS, titre et responsable');
   check(t.includes('Sous-workpackage') && t.includes('Workpackage') && t.includes('Jalon') && t.includes('Livrable'), 'nature de chaque carte écrite en toutes lettres');
@@ -196,18 +205,19 @@ function openPage(user, boot) {
   p.setChecked(showItems, false);
   check(p.nodes().length === 3 && !p.texts().includes('Livrable'), 'sans les livrables et jalons : projet et 2 WP');
   p.setChecked(showItems, true);
-  const wp = p.doc.querySelector('#opt-colors input[value="organization"]');
+  const wp = p.doc.querySelector(p.sel('#opt-colors input[value="organization"]'));
   wp.checked = true; wp.dispatchEvent(new p.w.Event('change', { bubbles: true }));
-  legend = [...p.doc.querySelectorAll('#legend li')].map((l) => l.textContent);
+  legend = [...p.doc.querySelectorAll(p.sel('#legend li'))].map((l) => l.textContent);
   check(legend.includes('Alpha Test') && legend.includes('Bureau d’études'), 'WBS coloré par organisation du responsable');
   p.click(p.nodes().find((g) => g.getAttribute('aria-label') === 'Sous-workpackage Structure'));
-  check(p.doc.querySelector('#details h2').textContent === '1.1 Structure' && p.doc.getElementById('details').textContent.includes('Ingénieur essais'), 'détail d’un WP avec fonction du responsable');
+  check(p.doc.querySelector(p.sel('#details h2')).textContent === '1.1 Structure' && p.doc.getElementById('details-wbs').textContent.includes('Ingénieur essais'), 'détail d’un WP avec fonction du responsable');
   await wait(800);
   const saved2 = JSON.parse(c.repoList('UserSetting').find((u) => u.user_email === 'alice@entreprise.com').view_prefs_json);
   check(saved2.wbs.colorBy === 'organization' && saved2.wbs.attrs.includes('charge_code') && saved2.obs.mode === 'teams', 'choix du WBS et du mode d’organisation mémorisés');
 
   // ---------------------------------------------------------------- réouverture : les choix sont retrouvés
-  const p2 = openPage('alice@entreprise.com', { tab: 'wbs' });
+  const p2 = openPage('alice@entreprise.com', {});
+  p2.setSide('-wbs');
   await p2.until(() => p2.nodes().length > 0);
   check(p2.texts().includes('Imputation : C-1'), 'à la réouverture, les attributs choisis sont déjà appliqués');
   check(p2.checkbox('charge_code').checked && !p2.checkbox('status').checked, 'cases cochées cohérentes');
@@ -224,13 +234,12 @@ function openPage(user, boot) {
   // ---------------------------------------------------------------- programme et WBS
   const p4 = openPage('alice@entreprise.com', { project: '', program: prog.id });
   await p4.until(() => p4.nodes().length > 0);
-  check(p4.doc.getElementById('title').textContent === 'Organisation par équipes', 'le mode « par équipes » choisi plus tôt est retrouvé à la réouverture');
+  check(p4.doc.getElementById('ztitle').textContent === 'Organisation par équipes', 'le mode « par équipes » choisi plus tôt est retrouvé à la réouverture');
   p4.click(p4.doc.querySelector('[data-mode="roles"]'));
-  await p4.until(() => p4.doc.getElementById('title').textContent.startsWith('Organisation — '));
-  check(p4.doc.getElementById('title').textContent === 'Organisation — PG — Programme A', 'organisation du programme : ' + p4.doc.getElementById('title').textContent);
-  p4.click(p4.doc.querySelector('[data-tab="wbs"]'));
-  await p4.until(() => p4.calls.includes('wbs.tree'));
-  check(p4.doc.getElementById('picker').value === 'project:' + p1.id, 'passer au WBS depuis un programme choisit un de ses projets');
+  await p4.until(() => p4.doc.getElementById('ztitle').textContent.startsWith('Organisation — '));
+  check(p4.doc.getElementById('ztitle').textContent === 'Organisation — PG — Programme A', 'organisation du programme : ' + p4.doc.getElementById('ztitle').textContent);
+  await p4.until(() => /Le WBS se lit projet par projet/.test(p4.doc.getElementById('canvas-wbs').textContent));
+  check(/Le WBS se lit projet par projet/.test(p4.doc.getElementById('canvas-wbs').textContent) && p4.doc.getElementById('picker').value === 'program:' + prog.id, 'périmètre programme : la zone du découpage demande de choisir un projet, sans rien changer d’office');
 
   console.log(failed ? '\n' + failed + ' échec(s) dans la page.' : '\nPage Structure : tout est conforme.');
   process.exit(failed ? 1 : 0);

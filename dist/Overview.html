@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.10.0">
+<meta name="ppm-version" content="0.11.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -245,15 +245,11 @@
   .hero-note .t b { font-weight: 700; }
   .btn.primary { background: var(--brand); border-color: var(--brand); }
   .btn.primary:hover { background: var(--accent); border-color: var(--accent); }
-  .ppm-nav .ppm-caret { align-self: stretch; margin-left: -8px; padding: 0 8px 0 4px; background: none; border: 0; border-bottom: 3px solid transparent; color: rgba(255, 255, 255, .78); font-size: 11px; cursor: pointer; }
-  .ppm-nav .ppm-caret:hover, .ppm-nav .ppm-caret[aria-expanded="true"] { color: #fff; }
-  .ppm-nav .ppm-caret[hidden] { display: none; }
-  .ppm-sub { position: fixed; z-index: 40; min-width: 230px; margin: 0; padding: 6px 0; list-style: none; background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); }
-  .ppm-sub[hidden] { display: none; }
-  .ppm-sub a { display: block; padding: 9px 18px; color: var(--ink); text-decoration: none; font-size: 14.5px; border-left: 3px solid transparent; }
-  .ppm-sub a:hover, .ppm-sub a:focus { background: var(--hover); outline: none; }
-  .ppm-sub a[aria-current="true"] { font-weight: 700; border-left-color: var(--accent); background: var(--tint); }
-  @media (max-width: 900px) { header { padding: 14px 12px 12px; } header .title h1 { font-size: 22px; } }
+  /* Plus d'onglets : chaque rubrique est une zone de la page, avec son titre */
+  .zone { padding: 22px 24px 0; }
+  .zone h2.sec { margin: 0; }
+  .zone[hidden] { display: none; }
+  @media (max-width: 900px) { header { padding: 14px 12px 12px; } header .title h1 { font-size: 22px; } .zone { padding: 16px 12px 0; } }
 </style>
 <style>
   header .title { flex: 1 1 360px; }
@@ -319,7 +315,7 @@
   <nav class="ppm-nav" aria-label="Pages de l’outil">
     <a id="nav-overview" data-view="overview" href="#">Overview</a>
     <a id="nav-plan" data-view="gantt" href="#">Planning</a>
-    <a id="nav-struct" data-view="structure" href="#">Structure</a>
+    <a id="nav-struct" data-view="structure" href="#">OBS/WBS</a>
     <a id="nav-res" data-view="ressources" href="#">Ressources</a>
     <a id="nav-suivi" data-view="suivi" href="#">Suivi</a>
     <a id="nav-copilot" data-view="copilote" href="#">Copilote</a>
@@ -412,10 +408,6 @@
     }
   })();
 
-  /** Dernier onglet connu de chaque page (les pages le signalent) : sert à marquer l'onglet courant dans le menu. */
-  var currentTab = {};
-  window.ppmTab = function (view, tab) { currentTab[view] = tab; };
-
   function init() {
     var B = window.BOOT || {};
     var base = B.baseUrl || '';
@@ -435,7 +427,8 @@
     });
     document.getElementById('ppm-admin').hidden = !B.isAdmin;
     document.getElementById('nav-budget').hidden = !B.canBudget;
-    var EYEBROW = { overview: 'Overview · Projet', gantt: 'Planning · Gantt', structure: 'Structure · OBS et WBS', ressources: 'Ressources · Équipes et rôles', suivi: 'Suivi · Baselines', copilote: 'Copilote · Analyse', budget: 'Budget · CPN et achats', compte: 'Mon compte', admin: 'Administration' };
+    document.getElementById('nav-copilot').hidden = !B.copilot; // copilote en suspens tant que PPM_COPILOT n'est pas « oui »
+    var EYEBROW = { overview: 'Overview · Projet', gantt: 'Planning · Gantt', structure: 'OBS/WBS · Organisation et découpage', ressources: 'Ressources · Équipes et rôles', suivi: 'Suivi · Baselines', copilote: 'Copilote · Analyse', budget: 'Budget · CPN et achats', compte: 'Mon compte', admin: 'Administration' };
     var titleBox = document.querySelector('header .title');
     if (titleBox && EYEBROW[B.view] && !titleBox.querySelector('.eyebrow')) {
       var eb = document.createElement('span');
@@ -465,54 +458,6 @@
     if (navBox && window.MutationObserver) new MutationObserver(propagateProject).observe(navBox, { subtree: true, attributes: true, attributeFilter: ['href'] });
     propagateProject();
 
-    // Onglets de Suivi, Copilote et Budget : accessibles directement depuis la bannière, sans recharger la page quand on y est déjà
-    var SUBMENUS = {
-      suivi: [['ecarts', 'Écarts à la baseline'], ['changes', 'Changements à valider'], ['baselines', 'Baselines'], ['workspace', 'Agenda et Drive']],
-      copilote: [['synthese', 'Synthèse'], ['simulation', 'Simulation « et si… »'], ['questions', 'Questions'], ['suggestions', 'Suggestions']],
-      budget: [['bilan', 'Bilan par CPN'], ['po', 'Achats (PO)'], ['budget', 'Budget']]
-    };
-    var menu = document.createElement('ul');
-    menu.className = 'ppm-sub'; menu.id = 'ppm-sub'; menu.setAttribute('role', 'menu'); menu.hidden = true;
-    document.body.appendChild(menu);
-    var openBtn = null;
-    function closeMenu() { menu.hidden = true; if (openBtn) { openBtn.setAttribute('aria-expanded', 'false'); openBtn = null; } }
-    function openMenu(view, caret) {
-      var link = document.querySelector('.ppm-nav a[data-view="' + view + '"]');
-      var href = link ? (link.getAttribute('href') || '') : '';
-      var project = new URLSearchParams(href.indexOf('?') >= 0 ? href.slice(href.indexOf('?') + 1) : '').get('project') || '';
-      while (menu.firstChild) menu.removeChild(menu.firstChild);
-      SUBMENUS[view].forEach(function (it) {
-        var li = document.createElement('li');
-        li.setAttribute('role', 'none');
-        var a = document.createElement('a');
-        a.setAttribute('role', 'menuitem'); a.setAttribute('data-tab', it[0]); a.textContent = it[1];
-        a.href = base + '?view=' + view + '&tab=' + it[0] + (project ? '&project=' + project : '');
-        if (B.view === view && currentTab[view] === it[0]) a.setAttribute('aria-current', 'true');
-        a.addEventListener('click', function (e) {
-          if (B.view === view && window.__ppm && typeof window.__ppm.setTab === 'function') { e.preventDefault(); closeMenu(); window.__ppm.setTab(it[0]); }
-        });
-        li.appendChild(a); menu.appendChild(li);
-      });
-      var r = caret.getBoundingClientRect();
-      menu.style.top = Math.round(r.bottom) + 'px';
-      menu.style.left = Math.max(8, Math.min(Math.round(r.left), window.innerWidth - 250)) + 'px';
-      menu.hidden = false; caret.setAttribute('aria-expanded', 'true'); openBtn = caret;
-      var first = menu.querySelector('a'); if (first) first.focus();
-    }
-    Object.keys(SUBMENUS).forEach(function (view) {
-      var link = document.querySelector('.ppm-nav a[data-view="' + view + '"]');
-      if (!link) return;
-      var caret = document.createElement('button');
-      caret.type = 'button'; caret.className = 'ppm-caret'; caret.setAttribute('data-menu', view);
-      caret.setAttribute('aria-haspopup', 'menu'); caret.setAttribute('aria-expanded', 'false');
-      caret.setAttribute('aria-label', 'Onglets de ' + link.textContent.trim());
-      caret.textContent = '▾'; caret.hidden = link.hidden;
-      link.parentNode.insertBefore(caret, link.nextSibling);
-      caret.addEventListener('click', function (e) { e.stopPropagation(); if (openBtn === caret) closeMenu(); else openMenu(view, caret); });
-    });
-    document.addEventListener('click', function (e) { if (!menu.hidden && !menu.contains(e.target)) closeMenu(); });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !menu.hidden) { var b = openBtn; closeMenu(); if (b) b.focus(); } });
-    window.addEventListener('resize', closeMenu);
     var here = document.querySelector('.ppm-bar [data-view="' + (B.view || '') + '"]');
     if (here) here.setAttribute('aria-current', 'page');
     document.getElementById('ppm-brand').setAttribute('href', base + '?view=' + (B.home || 'overview'));
@@ -733,7 +678,7 @@ var BOOT = <?!= boot ?>;
     kp.appendChild(kpiCard(2, 'Qualité · on quality', k.quality, p, open > 0 ? [
       el('div', { class: 'bar-row' }, [el('span', { text: 'Risques ouverts' }), el('div', { class: 'bar2', role: 'img', 'aria-label': plural(open, 'risque ouvert', 'risques ouverts') }, [
         el('span', { class: 'red', style: 'width:' + 100 * ql.critical_risks / open + '%' }), el('span', { class: 'amber', style: 'width:' + 100 * (ql.high_risks - ql.critical_risks) / open + '%' }), el('span', { class: 'soft', style: 'width:' + 100 * rest / open + '%' })]), el('span', { text: String(open) })])] : [],
-      link('copilote', p, '&tab=suggestions'), 'Voir les suggestions →', 'quality'));
+      BOOT.copilot ? link('copilote', p, '&tab=suggestions') : '', 'Voir les suggestions →', 'quality'));
     kp.appendChild(kpiCard(3, 'Coût · on cost', k.cost, p, cs.engaged_pct !== null && cs.engaged_pct !== undefined ? [bar('Budget externe engagé', Math.min(100, cs.engaged_pct), cs.engaged_pct > 100 ? 'red' : '', cs.engaged_pct + ' %')] : [],
       link('budget', p), 'Voir le budget →', 'cost'));
 

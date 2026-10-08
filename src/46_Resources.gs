@@ -44,6 +44,8 @@ defineAction('ressources.get', function (p, ctx) {
   var scope = project ? { type: 'project', id: project.id } : null;
   var wpIds = {};
   if (project) data.workpackages.forEach(function (w) { if (w.project_id === project.id) wpIds[w.id] = true; });
+  var placed = {};
+  repoList('RoleAssignment').forEach(function (a) { if (isBlank(a.end_date) || String(a.end_date) >= today) placed[a.resource_id] = true; });
   var roles = {};
   if (project) {
     repoList('RoleAssignment').forEach(function (a) {
@@ -63,6 +65,7 @@ defineAction('ressources.get', function (p, ctx) {
     var projectLevel = mine.filter(function (x) { return x.scope_type === 'project' && (x.code === 'CP' || x.code === 'MEMBER'); }).map(function (x) { return x.code; });
     return {
       resource_id: r.id, version: r.version, name: r.name, email: r.email || '', job_function: r.job_function || '', organization: r.organization || '',
+      unplaced: !placed[r.id],
       access: isBlank(r.email) ? 'none' : (isAllowedEmail_(r.email) ? 'ok' : 'outside'),
       resource_type: r.resource_type, supplier: r.supplier || '', country: r.country || '', capacity: isBlank(r.capacity_days_month) ? '' : Number(r.capacity_days_month),
       team_id: r.team_id || '', team: teamById[r.team_id] ? teamById[r.team_id].name : '',

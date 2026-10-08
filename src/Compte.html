@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.10.0">
+<meta name="ppm-version" content="0.11.0">
 <?!= include('Style') ?>
 <style>
   .panel { padding: 8px 24px 32px; max-width: 880px; }
@@ -36,17 +36,12 @@
   <div class="controls"><span id="admin-chip" class="badge" hidden>Administrateur de l’outil</span></div>
 </header>
 
-<div class="status">
-  <div class="seg" role="tablist" aria-label="Rubriques">
-    <button type="button" data-tab="fiche" aria-pressed="true">Ma fiche</button>
-    <button type="button" data-tab="notifications" aria-pressed="false">Notifications</button>
-    <button type="button" data-tab="affichage" aria-pressed="false">Affichage</button>
-  </div>
-</div>
-
+<div class="zone"><h2 class="sec">Ma fiche</h2></div>
 <section class="panel" id="panel-fiche" aria-label="Ma fiche"></section>
-<section class="panel" id="panel-notifications" aria-label="Notifications" hidden></section>
-<section class="panel" id="panel-affichage" aria-label="Affichage" hidden></section>
+<div class="zone"><h2 class="sec">Notifications</h2></div>
+<section class="panel" id="panel-notifications" aria-label="Notifications"></section>
+<div class="zone"><h2 class="sec">Affichage</h2></div>
+<section class="panel" id="panel-affichage" aria-label="Affichage"></section>
 
 <div class="toast" id="toast" role="status" hidden></div>
 
@@ -57,9 +52,9 @@ var BOOT = <?!= boot ?>;
 (function () {
   'use strict';
 
-  var state = { tab: 'fiche', acct: null, suggestions: null };
+  var state = { acct: null, suggestions: null };
   var $ = function (id) { return document.getElementById(id); };
-  var HOMES = [['overview', 'Overview projet'], ['gantt', 'Planning'], ['structure', 'Structure'], ['ressources', 'Ressources'], ['suivi', 'Suivi'], ['copilote', 'Copilote'], ['budget', 'Budget']];
+  var HOMES = [['overview', 'Overview projet'], ['gantt', 'Planning'], ['structure', 'OBS/WBS'], ['ressources', 'Ressources'], ['suivi', 'Suivi']].concat(BOOT.copilot ? [['copilote', 'Copilote']] : []).concat([['budget', 'Budget']]);
 
   // ------------------------------------------------------------ outils
   function el(tag, attrs, children) {
@@ -101,14 +96,6 @@ var BOOT = <?!= boot ?>;
   }
   function frDate(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
   function box(title, children) { return el('div', { class: 'box' }, [el('h2', { text: title })].concat(children)); }
-
-  // ------------------------------------------------------------ navigation
-  function syncTabs() {
-    Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-tab') === state.tab)); });
-    ['fiche', 'notifications', 'affichage'].forEach(function (t) { $('panel-' + t).hidden = t !== state.tab; });
-    try { google.script.history.replace(null, { view: 'compte', tab: state.tab }); } catch (e) { /* hors web app */ }
-  }
-  function setTab(t) { state.tab = t; syncTabs(); render(); }
 
   // ------------------------------------------------------------ Ma fiche
   function ensureSuggestions() {
@@ -246,17 +233,15 @@ var BOOT = <?!= boot ?>;
     ]));
   }
 
+  /** Plus d'onglets : les trois rubriques s'affichent ensemble. */
   function render() {
     if (!state.acct) return;
-    if (state.tab === 'fiche') renderFiche();
-    else if (state.tab === 'notifications') renderNotifications();
-    else renderAffichage();
+    renderFiche();
+    renderNotifications();
+    renderAffichage();
   }
 
   // ------------------------------------------------------------ démarrage
-  Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) { b.addEventListener('click', function () { setTab(b.getAttribute('data-tab')); }); });
-  state.tab = BOOT.tab || 'fiche';
-  syncTabs();
   call('account.get', {}).then(function (a) {
     state.acct = a;
     $('admin-chip').hidden = !a.isAdmin;
@@ -266,7 +251,7 @@ var BOOT = <?!= boot ?>;
     p.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Chargement impossible.' }), el('span', { text: e.message || 'Erreur inconnue.' })]));
   });
 
-  window.__ppm = { state: state, setTab: setTab };
+  window.__ppm = { state: state };
 })();
 </script>
 </body>

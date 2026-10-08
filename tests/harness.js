@@ -51,7 +51,7 @@ function freshCore(opts = {}) {
   const ctx = loadCore();
   let t = Date.parse(opts.now || '2026-10-05T08:00:00.000Z');
   ctx.CLOCK = () => (t += 1); // strictement croissante : ordre des événements garanti
-  ctx.PROPERTY_OVERRIDES = { PPM_DOMAIN: 'entreprise.com', PPM_ADMINS: 'admin@entreprise.com' };
+  ctx.PROPERTY_OVERRIDES = { PPM_DOMAIN: 'entreprise.com', PPM_ADMINS: 'admin@entreprise.com', PPM_COPILOT: 'oui' }; // le copilote est en suspens par défaut : les tests de ses fonctions l'activent
   ctx.TABLE_PROVIDER = memoryProvider(ctx);
   ctx.IDEMPOTENCY_STORE = {};
   ctx.SENT_MAILS = [];

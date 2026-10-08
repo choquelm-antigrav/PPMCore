@@ -469,9 +469,8 @@ function uiCall(action, params, requestId) {
 }
 
 var PAGES = { gantt: 'Gantt', structure: 'Structure', suivi: 'Suivi', copilote: 'Copilote', compte: 'Compte', admin: 'Admin', budget: 'Budget', overview: 'Overview', ressources: 'Ressources' };
-var PAGE_TITLES = { gantt: 'PPM — Planning', structure: 'PPM — Structure', suivi: 'PPM — Suivi', copilote: 'PPM — Copilote', compte: 'PPM — Mon compte', admin: 'PPM — Administration', budget: 'PPM — Budget', overview: 'PPM — Overview projet', ressources: 'PPM — Ressources' };
-var PAGE_TABS = { gantt: [''], structure: ['obs', 'wbs'], suivi: ['ecarts', 'changes', 'baselines', 'workspace'], copilote: ['synthese', 'simulation', 'questions', 'suggestions'],
-  compte: ['fiche', 'notifications', 'affichage'], admin: ['reglages', 'sante', 'feries', 'journaux'], budget: ['bilan', 'po', 'budget'], overview: [''], ressources: [''] };
+var PAGE_TITLES = { gantt: 'PPM — Planning', structure: 'PPM — OBS/WBS', suivi: 'PPM — Suivi', copilote: 'PPM — Copilote', compte: 'PPM — Mon compte', admin: 'PPM — Administration', budget: 'PPM — Budget', overview: 'PPM — Overview projet', ressources: 'PPM — Ressources' };
+var PAGE_TABS = { gantt: [''], structure: [''], suivi: [''], copilote: ['synthese', 'simulation', 'questions', 'suggestions'], compte: [''], admin: [''], budget: [''], overview: [''], ressources: [''] };
 
 /** JSON à clés triées : la page et le serveur calculent la même clé pour les mêmes paramètres. */
 function stableJson_(v) {
@@ -496,11 +495,18 @@ function preloadFor_(view, boot, email) {
   };
   if (view === 'compte') { put('account.get', {}); return pre; }
   if (view === 'overview') { put('overview.get', { projectId: boot.project || '' }); return pre; }
-  if (view === 'admin') { if (boot.isAdmin) put('admin.get', {}); return pre; }
+  if (view === 'admin') { if (boot.isAdmin) { put('admin.get', {}); put('admin.health', {}); put('admin.holidays', {}); put('admin.logs', {}); } return pre; }
   if (view === 'budget') {
     var bcat = put('planning.catalog', {});
     var bfirst = boot.project || (bcat.ok ? ((bcat.data.projects.filter(function (x) { return x.status !== 'Clos'; })[0] || bcat.data.projects[0] || {}).id || '') : '');
-    if (bfirst) put('budget.access', { projectId: bfirst });
+    if (bfirst) {
+      var acc = put('budget.access', { projectId: bfirst });
+      if (acc.ok) { // plus d'onglets : toutes les zones auxquelles on a droit se chargent avec la page
+        if (acc.data.all) put('budget.balance', { projectId: bfirst });
+        if (acc.data.po) { put('po.list', { projectId: bfirst }); put('po.list', { scope: 'outside' }); }
+        if (acc.data.budget) put('budget.get', { projectId: bfirst });
+      }
+    }
     return pre;
   }
   var cat = put('planning.catalog', {});
@@ -518,15 +524,16 @@ function preloadFor_(view, boot, email) {
       if (mode === 'teams') put('obs.teams', { rootTeamId: '' });
       else put('obs.tree', { scopeType: 'program', scopeId: boot.program === 'none' ? '' : boot.program });
     } else if (first) {
-      if (boot.tab === 'wbs') put('wbs.tree', { projectId: first });
-      else if (mode === 'teams') put('obs.teams', { rootTeamId: '' });
+      put('wbs.tree', { projectId: first });
+      if (mode === 'teams') put('obs.teams', { rootTeamId: '' });
       else put('obs.tree', { scopeType: 'project', scopeId: first });
     }
   } else if (view === 'suivi' && first) {
     var list = put('baselines.list', { projectId: first });
     if (list.ok) {
-      if (list.data.canReadFeed) put('changes.feed', { projectId: first, limit: 1 });
-      if (boot.tab === 'ecarts' && list.data.project.active_baseline_id) put('baselines.diff', { projectId: first });
+      if (list.data.canReadFeed) { put('changes.feed', { projectId: first, limit: 1 }); put('changes.feed', { projectId: first, all: false }); }
+      if (list.data.project.active_baseline_id) put('baselines.diff', { projectId: first });
+      put('workspace.status', { projectId: first });
     }
   } else if (view === 'ressources' && first) {
     put('ressources.get', { projectId: first });
@@ -551,6 +558,7 @@ function cleanId_(v) {
 function renderPage_(e) {
   resetExecution_();
   var view = e.parameter.view;
+  if (view === 'copilote' && !copilotEnabled_()) view = 'overview'; // copilote en suspens : on arrive sur l'Overview
   if (!PAGES[view]) {
     return HtmlService.createHtmlOutput('<p>Vue inconnue.</p>').setTitle('PPM');
   }
@@ -569,7 +577,9 @@ function renderPage_(e) {
   var theme = '', home = 'overview';
   try { var ui = loadPrefs_(currentUserEmail_()).ui; theme = ui.theme; home = ui.home; } catch (err) { theme = ''; }
   t.theme = theme === 'dark' || theme === 'light' ? theme : 'auto';
+  if (home === 'copilote' && !copilotEnabled_()) home = 'overview';
   boot.home = home;
+  boot.copilot = copilotEnabled_();
   boot.isAdmin = adminEmails().indexOf(currentUserEmail_()) >= 0;
   try { var bctx = buildContext(currentUserEmail_()); boot.canBudget = boot.isAdmin || (isInternalUser_(bctx) && (bctx.assignments || []).length > 0); } catch (err) { boot.canBudget = boot.isAdmin; }
   var t0 = Date.now();

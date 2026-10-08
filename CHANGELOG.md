@@ -1,5 +1,18 @@
 # Journal des versions
 
+## 0.11.0
+
+- **Plus aucun onglet** sur Budget, Suivi, Mon compte, Administration et OBS/WBS : chaque rubrique est une zone, toutes affichées ensemble. Le menu ▾ de la barre du haut est retiré. Premier écran préparé avec la page.
+- **OBS/WBS** : la page Structure est renommée ; l'organisation et le découpage s'affichent l'un sous l'autre, chacun avec sa barre d'outils et son panneau de détail.
+- **Ressources à positionner** : une personne créée sans rôle apparaît dans l'organisation, avec « Positionner dans l'organigramme » ; repère « À positionner dans l'OBS » dans Ressources.
+- **Copilote en suspens** (lien, page, réglages, demandes à l'IA) ; réactivation par `PPM_COPILOT = oui`.
+- **Domaines autorisés** : champ ajouté dans Administration (il manquait à l'écran en 0.10.0).
+- **Points d'entrée en tête de la liste** des fonctions de l'éditeur : `A1_INSTALLER_PPM`, `A2_SEED_DEMO`, `A3_VERIFIER_INSTALLATION`, `A4_DIAGNOSTIC_ACCES`, `A5_INSTALLER_DECLENCHEURS` (fichier `000_Menu.gs`). Les anciens noms `installerPpm`, `seedDemo`, `diagnosticAcces` ne sont plus publics.
+- **Démo complète** : un programme, quatre projets dont un complexe (WBS de 16 workpackages et 48 éléments, 43 dépendances, retards, trois baselines, budget, commandes d'achat, risques ; 60 dépendances et 47 lignes de budget en tout), 38 personnes avec leurs taux, 11 équipes, plus de 80 rôles, trois personnes à positionner. Découpée en 15 étapes qui reprennent là où elles se sont arrêtées ; aucune adresse e-mail fictive.
+- **Overview** : le repère « Personnes » compte les membres du projet (et non plus les adresses joignables) ; un dépassement du budget externe sur un seul CPN met l'indicateur de coût en alerte.
+- Aperçu de la démo : `node tests/preview_demo.js`.
+- Tests : 177 serveur (dont `test_demo.js`), plus onze essais de pages.
+
 ## 0.10.0 — Overview, Ressources, charte Airbus, menu des onglets, accès par domaine
 
 - **Charte** reprise de la diapositive Airbus fournie, sur toutes les pages (hero dégradé, libellés en capitales espacées, cartes à liseré, pastilles numérotées, orange réservé aux mises en garde).

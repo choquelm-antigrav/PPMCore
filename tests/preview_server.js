@@ -29,6 +29,8 @@ const dora = P('Dora Schmidt', '', 'Responsable qualification', orgs[3], { resou
 const fay = P('Fay Colin', 'fay@entreprise.com', 'Ingénieure structure', orgs[1], { team_id: tStr.id });
 const gus = P('Gustave Petit', 'gus@entreprise.com', 'Ingénieur matériaux', orgs[1], { team_id: tStr.id });
 const hana = P('Hana Iyer', '', 'Analyste calcul', orgs[2], { resource_type: 'Externe', country: 'IN', team_id: tStr.id });
+P('Nina Roux', 'nina@entreprise.com', 'Ingénieure calcul', orgs[1], { team_id: tStr.id });
+P('Paul Roy', '', 'Contrôleur essais', orgs[2], { resource_type: 'Externe', country: 'DE', supplier: 'Alpha Test GmbH' });
 const ines = P('Inès Girard', 'ines@entreprise.com', '', '', { team_id: tConc.id });
 c.repoUpdate('HierarchicalTeam', team.id, { manager_resource_id: anna.id }, null, S);
 c.repoUpdate('HierarchicalTeam', tConc.id, { manager_resource_id: alice.id }, null, S);

@@ -46,10 +46,11 @@ function openPage(user, tab, mode) {
   });
   const win = dom.window, doc = win.document;
   const until = async (cond, ms = 3000) => { const s = Date.now(); while (Date.now() - s < ms) { if (cond()) return true; await wait(10); } return false; };
-  const $ = (id) => doc.getElementById(id);
+  const SUF = tab === 'wbs' ? '-wbs' : ''; // dépendances : zone du découpage ; rôles, personnes, équipes : zone de l'organisation
+  const $ = (id) => doc.getElementById(id + SUF) || doc.getElementById(id);
   const click = (n) => n.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   const text = (id) => ($(id) || { textContent: '' }).textContent;
-  const node = (id) => doc.querySelector('#canvas .node[data-id="' + id + '"]');
+  const node = (id) => doc.querySelector('#canvas' + SUF + ' .node[data-id="' + id + '"]');
   const pick = async (id, title) => { await until(() => node(id)); click(node(id)); await until(() => !$('details').hidden && (!title || text('details').includes(title))); };
   const submit = () => $('gf-form').dispatchEvent(new win.Event('submit', { cancelable: true }));
   const set = (id, v) => { $('gf-' + id).value = v; };
@@ -198,6 +199,35 @@ function openPage(user, tab, mode) {
   check(!m.$('role-add') && m.doc.querySelectorAll('#details .member-list button').length === 0, 'aucune action sur les rôles');
   await m.person(w.carla.id);
   check(!m.$('person-edit') && !m.$('person-remove'), 'aucune action sur la fiche d’un autre');
+
+  // ---------------------------------------------------------------- ressources à positionner (personnes créées sans rôle)
+  const nina = c.repoInsert('Resource', { resource_type: 'Interne', name: 'Nina Roux', email: 'nina@entreprise.com', country: 'FR' }, w.S);
+  const place = openPage(CP, 'obs', 'roles');
+  await place.until(() => place.doc.getElementById('unplaced') && !place.doc.getElementById('unplaced').hidden);
+  check(/Ressources à positionner/.test(place.text('unplaced')) && !!place.doc.querySelector('[data-unplaced="' + nina.id + '"]'), 'la personne créée sans rôle apparaît dans « Ressources à positionner » : ' + place.text('unplaced-list'));
+  check(!place.doc.querySelector('[data-unplaced="' + w.mia.id + '"]'), 'une personne qui a un rôle n’y est pas');
+  place.click(place.doc.querySelector('[data-unplaced="' + nina.id + '"]'));
+  await place.until(() => place.doc.getElementById('person-place'));
+  check(/Nina Roux/.test(place.text('details')) && /pas encore positionnée/.test(place.text('details')), 'sa fiche dit qu’elle n’est pas encore positionnée : ' + place.text('details').slice(0, 120));
+  place.click(place.doc.getElementById('person-place'));
+  await place.until(() => place.formOpen() && place.doc.getElementById('gf-scope'));
+  check(place.doc.getElementById('gf-resource_id').value === nina.id, 'le formulaire de rôle est prérempli avec la personne');
+  check(place.doc.getElementById('gf-scope').value === 'project:' + w.p1.id, 'périmètre proposé : celui qu’on regarde');
+  check(!place.opts('role_code').includes('PL') && !place.opts('role_code').includes('DPL') && place.opts('role_code').includes('MEMBER'), 'seuls les rôles qu’on peut donner sont proposés');
+  place.set('role_code', 'MEMBER'); place.submit();
+  await place.until(() => c.repoList('RoleAssignment').some((a) => a.resource_id === nina.id && a.role_code === 'MEMBER'));
+  await place.until(() => !place.doc.querySelector('[data-unplaced="' + nina.id + '"]'));
+  check(true, 'positionnée : elle quitte la zone des ressources à positionner');
+  await place.until(() => place.doc.querySelectorAll('#canvas .node').length > 0);
+  check([...place.doc.querySelectorAll('#canvas .node text')].some((t) => /Nina Roux/.test(t.textContent)), 'et figure maintenant dans l’organigramme');
+  const viewer = openPage(MEMBER, 'obs', 'roles');
+  c.repoInsert('Resource', { resource_type: 'Externe', name: 'Paul Roy' }, w.S);
+  const viewer2 = openPage(MEMBER, 'obs', 'roles');
+  await viewer2.until(() => viewer2.doc.getElementById('unplaced') && !viewer2.doc.getElementById('unplaced').hidden);
+  viewer2.click(viewer2.doc.querySelector('[data-unplaced]'));
+  await viewer2.until(() => !viewer2.$('details').hidden);
+  check(!viewer2.doc.getElementById('person-place') && !viewer2.doc.getElementById('person-edit'), 'un simple membre voit la zone mais ne peut ni positionner ni modifier');
+  void viewer;
 
   console.log(failed ? '\n' + failed + ' échec(s).' : '\nDépendances, rôles, personnes et équipes : tout est conforme.');
   process.exit(failed ? 1 : 0);

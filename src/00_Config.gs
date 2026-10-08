@@ -5,7 +5,7 @@
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.10.0';
+var PPM_VERSION = '0.11.0';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -89,6 +89,8 @@ var PROP = {
   LOGO_URL: 'PPM_LOGO_URL',
   LAST_NIGHTLY: 'PPM_LAST_NIGHTLY',
   LAST_DIGEST: 'PPM_LAST_DIGEST',
+  COPILOT: 'PPM_COPILOT',
+  DEMO_STEP: 'PPM_DEMO_STEP',
   REMINDER_ON: 'PPM_REMINDER_ON',
   REMINDER_DAYS: 'PPM_REMINDER_DAYS'
 };
@@ -128,6 +130,16 @@ function adminEmails() {
 
 /** Domaine autorisé (propriété PPM_DOMAIN, ex. « entreprise.com »). */
 /** Domaines autorisés : PPM_DOMAIN peut en lister plusieurs, séparés par une virgule (ex. entreprise.com, filiale.com). */
+/**
+ * Copilote IA en suspens (décision du propriétaire) : page, lien, réglages et demandes à l'IA sont masqués et refusés tant que la propriété
+ * PPM_COPILOT ne vaut pas « oui ». Rien n'est supprimé : le code et les réglages sont conservés.
+ */
+function copilotEnabled_() { return String(getProp(PROP.COPILOT, 'non')).toLowerCase() === 'oui'; }
+
+function requireCopilot_() {
+  if (!copilotEnabled_()) throw new PpmError('FORBIDDEN', 'Le copilote est en suspens.');
+}
+
 function allowedDomains() {
   return String(getProp(PROP.DOMAIN, '')).toLowerCase().split(/[\s,;]+/).filter(function (d) { return d; });
 }

@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.10.0">
+<meta name="ppm-version" content="0.11.0">
 <?!= include('Style') ?>
 <style>
   .panel { padding: 16px 24px 32px; }
@@ -69,19 +69,17 @@
 </header>
 
 <div class="status">
-  <div class="seg" role="tablist" aria-label="Rubriques">
-    <button type="button" role="tab" data-tab="ecarts" aria-pressed="true">Écarts à la baseline</button>
-    <button type="button" role="tab" data-tab="changes" aria-pressed="false" id="tab-changes">Changements à valider</button>
-    <button type="button" role="tab" data-tab="baselines" aria-pressed="false">Baselines</button>
-    <button type="button" role="tab" data-tab="workspace" aria-pressed="false">Agenda et Drive</button>
-  </div>
   <button type="button" class="icon-btn" id="reload" style="margin-left:auto" aria-label="Actualiser" title="Actualiser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
 </div>
 
+<div class="zone" id="zone-ecarts"><h2 class="sec">Écarts à la baseline</h2></div>
 <section class="panel" id="panel-ecarts" aria-label="Écarts à la baseline"></section>
-<section class="panel" id="panel-changes" aria-label="Changements à valider" hidden></section>
-<section class="panel" id="panel-baselines" aria-label="Baselines" hidden></section>
-<section class="panel" id="panel-workspace" aria-label="Agenda et Drive" hidden></section>
+<div class="zone" id="zone-changes"><h2 class="sec" id="tab-changes">Changements à valider</h2></div>
+<section class="panel" id="panel-changes" aria-label="Changements à valider"></section>
+<div class="zone" id="zone-baselines"><h2 class="sec">Baselines</h2></div>
+<section class="panel" id="panel-baselines" aria-label="Baselines"></section>
+<div class="zone" id="zone-workspace"><h2 class="sec">Agenda et Drive</h2></div>
+<section class="panel" id="panel-workspace" aria-label="Agenda et Drive"></section>
 
 <dialog id="form">
   <h2 id="form-title"></h2>
@@ -198,10 +196,9 @@ var BOOT = <?!= boot ?>;
     var base = BOOT.baseUrl || '';
     $('nav-plan').setAttribute('href', base + '?view=gantt' + (state.projectId ? '&project=' + state.projectId : ''));
     $('nav-struct').setAttribute('href', base + '?view=structure' + (state.projectId ? '&project=' + state.projectId : ''));
-    $('nav-suivi').setAttribute('href', base + '?view=suivi' + (state.projectId ? '&project=' + state.projectId : '') + '&tab=' + state.tab);
+    $('nav-suivi').setAttribute('href', base + '?view=suivi' + (state.projectId ? '&project=' + state.projectId : ''));
     $('nav-copilot').setAttribute('href', base + '?view=copilote' + (state.projectId ? '&project=' + state.projectId : ''));
-    try { google.script.history.replace(null, { view: 'suivi', project: state.projectId, tab: state.tab }); } catch (e) { /* hors web app */ }
-    if (window.ppmTab) ppmTab('suivi', state.tab);
+    try { google.script.history.replace(null, { view: 'suivi', project: state.projectId }); } catch (e) { /* hors web app */ }
   }
   function fillPicker() {
     var sel = $('picker'); clear(sel);
@@ -218,45 +215,43 @@ var BOOT = <?!= boot ?>;
     group('Hors programme', byProgram['']);
     sel.value = state.projectId;
   }
-  function syncTabs() {
-    Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) {
-      b.setAttribute('aria-pressed', String(b.getAttribute('data-tab') === state.tab));
-    });
-    ['ecarts', 'changes', 'baselines', 'workspace'].forEach(function (t) { $('panel-' + t).hidden = t !== state.tab; });
-    var l = state.list;
-    $('tab-changes').hidden = !!l && !l.canReadFeed;
+  /** Plus d'onglets : toutes les zones s'affichent ; celle des changements est réservée à ceux qui peuvent les lire. */
+  function syncZones() {
+    var show = !state.list || !!state.list.canReadFeed;
+    $('zone-changes').hidden = !show; $('panel-changes').hidden = !show;
   }
-  function setTab(t) {
-    if (t === 'changes' && state.list && !state.list.canReadFeed) t = 'ecarts';
-    state.tab = t; syncTabs(); remember(); return loadTab();
+  /** « Voir les écarts » d'une baseline : on règle la comparaison puis on va à la zone des écarts. */
+  function showDiff() {
+    var p = loadDiff();
+    var z = $('zone-ecarts');
+    if (z.scrollIntoView) z.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return p;
   }
-
   // ------------------------------------------------------------ chargement
   function loadProject(id) {
     state.projectId = id; state.selected = {}; state.compare = { base: '', to: '' }; state.wsReport = null;
     $('picker').value = id;
     remember();
     var ticket = ++state.seq;
-    loading($('panel-' + state.tab));
+    ['ecarts', 'changes', 'baselines', 'workspace'].forEach(function (t) { loading($('panel-' + t)); });
     return call('baselines.list', { projectId: id }).then(function (l) {
       if (ticket !== state.seq) return;
       state.list = l;
       renderHeader();
-      if (state.tab === 'changes' && !l.canReadFeed) state.tab = 'ecarts';
-      syncTabs(); remember();
+      syncZones(); remember();
       if (l.canReadFeed) refreshPending();
-      return loadTab();
-    }).catch(function (e) { failed($('panel-' + state.tab), e); toast(e.message || 'Erreur.', true); });
+      return loadAll();
+    }).catch(function (e) { failed($('panel-ecarts'), e); toast(e.message || 'Erreur.', true); });
   }
   function reloadList() {
-    return call('baselines.list', { projectId: state.projectId }).then(function (l) { state.list = l; renderHeader(); syncTabs(); });
+    return call('baselines.list', { projectId: state.projectId }).then(function (l) { state.list = l; renderHeader(); syncZones(); });
   }
-  function loadTab() {
+  function loadAll() {
     if (!state.list) return Promise.resolve();
-    if (state.tab === 'ecarts') return loadDiff();
-    if (state.tab === 'changes') return loadFeed();
-    if (state.tab === 'baselines') { renderBaselines(); return Promise.resolve(); }
-    return loadWorkspace();
+    renderBaselines();
+    var jobs = [loadDiff(), loadWorkspace()];
+    if (state.list.canReadFeed) jobs.push(loadFeed());
+    return Promise.all(jobs);
   }
   function activeBaseline() { return (state.list.baselines || []).filter(function (b) { return b.status === 'Active'; })[0] || null; }
 
@@ -441,7 +436,7 @@ var BOOT = <?!= boot ?>;
       if (b.status === 'Active' || b.status === 'Archivée') {
         actions.appendChild(el('button', { type: 'button', class: 'btn', text: 'Voir les écarts', onclick: function () {
           state.compare = { base: b.id, to: '' };
-          setTab('ecarts');
+          showDiff();
         } }));
       }
       var who = b.status === 'Demandée' ? 'Demandée par ' + b.requested_by + ' le ' + frDate(b.created_at)
@@ -481,7 +476,7 @@ var BOOT = <?!= boot ?>;
     $('form-ok').disabled = true;
     f.submit(reason, $('form-label').value.trim()).then(function (msg) {
       closeForm(); toast(msg);
-      return reloadList().then(loadTab).then(function () { if (state.list.canReadFeed) refreshPending(); });
+      return reloadList().then(loadAll).then(function () { if (state.list.canReadFeed) refreshPending(); });
     }).catch(function (e) { $('form-ok').disabled = false; toast(e.message || 'Opération impossible.', true); });
   }
   function nextLabel() {
@@ -569,9 +564,6 @@ var BOOT = <?!= boot ?>;
   }
 
   // ------------------------------------------------------------ événements
-  Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) {
-    b.addEventListener('click', function () { setTab(b.getAttribute('data-tab')); });
-  });
   $('picker').addEventListener('change', function () { loadProject(this.value); });
   $('reload').addEventListener('click', function () { loadProject(state.projectId); });
   $('form-ok').addEventListener('click', submitForm);
@@ -579,18 +571,16 @@ var BOOT = <?!= boot ?>;
   $('form').addEventListener('cancel', function (e) { e.preventDefault(); closeForm(); });
 
   // ------------------------------------------------------------ démarrage
-  state.tab = BOOT.tab || 'ecarts';
-  syncTabs();
   call('planning.catalog', {}).then(function (cat) {
     state.catalog = cat;
     var first = BOOT.project || (cat.projects.filter(function (p) { return p.status !== 'Clos'; })[0] || cat.projects[0] || {}).id;
-    if (!first) { empty($('panel-' + state.tab), 'Aucun projet pour l’instant.', 'Créez un projet dans l’application AppSheet, puis revenez ici.'); return; }
+    if (!first) { empty($('panel-ecarts'), 'Aucun projet pour l’instant.', 'Créez un projet dans l’application AppSheet, puis revenez ici.'); return; }
     state.projectId = first;
     fillPicker();
     return loadProject(first);
-  }).catch(function (e) { failed($('panel-' + state.tab), e); });
+  }).catch(function (e) { failed($('panel-ecarts'), e); });
 
-  window.__ppm = { state: state, setTab: setTab, loadProject: loadProject };
+  window.__ppm = { state: state, loadProject: loadProject };
 })();
 </script>
 </body>

@@ -109,7 +109,6 @@ function openPage(file, user, boot, extraScript) {
   // ---------------------------------------------------------------- changements à valider
   await p.until(() => /\(\d+\)/.test(p.text('tab-changes')));
   check(p.text('tab-changes') === 'Changements à valider (4)', 'compteur de l’onglet : ' + p.text('tab-changes'));
-  p.click(p.doc.querySelector('[data-tab="changes"]'));
   await p.until(() => p.doc.querySelectorAll('#panel-changes tbody tr').length === 4);
   const feed = [...p.doc.querySelectorAll('#panel-changes tbody tr')].map((r) => r.textContent);
   check(feed.some((t) => t.includes('Calcul') && t.includes('fin prévue : 23/10/2026 → 28/10/2026')), 'changement de date lisible');
@@ -134,7 +133,7 @@ function openPage(file, user, boot, extraScript) {
   const m = openPage('Suivi.html', MEMBER, { tab: 'baselines' });
   await m.until(() => m.button('Demander une nouvelle baseline'));
   check(!m.button('Figer'), 'un membre ne peut pas figer');
-  check(m.doc.getElementById('tab-changes').hidden, 'le fil des changements est masqué à un simple membre');
+  check(m.doc.getElementById('zone-changes').hidden && m.doc.getElementById('panel-changes').hidden, 'la zone des changements est masquée à un simple membre');
   m.click(m.button('Demander une nouvelle baseline'));
   m.fill('form-reason', 'Le fournisseur livre 2 semaines plus tard');
   m.click(m.doc.getElementById('form-ok'));
@@ -142,7 +141,6 @@ function openPage(file, user, boot, extraScript) {
   await m.until(() => m.text('panel-baselines').includes('Demandée'));
   check(m.text('context').includes('1 demande en attente'), 'contexte : ' + m.text('context'));
 
-  p.click(p.doc.querySelector('[data-tab="baselines"]'));
   p.click(p.doc.getElementById('reload'));
   await p.until(() => p.button('Refuser'));
   p.click(p.button('Refuser'));
@@ -165,7 +163,6 @@ function openPage(file, user, boot, extraScript) {
   await p.until(() => /B0 active/.test(p.text('context')));
   check(true, 'B0 réactivée, contexte à jour');
   // comparer B0 et B1
-  p.click(p.doc.querySelector('[data-tab="ecarts"]'));
   await p.until(() => p.doc.getElementById('cmp-to'));
   const onlyAgain = p.doc.getElementById('only-changes');
   onlyAgain.checked = true; onlyAgain.dispatchEvent(new p.win.Event('change'));
@@ -176,7 +173,6 @@ function openPage(file, user, boot, extraScript) {
   check(p.doc.querySelectorAll('#panel-ecarts tbody tr').length === 3, 'B0 comparée à B1 : les 3 écarts figés dans B1');
 
   // ---------------------------------------------------------------- agenda et Drive
-  p.click(p.doc.querySelector('[data-tab="workspace"]'));
   await p.until(() => p.doc.getElementById('ws-enable'));
   p.click(p.doc.getElementById('ws-enable'));
   await p.until(() => p.doc.getElementById('ws-report'));

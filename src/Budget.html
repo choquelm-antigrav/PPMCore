@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.10.0">
+<meta name="ppm-version" content="0.11.0">
 <?!= include('Style') ?>
 <style>
   .panel { padding: 8px 24px 32px; max-width: 1240px; }
@@ -59,16 +59,11 @@
   <div class="controls"><select id="picker" aria-label="Projet"></select></div>
 </header>
 
-<div class="status">
-  <div class="seg" role="tablist" aria-label="Rubriques">
-    <button type="button" data-tab="bilan" aria-pressed="true" hidden>Bilan par CPN</button>
-    <button type="button" data-tab="po" aria-pressed="false" hidden>Achats (PO)</button>
-    <button type="button" data-tab="budget" aria-pressed="false" hidden>Budget</button>
-  </div>
-</div>
-
-<section class="panel" id="panel-bilan" aria-label="Bilan par CPN"></section>
+<div class="zone" id="zone-bilan" hidden><h2 class="sec">Bilan par CPN</h2></div>
+<section class="panel" id="panel-bilan" aria-label="Bilan par CPN" hidden></section>
+<div class="zone" id="zone-po" hidden><h2 class="sec">Achats (PO)</h2></div>
 <section class="panel" id="panel-po" aria-label="Achats" hidden></section>
+<div class="zone" id="zone-budget" hidden><h2 class="sec">Budget par livrable</h2></div>
 <section class="panel" id="panel-budget" aria-label="Budget" hidden></section>
 
 <dialog id="genform" aria-labelledby="gf-title">
@@ -117,7 +112,7 @@ var BOOT = <?!= boot ?>;
 
   var TABS = ['bilan', 'po', 'budget'];
   var ACCESS_KEY = { bilan: 'all', po: 'po', budget: 'budget' };
-  var state = { tab: '', projectId: '', catalog: null, access: null, balance: null, po: null, budget: null, rates: null, people: null, outside: null, resources: null, seq: 0 };
+  var state = { projectId: '', catalog: null, access: null, balance: null, po: null, budget: null, rates: null, people: null, outside: null, resources: null, seq: 0 };
   var $ = function (id) { return document.getElementById(id); };
   var STATUS_TONE = { 'À faire': '', 'Lancée': 'warn', 'GR': 'ok', 'Terminée': 'ok' };
   var STATUSES = ['À faire', 'Lancée', 'GR', 'Terminée'];
@@ -166,7 +161,7 @@ var BOOT = <?!= boot ?>;
   function frMonth(m) { var p = String(m).split('-'); return p[1] + '/' + p[0]; }
   function plural(n, one, many) { return n + ' ' + (Math.abs(n) > 1 ? many : one); }
   function loading(p) { clear(p); p.appendChild(el('p', { class: 'loading', text: 'Chargement…' })); }
-  function empty(p, title, text) { clear(p); p.appendChild(el('div', { class: 'empty' }, [el('strong', { text: title }), el('span', { text: text || '' })])); }
+  function empty(p, title, text) { p.hidden = false; clear(p); p.appendChild(el('div', { class: 'empty' }, [el('strong', { text: title }), el('span', { text: text || '' })])); }
   function card(k, v, s, tone) { return el('div', { class: 'card' + (tone ? ' ' + tone : '') }, [el('p', { class: 'k', text: k }), el('p', { class: 'v', text: v }), s ? el('p', { class: 's', text: s }) : null]); }
   function table(id, head, rows) {
     return el('div', { class: 'table-wrap' }, [el('table', { id: id }, [
@@ -240,27 +235,24 @@ var BOOT = <?!= boot ?>;
   }
 
   // ------------------------------------------------------------ navigation et chargement
-  function syncTabs() {
+  /** Plus d'onglets : les zones auxquelles on a droit s'affichent ensemble, chacune avec son titre. */
+  function syncZones() {
     var a = state.access || {};
-    Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) {
-      var t = b.getAttribute('data-tab');
-      b.hidden = !a[ACCESS_KEY[t]];
-      b.setAttribute('aria-pressed', String(t === state.tab));
-    });
-    TABS.forEach(function (t) { $('panel-' + t).hidden = t !== state.tab; });
-    try { google.script.history.replace(null, { view: 'budget', project: state.projectId, tab: state.tab }); } catch (e) { /* hors web app */ }
-    if (window.ppmTab) ppmTab('budget', state.tab);
+    TABS.forEach(function (t) { var on = !!a[ACCESS_KEY[t]]; $('panel-' + t).hidden = !on; $('zone-' + t).hidden = !on; });
+    try { google.script.history.replace(null, { view: 'budget', project: state.projectId }); } catch (e) { /* hors web app */ }
     var base = BOOT.baseUrl || '';
     Array.prototype.forEach.call(document.querySelectorAll('.ppm-bar [data-view]'), function (n) {
       var v = n.getAttribute('data-view');
       if (['gantt', 'structure', 'suivi', 'copilote', 'budget'].indexOf(v) >= 0 && state.projectId) n.setAttribute('href', base + '?view=' + v + '&project=' + state.projectId);
     });
   }
-  function firstAllowed() {
-    var a = state.access;
-    return a.all ? 'bilan' : a.po ? 'po' : a.budget ? 'budget' : '';
+  function loadAll() {
+    var a = state.access || {}, jobs = [];
+    if (a.all) jobs.push(loadBalance());
+    if (a.po) jobs.push(loadPo());
+    if (a.budget) jobs.push(loadBudget());
+    return Promise.all(jobs);
   }
-  function setTab(t) { state.tab = t; syncTabs(); return loadTab(); }
   function invalidate() { state.balance = null; state.po = null; state.budget = null; state.outside = null; }
   function renderHeader() {
     var p = state.access.project;
@@ -280,22 +272,16 @@ var BOOT = <?!= boot ?>;
       if (ticket !== state.seq) return;
       state.access = a;
       renderHeader();
-      if (TABS.indexOf(state.tab) < 0 || !a[ACCESS_KEY[state.tab]]) state.tab = firstAllowed();
-      if (!state.tab) {
-        syncTabs(); $('panel-bilan').hidden = false;
+      if (!TABS.some(function (t) { return a[ACCESS_KEY[t]]; })) {
+        syncZones(); $('panel-bilan').hidden = false;
         empty($('panel-bilan'), 'Accès réservé.', 'Le budget et les achats sont réservés aux personnes internes nommées dans l’équipe du projet.');
         return;
       }
-      syncTabs();
-      return loadTab();
+      syncZones();
+      return loadAll();
     }).catch(function (e) { failed($('panel-bilan'), e); });
   }
-  function loadTab() {
-    if (state.tab === 'bilan') return loadBalance();
-    if (state.tab === 'po') return loadPo();
-    return loadBudget();
-  }
-  function reload() { invalidate(); return loadTab(); }
+  function reload() { invalidate(); return loadAll(); }
 
   // ------------------------------------------------------------ CPN du projet
   function editCpn() {
@@ -590,7 +576,6 @@ var BOOT = <?!= boot ?>;
   }
 
   // ------------------------------------------------------------ événements et démarrage
-  Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) { b.addEventListener('click', function () { setTab(b.getAttribute('data-tab')); }); });
   $('picker').addEventListener('change', function () { loadProject(this.value); });
   $('cpn-edit').addEventListener('click', editCpn);
   $('gf-form').addEventListener('submit', function (e) { e.preventDefault(); submitForm(); });
@@ -600,7 +585,6 @@ var BOOT = <?!= boot ?>;
   $('confirm-cancel').addEventListener('click', function () { closeDialog($('confirm')); });
   $('confirm-ok').addEventListener('click', function () { if (state.confirmAction) state.confirmAction(); });
 
-  state.tab = TABS.indexOf(BOOT.tab) >= 0 ? BOOT.tab : '';
   call('planning.catalog', {}).then(function (cat) {
     state.catalog = cat;
     var sel = $('picker'); clear(sel);
@@ -611,7 +595,7 @@ var BOOT = <?!= boot ?>;
     return loadProject(first);
   }).catch(function (e) { failed($('panel-bilan'), e); });
 
-  window.__ppm = { state: state, setTab: setTab };
+  window.__ppm = { state: state, reload: reload };
 })();
 </script>
 </body>

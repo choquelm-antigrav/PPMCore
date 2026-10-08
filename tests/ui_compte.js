@@ -24,7 +24,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 function openPage(file, user, boot) {
   const html = src(file).replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Header') ?>", src('Header.html'))
     .replace('<?= theme ?>', 'auto')
-    .replace('<?!= boot ?>', JSON.stringify(Object.assign({ project: '', program: '', tab: '', baseUrl: 'https://app.test/exec', appsheetUrl: '', version: 'test', home: 'gantt', isAdmin: user === ADMIN, view: file === 'Compte.html' ? 'compte' : 'admin' }, boot || {})))
+    .replace('<?!= boot ?>', JSON.stringify(Object.assign({ project: '', program: '', tab: '', baseUrl: 'https://app.test/exec', appsheetUrl: '', version: 'test', home: 'overview', isAdmin: user === ADMIN, view: file === 'Compte.html' ? 'compte' : 'admin' }, boot || {})))
     .replace(/<link rel="stylesheet" href="https:[^"]+">/g, '').replace(/<link rel="preconnect"[^>]*>/g, '');
   const calls = [];
   const dom = new JSDOM(html, {
@@ -51,8 +51,7 @@ function openPage(file, user, boot) {
   const change = (n) => n.dispatchEvent(new win.Event('change', { bubbles: true }));
   const submit = (form) => form.dispatchEvent(new win.Event('submit', { cancelable: true }));
   const text = (id) => (doc.getElementById(id) || { textContent: '' }).textContent;
-  const tab = (name) => click(doc.querySelector('[data-tab="' + name + '"]'));
-  return { win, doc, calls, until, click, change, submit, text, tab };
+  return { win, doc, calls, until, click, change, submit, text };
 }
 
 (async () => {
@@ -87,7 +86,6 @@ function openPage(file, user, boot) {
   check(!n.doc.getElementById('edit-function'), 'sans fiche : message clair, rien à modifier');
 
   // ---------------------------------------------------------------- Notifications
-  p.tab('notifications');
   await p.until(() => p.doc.querySelector('input[name=freq]'));
   check(p.doc.querySelector('input[name=freq][value="Quotidien"]').checked, 'fréquence par défaut : quotidien');
   const weekly = p.doc.querySelector('input[name=freq][value="Hebdomadaire"]');
@@ -115,7 +113,6 @@ function openPage(file, user, boot) {
   check(true, 'désinscription enregistrée');
 
   // ---------------------------------------------------------------- Affichage
-  p.tab('affichage');
   await p.until(() => p.doc.getElementById('home'));
   check(p.doc.querySelector('input[name=theme][value="auto"]').checked && p.doc.getElementById('home').value === 'overview', 'réglages par défaut : automatique, Overview projet');
   const dark = p.doc.querySelector('input[name=theme][value="dark"]');
@@ -138,7 +135,7 @@ function openPage(file, user, boot) {
   console.log('\nPage Administration (jsdom)');
   const denied = openPage('Admin.html', CP);
   await denied.until(() => /Réservé aux administrateurs/.test(denied.text('panel-reglages')));
-  check(denied.doc.getElementById('tabs').hidden && !denied.calls.some((a) => a.startsWith('admin.')), 'non-administrateur : message, onglets cachés, aucune demande à l’administration');
+  check(['reglages', 'sante', 'feries', 'journaux'].every((z) => denied.doc.getElementById('zone-' + z).hidden) && !denied.calls.some((a) => a.startsWith('admin.')), 'non-administrateur : message, aucune zone d’administration, aucune demande à l’administration');
   check(denied.doc.getElementById('ppm-admin').hidden, 'lien « Administration » absent de sa bannière');
 
   // ---------------------------------------------------------------- Réglages
@@ -166,7 +163,6 @@ function openPage(file, user, boot) {
   await a.until(() => a.doc.getElementById('f-key').placeholder.includes('clé enregistrée'));
   check(!a.doc.documentElement.outerHTML.includes(KEY), 'la clé n’apparaît nulle part dans la page après enregistrement');
 
-  a.tab('reglages');
   await a.until(() => a.doc.getElementById('f-reminder-days'));
   check(a.doc.getElementById('f-reminder-on').checked && a.doc.getElementById('f-reminder-days').value === '10', 'rappels : actifs, 10 jours ouvrés par défaut');
   a.doc.getElementById('f-reminder-days').value = '7'; a.doc.getElementById('f-reminder-on').checked = false;
@@ -180,8 +176,8 @@ function openPage(file, user, boot) {
 
   // ---------------------------------------------------------------- Santé
   c.nightlyRun();
-  a.tab('sante');
-  await a.until(() => a.doc.querySelector('#panel-sante .cards'));
+  a.win.__ppm.render(); // la page charge santé et journaux dès l'ouverture : on les recharge après la nuit
+  await a.until(() => /Dernière nuitRéussie/.test(a.text('panel-sante')));
   const cards = [...a.doc.querySelectorAll('#panel-sante .card')].map((x) => x.textContent);
   check(cards.some((x) => /^InstallationConforme/.test(x)) && cards.some((x) => /^Dernière nuitRéussie/.test(x)), 'installation conforme, dernière nuit réussie : ' + cards.slice(0, 2).join(' / '));
   check(a.doc.querySelectorAll('#panel-sante tbody tr').length === 5 && /Sauvegarde des classeurs/.test(a.text('panel-sante')), 'les 5 étapes de la nuit avec leur durée');
@@ -193,7 +189,6 @@ function openPage(file, user, boot) {
   c.TRIGGER_LIST = () => ['nightlyRun', 'sendDigests'];
 
   // ---------------------------------------------------------------- Jours fériés
-  a.tab('feries');
   await a.until(() => a.doc.querySelectorAll('#panel-feries tbody tr').length === 8);
   check(a.doc.querySelectorAll('#panel-feries tbody tr').length === 8 && /France \(FR\)/.test(a.text('panel-feries')), '4 pays, 2 années');
   a.doc.getElementById('hol-years').value = '2028';
@@ -221,11 +216,40 @@ function openPage(file, user, boot) {
   check(/Date invalide/.test(a.text('toast')), 'date inexistante refusée : ' + a.text('toast'));
 
   // ---------------------------------------------------------------- Journaux
-  a.tab('journaux');
-  await a.until(() => a.doc.querySelector('#panel-journaux table'));
+  a.win.__ppm.render();
+  await a.until(() => /Réglages de l’outil/.test(a.text('panel-journaux')));
   const logs = a.text('panel-journaux');
   check(/Réglages de l’outil/.test(logs) && /gemini_key/.test(logs) && /remplacée/.test(logs) && !logs.includes(KEY), 'réglages tracés, sans jamais montrer la clé');
   check(/Aucun échange enregistré/.test(logs), 'échanges avec le copilote : vide tant que l’IA n’est pas utilisée');
+
+  // ---------------------------------------------------------------- domaines autorisés : un champ, avec ses garde-fous
+  const dm = openPage('Admin.html', ADMIN, { isAdmin: true });
+  await dm.until(() => dm.doc.getElementById('f-domains'));
+  check(dm.doc.getElementById('f-domains').value === 'entreprise.com', 'les domaines autorisés se lisent et se modifient dans les réglages : ' + dm.doc.getElementById('f-domains').value);
+  dm.doc.getElementById('f-domains').value = 'filiale.fr';
+  dm.submit(dm.doc.querySelector('form.form'));
+  await dm.until(() => !dm.doc.getElementById('cfg-error').hidden);
+  check(/retirer votre propre domaine/.test(dm.text('cfg-error')), 'on ne peut pas retirer son propre domaine : ' + dm.text('cfg-error'));
+  dm.doc.getElementById('f-domains').value = 'entreprise.com, filiale.fr';
+  dm.submit(dm.doc.querySelector('form.form'));
+  await dm.until(() => c.allowedDomains().length === 2);
+  check(c.allowedDomains().join() === 'entreprise.com,filiale.fr', 'second domaine enregistré, effet immédiat');
+  c.setProp(c.PROP.DOMAIN, 'entreprise.com');
+
+  // ---------------------------------------------------------------- copilote en suspens : absent des réglages, de la santé, des journaux et de la page d'accueil
+  c.setProp(c.PROP.COPILOT, 'non');
+  const sus = openPage('Admin.html', ADMIN, { isAdmin: true, copilot: false });
+  await sus.until(() => sus.doc.getElementById('f-domains') && /Santé de l’installation|Conforme/.test(sus.text('panel-sante')) && sus.doc.querySelector('#panel-journaux table'));
+  check(!sus.doc.getElementById('f-mode') && !/Copilote IA/.test(sus.text('panel-reglages')), 'réglages : plus de section « Copilote IA »');
+  check(![...sus.doc.querySelectorAll('#panel-sante .card')].some((x) => /^Copilote/.test(x.textContent)), 'santé : plus de carte « Copilote »');
+  check(!/Échanges avec le copilote/.test(sus.text('panel-journaux')), 'journaux : plus d’échanges avec le copilote');
+  const homeOff = openPage('Compte.html', CP, { copilot: false });
+  await homeOff.until(() => homeOff.doc.getElementById('home'));
+  check(![...homeOff.doc.querySelectorAll('#home option')].some((o) => o.value === 'copilote') && [...homeOff.doc.querySelectorAll('#home option')].some((o) => o.value === 'budget'), 'page d’accueil : le copilote n’est plus proposé');
+  const on = openPage('Compte.html', CP, { copilot: true });
+  await on.until(() => on.doc.getElementById('home'));
+  check([...on.doc.querySelectorAll('#home option')].some((o) => o.value === 'copilote'), 'réactivé : il revient');
+  c.setProp(c.PROP.COPILOT, 'oui');
 
   console.log(failed ? '\n' + failed + ' échec(s).' : '\nPages Mon compte et Administration : tout est conforme.');
   process.exit(failed ? 1 : 0);

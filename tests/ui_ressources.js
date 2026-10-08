@@ -108,6 +108,7 @@ function openPage(user) {
   await p.until(() => p.row(leo.id));
   check(leo.email === 'leo@entreprise.com' && leo.resource_type === 'Externe' && Number(leo.daily_rate) === 480, 'personne ajoutée avec son statut, son adresse et son taux');
   check(/Alpha Test GmbH/.test(flat(p.row(leo.id).textContent)), 'fournisseur affiché pour un externe');
+  check(!!p.row(leo.id).querySelector('a.badge') && /À positionner dans l’OBS/.test(p.row(leo.id).textContent) && /view=structure&project=/.test(p.row(leo.id).querySelector('a.badge').getAttribute('href')) && !p.row(w.carla.id).querySelector('a.badge'), 'une personne sans rôle porte « À positionner dans l’OBS », avec un lien vers la page OBS/WBS ; celles qui ont un rôle non');
   check(access(leo.id) === 'Peut se connecter' && /adresse e-mail professionnelle/.test(p.text('people-note')), 'une adresse du domaine donne l’accès aussitôt ; la page explique comment faire intervenir quelqu’un');
 
   // équipes

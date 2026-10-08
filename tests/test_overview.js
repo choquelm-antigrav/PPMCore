@@ -109,7 +109,8 @@ module.exports = function () {
     eq(c(bal(0, 500)).level, 'alert', 'engagé sans budget externe');
     ok(!/€/.test(c(bal(10000, 5000)).facts.join()), 'sans le droit budget : aucun montant');
     ok(/5 000 € sur 10 000 €/.test(c(bal(10000, 5000), { showAmounts: true }).facts.join().replace(/\s/g, ' ')), 'avec le droit budget : les montants');
-    eq(c(bal(10000, 5000, { cpns: [{ cpn: 'CPN-1', overrun: true }] })).facts.some((f) => /CPN-1 : budget externe dépassé/.test(f)), true);
+    const one = c(bal(10000, 5000, { cpns: [{ cpn: 'CPN-1', overrun: true, budget: { external: 3000 } }] }));
+    eq([one.facts.some((f) => /CPN-1 : budget externe dépassé/.test(f)), one.level, one.headline], [true, 'alert', 'Budget externe dépassé sur un CPN'], 'un dépassement sur un seul CPN suffit : le projet entier peut être sous le budget externe');
     eq([w.c.overallLevel_(['ok', 'warn', 'none']), w.c.overallLevel_(['ok', 'none', 'none']), w.c.overallLevel_(['none', 'none']), w.c.overallLevel_(['warn', 'alert', 'ok'])], ['warn', 'ok', 'none', 'alert']);
   });
 

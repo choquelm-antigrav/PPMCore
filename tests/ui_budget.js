@@ -54,13 +54,13 @@ function openPage(user, startTab) {
   const click = (n) => n.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   const change = (n) => n.dispatchEvent(new win.Event('change', { bubbles: true }));
   const text = (id) => flat(($(id) || { textContent: '' }).textContent);
-  const tab = (t) => click(doc.querySelector('[data-tab="' + t + '"]'));
-  const tabs = () => [...doc.querySelectorAll('[data-tab]')].filter((b) => !b.hidden).map((b) => b.getAttribute('data-tab'));
+  // plus d'onglets : les zones auxquelles on a droit sont affichées ensemble
+  const zones = () => ['bilan', 'po', 'budget'].filter((z) => { const n = doc.getElementById('zone-' + z); return n && !n.hidden && !doc.getElementById('panel-' + z).hidden; });
   const submitGf = () => $('gf-form').dispatchEvent(new win.Event('submit', { cancelable: true }));
   const submitPo = () => $('po-form').dispatchEvent(new win.Event('submit', { cancelable: true }));
   const set = (id, v) => { $(id).value = v; };
   const row = (table, key, attr) => doc.querySelector('#' + table + ' tr[' + attr + '="' + key + '"]');
-  return { win, doc, until, $, click, change, text, tab, tabs, submitGf, submitPo, set, row };
+  return { win, doc, until, $, click, change, text, zones, submitGf, submitPo, set, row };
 }
 
 (async () => {
@@ -70,14 +70,15 @@ function openPage(user, startTab) {
   let p = openPage(CP);
   await p.until(() => p.$('bal-table'));
   check(p.text('title') === 'P1 Projet 1' && p.text('cpn-chip') === 'CPN-100 — Nacelle moteur', 'titre et CPN du projet : ' + p.text('cpn-chip'));
-  check(JSON.stringify(p.tabs()) === JSON.stringify(['bilan', 'po', 'budget']), 'le chef de projet voit les trois onglets (les taux se règlent dans Ressources)');
+  check(JSON.stringify(p.zones()) === JSON.stringify(['bilan', 'po', 'budget']), 'le chef de projet voit les trois zones d’un coup, sans onglet : bilan, achats, budget');
+  await p.until(() => p.$('po-add') && p.$('lines-table'));
+  check(!!p.$('bal-table') && !!p.$('po-table') === false && !!p.$('line-add'), 'bilan, achats et lignes de budget sont chargés ensemble sur la page');
   const bal = [...p.doc.querySelectorAll('#bal-table tbody tr[data-cpn]')].map((r) => r.getAttribute('data-cpn'));
   check(JSON.stringify(bal) === JSON.stringify(['CPN-100', 'CPN-200']), 'une ligne par CPN : ' + bal.join(', '));
   check(/8 000 €/.test(p.text('bal-table')) && /5 200 €/.test(p.text('bal-table')), 'budget externe (8 000 €) et interne (5 200 €) par CPN');
   check(!p.$('cpn-edit').hidden && p.text('cpn-edit') === 'Modifier le CPN', 'bouton du CPN pour le pilotage');
 
   // ---------------------------------------------------------------- achats (PO)
-  p.tab('po');
   await p.until(() => p.$('po-add'));
   check(/Aucune PO pour ce projet/.test(p.text('panel-po')), 'aucune PO au départ');
   p.click(p.$('po-add'));
@@ -114,7 +115,7 @@ function openPage(user, startTab) {
   p.click(p.$('po-cancel'));
   // GR en retard
   w.call(CP, 'po.save', { values: { po_number: 'CB-LATE', cpn: 'CPN-100', resource_id: w.xavier.id, amount: 900, status: 'Lancée', gr_due_date: '2026-10-10' } });
-  p.win.__ppm.state.po = null; p.win.__ppm.state.balance = null; p.tab('bilan'); p.tab('po');
+  await p.win.__ppm.reload();
   await p.until(() => p.row('po-table', 'CB-LATE', 'data-po'));
   check(/GR en retard/.test(flat(p.row('po-table', 'CB-LATE', 'data-po').textContent)) && /1 GR en retard/.test(p.text('panel-po')), 'GR en retard signalée sur la ligne et dans l’en-tête');
   // changement de statut en un geste
@@ -123,12 +124,10 @@ function openPage(user, startTab) {
   await p.until(() => c.repoGet('PurchaseOrder', o1.id).status === 'GR');
   check(c.repoGet('PurchaseOrder', o1.id).gr_on === '2026-10-14', 'statut « GR » : date de réception enregistrée');
   // bilan mis à jour
-  p.tab('bilan');
   await p.until(() => p.doc.querySelector('#bal-table tr[data-cpn="CPN-200"]'));
   const g200 = flat(p.doc.querySelector('#bal-table tr[data-cpn="CPN-200"]').textContent);
   check(/8 000 €/.test(g200) && /5 000 €/.test(g200) && /3 000 €/.test(g200), 'bilan du CPN-200 : engagé et réceptionné 5 000 €, reste 3 000 € : ' + g200);
   // suppression
-  p.tab('po');
   await p.until(() => p.row('po-table', 'CB-LATE', 'data-po'));
   p.click(p.row('po-table', 'CB-LATE', 'data-po').querySelector('.po-del'));
   await p.until(() => p.$('confirm').open);
@@ -138,7 +137,6 @@ function openPage(user, startTab) {
   check(true, 'PO supprimée de la liste');
 
   // ---------------------------------------------------------------- lignes de budget
-  p.tab('budget');
   await p.until(() => p.$('lines-table'));
   check(p.doc.querySelectorAll('#lines-table tbody tr').length === 2 && /Taux figé/.test(p.text('lines-table')) && /520/.test(p.text('lines-table')), 'lignes existantes, taux figé visible du chef de projet');
   check(/Livrables sans budget/.test(p.text('panel-budget')), 'livrables sans budget signalés');
@@ -165,7 +163,7 @@ function openPage(user, startTab) {
   check(/doit égaler/.test(p.text('gf-error')), 'échéancier de somme fausse refusé');
   p.set('gf-text', '2026-10 1080\n2026-11 1000'); p.submitGf();
   await p.until(() => c.repoGet('BudgetLine', l3.id).phasing_mode === 'manuel');
-  await p.until(() => /à la main/.test(flat(p.row('lines-table', l3.id, 'data-line').textContent)));
+  await p.until(() => { const r0 = p.row('lines-table', l3.id, 'data-line'); return r0 && /à la main/.test(flat(r0.textContent)); });
   check(true, 'échéancier à la main enregistré et signalé');
   p.click(p.row('lines-table', l3.id, 'data-line').querySelector('.line-del'));
   await p.until(() => p.$('confirm').open);
@@ -188,17 +186,16 @@ function openPage(user, startTab) {
   // ---------------------------------------------------------------- droits
   const m = openPage(MEMBER);
   await m.until(() => m.$('po-add'));
-  check(JSON.stringify(m.tabs()) === JSON.stringify(['po']) && m.$('cpn-edit').hidden, 'un membre interne : seulement les achats, pas de bouton de CPN');
+  check(JSON.stringify(m.zones()) === JSON.stringify(['po']) && m.$('cpn-edit').hidden, 'un membre interne : seulement la zone des achats, pas de bouton de CPN');
   check(!!m.doc.querySelector('#po-table'), 'il voit les PO du projet et peut en créer');
   const r = openPage(RWP);
-  await r.until(() => r.tabs().length > 0 && r.$('panel-po'));
-  check(JSON.stringify(r.tabs()) === JSON.stringify(['po', 'budget']), 'un responsable de WP : achats et son budget : ' + r.tabs().join(','));
-  r.tab('budget');
+  await r.until(() => r.zones().length > 0 && r.$('panel-po'));
+  check(JSON.stringify(r.zones()) === JSON.stringify(['po', 'budget']), 'un responsable de WP : achats et son budget : ' + r.zones().join(','));
   await r.until(() => r.$('lines-table') || r.$('line-add'));
   check(/Budget de votre périmètre/.test(r.text('panel-budget')) && !/Taux figé/.test(r.text('panel-budget')), 'budget limité à son périmètre, sans les taux');
   const n = openPage(NOBODY);
   await n.until(() => /Accès réservé/.test(n.text('panel-bilan')));
-  check(n.tabs().length === 0, 'sans nomination dans l’équipe : rien d’accessible');
+  check(n.zones().length === 0, 'sans nomination dans l’équipe : rien d’accessible');
 
   console.log(failed ? '\n' + failed + ' échec(s).' : '\nPage Budget : tout est conforme.');
   process.exit(failed ? 1 : 0);

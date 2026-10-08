@@ -2,7 +2,7 @@
 
 Toutes les opérations se font **avec le compte propriétaire** (H16), celui qui possède déjà le projet Apps Script et les deux classeurs. AppSheet appelle les scripts de ce compte, et les utilisateurs n'ont jamais accès aux classeurs eux-mêmes.
 
-Prérequis : `setupPpm()` exécuté (les deux classeurs existent), et de préférence `seedDemo()` pour qu'AppSheet détecte les types sur des données réelles.
+Prérequis : `setupPpm()` exécuté (les deux classeurs existent), et de préférence `A2_SEED_DEMO` pour qu'AppSheet détecte les types sur des données réelles.
 
 ## 1. Créer l'application
 

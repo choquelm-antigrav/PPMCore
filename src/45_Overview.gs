@@ -96,7 +96,8 @@ function costKpi_(d) {
   }
   var ext = b.totals.budget.external, committed = b.totals.po.committed;
   var pct = ext > 0 ? Math.round(100 * committed / ext) : null;
-  var overrun = b.totals.overrun || (ext === 0 && committed > 0);
+  var cpnOverrun = b.cpns.some(function (g) { return g.overrun && g.budget && g.budget.external > 0; }); // les analyses se font par CPN : un seul dépassement compte
+  var overrun = b.totals.overrun || cpnOverrun || (ext === 0 && committed > 0);
   var level = 'ok';
   if ((pct !== null && pct >= 85) || d.lateGr > 0) level = 'warn';
   if (overrun) level = 'alert';
@@ -106,7 +107,7 @@ function costKpi_(d) {
   b.cpns.filter(function (g) { return g.overrun && g.cpn; }).forEach(function (g) { facts.push('CPN ' + g.cpn + ' : budget externe dépassé'); });
   if (d.lateGr) facts.push(pl_(d.lateGr, 'GR en retard', 'GR en retard'));
   if (d.withoutBudget) facts.push(pl_(d.withoutBudget, 'livrable sans budget', 'livrables sans budget'));
-  var headline = level === 'ok' ? 'Budget externe maîtrisé' : overrun ? 'Budget externe dépassé' : d.lateGr ? 'GR en retard' : 'Budget externe bientôt consommé';
+  var headline = level === 'ok' ? 'Budget externe maîtrisé' : overrun ? (cpnOverrun && !b.totals.overrun ? 'Budget externe dépassé sur un CPN' : 'Budget externe dépassé') : d.lateGr ? 'GR en retard' : 'Budget externe bientôt consommé';
   return { level: level, label: KPI_LABELS[level], headline: headline, facts: facts, metrics: { engaged_pct: pct, late_gr: d.lateGr, without_budget: d.withoutBudget } };
 }
 
@@ -206,7 +207,7 @@ defineAction('overview.get', function (p, ctx) {
       alerts: data.insights.filter(function (x) { return x.project_id === pr.id && !isTrue(x.deleted) && x.status === 'Nouveau' && x.severity !== 'Info'; })
         .sort(function (a, b) { return (a.severity === 'Alerte' ? 0 : 1) - (b.severity === 'Alerte' ? 0 : 1); }).slice(0, 5)
         .map(function (x) { return { severity: x.severity, message: x.message }; }),
-      people: projectMembers_({ projects: data.projects, workpackages: data.workpackages, planitems: data.planitems, resources: data.resources, assignments: repoList('RoleAssignment') }, pr.id, today).length
+      people: projectMemberIds_({ projects: data.projects, workpackages: data.workpackages, planitems: data.planitems, resources: data.resources, assignments: repoList('RoleAssignment') }, pr.id, today).length
     };
   }
   var programs = data.programs.map(function (g) { return { id: g.id, code: g.code, name: g.name }; });

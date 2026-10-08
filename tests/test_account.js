@@ -192,8 +192,8 @@ module.exports = function () {
     const w = lot2World();
     const boot = (tab, isAdmin) => ({ project: '', program: '', tab, mode: '', isAdmin });
     eq(Object.keys(w.c.preloadFor_('compte', boot('fiche', false), CP)), ['account.get|{}']);
-    eq(Object.keys(w.c.preloadFor_('admin', boot('reglages', true), ADMIN)), ['admin.get|{}']);
+    eq(Object.keys(w.c.preloadFor_('admin', boot('reglages', true), ADMIN)), ['admin.get|{}', 'admin.health|{}', 'admin.holidays|{}', 'admin.logs|{}']);
     eq(Object.keys(w.c.preloadFor_('admin', boot('reglages', false), CP)), [], 'rien pour un non-administrateur');
-    eq([w.c.PAGES.compte, w.c.PAGES.admin, w.c.PAGE_TABS.compte.length, w.c.PAGE_TABS.admin.length], ['Compte', 'Admin', 3, 4]);
+    eq([w.c.PAGES.compte, w.c.PAGES.admin, w.c.PAGE_TABS.compte, w.c.PAGE_TABS.admin], ['Compte', 'Admin', [''], ['']], 'plus d’onglets : rubriques en zones');
   });
 };

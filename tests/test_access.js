@@ -48,9 +48,9 @@ module.exports = function () {
   test('Diagnostic depuis l’éditeur : montre le compte détecté, les domaines et la conduite à tenir', () => {
     const w = lot2World();
     w.c.Session = { getEffectiveUser: () => ({ getEmail: () => 'max@gmail.com' }), getActiveUser: () => ({ getEmail: () => '' }) };
-    const t = w.c.diagnosticAcces();
+    const t = w.c.A4_DIAGNOSTIC_ACCES();
     ok(/Compte qui exécute le script : max@gmail\.com/.test(t) && /non identifié/.test(t) && /Domaines autorisés \(PPM_DOMAIN\) : entreprise\.com/.test(t) && /REFUSÉ/.test(t), t);
     w.c.Session = { getEffectiveUser: () => ({ getEmail: () => CP }), getActiveUser: () => ({ getEmail: () => CP }) };
-    ok(/ACCEPTÉ/.test(w.c.diagnosticAcces()));
+    ok(/ACCEPTÉ/.test(w.c.A4_DIAGNOSTIC_ACCES()));
   });
 };

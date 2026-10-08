@@ -157,6 +157,18 @@ function saveLinks_(links) {
  * responsables de WP et de livrables. Personnes supprimées ou sans adresse du domaine exclues.
  */
 function projectMembers_(data, projectId, today) {
+  var res = indexBy_(data.resources), domains = allowedDomains(), out = {};
+  projectMemberIds_(data, projectId, today).forEach(function (id) {
+    var r = res[id];
+    if (isBlank(r.email)) return;
+    var m = String(r.email).toLowerCase();
+    if (!domains.length || isAllowedEmail_(m)) out[m] = true;
+  });
+  return Object.keys(out).sort();
+}
+
+/** Les membres d'un projet (responsable, responsables de workpackage et d'éléments, rôles du projet, de ses workpackages et du programme), avec ou sans adresse e-mail. */
+function projectMemberIds_(data, projectId, today) {
   var project = indexBy_(data.projects)[projectId];
   if (!project) return [];
   var wpIds = {};
@@ -172,16 +184,8 @@ function projectMembers_(data, projectId, today) {
       (a.scope_type === 'program' && !isBlank(project.program_id) && a.scope_id === project.program_id);
     if (hit) people[a.resource_id] = true;
   });
-  var domains = allowedDomains();
   var res = indexBy_(data.resources);
-  var out = {};
-  Object.keys(people).forEach(function (id) {
-    var r = res[id];
-    if (!r || isTrue(r.deleted) || isBlank(r.email)) return;
-    var m = String(r.email).toLowerCase();
-    if (!domains.length || isAllowedEmail_(m)) out[m] = true;
-  });
-  return Object.keys(out).sort();
+  return Object.keys(people).filter(function (id) { return res[id] && !isTrue(res[id].deleted); }).sort();
 }
 
 // ---------------------------------------------------------------- agenda

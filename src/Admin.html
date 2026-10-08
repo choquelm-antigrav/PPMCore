@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.10.0">
+<meta name="ppm-version" content="0.11.0">
 <?!= include('Style') ?>
 <style>
   .panel { padding: 8px 24px 32px; max-width: 1100px; }
@@ -49,19 +49,14 @@
   <div class="title"><h1 id="title">Administration</h1></div>
 </header>
 
-<div class="status">
-  <div class="seg" role="tablist" aria-label="Rubriques" id="tabs">
-    <button type="button" data-tab="reglages" aria-pressed="true">Réglages</button>
-    <button type="button" data-tab="sante" aria-pressed="false">Santé</button>
-    <button type="button" data-tab="feries" aria-pressed="false">Jours fériés</button>
-    <button type="button" data-tab="journaux" aria-pressed="false">Journaux</button>
-  </div>
-</div>
-
+<div class="zone" id="zone-reglages"><h2 class="sec">Réglages</h2></div>
 <section class="panel" id="panel-reglages" aria-label="Réglages"></section>
-<section class="panel" id="panel-sante" aria-label="Santé" hidden></section>
-<section class="panel" id="panel-feries" aria-label="Jours fériés" hidden></section>
-<section class="panel" id="panel-journaux" aria-label="Journaux" hidden></section>
+<div class="zone" id="zone-sante"><h2 class="sec">Santé de l’installation</h2></div>
+<section class="panel" id="panel-sante" aria-label="Santé"></section>
+<div class="zone" id="zone-feries"><h2 class="sec">Jours fériés</h2></div>
+<section class="panel" id="panel-feries" aria-label="Jours fériés"></section>
+<div class="zone" id="zone-journaux"><h2 class="sec">Journaux</h2></div>
+<section class="panel" id="panel-journaux" aria-label="Journaux"></section>
 
 <div class="toast" id="toast" role="status" hidden></div>
 
@@ -72,8 +67,7 @@ var BOOT = <?!= boot ?>;
 (function () {
   'use strict';
 
-  var TABS = ['reglages', 'sante', 'feries', 'journaux'];
-  var state = { tab: 'reglages', cfg: null, health: null, holidays: null, logs: null, editing: '' };
+  var state = { cfg: null, health: null, holidays: null, logs: null, editing: '' };
   var $ = function (id) { return document.getElementById(id); };
   var COUNTRY_NAMES = { FR: 'France', DE: 'Allemagne', UK: 'Royaume-Uni', IN: 'Inde' };
   var STEP_LABELS = { reconcile: 'Réconciliation du journal', rules: 'Moteur de règles', workspace: 'Agenda et Drive', directory: 'Annuaire', backup: 'Sauvegarde des classeurs' };
@@ -138,17 +132,12 @@ var BOOT = <?!= boot ?>;
   function field(label, input) { return el('label', { class: 'lbl' }, [label, input]); }
 
   // ------------------------------------------------------------ navigation
-  function syncTabs() {
-    Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-tab') === state.tab)); });
-    TABS.forEach(function (t) { $('panel-' + t).hidden = t !== state.tab; });
-    try { google.script.history.replace(null, { view: 'admin', tab: state.tab }); } catch (e) { /* hors web app */ }
-  }
-  function setTab(t) { state.tab = t; syncTabs(); render(); }
+  /** Plus d'onglets : toutes les rubriques se chargent et s'affichent ensemble. */
   function render() {
-    if (state.tab === 'reglages') renderSettings();
-    else if (state.tab === 'sante') loadHealth();
-    else if (state.tab === 'feries') loadHolidays();
-    else loadLogs();
+    renderSettings();
+    loadHealth();
+    loadHolidays();
+    loadLogs();
   }
   function failed(p, e) { empty(p, 'Chargement impossible.', (e && e.message) || 'Erreur inconnue.'); }
 
@@ -167,6 +156,9 @@ var BOOT = <?!= boot ?>;
     var remOn = el('input', { type: 'checkbox', id: 'f-reminder-on' });
     remOn.checked = !!c.reminder_on;
     var remDays = el('input', { type: 'number', id: 'f-reminder-days', min: '1', max: '60', step: '1', value: String(c.reminder_days) });
+    var initialDomains = String(c.domain || '');
+    var domainsInput = el('input', { type: 'text', id: 'f-domains', 'aria-label': 'Domaines autorisés', autocomplete: 'off' });
+    domainsInput.value = initialDomains;
     var appsheet = el('input', { type: 'text', id: 'f-appsheet', value: c.appsheet_url, placeholder: 'https://…' });
     var logo = el('input', { type: 'text', id: 'f-logo', value: c.logo_url, placeholder: 'https://… (logo officiel, portail de marque)' });
     var folder = el('input', { type: 'text', id: 'f-folder', value: c.projects_folder_id, placeholder: 'identifiant du dossier Drive' });
@@ -178,6 +170,7 @@ var BOOT = <?!= boot ?>;
         appsheet_url: appsheet.value, logo_url: logo.value, projects_folder_id: folder.value,
         reminder_on: remOn.checked, reminder_days: Number(remDays.value)
       };
+      if (domainsInput.value.trim() !== initialDomains.trim()) values.domains = domainsInput.value;
       if (key.value.trim()) values.gemini_key = key.value.trim();
       if (clearKey.checked) values.clear_gemini_key = true;
       save.disabled = true;
@@ -193,10 +186,12 @@ var BOOT = <?!= boot ?>;
     } }, [
       el('p', { class: 'late', id: 'cfg-error', role: 'alert', hidden: 'hidden' }),
       el('section', { class: 'grp' }, [el('h3', { text: 'Administrateurs' }), field('Une adresse par ligne ; vous devez rester dans la liste', admins)]),
-      el('section', { class: 'grp' }, [el('h3', { text: 'Copilote IA' }),
+      el('section', { class: 'grp' }, [el('h3', { text: 'Accès à l’outil' }),
+        field('Domaines autorisés, séparés par une virgule (au plus cinq ; vous ne pouvez pas retirer le vôtre)', domainsInput)]),
+      c.copilot_enabled ? el('section', { class: 'grp' }, [el('h3', { text: 'Copilote IA' }),
         field('Mode', mode), field('Modèle Gemini', model), field('Quota : demandes par personne et par jour', quota),
         field('Clé Gemini (jamais réaffichée)', key),
-        el('label', { class: 'opt' }, [clearKey, el('span', { text: 'Supprimer la clé enregistrée' })])]),
+        el('label', { class: 'opt' }, [clearKey, el('span', { text: 'Supprimer la clé enregistrée' })])]) : null,
       el('section', { class: 'grp' }, [el('h3', { text: 'Rappels avant livraison' }),
         el('label', { class: 'opt' }, [remOn, el('span', { text: 'Ajouter un rappel dans l’agenda du responsable de chaque livrable' })]),
         field('Délai par défaut, en jours ouvrés avant la livraison (chacun peut régler le sien)', remDays)]),
@@ -207,7 +202,7 @@ var BOOT = <?!= boot ?>;
     panel.appendChild(box('Réglages de l’outil', [form,
       el('p', { class: 'note', text: 'Le mode « api » envoie des données de projet à Gemini : ne l’activez qu’avec l’accord de la DSI. La clé n’est stockée que dans les propriétés du script.' })]));
     var ro = el('dl', { class: 'readonly' });
-    [['Domaine autorisé', c.domain], ['Adresse de l’application', c.webapp_url || 'inconnue : ouvrir l’application une fois'], ['Dossier des sauvegardes', c.backup_folder_id || 'pas encore créé']].forEach(function (x) {
+    [['Domaines autorisés', c.domain], ['Adresse de l’application', c.webapp_url || 'inconnue : ouvrir l’application une fois'], ['Dossier des sauvegardes', c.backup_folder_id || 'pas encore créé']].forEach(function (x) {
       ro.appendChild(el('dt', { class: 'muted', text: x[0] })); ro.appendChild(el('dd', { text: x[1] }));
     });
     panel.appendChild(box('Lecture seule', [ro, el('p', { class: 'note', text: 'Le manifeste, le déploiement et les autorisations se gèrent dans l’éditeur Apps Script.' })]));
@@ -226,7 +221,7 @@ var BOOT = <?!= boot ?>;
     cards.appendChild(card('Installation', h.ok ? 'Conforme' : plural(h.checks.length, 'point à corriger', 'points à corriger'), 'version ' + h.version, h.ok ? 'ok' : 'alert'));
     cards.appendChild(card('Dernière nuit', n ? (n.ok ? 'Réussie' : 'Échec') : 'Jamais exécutée', n ? frDateTime(n.endedAt) : 'lancer nightlyRun ou installTriggers', n && !n.ok ? 'alert' : (n ? 'ok' : '')));
     cards.appendChild(card('Dernier récapitulatif', h.digest ? plural(h.digest.sent, 'mail', 'mails') : '—', h.digest ? frDateTime(h.digest.at) + (h.digest.skipped ? ', ' + h.digest.skipped + ' reporté(s)' : '') : 'pas encore envoyé'));
-    cards.appendChild(card('Copilote', h.ai.mode === 'api' ? h.ai.used_today + ' demandes' : 'IA ' + (h.ai.mode === 'off' ? 'désactivée' : 'en copier-coller'), h.ai.mode === 'api' ? 'aujourd’hui, limite ' + h.ai.per_person_limit + ' par personne' : ''));
+    if (h.copilot_enabled) cards.appendChild(card('Copilote', h.ai.mode === 'api' ? h.ai.used_today + ' demandes' : 'IA ' + (h.ai.mode === 'off' ? 'désactivée' : 'en copier-coller'), h.ai.mode === 'api' ? 'aujourd’hui, limite ' + h.ai.per_person_limit + ' par personne' : ''));
     if (h.mail_quota !== null) cards.appendChild(card('Mails restants', String(h.mail_quota), 'quota du jour', h.mail_quota < 50 ? 'alert' : ''));
     cards.appendChild(card('Cache des lectures', h.cache ? 'Actif' : 'Inactif', h.cache ? 'les tables ne sont relues que si elles ont changé' : 'chaque page relit les feuilles'));
     cards.appendChild(card('Données', plural(h.counts.projects, 'projet', 'projets') + ', ' + plural(h.counts.items, 'élément', 'éléments'), plural(h.counts.people, 'personne', 'personnes') + ', ' + plural(h.counts.administrators, 'administrateur', 'administrateurs')));
@@ -304,8 +299,8 @@ var BOOT = <?!= boot ?>;
       return el('tr', {}, [el('td', { text: frDateTime(e.at) }), el('td', { text: e.actor }), el('td', { text: e.what }), el('td', { text: e.field }),
         el('td', { text: (e.old_value || '∅') + ' → ' + (e.new_value || '∅') }), el('td', { text: e.source })]);
     })));
-    panel.appendChild(el('h2', { style: 'font-size:16px;margin:24px 0 8px', text: 'Échanges avec le copilote' }));
-    if (!l.ai.length) panel.appendChild(el('p', { class: 'note', text: 'Aucun échange enregistré.' }));
+    if (l.copilot_enabled) panel.appendChild(el('h2', { style: 'font-size:16px;margin:24px 0 8px', text: 'Échanges avec le copilote' }));
+    if (!l.copilot_enabled) { /* copilote en suspens : pas d'échanges à montrer */ } else if (!l.ai.length) panel.appendChild(el('p', { class: 'note', text: 'Aucun échange enregistré.' }));
     else panel.appendChild(table(['Quand', 'Qui', 'Objet', 'Mode', 'Chiffres non vérifiés', 'Avis', 'Extrait'], l.ai.map(function (x) {
       return el('tr', {}, [el('td', { text: frDateTime(x.at) }), el('td', { text: x.actor }), el('td', { text: x.purpose }), el('td', { text: x.mode }),
         el('td', {}, [x.unverified ? el('span', { class: 'badge warn', text: x.unverified }) : '—']), el('td', { text: x.feedback || '—' }), el('td', { text: x.excerpt })]);
@@ -313,18 +308,15 @@ var BOOT = <?!= boot ?>;
   }
 
   // ------------------------------------------------------------ démarrage
-  Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) { b.addEventListener('click', function () { setTab(b.getAttribute('data-tab')); }); });
-  state.tab = TABS.indexOf(BOOT.tab) >= 0 ? BOOT.tab : 'reglages';
-  syncTabs();
   if (!BOOT.isAdmin) {
-    $('tabs').hidden = true;
-    TABS.forEach(function (t) { $('panel-' + t).hidden = t !== 'reglages'; });
+    ['sante', 'feries', 'journaux'].forEach(function (t) { $('panel-' + t).hidden = true; $('zone-' + t).hidden = true; });
+    $('zone-reglages').hidden = true;
     empty($('panel-reglages'), 'Réservé aux administrateurs.', 'Vos réglages personnels sont dans « Mon compte ».');
   } else {
-    call('admin.get', {}).then(function (c) { state.cfg = c; render(); }).catch(function (e) { failed($('panel-' + state.tab), e); });
+    call('admin.get', {}).then(function (c) { state.cfg = c; render(); }).catch(function (e) { failed($('panel-reglages'), e); });
   }
 
-  window.__ppm = { state: state, setTab: setTab };
+  window.__ppm = { state: state, render: render };
 })();
 </script>
 </body>

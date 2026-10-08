@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.10.0">
+<meta name="ppm-version" content="0.11.0">
 <?!= include('Style') ?>
 <style>
   header .title { flex: 1 1 360px; }
@@ -266,7 +266,7 @@ var BOOT = <?!= boot ?>;
     kp.appendChild(kpiCard(2, 'Qualité · on quality', k.quality, p, open > 0 ? [
       el('div', { class: 'bar-row' }, [el('span', { text: 'Risques ouverts' }), el('div', { class: 'bar2', role: 'img', 'aria-label': plural(open, 'risque ouvert', 'risques ouverts') }, [
         el('span', { class: 'red', style: 'width:' + 100 * ql.critical_risks / open + '%' }), el('span', { class: 'amber', style: 'width:' + 100 * (ql.high_risks - ql.critical_risks) / open + '%' }), el('span', { class: 'soft', style: 'width:' + 100 * rest / open + '%' })]), el('span', { text: String(open) })])] : [],
-      link('copilote', p, '&tab=suggestions'), 'Voir les suggestions →', 'quality'));
+      BOOT.copilot ? link('copilote', p, '&tab=suggestions') : '', 'Voir les suggestions →', 'quality'));
     kp.appendChild(kpiCard(3, 'Coût · on cost', k.cost, p, cs.engaged_pct !== null && cs.engaged_pct !== undefined ? [bar('Budget externe engagé', Math.min(100, cs.engaged_pct), cs.engaged_pct > 100 ? 'red' : '', cs.engaged_pct + ' %')] : [],
       link('budget', p), 'Voir le budget →', 'cost'));
 

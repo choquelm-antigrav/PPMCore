@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.10.0">
+<meta name="ppm-version" content="0.11.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -245,15 +245,11 @@
   .hero-note .t b { font-weight: 700; }
   .btn.primary { background: var(--brand); border-color: var(--brand); }
   .btn.primary:hover { background: var(--accent); border-color: var(--accent); }
-  .ppm-nav .ppm-caret { align-self: stretch; margin-left: -8px; padding: 0 8px 0 4px; background: none; border: 0; border-bottom: 3px solid transparent; color: rgba(255, 255, 255, .78); font-size: 11px; cursor: pointer; }
-  .ppm-nav .ppm-caret:hover, .ppm-nav .ppm-caret[aria-expanded="true"] { color: #fff; }
-  .ppm-nav .ppm-caret[hidden] { display: none; }
-  .ppm-sub { position: fixed; z-index: 40; min-width: 230px; margin: 0; padding: 6px 0; list-style: none; background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); }
-  .ppm-sub[hidden] { display: none; }
-  .ppm-sub a { display: block; padding: 9px 18px; color: var(--ink); text-decoration: none; font-size: 14.5px; border-left: 3px solid transparent; }
-  .ppm-sub a:hover, .ppm-sub a:focus { background: var(--hover); outline: none; }
-  .ppm-sub a[aria-current="true"] { font-weight: 700; border-left-color: var(--accent); background: var(--tint); }
-  @media (max-width: 900px) { header { padding: 14px 12px 12px; } header .title h1 { font-size: 22px; } }
+  /* Plus d'onglets : chaque rubrique est une zone de la page, avec son titre */
+  .zone { padding: 22px 24px 0; }
+  .zone h2.sec { margin: 0; }
+  .zone[hidden] { display: none; }
+  @media (max-width: 900px) { header { padding: 14px 12px 12px; } header .title h1 { font-size: 22px; } .zone { padding: 16px 12px 0; } }
 </style>
 <style>
   main { display: grid; grid-template-columns: minmax(0, 1fr); }
@@ -263,6 +259,12 @@
   .canvas svg { display: block; }
   .team-pick[hidden], .scope-pick[hidden], .mode[hidden] { display: none; }
 
+  .unplaced { margin: 0 0 12px; padding: 10px 14px; background: var(--warn-bg); border-left: 4px solid var(--amber); border-radius: 4px; }
+  .unplaced[hidden] { display: none; }
+  .unplaced .k { margin: 0 0 2px; font-size: 12px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--warn-ink); }
+  .unplaced .hint-line { margin: 0 0 4px; font-size: 13.5px; color: var(--warn-ink); }
+  .chip-person { margin: 4px 6px 0 0; padding: 3px 12px; border: 1px solid var(--amber); border-radius: 100px; background: var(--surface); color: var(--ink); cursor: pointer; font: inherit; font-size: 13.5px; }
+  .chip-person:hover, .chip-person[aria-pressed="true"] { background: var(--amber); color: #FFFFFF; }
   .options { margin: 0 24px; padding: 12px 16px; background: var(--surface); border: 1px solid var(--rule); border-top: 0; border-radius: 0 0 4px 4px; }
   .options[hidden] { display: none; }
   .options .groups { display: flex; flex-wrap: wrap; gap: 12px 32px; }
@@ -304,8 +306,8 @@
   aside .edit input { padding: 6px 8px; border: 1px solid var(--rule); border-radius: 4px; color: var(--ink); }
   aside ul.roles { margin: 0 0 16px; padding-left: 18px; font-size: 14px; }
   aside .hint { margin: 12px 0 0; color: var(--muted); font-size: 13px; }
-  #editor { width: min(520px, calc(100% - 32px)); max-width: none; }
-  #confirm { width: min(460px, calc(100% - 32px)); }
+  dialog[id^="editor"] { width: min(520px, calc(100% - 32px)); max-width: none; }
+  dialog[id^="confirm"] { width: min(460px, calc(100% - 32px)); }
   .ed-grid { display: grid; gap: 12px; }
   .ed-grid label.lbl { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
   .ed-grid input, .ed-grid select { padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--ink); min-width: 0; width: 100%; }
@@ -314,7 +316,7 @@
   .btn.danger { background: var(--red); border-color: var(--red); color: #FFFFFF; }
   .btn.danger:hover { filter: brightness(.92); background: var(--red); }
   #wbs-actions { margin: 4px 0 16px; padding-top: 12px; border-top: 1px solid var(--rule); }
-  #genform { width: min(520px, calc(100% - 32px)); max-width: none; }
+  dialog[id^="genform"] { width: min(520px, calc(100% - 32px)); max-width: none; }
   .deps h3 { margin: 4px 0 8px; font-size: 15px; font-weight: 600; }
   .dep-row, aside ul.member-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; }
   .dep-row { border-bottom: 1px solid var(--rule); font-size: 14px; }
@@ -332,7 +334,7 @@
   <nav class="ppm-nav" aria-label="Pages de l’outil">
     <a id="nav-overview" data-view="overview" href="#">Overview</a>
     <a id="nav-plan" data-view="gantt" href="#">Planning</a>
-    <a id="nav-struct" data-view="structure" href="#">Structure</a>
+    <a id="nav-struct" data-view="structure" href="#">OBS/WBS</a>
     <a id="nav-res" data-view="ressources" href="#">Ressources</a>
     <a id="nav-suivi" data-view="suivi" href="#">Suivi</a>
     <a id="nav-copilot" data-view="copilote" href="#">Copilote</a>
@@ -425,10 +427,6 @@
     }
   })();
 
-  /** Dernier onglet connu de chaque page (les pages le signalent) : sert à marquer l'onglet courant dans le menu. */
-  var currentTab = {};
-  window.ppmTab = function (view, tab) { currentTab[view] = tab; };
-
   function init() {
     var B = window.BOOT || {};
     var base = B.baseUrl || '';
@@ -448,7 +446,8 @@
     });
     document.getElementById('ppm-admin').hidden = !B.isAdmin;
     document.getElementById('nav-budget').hidden = !B.canBudget;
-    var EYEBROW = { overview: 'Overview · Projet', gantt: 'Planning · Gantt', structure: 'Structure · OBS et WBS', ressources: 'Ressources · Équipes et rôles', suivi: 'Suivi · Baselines', copilote: 'Copilote · Analyse', budget: 'Budget · CPN et achats', compte: 'Mon compte', admin: 'Administration' };
+    document.getElementById('nav-copilot').hidden = !B.copilot; // copilote en suspens tant que PPM_COPILOT n'est pas « oui »
+    var EYEBROW = { overview: 'Overview · Projet', gantt: 'Planning · Gantt', structure: 'OBS/WBS · Organisation et découpage', ressources: 'Ressources · Équipes et rôles', suivi: 'Suivi · Baselines', copilote: 'Copilote · Analyse', budget: 'Budget · CPN et achats', compte: 'Mon compte', admin: 'Administration' };
     var titleBox = document.querySelector('header .title');
     if (titleBox && EYEBROW[B.view] && !titleBox.querySelector('.eyebrow')) {
       var eb = document.createElement('span');
@@ -478,54 +477,6 @@
     if (navBox && window.MutationObserver) new MutationObserver(propagateProject).observe(navBox, { subtree: true, attributes: true, attributeFilter: ['href'] });
     propagateProject();
 
-    // Onglets de Suivi, Copilote et Budget : accessibles directement depuis la bannière, sans recharger la page quand on y est déjà
-    var SUBMENUS = {
-      suivi: [['ecarts', 'Écarts à la baseline'], ['changes', 'Changements à valider'], ['baselines', 'Baselines'], ['workspace', 'Agenda et Drive']],
-      copilote: [['synthese', 'Synthèse'], ['simulation', 'Simulation « et si… »'], ['questions', 'Questions'], ['suggestions', 'Suggestions']],
-      budget: [['bilan', 'Bilan par CPN'], ['po', 'Achats (PO)'], ['budget', 'Budget']]
-    };
-    var menu = document.createElement('ul');
-    menu.className = 'ppm-sub'; menu.id = 'ppm-sub'; menu.setAttribute('role', 'menu'); menu.hidden = true;
-    document.body.appendChild(menu);
-    var openBtn = null;
-    function closeMenu() { menu.hidden = true; if (openBtn) { openBtn.setAttribute('aria-expanded', 'false'); openBtn = null; } }
-    function openMenu(view, caret) {
-      var link = document.querySelector('.ppm-nav a[data-view="' + view + '"]');
-      var href = link ? (link.getAttribute('href') || '') : '';
-      var project = new URLSearchParams(href.indexOf('?') >= 0 ? href.slice(href.indexOf('?') + 1) : '').get('project') || '';
-      while (menu.firstChild) menu.removeChild(menu.firstChild);
-      SUBMENUS[view].forEach(function (it) {
-        var li = document.createElement('li');
-        li.setAttribute('role', 'none');
-        var a = document.createElement('a');
-        a.setAttribute('role', 'menuitem'); a.setAttribute('data-tab', it[0]); a.textContent = it[1];
-        a.href = base + '?view=' + view + '&tab=' + it[0] + (project ? '&project=' + project : '');
-        if (B.view === view && currentTab[view] === it[0]) a.setAttribute('aria-current', 'true');
-        a.addEventListener('click', function (e) {
-          if (B.view === view && window.__ppm && typeof window.__ppm.setTab === 'function') { e.preventDefault(); closeMenu(); window.__ppm.setTab(it[0]); }
-        });
-        li.appendChild(a); menu.appendChild(li);
-      });
-      var r = caret.getBoundingClientRect();
-      menu.style.top = Math.round(r.bottom) + 'px';
-      menu.style.left = Math.max(8, Math.min(Math.round(r.left), window.innerWidth - 250)) + 'px';
-      menu.hidden = false; caret.setAttribute('aria-expanded', 'true'); openBtn = caret;
-      var first = menu.querySelector('a'); if (first) first.focus();
-    }
-    Object.keys(SUBMENUS).forEach(function (view) {
-      var link = document.querySelector('.ppm-nav a[data-view="' + view + '"]');
-      if (!link) return;
-      var caret = document.createElement('button');
-      caret.type = 'button'; caret.className = 'ppm-caret'; caret.setAttribute('data-menu', view);
-      caret.setAttribute('aria-haspopup', 'menu'); caret.setAttribute('aria-expanded', 'false');
-      caret.setAttribute('aria-label', 'Onglets de ' + link.textContent.trim());
-      caret.textContent = '▾'; caret.hidden = link.hidden;
-      link.parentNode.insertBefore(caret, link.nextSibling);
-      caret.addEventListener('click', function (e) { e.stopPropagation(); if (openBtn === caret) closeMenu(); else openMenu(view, caret); });
-    });
-    document.addEventListener('click', function (e) { if (!menu.hidden && !menu.contains(e.target)) closeMenu(); });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !menu.hidden) { var b = openBtn; closeMenu(); if (b) b.focus(); } });
-    window.addEventListener('resize', closeMenu);
     var here = document.querySelector('.ppm-bar [data-view="' + (B.view || '') + '"]');
     if (here) here.setAttribute('aria-current', 'page');
     document.getElementById('ppm-brand').setAttribute('href', base + '?view=' + (B.home || 'overview'));
@@ -544,35 +495,32 @@
 </script>
 <header>
   <div class="title">
-    <h1 id="title">Structure</h1>
-    <span class="pop-anchor">
-      <button type="button" class="icon-btn" id="info-btn" aria-label="Informations" title="Informations"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.01"/></svg></button>
-      <div class="popover" id="info-pop" hidden>
-        <p id="summary" aria-live="polite"></p>
-        <p class="context" id="context"></p>
-      </div>
-    </span>
+    <h1 id="title">OBS/WBS</h1>
+    <p class="context">L’organisation et le découpage du projet, l’un sous l’autre.</p>
   </div>
   <div class="controls">
-    <div class="seg" role="group" aria-label="Type de structure">
-      <button type="button" data-tab="obs" aria-pressed="true">Organisation (OBS)</button>
-      <button type="button" data-tab="wbs" aria-pressed="false">Découpage (WBS)</button>
-    </div>
-    <div class="seg mode" id="mode" role="group" aria-label="Lecture de l’organisation">
-      <button type="button" data-mode="roles" aria-pressed="true">Par rôles</button>
-      <button type="button" data-mode="teams" aria-pressed="false">Par équipes</button>
-    </div>
     <span class="scope-pick" id="scope-pick"><select id="picker" aria-label="Projet ou programme"></select></span>
-    <span class="team-pick" id="team-pick" hidden><select id="team-root" aria-label="Équipe de départ"></select></span>
   </div>
 </header>
 
+<div class="zone" id="zone-obs"><h2 class="sec" id="ztitle">Organisation (OBS)</h2></div>
 <div class="status">
+  <span class="pop-anchor">
+    <button type="button" class="icon-btn" id="info-btn" aria-label="Informations" title="Informations"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.01"/></svg></button>
+    <div class="popover" id="info-pop" hidden>
+      <p id="summary" aria-live="polite"></p>
+      <p class="context" id="context"></p>
+    </div>
+  </span>
+  <div class="seg mode" id="mode" role="group" aria-label="Lecture de l’organisation">
+    <button type="button" data-mode="roles" aria-pressed="true">Par rôles</button>
+    <button type="button" data-mode="teams" aria-pressed="false">Par équipes</button>
+  </div>
+  <span class="team-pick" id="team-pick" hidden><select id="team-root" aria-label="Équipe de départ"></select></span>
   <div class="controls" style="margin-left:auto">
     <button type="button" class="btn" id="org-role" hidden>Attribuer un rôle</button>
     <button type="button" class="btn" id="org-person" hidden>Ajouter une personne</button>
     <button type="button" class="btn" id="org-team" hidden>Ajouter une équipe</button>
-    <button type="button" class="btn" id="wbs-add" hidden>Ajouter un workpackage</button>
     <button type="button" class="btn" id="options-btn" aria-expanded="false" aria-controls="options">Attributs affichés</button>
     <div class="seg" role="group" aria-label="Zoom">
       <button type="button" id="zoom-out" aria-label="Zoom arrière">−</button>
@@ -598,6 +546,11 @@
 
 <main id="main">
   <div class="chart">
+    <div class="unplaced" id="unplaced" hidden>
+      <p class="k">Ressources à positionner <span id="unplaced-count"></span></p>
+      <p class="hint-line">Personnes sans aucun rôle pour l’instant : cliquez sur l’une d’elles, puis « Positionner dans l’organigramme ».</p>
+      <div id="unplaced-list"></div>
+    </div>
     <ul class="legend" id="legend" aria-label="Légende des couleurs"></ul>
     <div class="canvas" id="canvas"><p class="loading">Chargement…</p></div>
   </div>
@@ -638,6 +591,84 @@
   </form>
 </dialog>
 
+
+<div class="zone" id="zone-wbs"><h2 class="sec" id="ztitle-wbs">Découpage du projet (WBS)</h2></div>
+<div class="status">
+  <span class="pop-anchor">
+    <button type="button" class="icon-btn" id="info-btn-wbs" aria-label="Informations" title="Informations"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.01"/></svg></button>
+    <div class="popover" id="info-pop-wbs" hidden>
+      <p id="summary-wbs" aria-live="polite"></p>
+      <p class="context" id="context-wbs"></p>
+    </div>
+  </span>
+  <div class="controls" style="margin-left:auto">
+    <button type="button" class="btn" id="wbs-add-wbs" hidden>Ajouter un workpackage</button>
+    <button type="button" class="btn" id="options-btn-wbs" aria-expanded="false" aria-controls="options-wbs">Attributs affichés</button>
+    <div class="seg" role="group" aria-label="Zoom">
+      <button type="button" id="zoom-out-wbs" aria-label="Zoom arrière">−</button>
+      <button type="button" id="zoom-fit-wbs">Ajuster</button>
+      <button type="button" id="zoom-in-wbs" aria-label="Zoom avant">+</button>
+    </div>
+    <button type="button" class="icon-btn" id="reload-wbs" aria-label="Actualiser" title="Actualiser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+  </div>
+</div>
+
+<section class="options" id="options-wbs" hidden aria-label="Attributs affichés">
+  <div class="groups">
+    <fieldset id="opt-attrs-wbs"><legend>Afficher sur chaque carte</legend><div class="checks" id="attr-list-wbs"></div></fieldset>
+    <fieldset id="opt-colors-wbs"><legend>Couleur selon</legend></fieldset>
+    <fieldset id="opt-more-wbs" hidden><legend>Contenu</legend></fieldset>
+  </div>
+  <div class="foot">
+    <button type="button" class="btn" id="opt-reset-wbs">Rétablir les valeurs par défaut</button>
+    <span id="prefs-state-wbs" role="status" aria-live="polite"></span>
+    <span>Le nom et le titre de chaque carte sont toujours affichés. Vos choix sont mémorisés pour votre compte.</span>
+  </div>
+</section>
+
+<main id="main-wbs">
+  <div class="chart">
+    <ul class="legend" id="legend-wbs" aria-label="Légende des couleurs"></ul>
+    <div class="canvas" id="canvas-wbs"><p class="loading">Chargement…</p></div>
+  </div>
+  <aside id="details-wbs" hidden aria-live="polite"></aside>
+</main>
+
+<dialog id="editor-wbs" aria-labelledby="editor-title-wbs">
+  <form id="editor-form-wbs" novalidate>
+    <h2 id="editor-title-wbs"></h2>
+    <div class="ed-grid" id="editor-body-wbs"></div>
+    <p class="ed-error" id="ed-error-wbs" role="alert" hidden></p>
+    <div class="actions">
+      <button type="button" class="btn" id="ed-cancel-wbs">Annuler</button>
+      <button type="submit" class="btn primary" id="ed-save-wbs">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="confirm-wbs" aria-labelledby="confirm-title-wbs">
+  <h2 id="confirm-title-wbs"></h2>
+  <p id="confirm-text-wbs"></p>
+  <p class="ed-error" id="confirm-error-wbs" role="alert" hidden></p>
+  <div class="actions">
+    <button type="button" class="btn" id="confirm-cancel-wbs">Annuler</button>
+    <button type="button" class="btn danger" id="confirm-ok-wbs">Supprimer</button>
+  </div>
+</dialog>
+
+<dialog id="genform-wbs" aria-labelledby="gf-title-wbs">
+  <form id="gf-form-wbs" novalidate>
+    <h2 id="gf-title-wbs"></h2>
+    <div class="ed-grid" id="gf-body-wbs"></div>
+    <p class="ed-error" id="gf-error-wbs" role="alert" hidden></p>
+    <div class="actions">
+      <button type="button" class="btn" id="gf-cancel-wbs">Annuler</button>
+      <button type="submit" class="btn primary" id="gf-ok-wbs">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+
+
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script>
@@ -646,6 +677,9 @@ var BOOT = <?!= boot ?>;
 <script>
 (function () {
   'use strict';
+
+  /** Un schéma = une instance. L'organisation garde ses identifiants ; ceux du découpage portent le suffixe « -wbs ». */
+  function createStructure(TAB, shared) {
 
   var SVGNS = 'http://www.w3.org/2000/svg';
   var ROLE_COLORS = { PL: '#3B6FE0', DPL: '#00A3E0', CP: '#1F8A85', RWP: '#B7791F', MEMBER: '#8A4F9E' };
@@ -656,11 +690,12 @@ var BOOT = <?!= boot ?>;
   var CHAR_PX = 6.7, CHAR_PX_BOLD = 7.6; // largeur moyenne d'un caractère (12 px) et d'un titre gras (13 px)
 
   var state = {
-    tab: 'obs', mode: 'roles', scopeType: 'project', scopeId: '', teamRoot: '',
+    tab: TAB, mode: 'roles', scopeType: 'project', scopeId: '', teamRoot: '',
     catalog: null, prefs: null, data: null, catalogLists: null, collapsed: {}, zoom: 1,
     layout: null, selected: '', suggestions: null, saveTimer: null, orgColors: {}, seq: 0
   };
-  var $ = function (id) { return document.getElementById(id); };
+  var SUF = TAB === 'wbs' ? '-wbs' : '';
+  var $ = function (id) { return document.getElementById(id + SUF) || document.getElementById(id); };
 
   // ------------------------------------------------------------ outils
   function el(tag, attrs, children) {
@@ -737,12 +772,12 @@ var BOOT = <?!= boot ?>;
   function remember() {
     var base = BOOT.baseUrl || '';
     $('nav-plan').setAttribute('href', base + '?view=gantt' + scopeParams());
-    $('nav-struct').setAttribute('href', base + '?view=structure' + scopeParams() + '&tab=' + state.tab);
+    $('nav-struct').setAttribute('href', base + '?view=structure' + scopeParams());
     $('nav-suivi').setAttribute('href', base + '?view=suivi' + (state.scopeType === 'project' ? '&project=' + state.scopeId : ''));
     $('nav-copilot').setAttribute('href', base + '?view=copilote' + (state.scopeType === 'project' ? '&project=' + state.scopeId : ''));
+    if (state.tab !== 'obs') return;
     try {
-      var p = { view: 'structure', tab: state.tab };
-      if (state.tab === 'obs') p.mode = state.mode;
+      var p = { view: 'structure', mode: state.mode };
       if (state.scopeType === 'program') p.program = state.scopeId || 'none'; else p.project = state.scopeId;
       google.script.history.replace(null, p);
     } catch (e) { /* hors web app */ }
@@ -1199,32 +1234,35 @@ var BOOT = <?!= boot ?>;
       if (d.mode === 'teams') fillTeamPicker(d.teams);
       setSummary();
       draw();
+      renderUnplaced();
       if (scroll) { $('canvas').scrollLeft = scroll.x; $('canvas').scrollTop = scroll.y; } else initialView();
       selectPending();
     }).catch(function (e) { if (ticket === state.seq) showError(e); });
   }
 
   function setSummary() {
-    var d = state.data, s = $('summary'), t = $('title'), ctx = $('context');
+    var d = state.data, sm = $('summary'), t = $('ztitle'), ctx = $('context');
     clear(ctx);
-    $('wbs-add').hidden = !(state.tab === 'wbs' && d && d.canCreate);
-    var orgEdit = !!(state.tab === 'obs' && d && d.canEditAll);
-    $('org-person').hidden = !orgEdit;
-    $('org-role').hidden = !(orgEdit && d.mode === 'roles');
-    $('org-team').hidden = !(orgEdit && d.mode === 'teams');
-    if (!d) { s.textContent = ''; return; }
+    if (state.tab === 'wbs') $('wbs-add').hidden = !(d && d.canCreate);
+    else {
+      var orgEdit = !!(d && d.canEditAll);
+      $('org-person').hidden = !orgEdit;
+      $('org-role').hidden = !(orgEdit && d.mode === 'roles');
+      $('org-team').hidden = !(orgEdit && d.mode === 'teams');
+    }
+    if (!d) { sm.textContent = ''; return; }
     if (state.tab === 'wbs') {
-      t.textContent = 'WBS — ' + d.project.code + ' ' + d.project.name;
-      s.textContent = plural(d.stats.wps, 'workpackage', 'workpackages') + ', ' + plural(d.stats.items, 'livrable ou jalon', 'livrables et jalons') + '.';
+      t.textContent = 'Découpage (WBS) — ' + d.project.code + ' ' + d.project.name;
+      sm.textContent = plural(d.stats.wps, 'workpackage', 'workpackages') + ', ' + plural(d.stats.items, 'livrable ou jalon', 'livrables et jalons') + '.';
       ctx.textContent = d.project.program_name ? 'Programme ' + d.project.program_name + '. ' : '';
       ctx.appendChild(document.createTextNode('Cliquez sur une carte pour son détail ; le bouton sur une carte replie sa branche.'));
     } else if (d.mode === 'teams') {
       t.textContent = 'Organisation par équipes';
-      s.textContent = plural(d.stats.nodes, 'équipe', 'équipes') + ', ' + plural(d.stats.people, 'personne', 'personnes') + '.';
+      sm.textContent = plural(d.stats.nodes, 'équipe', 'équipes') + ', ' + plural(d.stats.people, 'personne', 'personnes') + '.';
       ctx.textContent = 'Cliquez sur une personne pour voir et compléter sa fonction et son organisation.';
     } else {
       t.textContent = 'Organisation — ' + d.scope.label;
-      s.textContent = plural(d.stats.nodes, 'rôle', 'rôles') + ', ' + plural(d.stats.people, 'affectation', 'affectations') + '.';
+      sm.textContent = plural(d.stats.nodes, 'rôle', 'rôles') + ', ' + plural(d.stats.people, 'affectation', 'affectations') + '.';
       ctx.textContent = 'Chaque carte est un rôle sur un périmètre ; il dépend du rôle supérieur qui le couvre. Cliquez sur une personne pour son détail.';
     }
   }
@@ -1251,13 +1289,10 @@ var BOOT = <?!= boot ?>;
   function syncControls() {
     var sel = $('picker');
     sel.value = (state.scopeType === 'program' ? 'program:' + (state.scopeId || 'none') : 'project:' + state.scopeId);
-    Array.prototype.forEach.call(sel.querySelectorAll('option[data-kind="program"]'), function (o) { o.disabled = state.tab === 'wbs'; });
-    Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-tab') === state.tab)); });
-    Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === state.mode)); });
-    $('mode').hidden = state.tab !== 'obs';
-    var teams = state.tab === 'obs' && state.mode === 'teams';
-    $('scope-pick').hidden = teams;
-    $('team-pick').hidden = !teams;
+    if (state.tab === 'obs') {
+      Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === state.mode)); });
+      $('team-pick').hidden = !(state.mode === 'teams');
+    }
     renderOptions();
   }
   function fillTeamPicker(teams) {
@@ -1306,7 +1341,27 @@ var BOOT = <?!= boot ?>;
     state.data.nodes.forEach(function (n) {
       (n.people || []).concat(n.members || [], n.manager ? [n.manager] : []).forEach(function (p) { out.push({ p: p, node: n }); });
     });
+    // les personnes sans aucun rôle ne sont sur aucune carte : on les retrouve dans la zone « Ressources à positionner »
+    ((state.data.unplaced && state.data.unplaced.people) || []).forEach(function (p) { out.push({ p: p, node: { unplaced: true } }); });
     return out;
+  }
+  function isUnplaced(id) {
+    return ((state.data && state.data.unplaced && state.data.unplaced.people) || []).some(function (p) { return p.resource_id === id; });
+  }
+  /** Zone des personnes sans rôle (organigramme seulement) : une pastille par personne. */
+  function renderUnplaced() {
+    if (TAB !== 'obs') return;
+    var box = $('unplaced'), list = $('unplaced-list'), u = state.data && state.data.unplaced;
+    clear(list);
+    if (!u || !u.total) { box.hidden = true; return; }
+    box.hidden = false;
+    $('unplaced-count').textContent = '(' + u.total + ')';
+    u.people.forEach(function (p) {
+      list.appendChild(el('button', { type: 'button', class: 'chip-person', 'data-unplaced': p.resource_id, 'aria-pressed': String(state.selected === 'person:' + p.resource_id),
+        title: p.resource_type === 'Externe' ? 'Ressource externe' : 'Ressource interne', text: p.name + (p.resource_type === 'Externe' ? ' · externe' : ''),
+        onclick: function () { state.selected = 'person:' + p.resource_id; showPerson(p.resource_id); renderUnplaced(); } }));
+    });
+    if (u.total > u.people.length) list.appendChild(el('span', { class: 'muted', text: '… et ' + (u.total - u.people.length) + ' autres' }));
   }
 
   function showPerson(personId) {
@@ -1319,7 +1374,11 @@ var BOOT = <?!= boot ?>;
       ['E-mail', p.email], ['Équipe', p.team], ['Pays', p.country], ['Type', p.resource_type], ['Fournisseur', p.supplier],
       ['Capacité', p.capacity === '' ? '' : p.capacity + ' jours par mois']
     ]));
-    if (state.data.mode === 'roles') {
+    var unplaced = isUnplaced(personId);
+    if (unplaced) {
+      nodes.push(el('p', { class: 'hint' , text: 'Aucun rôle pour l’instant : cette personne n’est pas encore positionnée dans l’organigramme.' }));
+      if (state.data.canEditAll) nodes.push(el('div', { class: 'links' }, [el('button', { type: 'button', class: 'btn primary', id: 'person-place', text: 'Positionner dans l’organigramme', onclick: function () { assignRoleGeneral(personId); } })]));
+    } else if (state.data.mode === 'roles') {
       var seen = {};
       var roles = hits.map(function (h) { return h.node.role_label + ', ' + h.node.scope_label; }).filter(function (t) { if (seen[t]) return false; seen[t] = true; return true; });
       nodes.push(el('h3', { text: 'Rôles dans cette vue', style: 'font-size:15px;margin:0 0 6px' }));
@@ -1415,7 +1474,11 @@ var BOOT = <?!= boot ?>;
     if (id && state.data && state.data.nodes.some(function (n) { return n.id === id; })) showNode(id);
   }
   function openDialog(d) { if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
-  function closeDialog(d) { if (d.close) d.close(); else d.removeAttribute('open'); }
+  function closeDialog(d) {
+    if (d.close) d.close(); else d.removeAttribute('open');
+    if (/^genform/.test(d.id)) clear($('gf-body'));
+    if (/^editor/.test(d.id)) clear($('editor-body'));
+  }
 
   /** Boutons du panneau de détail : seulement ceux que le serveur autorise pour cette carte. */
   function wbsActions(n) {
@@ -1570,7 +1633,7 @@ var BOOT = <?!= boot ?>;
   $('ed-cancel').addEventListener('click', function () { closeDialog($('editor')); });
   $('confirm-cancel').addEventListener('click', function () { closeDialog($('confirm')); });
   $('confirm-ok').addEventListener('click', confirmDelete);
-  $('wbs-add').addEventListener('click', function () {
+  if (state.tab === 'wbs') $('wbs-add').addEventListener('click', function () {
     var root = state.data && state.data.nodes.filter(function (x) { return x.kind === 'project'; })[0];
     if (root) openEditor({ mode: 'create', kind: 'wp', parent: root });
   });
@@ -1597,6 +1660,8 @@ var BOOT = <?!= boot ?>;
   function refreshAfter(id) {
     state.people = null; state.teamsList = null;
     if (id) state.pendingSelect = id;
+    // le découpage montre l'organisation de chaque responsable : il se recharge quand on modifie une personne, un rôle ou une équipe
+    if (TAB === 'obs' && shared.wbs) shared.wbs.load(true);
     return load(true);
   }
 
@@ -1745,19 +1810,20 @@ var BOOT = <?!= boot ?>;
       });
     } })]);
   }
-  function assignRoleGeneral() {
+  function assignRoleGeneral(presetId) {
     Promise.all([ensurePeople(), call('roles.options', {})]).then(function (r) {
       var people = r[0], opt = r[1];
       if (!opt.scopes.length) { toast('Vous ne pouvez attribuer de rôle sur aucun périmètre.', true); return; }
       var byKey = {};
       var scopes = opt.scopes.map(function (s) { var k = s.type + ':' + s.id; byKey[k] = s; return { value: k, label: s.label + (s.type === 'program' ? ' (programme)' : s.type === 'project' ? ' (projet)' : '') }; });
       var roleOptions = function (key) { return opt.roles.filter(function (x) { return x.rank >= byKey[key].min_rank; }).map(function (x) { return { value: x.code, label: x.label }; }); };
+      var here = state.scopeType + ':' + state.scopeId, startScope = byKey[here] ? here : scopes[0].value; // le périmètre qu'on regarde, s'il est permis
       openForm({
         title: 'Attribuer un rôle', ok: 'Attribuer', note: 'Vous ne pouvez pas attribuer un rôle plus élevé que le vôtre sur le périmètre choisi.',
         fields: [
-          { key: 'resource_id', label: 'Personne', type: 'select', value: '', options: personOptions(people) },
-          { key: 'scope', label: 'Périmètre', type: 'select', value: scopes[0].value, options: scopes },
-          { key: 'role_code', label: 'Rôle', type: 'select', options: roleOptions(scopes[0].value) }
+          { key: 'resource_id', label: 'Personne', type: 'select', value: typeof presetId === 'string' ? presetId : '', options: personOptions(people) },
+          { key: 'scope', label: 'Périmètre', type: 'select', value: startScope, options: scopes },
+          { key: 'role_code', label: 'Rôle', type: 'select', options: roleOptions(startScope) }
         ],
         after: function (inputs) { inputs.scope.addEventListener('change', function () { fillSelect(inputs.role_code, roleOptions(inputs.scope.value)); }); },
         onSubmit: function (v) {
@@ -1877,9 +1943,11 @@ var BOOT = <?!= boot ?>;
 
   $('gf-form').addEventListener('submit', function (e) { e.preventDefault(); submitForm(); });
   $('gf-cancel').addEventListener('click', function () { closeDialog($('genform')); });
-  $('org-person').addEventListener('click', function () { openPersonForm(null); });
-  $('org-team').addEventListener('click', function () { openTeamForm(null, null); });
-  $('org-role').addEventListener('click', assignRoleGeneral);
+  if (state.tab === 'obs') {
+    $('org-person').addEventListener('click', function () { openPersonForm(null); });
+    $('org-team').addEventListener('click', function () { openTeamForm(null, null); });
+    $('org-role').addEventListener('click', assignRoleGeneral);
+  }
 
   // ------------------------------------------------------------ zoom
   function applyZoom() {
@@ -1934,11 +2002,8 @@ var BOOT = <?!= boot ?>;
     state.scopeType = v[0]; state.scopeId = v[1] === 'none' ? '' : v[1];
     load();
   });
-  $('team-root').addEventListener('change', function () { state.teamRoot = this.value; load(); });
-  Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) {
-    b.addEventListener('click', function () { switchTab(b.getAttribute('data-tab')); });
-  });
-  Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (b) {
+  if (state.tab === 'obs') $('team-root').addEventListener('change', function () { state.teamRoot = this.value; load(); });
+  if (state.tab === 'obs') Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (b) {
     b.addEventListener('click', function () {
       state.mode = b.getAttribute('data-mode');
       state.prefs.obs.mode = state.mode;
@@ -1946,17 +2011,6 @@ var BOOT = <?!= boot ?>;
       load();
     });
   });
-  function switchTab(tab) {
-    if (tab === state.tab) return;
-    state.tab = tab;
-    if (tab === 'wbs' && state.scopeType === 'program') {
-      var first = state.catalogLists.projects.filter(function (p) { return (p.program_id || '') === state.scopeId; })[0] ||
-        state.catalogLists.projects.filter(function (p) { return p.status !== 'Clos'; })[0] || state.catalogLists.projects[0];
-      if (first) { state.scopeType = 'project'; state.scopeId = first.id; }
-    }
-    state.selected = '';
-    load();
-  }
   $('options-btn').addEventListener('click', function () {
     var box = $('options'), open = box.hidden;
     box.hidden = !open;
@@ -1971,28 +2025,33 @@ var BOOT = <?!= boot ?>;
 
   // ------------------------------------------------------------ démarrage
   ppmPopover($('info-btn'), $('info-pop'));
-  Promise.all([call('planning.catalog', {}), call('views.config', {})]).then(function (r) {
+  shared.boot = shared.boot || Promise.all([call('planning.catalog', {}), call('views.config', {})]);
+  shared.boot.then(function (r) {
     state.catalogLists = r[0];
     state.catalog = r[1].catalog;
     state.prefs = r[1].prefs;
-    fillPicker(r[0]);
-    state.tab = BOOT.tab === 'wbs' ? 'wbs' : 'obs';
+    if (!$('picker').options.length) fillPicker(r[0]);
     state.mode = BOOT.mode || state.prefs.obs.mode || 'roles';
     if (BOOT.program) { state.scopeType = 'program'; state.scopeId = BOOT.program === 'none' ? '' : BOOT.program; }
     else {
       var first = BOOT.project || (r[0].projects.filter(function (p) { return p.status !== 'Clos'; })[0] || r[0].projects[0] || {}).id;
       if (!first) {
         var c = $('canvas'); clear(c);
-        c.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucun projet pour l’instant.' }), el('span', { text: 'Créez un projet dans l’application AppSheet, puis revenez ici.' })]));
+        c.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucun projet pour l’instant.' }), el('span', { text: 'Créez un projet depuis la page Overview, puis revenez ici.' })]));
         return;
       }
       state.scopeType = 'project'; state.scopeId = first;
     }
-    if (state.tab === 'wbs' && state.scopeType === 'program') { state.tab = 'obs'; }
     return load();
   }).catch(showError);
 
-  window.__ppm = { state: state, layoutTree: layoutTree, draw: draw, load: load };
+  return { state: state, layoutTree: layoutTree, draw: draw, load: load };
+  }
+
+  var shared = {};
+  var obs = createStructure('obs', shared);
+  var wbs = shared.wbs = createStructure('wbs', shared);
+  window.__ppm = Object.assign({}, obs, { obs: obs, wbs: wbs });
 })();
 </script>
 </body>

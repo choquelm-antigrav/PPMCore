@@ -29,7 +29,8 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `07_Schedule.gs` | Marges totales et chemin critique sur les dates saisies |
 | `10_Repository.gs` | Accès Sheets, verrou, versions |
 | `11_ChangeLog.gs` | Journal, instantanés, point d'entrée AppSheet `onRowChanged`, contrôles des saisies AppSheet |
-| `20_Setup.gs` | `installerPpm()` (installation en une fois), `setupPpm()`, `selfCheck()` (vérifie aussi la version de chaque page), `seedDemo()` |
+| `000_Menu.gs` | Les cinq points d'entrée à lancer à la main, placés **en tête** du fichier fabriqué et de la liste des fonctions de l'éditeur : `A1_INSTALLER_PPM`, `A2_SEED_DEMO`, `A3_VERIFIER_INSTALLATION`, `A4_DIAGNOSTIC_ACCES`, `A5_INSTALLER_DECLENCHEURS` |
+| `20_Setup.gs` | `installerPpm_()` (installation en une fois), `setupPpm()`, `selfCheck()` (vérifie aussi la version de chaque page), `diagnosticAcces_()` |
 | `30_Api.gs` | Web app `doPost` / `doGet` et actions de base |
 | `32_Views.gs` | Gantt projet, vue programme, organisation (OBS), attribution des rôles, pages web |
 | `33_Structure.gs` | Fonction et organisation des personnes, arbres OBS (rôles, équipes) et WBS, catalogue des attributs affichables, préférences par utilisateur |
@@ -40,6 +41,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `43_Budget.gs` | 0.9.0 : CPN (projet et sous-projet), grille de taux, lignes de budget et étalement, bilan par CPN |
 | `45_Overview.gs` | 0.10.0 : page Overview : création et renommage de projet, indicateurs délais, qualité et coût |
 | `46_Resources.gs` | 0.10.0 : page Ressources : personnes, équipes, rôle de projet, taux journalier par personne |
+| `47_Demo.gs` | 0.11.0 : démo complète (`seedDemo_()`), découpée en 15 étapes qui reprennent là où elles se sont arrêtées |
 | `44_Orders.gs` | 0.9.0 : commandes d'achat (PO) : saisie, statuts, répartition par livrable, constats et rappels de GR |
 | `42_Org.gs` | 0.8.0 : dépendances d'un élément (`deps.item`), rôles attribuables (`roles.options`), retrait d'une personne, équipes hiérarchiques (`teams.*`) |
 | `41_Edit.gs` | 0.7.0 : création, modification, déplacement et suppression sûre du WBS (`wbs.create`, `wbs.update`, `wbs.delete`) |
@@ -47,14 +49,14 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `38_Copilot.gs` | Lot 4 : copilote (modes off, manual, api), garde-fou des chiffres, journal AiLog, quota, questions, décisions sur les suggestions |
 | `40_Jobs.gs` | Traitement nocturne par tranches (journal, règles, agenda et Drive, annuaire, sauvegardes), récapitulatif de 7 h |
 | `Gantt.html` | Page du planning (Frappe Gantt 0.6.1, chargé depuis jsDelivr) |
-| `Structure.html` | Page Structure : OBS et WBS dessinés en SVG, sans bibliothèque externe |
+| `Structure.html` | Page OBS/WBS (anciennement Structure) : organisation et découpage, l'un sous l'autre, dessinés en SVG sans bibliothèque externe |
 | `Suivi.html` | Page Suivi : écarts à la baseline, changements à valider, baselines, agenda et Drive, mes notifications |
 | `Overview.html` | Page d'accueil : verdict, indicateurs délais, qualité, coût, portefeuille, création de projet |
 | `Ressources.html` | Page Ressources : personnes, équipes, rôle dans le projet, taux, accès |
 | `Budget.html` | Page Budget : bilan par CPN, achats (PO), lignes de budget |
 | `Compte.html` | Page Mon compte : fiche, rôles en lecture seule, notifications, affichage (thème, page d'accueil) |
 | `Admin.html` | Page Administration (réservée aux administrateurs) : réglages, santé, jours fériés, journaux |
-| `Copilote.html` | Page Copilote : synthèse, simulation, questions, suggestions |
+| `Copilote.html` | Page Copilote : synthèse, simulation, questions, suggestions (**en suspens** depuis 0.11.0 : page masquée) |
 | `Header.html` | Bannière commune (navigation, bouton jour/nuit), données préchargées et fenêtres d'information (inclus par `include('Header')`) |
 | `Style.html` | Charte graphique commune, thèmes jour et nuit (inclus par `include('Style')`) |
 
@@ -65,8 +67,8 @@ Le pas à pas détaillé est dans `PREMIERS_PAS.md`. En résumé :
 1. **Ranger dans un Drive partagé** : créer un Drive partagé « PPM » et y placer le projet Apps Script, les classeurs, les sauvegardes et un dossier « PPM Sources ». L'outil n'est alors pas lié à un compte personnel.
 2. **Créer le projet** : sur script.google.com, *Nouveau projet* nommé **PPM Core**, puis cocher « Afficher le fichier manifeste » dans *Paramètres du projet*.
 3. **Copier les 11 fichiers de `dist/`** : `PPM_Core.gs` (à la place de `Code.gs`), les pages `Gantt`, `Structure`, `Suivi`, `Copilote`, `Compte`, `Admin`, `Budget`, `Overview`, `Ressources` (fichiers *HTML*, sans l'extension) et `appsscript.json` (il active le service avancé « Google Calendar API », qui sert à partager l'agenda d'un projet à ses membres). Ou bien les envoyer d'un coup avec `clasp` (voir `PREMIERS_PAS.md`).
-4. **Installer** : exécuter `installerPpm` et accepter les autorisations. Il règle le domaine et l'administrateur d'après ton compte (propriétés `PPM_DOMAIN`, `PPM_ADMINS`, sans rien écraser s'ils existent), crée les classeurs **PPM Données** et **PPM Historique**, installe les déclencheurs (nuit à 2 h, récapitulatif à 7 h) et vérifie l'installation. Ajouter ensuite un second administrateur dans `PPM_ADMINS` (adresses séparées par des virgules) et déplacer les classeurs dans le Drive partagé.
-5. **Données d'essai** (facultatif) : exécuter `seedDemo`.
+4. **Installer** : dans la liste des fonctions de l'éditeur, **la première** est `A1_INSTALLER_PPM` : l'exécuter et accepter les autorisations. Il règle le domaine et l'administrateur d'après ton compte (propriétés `PPM_DOMAIN`, `PPM_ADMINS`, sans rien écraser s'ils existent), crée les classeurs **PPM Données** et **PPM Historique**, installe les déclencheurs (nuit à 2 h, récapitulatif à 7 h) et vérifie l'installation. Ajouter ensuite un second administrateur dans `PPM_ADMINS` (adresses séparées par des virgules) et déplacer les classeurs dans le Drive partagé.
+5. **Données d'essai** (facultatif) : exécuter `A2_SEED_DEMO`, la deuxième de la liste. La démo est complète (voir « Démo complète » plus bas) ; elle représente plusieurs centaines d'écritures et s'arrête avant la limite de 6 minutes d'Apps Script : **relancer `A2_SEED_DEMO` jusqu'à « Démo complète »**, elle reprend à l'étape suivante. Une démo déjà complète n'est jamais recréée.
 6. **Publier** : *Déployer → Nouveau déploiement → Application Web*, « Exécuter en tant que : moi », « Accès : tous les utilisateurs du domaine ». Noter l'URL `/exec`.
 7. **Ouvrir les pages** : `<URL /exec>?view=gantt`, `?view=structure`, `?view=suivi`, `?view=copilote`, `?view=compte`, `?view=admin`, `?view=budget`, `?view=overview` (page d'accueil), `?view=ressources` (avec `&project=<id>` pour un projet précis ; `&tab=…` pour un onglet).
 8. **AppSheet** : suivre `appsheet/APPSHEET_SETUP.md` (sections 1 à 9, puis 10 et 11 pour le lot 1, 12 pour le lot 2). `PPM_APPSHEET_URL` (propriété facultative) = l'URL de l'application, une fois créée.
@@ -93,7 +95,7 @@ Le dépôt Git est la référence du code ; Apps Script n'en est que le lieu d'e
 2. Modifier `src/`, tester hors ligne : `node tests/run.js` doit rester entièrement vert.
 3. Changer `PPM_VERSION` (`00_Config.gs`) et la balise `ppm-version` des neuf pages, puis fabriquer : `node tools/build.js` (il refuse une page dont la version ne correspond pas). `dist/` est versionné : il doit toujours correspondre aux sources.
 4. Valider et pousser : `git add -A && git commit -m "…" && git push`, puis fusionner la branche.
-5. Mettre en production : remplacer le contenu des 11 fichiers du dossier `dist/` dans le projet Apps Script (ou `clasp push -f` depuis `dist/`), puis exécuter `installerPpm`.
+5. Mettre en production : remplacer le contenu des 11 fichiers du dossier `dist/` dans le projet Apps Script (ou `clasp push -f` depuis `dist/`), puis exécuter `A1_INSTALLER_PPM`.
 6. *Déployer → Gérer les déploiements → Modifier (crayon) → Version : nouvelle version*. L'URL `/exec` ne change pas, AppSheet continue de fonctionner.
 7. Poser une étiquette sur la version publiée : `git tag v0.5.1 && git push --tags`. Elle remplace l'archive déposée dans « PPM Sources » (on peut en garder une copie).
 8. Retour arrière : même écran Apps Script, choisir la version précédente ; côté code, `git revert`.
@@ -130,12 +132,12 @@ Actions disponibles :
 | Organisation (0.8.0) | `deps.item`, `dependencies.update`, `roles.options`, `people.remove`, `teams.create`, `teams.update`, `teams.delete` (avec `dependencies.create/delete`, `roles.assign/end`, `resources.*`) |
 | Édition du WBS (0.7.0) | `wbs.create`, `wbs.update`, `wbs.delete` (les actions `workpackages.*` et `planitems.*` restent disponibles pour l'API) |
 | Compte et administration (0.6.0) | `account.get`, `ui.set` ; réservées aux administrateurs : `admin.get`, `admin.set`, `admin.health`, `admin.logs`, `admin.holidays`, `admin.holidays.seed`, `admin.holidays.set` |
-| Copilote (lot 4) | `copilot.status`, `copilot.brief`, `simulations.run`, `copilot.ask`, `copilot.feedback`, `copilot.suggestions`, `insights.decide` |
+| Copilote (lot 4, refusées tant que le copilote est en suspens) | `copilot.status`, `copilot.brief`, `simulations.run`, `copilot.ask`, `copilot.feedback`, `copilot.suggestions`, `insights.decide` |
 
 ## Tests
 
 ```bash
-node tests/run.js                    # 162 tests : calendriers, graphe, droits, journal, règles, API, marges, vues, personnes, OBS, WBS,
+node tests/run.js                    # 177 tests : calendriers, graphe, droits, journal, règles, API, marges, vues, personnes, OBS, WBS,
                                      # préférences, baselines, écarts, fil des changements, agenda, Drive, annuaire, récapitulatif,
                                      # simulation, synthèse, copilote (faux modèle), signaux faibles, fabrication, installation
 node tools/build.js                  # fabrique dist/ (11 fichiers)
@@ -145,7 +147,7 @@ node tests/gen_appsheet_columns.js   # régénère appsheet/COLONNES.md après u
 # Essai des pages dans un navigateur simulé (demande des paquets npm) :
 npm i --no-save jsdom@24 frappe-gantt@0.6.1
 node tests/ui_smoke.js        # page Gantt
-node tests/ui_structure.js    # page Structure
+node tests/ui_structure.js    # page OBS/WBS : organisation et découpage empilés
 node tests/ui_suivi.js        # page Suivi et baseline du Gantt
 node tests/ui_copilote.js     # page Copilote, dans les trois modes
 node tests/ui_compte.js       # pages Mon compte et Administration
@@ -154,13 +156,32 @@ node tests/ui_org.js          # dépendances, rôles, personnes et équipes dans
 node tests/ui_budget.js       # page Budget : bilan, PO, lignes de budget
 node tests/ui_overview.js     # page Overview : indicateurs, création et renommage de projet
 node tests/ui_ressources.js   # page Ressources : personnes, équipes, rôles, taux, accès
-node tests/ui_nav.js          # menu des onglets de la bannière, projet courant d'une page à l'autre
+node tests/ui_nav.js          # barre du haut : pas de menu d'onglets, projet courant d'une page à l'autre, lien du copilote
 
 # Aperçu visuel des pages avec un jeu de données fourni, Agenda et Drive simulés (hors production) :
+node tests/preview_demo.js 8124     # aperçu de la démo complète, puis http://localhost:8124/?view=overview
 node tests/preview_server.js 8123   # puis http://localhost:8123/?view=suivi&project=p1 (ou view=gantt, view=structure)
 ```
 
 Les tests chargent les fichiers `.gs` tels quels, avec des tables en mémoire à la place de Sheets et de faux services Agenda, Drive et annuaire. Tout changement du Core doit les garder verts.
+
+## Démo complète et points d'entrée de l'éditeur (0.11.0)
+
+- **Points d'entrée en tête de liste** : la liste des fonctions de l'éditeur Apps Script en compte plus de cent (presque toutes internes). Les cinq à connaître commencent par `A` et un numéro, donc passent devant quel que soit le tri, et sont aussi définies en premier dans le fichier : `A1_INSTALLER_PPM`, `A2_SEED_DEMO`, `A3_VERIFIER_INSTALLATION`, `A4_DIAGNOSTIC_ACCES`, `A5_INSTALLER_DECLENCHEURS`. Les anciens noms `installerPpm`, `seedDemo` et `diagnosticAcces` n'existent plus comme fonctions publiques (leurs implémentations finissent par `_` : elles sont privées, donc absentes de la liste). Un test vérifie cet ordre sur le fichier fabriqué.
+- **Démo complète** (`A2_SEED_DEMO`) : un programme **NAC** et quatre projets aux situations contrastées. **NAC-1 « Nacelle moteur A »** est complexe : 4 workpackages et 12 sous-workpackages, 39 livrables et 9 jalons, 43 dépendances de tous types (dont des décalages négatifs), 3 CPN, du retard (livrables en retard, dépendances non respectées, jalons menacés, glissement critique sur le chemin critique, fin du plan après la fin visée), trois baselines (B0 archivée, B1 active, une demande en attente) avec des évolutions entre elles (retards, ajouts, retrait, changement de responsable), un historique d'avancement avec commentaires, 9 risques et opportunités, 39 lignes de budget (internes en jours, externes en jours ou au forfait), 10 commandes d'achat (GR en retard, PO à lancer en retard, dépassement du budget externe d'un CPN, PO sans livrable, PO hors outil). **NAC-2 « Systèmes embarqués »** est sain (avec son budget et une commande d'achat ; une PO d'un autre projet, hors de l'outil, complète le jeu), **NAC-3 « Industrialisation moteur »** est en préparation (un élément sans responsable ni date), **NAC-4 « Essais en vol »** est clos.
+- **Autour** : 11 équipes sur trois niveaux, 38 personnes plus le compte qui lance la démo (30 internes, 8 externes de 4 fournisseurs, 4 pays) avec leur **taux journalier** (de 330 à 900 € par jour), plus de 80 rôles à tous les niveaux (programme, projet, workpackage), et **trois personnes sans aucun rôle** pour montrer la zone « Ressources à positionner ». Les dates se calculent à partir d'aujourd'hui.
+- **Sûreté** : aucune personne fictive n'a d'adresse e-mail. Rien n'est envoyé, aucune invitation ne part, personne ne peut s'y connecter. Seul le compte qui lance la démo y figure, avec son adresse.
+- **Reprise** : chaque étape est enregistrée dans la propriété `PPM_DEMO_STEP`. Si une étape échoue, le message dit laquelle, les précédentes sont conservées, et il suffit de relancer. **Limite** : il n'y a pas de fonction pour effacer la démo ; pour repartir de zéro, installer sur de nouveaux classeurs (les noms de la démo, retrouvés par leur plus récent homonyme, ne se mélangent pas à de vraies fiches).
+- **Aperçu** : `node tests/preview_demo.js 8124` sert toutes les pages sur la démo complète.
+- **Overview, repère « Personnes »** : il compte maintenant les membres du projet (il comptait les adresses joignables, ce qui est trompeur pour des personnes sans adresse). **Indicateur de coût** : un dépassement du budget externe sur un seul CPN le met en alerte, même si le total du projet reste sous son budget (les analyses se font par CPN).
+
+## Pages sans onglets, OBS/WBS, copilote en suspens (0.11.0)
+
+- **Plus aucun onglet** : chaque rubrique est une zone de la page, avec son titre, et toutes s'affichent ensemble (une zone dont on n'a pas le droit n'apparaît pas). Pages concernées : **Budget** (bilan par CPN, achats, budget par livrable), **Suivi** (écarts, changements à valider, baselines, agenda et Drive), **Mon compte** (fiche, notifications, affichage), **Administration** (réglages, santé, jours fériés, journaux) et **OBS/WBS**. Les données de toutes les zones sont préparées avec la page. Les pages restent séparées entre elles ; le menu ▾ de la barre du haut est retiré.
+- **OBS/WBS** (nouveau nom de la page Structure) : l'organisation au-dessus du découpage, chacun avec sa barre d'outils, son panneau de détail et ses attributs affichés ; le sélecteur de projet ou de programme est partagé. Avec un programme choisi, le découpage demande de choisir un projet. Modifier une personne, un rôle ou une équipe recharge aussi le découpage (il affiche l'organisation de chaque responsable).
+- **Ressources à positionner** : une personne créée dans Ressources n'a aucun rôle ; elle apparaît dans une zone dédiée de l'organisation (par rôles comme par équipes). Un clic sur sa pastille, puis « Positionner dans l'organigramme », ouvre l'attribution d'un rôle avec la personne et le périmètre déjà choisis. Dans Ressources, elle porte un repère « À positionner dans l'OBS ».
+- **Copilote en suspens** : lien, page, réglages, santé, journaux et demandes à l'IA sont masqués ou refusés tant que la propriété `PPM_COPILOT` ne vaut pas `oui` ; rien n'est supprimé. Raison : pas de connexion automatique possible avec le compte Gemini de chaque personne (l'accès par programme passe par une clé ou Vertex AI, facturés à un projet Google Cloud).
+- **Domaines autorisés** réglables dans Administration (Réglages) : au plus cinq, séparés par une virgule, sans pouvoir retirer le sien. (Annoncé à tort comme disponible en 0.10.0 : le champ n'existait pas à l'écran.)
 
 ## Overview, Ressources, charte et accès (0.10.0)
 
@@ -173,11 +194,11 @@ Les tests chargent les fichiers `.gs` tels quels, avec des tables en mémoire à
 
 **Ressources** (`?view=ressources`) : un seul écran pour les personnes (créer, modifier, retirer), les équipes, le **rôle dans le projet** (chef de projet, membre, aucun : l'ancien rôle de projet est terminé et le chef de projet du projet suit) et le **taux journalier de chaque personne, interne ou externe**. Ce taux, saisi sur la fiche, remplace la grille profil × pays × date, conservée en secours côté serveur sans écran ; il se fige dans chaque ligne de budget à sa création, et ne se voit que du chef de projet et du DPL. Une ressource externe se budgète au forfait ou en jours × taux. La colonne **Accès** dit si la personne peut se connecter (adresse dans un domaine autorisé), est hors domaine ou n'a pas d'adresse.
 
-**Menu des onglets** : Suivi, Copilote et Budget gardent leurs pages et leurs onglets ; une flèche ▾ dans la bannière donne accès direct à chaque onglet, sans recharger la page quand on y est déjà. Le projet courant suit d'une page à l'autre.
+**Projet courant** : il suit d'une page à l'autre dans la barre du haut (Overview, Ressources et Budget s'ouvrent sur le même projet que celui qu'on regarde). Le menu d'onglets ▾ introduit en 0.10.0 a disparu en 0.11.0 : voir « Pages sans onglets ».
 
 **Mails** : tous les objets commencent par `[PPM✴️]` (`mailSubject_`, un test refuse tout envoi qui le contournerait).
 
-**Accès par domaine** : `PPM_DOMAIN` accepte plusieurs domaines séparés par une virgule (réglables dans Administration → Réglages, sans pouvoir retirer le sien). Un refus indique le compte détecté et la marche à suivre. En cas de doute, exécuter `diagnosticAcces` depuis l'éditeur Apps Script : il montre le compte qui exécute, le compte détecté et les domaines autorisés.
+**Accès par domaine** : `PPM_DOMAIN` accepte plusieurs domaines séparés par une virgule (réglables dans Administration → Réglages, sans pouvoir retirer le sien). Un refus indique le compte détecté et la marche à suivre. En cas de doute, exécuter `A4_DIAGNOSTIC_ACCES` depuis l'éditeur Apps Script : il montre le compte qui exécute, le compte détecté et les domaines autorisés.
 
 ## Rappels avant livraison (0.9.1)
 
@@ -191,11 +212,11 @@ Pour chaque livrable non terminé qui a un responsable et une date de livraison,
 
 ## Budget, CPN et commandes d'achat (0.9.0)
 
-Page **Budget** (`?view=budget`, onglet visible des personnes internes nommées dans une équipe).
+Page **Budget** (`?view=budget`, visible des personnes internes nommées dans une équipe).
 
 **CPN.** Le CPN est le code financier d'un projet, avec sa « désignation ». Un workpackage de premier niveau, le **sous-projet**, peut porter le sien (champs du formulaire de modification dans la page Structure). **Un CPN ne couvre qu'un seul projet**, au maximum ; le même CPN peut en revanche figurer sur un projet et sur ses propres sous-projets. Poser ou changer un CPN demande le rôle de chef de projet, DPL ou Program Leader ; un CPN qui porte des PO ne se retire ni ne se change. **Les analyses budgétaires se font par CPN** : un livrable relève du CPN de son premier workpackage ancêtre qui en porte un, à défaut de celui du projet.
 
-**Budget** (onglets Budget et Taux). Une ligne relie un livrable à une ressource : *interne* = jours × taux journalier, **taux figé à la création de la ligne** (un changement de la grille n'y touche pas, sauf demande explicite) ; *externe* = forfait. L'étalement se calcule seul (interne : au prorata des jours ouvrés de chaque mois ; externe : en totalité le mois de la livraison), suit les dates du livrable, et peut être fixé à la main (la somme doit égaler le montant). La grille de taux (profil, pays, taux, date d'effet) et le profil tarifaire des personnes sont **réservés au chef de projet et au DPL** ; les autres ne voient jamais les taux. Un responsable de workpackage ne voit et n'édite que le budget de son périmètre.
+**Budget** (zone « Budget par livrable » ; les taux se saisissent sur la fiche de chaque personne, dans Ressources). Une ligne relie un livrable à une ressource : *interne* = jours × taux journalier, **taux figé à la création de la ligne** (un changement de la grille n'y touche pas, sauf demande explicite) ; *externe* = forfait. L'étalement se calcule seul (interne : au prorata des jours ouvrés de chaque mois ; externe : en totalité le mois de la livraison), suit les dates du livrable, et peut être fixé à la main (la somme doit égaler le montant). La grille de taux (profil, pays, taux, date d'effet) et le profil tarifaire des personnes sont **réservés au chef de projet et au DPL** ; les autres ne voient jamais les taux. Un responsable de workpackage ne voit et n'édite que le budget de son périmètre.
 
 **Commandes d'achat (PO).** Une PO se passe auprès d'une **ressource externe** ; son **numéro est saisi à la main** (celui de Click and Buy) et doit être unique. Elle porte un **CPN saisi à la main** : s'il correspond à un projet de l'outil (ou à l'un de ses sous-projets), le bilan budgétaire de ce projet en est impacté ; sinon la PO est enregistrée, sans effet sur aucun budget (elle apparaît dans « Mes PO hors périmètre de l'outil »).
 
@@ -211,7 +232,7 @@ Pas encore : le réalisé (import d'actuals) et la valeur acquise (EVM), prochai
 
 ## Dépendances, rôles, personnes et équipes (0.8.0)
 
-Depuis la page **Structure**, sans AppSheet :
+Depuis la page **OBS/WBS** (anciennement Structure), sans AppSheet :
 
 - **Dépendances** : la carte d'un livrable ou d'un jalon liste ses prédécesseurs et ses successeurs, avec le type de lien (fin → début, début → début, fin → fin, début → fin) et le décalage en jours ouvrés. On ajoute un lien avec un élément du projet ou d'un autre projet du même programme, on le retire d'un clic. Le serveur refuse un lien qui fermerait une boucle, un doublon, un lien d'un élément avec lui-même, et vérifie le droit d'écrire sur l'élément successeur.
 - **Rôles** (organigramme par rôles) : sur la carte d'un rôle, « Ajouter une personne à ce rôle » et une croix pour retirer. Le bouton « Attribuer un rôle » de l'en-tête permet de choisir personne, périmètre et rôle. **On ne donne jamais un rôle plus élevé que le sien** sur le périmètre : la liste des rôles proposés s'adapte au périmètre choisi. Retirer un rôle le termine (il reste dans l'historique).
@@ -222,7 +243,7 @@ L'import d'un WBS depuis Google Sheets est abandonné (décision du propriétair
 
 ## Édition du WBS (0.7.0)
 
-Dans la page **Structure**, onglet **Découpage (WBS)** : cliquer une carte ouvre son détail ; selon vos droits, il propose **Ajouter** (sous-workpackage, livrable, jalon), **Modifier** et **Supprimer**. Le bouton **Ajouter un workpackage**, en haut de page, crée un workpackage de premier niveau. Les boutons n'apparaissent que là où le serveur autorise l'action : un simple membre n'en voit aucun ; un responsable de workpackage agit dans son workpackage et ses sous-niveaux ; le chef de projet, le DPL et le Program Leader agissent sur tout le projet.
+Dans la page **OBS/WBS**, zone **Découpage (WBS)** : cliquer une carte ouvre son détail ; selon vos droits, il propose **Ajouter** (sous-workpackage, livrable, jalon), **Modifier** et **Supprimer**. Le bouton **Ajouter un workpackage**, en haut de page, crée un workpackage de premier niveau. Les boutons n'apparaissent que là où le serveur autorise l'action : un simple membre n'en voit aucun ; un responsable de workpackage agit dans son workpackage et ses sous-niveaux ; le chef de projet, le DPL et le Program Leader agissent sur tout le projet.
 
 Règles appliquées par le serveur (`41_Edit.gs`), donc aussi pour l'API :
 
@@ -275,6 +296,6 @@ Limite : une saisie faite directement dans une feuille, sans passer par le Core 
 - Partages : l'agenda et le dossier sont partagés aux membres du projet, mais jamais retirés automatiquement à quelqu'un qui quitte le projet (à faire à la main). Un WP supprimé garde son dossier.
 - Le récapitulatif n'est envoyé qu'aux adresses du domaine, les jours de semaine.
 - Pas encore d'EVM ni d'import d'actuals (lot 3, en attente d'un exemple de fichier, H4).
-- Copilote : sans décision sur H12, il fonctionne sans IA (mode `off`) ou en préparant des textes à coller dans Gemini (`manual`). Le mode `api` n'a été testé qu'avec un faux modèle.
+- Copilote : **en suspens depuis 0.11.0** (réactivation : propriété `PPM_COPILOT = oui`). Sans décision sur H12, il fonctionne sans IA (mode `off`) ou en préparant des textes à coller dans Gemini (`manual`). Le mode `api` n'a été testé qu'avec un faux modèle.
 - Simulation : elle mesure l'effet d'une hypothèse sur le plan tel qu'il est ; les dépendances déjà non respectées restent en l'état (elles sont signalées). Avancer un élément ne tire pas ses successeurs.
 - Reste à faire au lot 4 : flash report COPIL dans Slides, relances ciblées, saisie assistée (livrables et risques depuis un texte), comptes rendus vers données, premier WBS, estimation assistée, dossier de revue de jalon, retour d'expérience. La proposition de mapping d'actuals viendra avec le lot 3.
