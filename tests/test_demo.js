@@ -22,20 +22,20 @@ module.exports = function () {
   const demo = (() => { const c = core(); const msg = c.seedDemo_(); return { c, msg }; })();
   const c = demo.c;
 
-  test('Les cinq points d’entrée sont en tête de la liste des fonctions, avant les cent autres', () => {
-    const names = ['A1_INSTALLER_PPM', 'A2_SEED_DEMO', 'A3_VERIFIER_INSTALLATION', 'A4_DIAGNOSTIC_ACCES', 'A5_INSTALLER_DECLENCHEURS'];
+  test('Les six points d’entrée sont en tête de la liste des fonctions, avant les cent autres', () => {
+    const names = ['A1_INSTALLER_PPM', 'A2_SEED_DEMO', 'A3_VERIFIER_INSTALLATION', 'A4_DIAGNOSTIC_ACCES', 'A5_INSTALLER_DECLENCHEURS', 'A6_EFFACER_ANCIENNE_DEMO'];
     names.forEach((n) => eq(typeof c[n], 'function', n));
     ['installerPpm', 'seedDemo', 'diagnosticAcces'].forEach((n) => eq(typeof c[n], 'undefined', 'l’ancien nom public ' + n + ' a disparu : il encombrait la liste'));
     // dans le fichier fabriqué : définis en premier (ordre de définition) ...
     const bundle = fs.readFileSync(path.join(__dirname, '..', 'dist', 'PPM_Core.gs'), 'utf8');
     const decl = [...bundle.matchAll(/^function ([A-Za-z0-9_$]+)\(/gm)].map((m) => m[1]);
-    eq(decl.slice(0, 5), names, 'les cinq premières fonctions du fichier');
+    eq(decl.slice(0, 6), names, 'les six premières fonctions du fichier');
     // ... et en tête dans l'ordre alphabétique, avec ou sans casse (les fonctions finissant par « _ » sont privées : absentes de la liste)
     const publics = decl.filter((n) => !n.endsWith('_'));
     ok(publics.length > 100, publics.length + ' fonctions publiques dans la liste');
-    eq([...publics].sort().slice(0, 5), names, 'en tête dans l’ordre des codes de caractères');
-    eq([...publics].sort((a, b) => a.localeCompare(b, 'fr')).slice(0, 5), names, 'en tête dans l’ordre alphabétique des langues');
-    eq([...publics].sort((a, b) => a.toLowerCase() < b.toLowerCase() ? -1 : 1).slice(0, 5), names, 'en tête, sans tenir compte de la casse');
+    eq([...publics].sort().slice(0, 6), names, 'en tête dans l’ordre des codes de caractères');
+    eq([...publics].sort((a, b) => a.localeCompare(b, 'fr')).slice(0, 6), names, 'en tête dans l’ordre alphabétique des langues');
+    eq([...publics].sort((a, b) => a.toLowerCase() < b.toLowerCase() ? -1 : 1).slice(0, 6), names, 'en tête, sans tenir compte de la casse');
   });
 
   test('La démo se crée d’un coup et annonce sa fin', () => {
@@ -148,5 +148,102 @@ module.exports = function () {
     w.runRules = real;
     ok(/^Démo complète/.test(w.seedDemo_()), 'relancée, elle termine');
     eq(counts(w), counts(demo.c), 'sans doublon');
+  });
+
+  // ---------------------------------------------------------------- remplacer l'ancienne démo (A6_EFFACER_ANCIENNE_DEMO)
+  const A = { actor: ME, source: 'setup' };
+  /** Base avec l'ancienne démo (0.10.0), ce qu'on a pu y ajouter en essayant les versions suivantes, et des données réelles à ne pas toucher. */
+  function oldDemoBase(opts) {
+    const w = core(); opts = opts || {};
+    const me = w.repoInsert('Resource', { resource_type: 'Interne', name: 'Admin', email: ME, country: 'FR' }, A);
+    const ins = (t, v) => w.repoInsert(t, v, A);
+    const prog = ins('Program', { code: 'DEMO', name: 'Programme de démonstration', status: 'Actif', leader_resource_id: me.id });
+    const proj = ins('Project', { code: 'PILOTE', name: 'Projet pilote', program_id: prog.id, manager_resource_id: me.id, status: 'Actif', holiday_country: 'FR', start_date: w.todayStr() });
+    const camille = ins('Resource', { resource_type: 'Interne', name: 'Camille Durand', country: 'FR', job_function: 'Ingénieure structure', organization: 'Bureau d’études' });
+    const sam = ins('Resource', { resource_type: 'Externe', name: 'Sam Weber', country: 'DE', job_function: 'Responsable essais', organization: 'Sous-traitant Alpha', supplier: 'Alpha Test GmbH' });
+    const wp1 = ins('WorkPackage', { project_id: proj.id, wbs_code: '1', name: 'Conception', owner_resource_id: camille.id, charge_code: 'PIL-001' });
+    const wp2 = ins('WorkPackage', { project_id: proj.id, wbs_code: '2', name: 'Validation', owner_resource_id: sam.id, charge_code: 'PIL-002' });
+    ins('RoleAssignment', { resource_id: me.id, role_code: 'CP', scope_type: 'project', scope_id: proj.id });
+    ins('RoleAssignment', { resource_id: camille.id, role_code: 'RWP', scope_type: 'workpackage', scope_id: wp1.id });
+    ins('RoleAssignment', { resource_id: sam.id, role_code: 'RWP', scope_type: 'workpackage', scope_id: wp2.id });
+    const item = (wp, name, type) => ins('PlanItem', { project_id: proj.id, wp_id: wp.id, item_type: type || 'Livrable', name: name, owner_resource_id: me.id, planned_start: w.todayStr(), planned_finish: w.todayStr(), progress_pct: 0, status: 'À faire' });
+    const l1 = item(wp1, 'Spécification'), l2 = item(wp2, 'Plan de tests'), j1 = item(wp2, 'Revue de conception', 'Jalon');
+    ins('Dependency', { predecessor_id: l1.id, successor_id: l2.id, dep_type: 'FS', lag_days: 0 });
+    ins('MilestoneRequirement', { milestone_id: j1.id, deliverable_id: l2.id });
+    // ajouts faits en essayant les versions suivantes : budget, étalement, baseline, commande d'achat
+    const line = ins('BudgetLine', { deliverable_id: l1.id, resource_id: camille.id, cost_type: 'TJM', planned_days: 5, frozen_rate: 600, planned_amount: 3000, phasing_mode: 'auto', is_external: false });
+    ins('BudgetPhasing', { budget_line_id: line.id, month: '2026-11', amount: 3000 });
+    ins('Baseline', { project_id: proj.id, number: 0, label: 'B0', justification: 'Planning validé', status: 'Active' });
+    const po = ins('PurchaseOrder', { po_number: 'CB-PILOTE', cpn: 'CPN-0001', resource_id: sam.id, amount: 1000, status: 'À faire', gr_due_date: w.todayStr() });
+    ins('PurchaseOrderLink', { po_id: po.id, deliverable_id: l1.id, amount: 1000 });
+    // données réelles, à ne jamais toucher
+    const alice = ins('Resource', { resource_type: 'Interne', name: 'Alice Réelle', email: 'alice@entreprise.com', country: 'FR' });
+    const realProg = ins('Program', { code: 'REEL', name: 'Programme réel', status: 'Actif', leader_resource_id: alice.id });
+    const realProj = ins('Project', { code: 'R-1', name: 'Projet réel', program_id: realProg.id, manager_resource_id: alice.id, status: 'Actif', holiday_country: 'FR', start_date: w.todayStr() });
+    const realWp = ins('WorkPackage', { project_id: realProj.id, wbs_code: '1', name: 'Lot réel', owner_resource_id: opts.samCited ? sam.id : alice.id, charge_code: 'REEL-1' });
+    const autreCamille = ins('Resource', { resource_type: 'Interne', name: 'Camille Durand', country: 'FR', job_function: 'Ingénieure calcul', organization: 'Bureau d’études' });
+    return { w, me, prog, proj, camille, sam, alice, realProj, realWp, autreCamille, line, po };
+  }
+  const live = (w, t) => w.repoList(t);
+  const liveCount = (w) => ['Program', 'Project', 'WorkPackage', 'PlanItem', 'Dependency', 'MilestoneRequirement', 'BudgetLine', 'BudgetPhasing', 'Baseline', 'PurchaseOrder', 'PurchaseOrderLink', 'RoleAssignment', 'Resource']
+    .map((t) => t + ':' + live(w, t).length).join(' ');
+
+  test('Ancienne démo : le premier lancement montre ce qui serait supprimé et ne touche à rien', () => {
+    const b = oldDemoBase(), w = b.w, before = liveCount(w);
+    const m = w.A6_EFFACER_ANCIENNE_DEMO();
+    ok(/Rien n’est supprimé/.test(m) && /relancez A6_EFFACER_ANCIENNE_DEMO dans les 10 minutes/.test(m), m);
+    ok(/1 programme/.test(m) && /1 projet/.test(m) && /2 workpackages/.test(m) && /3 livrables ou jalons/.test(m) && /1 ligne de budget/.test(m) && /1 baseline/.test(m) && /1 commande d’achat/.test(m) && /2 personnes fictives/.test(m), m);
+    eq(liveCount(w), before, 'aucune ligne supprimée');
+    ok(Number(w.getProp(w.PROP.DEMO_CLEAN, '0')) > 0, 'la demande est mémorisée');
+  });
+
+  test('Ancienne démo : le second lancement supprime, et seulement elle', () => {
+    const b = oldDemoBase(), w = b.w;
+    const realBefore = ['Project:R-1', 'Program:REEL'].map((x) => x);
+    w.A6_EFFACER_ANCIENNE_DEMO();
+    const m = w.A6_EFFACER_ANCIENNE_DEMO();
+    ok(/^Ancienne démo supprimée/.test(m) && /Lancez maintenant A2_SEED_DEMO/.test(m), m);
+    eq([live(w, 'Program').map((p) => p.code), live(w, 'Project').map((p) => p.code)], [['REEL'], ['R-1']], 'seuls le programme et le projet réels restent');
+    eq([live(w, 'WorkPackage').length, live(w, 'PlanItem').length, live(w, 'Dependency').length, live(w, 'MilestoneRequirement').length, live(w, 'BudgetLine').length, live(w, 'BudgetPhasing').length, live(w, 'Baseline').length, live(w, 'PurchaseOrder').length, live(w, 'PurchaseOrderLink').length], [1, 0, 0, 0, 0, 0, 0, 0, 0], 'découpage, planning, budget, baseline et achats de l’ancienne démo supprimés ; le lot réel reste');
+    eq(live(w, 'RoleAssignment').length, 0, 'ses rôles sont supprimés');
+    eq(live(w, 'Resource').map((r) => r.name + '|' + (r.job_function || '')).sort(), ['Admin|', 'Alice Réelle|', 'Camille Durand|Ingénieure calcul'], 'les deux personnes fictives partent ; l’administrateur, la personne réelle et une homonyme d’une autre fonction restent');
+    ok(realBefore.length === 2 && w.repoList('Project', null, { includeDeleted: true }).some((p) => p.code === 'PILOTE' && w.isTrue(p.deleted)), 'suppression douce : la ligne reste dans la feuille, marquée supprimée (réversible)');
+    eq(w.getProp(w.PROP.DEMO_CLEAN, ''), '', 'demande de confirmation effacée');
+    ok(/Aucune ancienne démo/.test(w.A6_EFFACER_ANCIENNE_DEMO()), 'relancée, elle ne trouve plus rien');
+  });
+
+  test('Ancienne démo : confirmation périmée, personne encore citée ailleurs, droits', () => {
+    const b = oldDemoBase({ samCited: true }), w = b.w;
+    const m1 = w.A6_EFFACER_ANCIENNE_DEMO();
+    ok(/1 personne fictive/.test(m1) && /Conservées car citées ailleurs : Sam Weber/.test(m1), m1);
+    w.A6_EFFACER_ANCIENNE_DEMO();
+    ok(live(w, 'Resource').some((r) => r.name === 'Sam Weber') && live(w, 'WorkPackage').some((x) => x.owner_resource_id === b.sam.id), 'une personne fictive encore responsable d’un lot réel est conservée');
+    ok(!live(w, 'Resource').some((r) => r.name === 'Camille Durand' && r.job_function === 'Ingénieure structure'), 'l’autre personne fictive, plus citée, est supprimée');
+    // confirmation trop ancienne : on redemande, on ne supprime pas
+    const o = oldDemoBase(), x = o.w;
+    x.setProp(x.PROP.DEMO_CLEAN, String(Date.now() - 11 * 60 * 1000));
+    const before = liveCount(x);
+    ok(/Rien n’est supprimé/.test(x.A6_EFFACER_ANCIENNE_DEMO()) && liveCount(x) === before, 'après 10 minutes, la confirmation ne vaut plus : on redemande');
+    // droits
+    const n = oldDemoBase().w;
+    n.Session = { getActiveUser: () => ({ getEmail: () => 'alice@entreprise.com' }), getEffectiveUser: () => ({ getEmail: () => 'alice@entreprise.com' }) };
+    let err; try { n.A6_EFFACER_ANCIENNE_DEMO(); } catch (e) { err = e; }
+    ok(err && err.code === 'FORBIDDEN', 'réservé aux administrateurs');
+  });
+
+  test('Ancienne et nouvelle démo ensemble : la nouvelle prévient, puis l’ancienne part sans toucher à la nouvelle', () => {
+    const b = oldDemoBase(), w = b.w;
+    const msg = w.seedDemo_();
+    ok(/^Démo complète/.test(msg) && /l’ancienne démo \(programme DEMO\) est toujours là/.test(msg) && /A6_EFFACER_ANCIENNE_DEMO/.test(msg), msg);
+    const nac = () => ['Program', 'Project', 'WorkPackage', 'PlanItem', 'Dependency', 'BudgetLine', 'PurchaseOrder', 'Baseline', 'RoleAssignment', 'Resource'].map((t) => t + ':' + live(w, t).filter((r) => t !== 'Program' || r.code === 'NAC').length).join(' ');
+    const demoNames = () => live(w, 'Resource').filter((r) => !r.email).map((r) => r.name + '|' + r.job_function).sort().join(';');
+    const people = demoNames();
+    w.A6_EFFACER_ANCIENNE_DEMO(); w.A6_EFFACER_ANCIENNE_DEMO();
+    eq(live(w, 'Program').map((p) => p.code).sort(), ['NAC', 'REEL'], 'il reste le programme NAC de la nouvelle démo et le programme réel');
+    ok(!live(w, 'Project').some((p) => p.code === 'PILOTE') && live(w, 'Project').filter((p) => /^NAC-/.test(p.code)).length === 4, 'projet PILOTE supprimé, quatre projets NAC intacts');
+    ok(live(w, 'Resource').filter((r) => r.name === 'Camille Durand' && r.job_function === 'Ingénieure structure').length === 0 && live(w, 'Resource').some((r) => r.name === 'Camille Durand' && r.job_function === 'Ingénieure calcul'), 'les homonymes de la nouvelle démo sont conservées');
+    ok(demoNames().split(';').length === people.split(';').length - 2, 'exactement deux personnes de moins');
+    ok(!/Attention/.test(w.seedDemo_()) && /La démo existe déjà/.test(w.seedDemo_()), 'plus d’avertissement, et la nouvelle démo n’est pas recréée');
+    void nac;
   });
 };

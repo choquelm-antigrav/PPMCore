@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 0.11.1 — remplacer l'ancienne démo
+
+- **`A6_EFFACER_ANCIENNE_DEMO`** : supprime l'ancienne démo (programme `DEMO`, projet `PILOTE`, deux personnes fictives) et ce qui s'y est rattaché ; deux lancements (le premier montre, le second supprime), suppression douce, réservée aux administrateurs. `A2_SEED_DEMO` signale si l'ancienne démo est toujours là.
+- Tests : 181.
+
 ## 0.11.0
 
 - **Plus aucun onglet** sur Budget, Suivi, Mon compte, Administration et OBS/WBS : chaque rubrique est une zone, toutes affichées ensemble. Le menu ▾ de la barre du haut est retiré. Premier écran préparé avec la page.

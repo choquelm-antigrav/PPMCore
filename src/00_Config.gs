@@ -5,7 +5,7 @@
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.11.0';
+var PPM_VERSION = '0.11.1';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -91,6 +91,7 @@ var PROP = {
   LAST_DIGEST: 'PPM_LAST_DIGEST',
   COPILOT: 'PPM_COPILOT',
   DEMO_STEP: 'PPM_DEMO_STEP',
+  DEMO_CLEAN: 'PPM_DEMO_CLEAN', // horodatage de la demande de suppression de l'ancienne démo (confirmation par un second lancement)
   REMINDER_ON: 'PPM_REMINDER_ON',
   REMINDER_DAYS: 'PPM_REMINDER_DAYS'
 };

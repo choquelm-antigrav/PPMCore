@@ -1,4 +1,4 @@
-# Premiers pas : installer et essayer PPM (version 0.11.0)
+# Premiers pas : installer et essayer PPM (version 0.11.1)
 
 Environ 15 minutes. Pas besoin d'AppSheet pour ces essais. Tout ce qu'il faut est dans le dossier `dist` de l'archive : **11 fichiers**.
 
@@ -21,7 +21,7 @@ En haut de l'éditeur, choisir **A1_INSTALLER_PPM** (la première de la liste de
 
 Le journal d'exécution doit finir par « Installation conforme ». Le domaine et l'administrateur sont déduits de votre compte.
 
-Pour avoir des données d'essai : exécuter aussi **A2_SEED_DEMO** (la deuxième de la liste) : un programme complet, quatre projets dont un complexe (planning en retard, baselines, budget, commandes d'achat, risques) et 38 personnes avec leurs taux. Cela prend plusieurs minutes : **relancez-la jusqu'à voir « Démo complète »** ; elle reprend là où elle s'est arrêtée. Si le journal répond « La démo existe déjà (programme NAC) », une démo est déjà dans le classeur : rien n'est recréé ni remplacé. Personne d'autre que vous n'a d'adresse : rien n'est envoyé.
+Pour avoir des données d'essai : exécuter aussi **A2_SEED_DEMO** (la deuxième de la liste) : un programme complet, quatre projets dont un complexe (planning en retard, baselines, budget, commandes d'achat, risques) et 38 personnes avec leurs taux. Cela prend plusieurs minutes : **relancez-la jusqu'à voir « Démo complète »** ; elle reprend là où elle s'est arrêtée. Si le journal répond « La démo existe déjà (programme NAC) », une démo est déjà dans le classeur : rien n'est recréé ni remplacé. **Si vous aviez essayé une version antérieure à la 0.11.0**, son ancienne démo (programme DEMO, projet PILOTE) est encore là : exécutez d'abord **A6_EFFACER_ANCIENNE_DEMO** (la sixième de la liste) ; le premier lancement dit seulement ce qui serait supprimé, relancez-la dans les 10 minutes pour confirmer, puis lancez A2_SEED_DEMO. Personne d'autre que vous n'a d'adresse : rien n'est envoyé.
 
 ## 4. Publier
 
