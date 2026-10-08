@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.10.0)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.11.0)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 

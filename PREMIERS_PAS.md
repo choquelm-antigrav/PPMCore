@@ -1,4 +1,4 @@
-# Premiers pas : installer et essayer PPM (version 0.10.0)
+# Premiers pas : installer et essayer PPM (version 0.11.0)
 
 Environ 15 minutes. Pas besoin d'AppSheet pour ces essais. Tout ce qu'il faut est dans le dossier `dist` de l'archive : **11 fichiers**.
 
@@ -21,7 +21,7 @@ En haut de l'éditeur, choisir **A1_INSTALLER_PPM** (la première de la liste de
 
 Le journal d'exécution doit finir par « Installation conforme ». Le domaine et l'administrateur sont déduits de votre compte.
 
-Pour avoir des données d'essai : exécuter aussi **A2_SEED_DEMO** (la deuxième de la liste) : un programme complet, quatre projets dont un complexe (planning en retard, baselines, budget, commandes d'achat, risques) et 38 personnes avec leurs taux. Cela prend plusieurs minutes : **relancez-la jusqu'à voir « Démo complète »** ; elle reprend là où elle s'est arrêtée. Personne d'autre que vous n'a d'adresse : rien n'est envoyé.
+Pour avoir des données d'essai : exécuter aussi **A2_SEED_DEMO** (la deuxième de la liste) : un programme complet, quatre projets dont un complexe (planning en retard, baselines, budget, commandes d'achat, risques) et 38 personnes avec leurs taux. Cela prend plusieurs minutes : **relancez-la jusqu'à voir « Démo complète »** ; elle reprend là où elle s'est arrêtée. Si le journal répond « La démo existe déjà (programme NAC) », une démo est déjà dans le classeur : rien n'est recréé ni remplacé. Personne d'autre que vous n'a d'adresse : rien n'est envoyé.
 
 ## 4. Publier
 
@@ -35,7 +35,7 @@ Ouvrir l'URL suivie de `?view=gantt`. Les liens en haut de chaque page mènent a
 | --- | --- |
 | **Planning** | Chemin critique ; glisser une barre pour la déplacer ; cliquer une barre pour déclarer un avancement. |
 | **OBS/WBS** | L'organisation (par rôles ou par équipes) au-dessus du découpage du projet ; bouton **Attributs affichés** dans chaque zone. Zone **Ressources à positionner** : les personnes créées sans rôle ; cliquer l'une d'elles, puis **Positionner dans l'organigramme**. Zone **Découpage (WBS)** : **Ajouter un workpackage**, puis cliquer une carte pour **Ajouter** un livrable ou un jalon, **Modifier** (nom, responsable, dates, rattachement) ou **Supprimer** ; sur un livrable, la section **Dépendances**. En **Organisation** : « Attribuer un rôle », « Ajouter une personne », « Ajouter une équipe », et les boutons de chaque carte. |
-| **Suivi** | Onglet **Baselines** → **Figer la baseline B0**. Déplacer ensuite une barre dans le Planning : un trait gris garde l'ancienne place. **Changements à valider** → **Tout valider**. **Agenda et Drive** → **Créer l'agenda et le dossier du projet**.  |
+| **Suivi** | Zone **Baselines** → **Figer la baseline B0**. Déplacer ensuite une barre dans le Planning : un trait gris garde l'ancienne place. **Changements à valider** → **Tout valider**. **Agenda et Drive** → **Créer l'agenda et le dossier du projet**.  |
 | **Mon compte** (icône de personne, en haut à droite) | **Notifications** → **Me l'envoyer maintenant** : le mail récapitulatif arrive dans votre boîte. Même page : le **rappel avant livraison** (votre délai en jours ouvrés, 10 par défaut). **Affichage** : choisir le thème et la page d'accueil. |
 | **Administration** (icône d'engrenage, administrateurs seulement) | **Santé** : l'installation doit être « Conforme ». **Réglages** : ajouter un second administrateur. **Jours fériés** : ajouter une année. |
 | **Overview** (page d'accueil) | Créer un projet (« Nouveau projet »), le renommer, lire les indicateurs délais, qualité, coût. |
