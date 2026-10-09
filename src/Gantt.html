@@ -3,9 +3,10 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.12.0">
+<meta name="ppm-version" content="0.12.1">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.css">
 <?!= include('Style') ?>
+<?!= include('Common') ?>
 <style>
   /* ---- Frappe Gantt : couleurs à la manière d'un écran de cockpit ---- */
   .gantt-container .popup-wrapper { display: none !important; }
@@ -130,72 +131,24 @@ var BOOT = <?!= boot ?>;
 <script>
 (function () {
   'use strict';
+  var el = ppm.el, clear = ppm.clear, uuid = ppm.uuid, plural = ppm.plural, toast = ppm.toast, call = ppm.call, frDate = function (s) { return ppm.frDate(s, '—'); };
 
   var state = { mode: 'project', projectId: '', programId: '', data: null, catalog: null,
     viewMode: 'Week', gantt: null, lastDrag: 0, pending: null };
   var $ = function (id) { return document.getElementById(id); };
 
   // ------------------------------------------------------------ outils
-  function el(tag, attrs, children) {
-    var n = document.createElement(tag);
-    Object.keys(attrs || {}).forEach(function (k) {
-      if (k === 'text') n.textContent = attrs[k];
-      else if (k === 'class') n.className = attrs[k];
-      else if (k.indexOf('on') === 0) n.addEventListener(k.slice(2), attrs[k]);
-      else n.setAttribute(k, attrs[k]);
-    });
-    (children || []).forEach(function (c) { if (c) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
-    return n;
-  }
-  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
   // Frappe Gantt insère les libellés en HTML : on les échappe pour qu'un nom reste du texte.
   function escapeHtml(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-  function uuid() {
-    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
-    return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2);
-  }
-  function frDate(s) {
-    if (!s) return '—';
-    var p = String(s).split('-');
-    return p[2] + '/' + p[1] + '/' + p[0];
   }
   function ymd(d) {
     var m = d.getMonth() + 1, day = d.getDate();
     return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
   }
   function isWeekend(s) { var d = new Date(s + 'T12:00:00'); return d.getDay() === 0 || d.getDay() === 6; }
-  function plural(n, one, many) { return n + ' ' + (n > 1 ? many : one); }
 
-  var toastTimer = null;
-  function toast(msg, isError) {
-    var t = $('toast');
-    t.textContent = msg;
-    t.className = 'toast' + (isError ? ' error' : '');
-    t.hidden = false;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { t.hidden = true; }, isError ? 7000 : 3500);
-  }
 
-  function call(action, params, write) {
-    var pre = window.ppmPreloaded && window.ppmPreloaded(action, params, write);
-    if (pre) return pre;
-    return new Promise(function (resolve, reject) {
-      document.body.classList.add('busy');
-      google.script.run
-        .withSuccessHandler(function (res) {
-          document.body.classList.remove('busy');
-          if (res && res.ok) resolve(res.data);
-          else reject(res && res.error ? res.error : { code: 'INTERNAL', message: 'Réponse inattendue du serveur.' });
-        })
-        .withFailureHandler(function (err) {
-          document.body.classList.remove('busy');
-          reject({ code: 'NETWORK', message: 'Le serveur ne répond pas. Vérifiez la connexion puis cliquez sur Actualiser.', details: String(err) });
-        })
-        .uiCall(action, params || {}, write ? uuid() : null);
-    });
-  }
 
   function updateNav() {
     var base = BOOT.baseUrl || '';

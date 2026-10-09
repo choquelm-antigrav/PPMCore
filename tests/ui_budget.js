@@ -25,7 +25,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const flat = (s) => String(s).replace(/\s/g, ' ');
 
 function openPage(user, startTab) {
-  const html = src('Budget.html').replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Header') ?>", src('Header.html'))
+  const html = src('Budget.html').replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Common') ?>", src('Common.html')).replace("<?!= include('Header') ?>", src('Header.html'))
     .replace('<?= theme ?>', 'auto')
     .replace('<?!= boot ?>', JSON.stringify({ project: w.p1.id, program: '', tab: startTab || '', mode: '', baseUrl: 'https://app.test/exec', appsheetUrl: '', version: 'test', view: 'budget', home: 'gantt', isAdmin: false, canBudget: true }))
     .replace(/<link rel="stylesheet" href="https:[^"]+">/g, '').replace(/<link rel="preconnect"[^>]*>/g, '');

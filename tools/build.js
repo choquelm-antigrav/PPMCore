@@ -19,7 +19,8 @@ const crypto = require('crypto');
 const root = path.join(__dirname, '..');
 const src = path.join(root, 'src');
 const dist = path.join(root, 'dist');
-const PAGES = ['Gantt', 'Structure', 'Suivi', 'Copilote', 'Compte', 'Admin', 'Budget', 'Overview', 'Ressources', 'Actualites'];
+// la liste des pages vient du registre (src/00_Pages.gs), lu seul dans un contexte isolé
+const PAGES = (() => { const ctx = {}; require('vm').runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'src', '00_Pages.gs'), 'utf8'), ctx); return ctx.PPM_PAGES.map((p) => p.file); })();
 
 function build() {
   const files = fs.readdirSync(src).filter((f) => f.endsWith('.gs')).sort();
@@ -48,7 +49,7 @@ function build() {
   const partial = (n) => fs.readFileSync(path.join(src, n + '.html'), 'utf8').replace(/\s+$/, '');
   PAGES.forEach((p) => {
     let html = fs.readFileSync(path.join(src, p + '.html'), 'utf8');
-    ['Style', 'Header'].forEach((n) => {
+    ['Style', 'Common', 'Header'].forEach((n) => {
       if (html.indexOf("<?!= include('" + n + "') ?>") < 0) throw new Error(p + '.html : include(\'' + n + '\') absent');
       html = html.replace("<?!= include('" + n + "') ?>", partial(n));
     });

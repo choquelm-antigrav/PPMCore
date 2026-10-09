@@ -19,7 +19,7 @@ const check = (cond, msg) => { if (!cond) { failed++; console.error('✗ ' + msg
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function openPage(file, view, boot) {
-  const html = src(file).replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Header') ?>", src('Header.html'))
+  const html = src(file).replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Common') ?>", src('Common.html')).replace("<?!= include('Header') ?>", src('Header.html'))
     .replace('<?= theme ?>', 'auto')
     .replace('<?!= boot ?>', JSON.stringify(Object.assign({ project: w.p1.id, program: '', tab: '', mode: '', baseUrl: 'https://app.test/exec', appsheetUrl: '', version: 'test', view: view, home: 'overview', isAdmin: false, canBudget: true, copilot: false }, boot || {})))
     .replace(/<link rel="stylesheet" href="https:[^"]+">/g, '').replace(/<link rel="preconnect"[^>]*>/g, '');
@@ -63,8 +63,8 @@ function openPage(file, view, boot) {
   for (const [file, view] of [['Gantt.html', 'gantt'], ['Structure.html', 'structure'], ['Suivi.html', 'suivi']]) {
     const p = openPage(file, view, {});
     await wait(1100);
-    const ok3 = ['overview', 'ressources', 'budget', 'suivi'].every((v) => (p.link(v).getAttribute('href') || '').indexOf('project=' + w.p1.id) >= 0);
-    check(ok3, file + ' : tous les liens de la barre reprennent le projet courant : ' + ['overview', 'ressources', 'budget'].map((v) => p.link(v).getAttribute('href')).join(' | '));
+    const ok3 = ['overview', 'ressources', 'budget', 'suivi', 'actualites'].every((v) => (p.link(v).getAttribute('href') || '').indexOf('project=' + w.p1.id) >= 0);
+    check(ok3, file + ' : tous les liens de la barre reprennent le projet courant : ' + ['overview', 'ressources', 'budget', 'actualites'].map((v) => p.link(v).getAttribute('href')).join(' | '));
   }
 
   // le copilote est en suspens : pas de lien ; réactivé : le lien revient

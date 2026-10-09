@@ -3,48 +3,28 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.12.0">
+<meta name="ppm-version" content="0.12.1">
 <?!= include('Style') ?>
+<?!= include('Common') ?>
 <style>
-  .panel { padding: 8px 24px 32px; max-width: 1240px; }
-  .panel[hidden] { display: none; }
   .box { margin: 0 0 20px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .panel { padding: 8px 24px 32px; max-width: 1240px; }
   h2.sec { margin: 24px 0 12px; font-size: 16px; font-weight: 600; }
   .note { margin: 8px 0 0; color: var(--muted); font-size: 14px; max-width: 76ch; }
-  .muted { color: var(--muted); }
-  .late { color: var(--red); font-weight: 500; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 0 0 16px; }
   .card { padding: 12px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); }
-  .card .k { margin: 0; color: var(--muted); font-size: 13px; }
-  .card .v { margin: 2px 0 0; font-size: 20px; font-weight: 600; }
-  .card .s { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
-  .card.alert .v { color: var(--red); }
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; }
-  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12.5px; background: var(--tint); color: var(--ink); white-space: nowrap; }
-  .badge.alert { background: var(--alert-bg); color: var(--alert-ink); }
-  .badge.warn { background: var(--warn-bg); color: var(--warn-ink); }
-  .badge.ok { background: var(--ok-bg); color: var(--ok-ink); }
   td.num, th.num { text-align: right; white-space: nowrap; }
   td.late { color: var(--red); font-weight: 500; }
   td.nowrap { white-space: nowrap; }
   tr.total td { font-weight: 600; background: var(--tint); }
-  td small { display: block; color: var(--muted); }
   td small.late { color: var(--red); }
   select.inline, input.inline { padding: 4px 8px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--ink); max-width: 100%; }
-  .actions-cell { display: flex; gap: 6px; flex-wrap: wrap; }
-  .actions-cell .btn { padding: 3px 10px; font-size: 13.5px; }
   #genform { width: min(560px, calc(100% - 32px)); max-width: none; }
   #po-dialog { width: min(680px, calc(100% - 32px)); max-width: none; max-height: calc(100vh - 32px); overflow: auto; }
-  .ed-grid { display: grid; gap: 12px; }
-  .ed-grid label.lbl { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
   .ed-grid input, .ed-grid select, .ed-grid textarea { padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--ink); min-width: 0; width: 100%; }
-  .ed-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .ed-error { margin: 12px 0 0; color: var(--red); font-weight: 500; }
-  .btn.danger { background: var(--red); border-color: var(--red); color: #FFFFFF; }
   .plink { display: grid; grid-template-columns: 1fr 140px auto; gap: 8px; align-items: center; margin-top: 6px; }
   .plink-sum { margin: 6px 0 0; font-size: 14px; }
   .plink-sum.late { color: var(--red); }
-  dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
   @media (max-width: 700px) { .panel { padding: 8px 12px 24px; } .status .seg { display: grid; grid-template-columns: 1fr 1fr; width: 100%; } .ed-row2, .plink { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -109,6 +89,7 @@ var BOOT = <?!= boot ?>;
 <script>
 (function () {
   'use strict';
+  var el = ppm.el, clear = ppm.clear, uuid = ppm.uuid, plural = ppm.plural, toast = ppm.toast, call = ppm.call, openDialog = ppm.openDialog, closeDialog = ppm.closeDialog, frDate = ppm.frDate;
 
   var TABS = ['bilan', 'po', 'budget'];
   var ACCESS_KEY = { bilan: 'all', po: 'po', budget: 'budget' };
@@ -118,48 +99,9 @@ var BOOT = <?!= boot ?>;
   var STATUSES = ['À faire', 'Lancée', 'GR', 'Terminée'];
 
   // ------------------------------------------------------------ outils
-  function el(tag, attrs, children) {
-    var n = document.createElement(tag);
-    Object.keys(attrs || {}).forEach(function (k) {
-      if (k === 'text') n.textContent = attrs[k];
-      else if (k === 'class') n.className = attrs[k];
-      else if (k.indexOf('on') === 0) n.addEventListener(k.slice(2), attrs[k]);
-      else n.setAttribute(k, attrs[k]);
-    });
-    (children || []).forEach(function (c) { if (c !== null && c !== undefined) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
-    return n;
-  }
-  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
-  function uuid() { return window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2); }
-  var toastTimer = null;
-  function toast(msg, isError) {
-    var t = $('toast');
-    t.textContent = msg; t.className = 'toast' + (isError ? ' error' : ''); t.hidden = false;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { t.hidden = true; }, isError ? 8000 : 3500);
-  }
-  function call(action, params, write) {
-    var pre = window.ppmPreloaded && window.ppmPreloaded(action, params, write);
-    if (pre) return pre;
-    return new Promise(function (resolve, reject) {
-      document.body.classList.add('busy');
-      google.script.run
-        .withSuccessHandler(function (res) {
-          document.body.classList.remove('busy');
-          if (res && res.ok) resolve(res.data); else reject(res && res.error ? res.error : { code: 'INTERNAL', message: 'Réponse inattendue du serveur.' });
-        })
-        .withFailureHandler(function (err) {
-          document.body.classList.remove('busy');
-          reject({ code: 'NETWORK', message: 'Le serveur ne répond pas. Vérifiez la connexion puis rechargez la page.', details: String(err) });
-        })
-        .uiCall(action, params || {}, write ? uuid() : null);
-    });
-  }
   function eur(n) { return n === null || n === undefined ? '' : Number(n).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }); }
   function eur2(n) { return Number(n).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-  function frDate(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
   function frMonth(m) { var p = String(m).split('-'); return p[1] + '/' + p[0]; }
-  function plural(n, one, many) { return n + ' ' + (Math.abs(n) > 1 ? many : one); }
   function loading(p) { clear(p); p.appendChild(el('p', { class: 'loading', text: 'Chargement…' })); }
   function empty(p, title, text) { p.hidden = false; clear(p); p.appendChild(el('div', { class: 'empty' }, [el('strong', { text: title }), el('span', { text: text || '' })])); }
   function card(k, v, s, tone) { return el('div', { class: 'card' + (tone ? ' ' + tone : '') }, [el('p', { class: 'k', text: k }), el('p', { class: 'v', text: v }), s ? el('p', { class: 's', text: s }) : null]); }
@@ -169,8 +111,6 @@ var BOOT = <?!= boot ?>;
       el('tbody', {}, rows)])]);
   }
   function cell(content, cls) { return el('td', { class: cls || '' }, [].concat(content)); }
-  function openDialog(d) { if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
-  function closeDialog(d) { if (d.close) d.close(); else d.removeAttribute('open'); }
   function fail(e) { toast(window.ppmErrorText ? ppmErrorText(e) : (e && e.message) || 'Opération impossible.', true); }
   function failed(p, e) { empty(p, 'Chargement impossible.', (e && e.message) || 'Erreur inconnue.'); }
 

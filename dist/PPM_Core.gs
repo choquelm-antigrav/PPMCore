@@ -1,7 +1,7 @@
 /**
- * PPM Core 0.12.0 — fichier unique à installer (fabriqué par tools/build.js, empreinte 9988aa62bdab).
+ * PPM Core 0.12.1 — fichier unique à installer (fabriqué par tools/build.js, empreinte b20bfdffca12).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
- * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 30_Api.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 48_News.gs.
+ * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 30_Api.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 48_News.gs.
  */
 
 // ======================================================================
@@ -40,7 +40,7 @@ function A6_EFFACER_ANCIENNE_DEMO() { return effacerAncienneDemo_(); }
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.12.0';
+var PPM_VERSION = '0.12.1';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -204,6 +204,39 @@ function accessDeniedMessage_(email) {
 function allowedDomain() {
   return allowedDomains()[0] || '';
 }
+
+// ======================================================================
+// 00_Pages.gs
+// ======================================================================
+
+/**
+ * PPM Core — registre des pages : la source unique de ce qui existe, lue par le serveur (32_Views.gs), par la fabrication
+ * (tools/build.js), par les aperçus et par les tests.
+ *
+ *   view    paramètre ?view=… de l'adresse
+ *   file    fichier HTML de src/ (sans l'extension)
+ *   title   titre de l'onglet du navigateur
+ *   eyebrow petit libellé au-dessus du titre de la page (repris dans Header.html, vérifié par tests/test_pages.js)
+ *   tabs    valeurs acceptées pour ?tab=… ; la première est celle par défaut ; [''] : la page n'a pas d'onglets
+ *   nav     'bar' : lien de la barre du haut ; 'icon' : icône du coin (Mon compte, Administration)
+ *   share   la page reprend le projet courant d'un lien à l'autre (liste SHARE de Header.html)
+ *
+ * AJOUTER UNE PAGE : une entrée ici, le fichier src/<file>.html (avec les inclusions Style, Common et Header et la balise
+ * ppm-version), son lien et son libellé dans Header.html (liens, EYEBROW, et SHARE si elle partage le projet), puis
+ * `node tests/run.js` : test_pages.js dit ce qui manque.
+ */
+var PPM_PAGES = [
+  { view: 'overview',   file: 'Overview',   title: 'PPM — Overview projet', eyebrow: 'Overview · Projet',                     tabs: [''], nav: 'bar',  share: true },
+  { view: 'gantt',      file: 'Gantt',      title: 'PPM — Planning',        eyebrow: 'Planning · Gantt',                      tabs: [''], nav: 'bar',  share: true },
+  { view: 'structure',  file: 'Structure',  title: 'PPM — OBS/WBS',         eyebrow: 'OBS/WBS · Organisation et découpage',   tabs: [''], nav: 'bar',  share: true },
+  { view: 'ressources', file: 'Ressources', title: 'PPM — Ressources',      eyebrow: 'Ressources · Équipes et rôles',         tabs: [''], nav: 'bar',  share: true },
+  { view: 'suivi',      file: 'Suivi',      title: 'PPM — Suivi',           eyebrow: 'Suivi · Baselines',                     tabs: [''], nav: 'bar',  share: true },
+  { view: 'actualites', file: 'Actualites', title: 'PPM — Actualités',      eyebrow: 'Actualités · Réunions et actions',      tabs: [''], nav: 'bar',  share: true },
+  { view: 'copilote',   file: 'Copilote',   title: 'PPM — Copilote',        eyebrow: 'Copilote · Analyse',                    tabs: ['synthese', 'simulation', 'questions', 'suggestions'], nav: 'bar', share: true },
+  { view: 'budget',     file: 'Budget',     title: 'PPM — Budget',          eyebrow: 'Budget · CPN et achats',                tabs: [''], nav: 'bar',  share: true },
+  { view: 'compte',     file: 'Compte',     title: 'PPM — Mon compte',      eyebrow: 'Mon compte',                            tabs: [''], nav: 'icon', share: false },
+  { view: 'admin',      file: 'Admin',      title: 'PPM — Administration',  eyebrow: 'Administration',                        tabs: [''], nav: 'icon', share: false }
+];
 
 // ======================================================================
 // 01_Schema.gs
@@ -3218,9 +3251,9 @@ function uiCall(action, params, requestId) {
     currentUserEmail_());
 }
 
-var PAGES = { gantt: 'Gantt', structure: 'Structure', suivi: 'Suivi', copilote: 'Copilote', compte: 'Compte', admin: 'Admin', budget: 'Budget', overview: 'Overview', ressources: 'Ressources', actualites: 'Actualites' };
-var PAGE_TITLES = { gantt: 'PPM — Planning', structure: 'PPM — OBS/WBS', suivi: 'PPM — Suivi', copilote: 'PPM — Copilote', compte: 'PPM — Mon compte', admin: 'PPM — Administration', budget: 'PPM — Budget', overview: 'PPM — Overview projet', ressources: 'PPM — Ressources', actualites: 'PPM — Actualités' };
-var PAGE_TABS = { gantt: [''], structure: [''], suivi: [''], copilote: ['synthese', 'simulation', 'questions', 'suggestions'], compte: [''], admin: [''], budget: [''], overview: [''], ressources: [''], actualites: [''] };
+/** Tables déduites du registre des pages (00_Pages.gs) : ne pas les écrire à la main. */
+var PAGES = {}, PAGE_TITLES = {}, PAGE_TABS = {};
+PPM_PAGES.forEach(function (p) { PAGES[p.view] = p.file; PAGE_TITLES[p.view] = p.title; PAGE_TABS[p.view] = p.tabs; });
 
 /** JSON à clés triées : la page et le serveur calculent la même clé pour les mêmes paramètres. */
 function stableJson_(v) {

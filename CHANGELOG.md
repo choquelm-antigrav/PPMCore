@@ -1,5 +1,20 @@
 # Journal des versions
 
+## 0.12.1 — nettoyage : outils communs, CSS commun, registre des pages
+
+Aucun changement de fonctionnement, sauf les deux corrections ci-dessous.
+
+- **Outils JavaScript communs** (`Common.html`, `ppm.el`, `ppm.call`, `ppm.toast`, `ppm.frDate`…) : une seule version à la place d'une copie par page (il en existait jusqu'à cinq variantes pour le formatage des dates). Environ 480 lignes retirées des pages.
+- **Les pages fabriquées (`dist/`) restent autonomes** : Apps Script sert chaque page seule, donc la partie commune y est recopiée à la fabrication ; le gain est dans les **sources** (une seule version à corriger), pas dans le poids servi, qui augmente d'environ 25 Ko au total sur les dix pages (environ 2,5 Ko par page).
+- **CSS commun** : 23 règles identiques dans trois pages ou plus déplacées dans `Style.html`.
+- **Registre des pages** (`00_Pages.gs`) : la liste des pages n'est plus écrite à six endroits ; le serveur, la fabrication et les aperçus la lisent ; `test_pages.js` vérifie la cohérence avec la barre du haut et les fichiers.
+- **`ARCHITECTURE.md`** : les couches, les règles et la marche à suivre pour ajouter une page, une action ou une table.
+- **Correction** : le lien « Actualités » de la barre du haut reprend désormais le projet courant (oublié en 0.12.0).
+- **Correction visuelle** : dans Ressources, le compteur « n personnes » prend le gris des textes secondaires, comme partout ailleurs.
+- Vérifié en comparant neuf pages pixel par pixel avec la 0.12.0 (démo complète) : sept strictement identiques, Ressources (le compteur) et Administration (ordre de lignes de journal à la même seconde) mis à part.
+- Essai instable corrigé (`ui_org.js` cliquait sur un bouton avant qu'il soit redessiné ; reproduit sous charge, puis six essais sous charge sans échec).
+- Tests : 204 serveur, plus douze essais de pages.
+
 ## 0.12.0 — fil d'actualités du projet (phase 1)
 
 - **Page Actualités** : synthèse du matin, actions issues des réunions, fil des réunions, réunions à trier, ajout d'un compte rendu, repères et journal.

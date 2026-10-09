@@ -3,8 +3,9 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.12.0">
+<meta name="ppm-version" content="0.12.1">
 <?!= include('Style') ?>
+<?!= include('Common') ?>
 <style>
   main { padding: 16px 24px 28px; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
   .box { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px; }
@@ -14,12 +15,9 @@
   .filters input[type=search] { min-width: 220px; }
   .badge { display: inline-block; padding: 2px 10px; border-radius: 100px; font-size: 12px; background: var(--tint); color: var(--ink); white-space: nowrap; }
   .badge.ext { background: var(--warn-bg); color: var(--warn-ink); } .badge.ok { background: var(--ok-bg); color: var(--ok-ink); } .badge.warn { background: var(--warn-bg); color: var(--warn-ink); }
-  td small { display: block; color: var(--muted); }
   td.num { text-align: right; white-space: nowrap; }
   select.inline, input.inline { padding: 4px 8px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--ink); max-width: 100%; }
   input.rate-input { width: 96px; text-align: right; }
-  .actions-cell { display: flex; gap: 6px; flex-wrap: wrap; }
-  .actions-cell .btn { padding: 3px 10px; font-size: 13.5px; }
   .teams { list-style: none; margin: 0; padding: 0; }
   .teams li { padding: 8px 0; border-bottom: 1px solid var(--rule); }
   .teams li:last-child { border-bottom: 0; }
@@ -30,13 +28,6 @@
   .teams .t-actions .btn { padding: 2px 8px; font-size: 12.5px; }
   .note { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
   #genform { width: min(540px, calc(100% - 32px)); max-width: none; }
-  .ed-grid { display: grid; gap: 12px; }
-  .ed-grid label.lbl { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
-  .ed-grid input, .ed-grid select { padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--ink); min-width: 0; width: 100%; }
-  .ed-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .ed-error { margin: 12px 0 0; color: var(--red); font-weight: 500; }
-  .btn.danger { background: var(--red); border-color: var(--red); color: #FFFFFF; }
-  dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
   @media (max-width: 1000px) { main { grid-template-columns: 1fr; padding: 12px; } .ed-row2 { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -103,53 +94,14 @@ var BOOT = <?!= boot ?>;
 <script>
 (function () {
   'use strict';
+  var el = ppm.el, clear = ppm.clear, uuid = ppm.uuid, plural = ppm.plural, toast = ppm.toast, call = ppm.call, openDialog = ppm.openDialog, closeDialog = ppm.closeDialog;
 
   var state = { data: null, projectId: '', team: '', catalog: null, seq: 0 };
   var $ = function (id) { return document.getElementById(id); };
   var COUNTRY_LIST = [['FR', 'France'], ['DE', 'Allemagne'], ['UK', 'Royaume-Uni'], ['IN', 'Inde']];
 
   // ------------------------------------------------------------ outils
-  function el(tag, attrs, children) {
-    var n = document.createElement(tag);
-    Object.keys(attrs || {}).forEach(function (k) {
-      if (k === 'text') n.textContent = attrs[k];
-      else if (k === 'class') n.className = attrs[k];
-      else if (k.indexOf('on') === 0) n.addEventListener(k.slice(2), attrs[k]);
-      else n.setAttribute(k, attrs[k]);
-    });
-    (children || []).forEach(function (c) { if (c !== null && c !== undefined) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
-    return n;
-  }
-  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
-  function uuid() { return window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2); }
-  var toastTimer = null;
-  function toast(msg, isError) {
-    var t = $('toast');
-    t.textContent = msg; t.className = 'toast' + (isError ? ' error' : ''); t.hidden = false;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { t.hidden = true; }, isError ? 8000 : 3500);
-  }
-  function call(action, params, write) {
-    var pre = window.ppmPreloaded && window.ppmPreloaded(action, params, write);
-    if (pre) return pre;
-    return new Promise(function (resolve, reject) {
-      document.body.classList.add('busy');
-      google.script.run
-        .withSuccessHandler(function (res) {
-          document.body.classList.remove('busy');
-          if (res && res.ok) resolve(res.data); else reject(res && res.error ? res.error : { code: 'INTERNAL', message: 'Réponse inattendue du serveur.' });
-        })
-        .withFailureHandler(function (err) {
-          document.body.classList.remove('busy');
-          reject({ code: 'NETWORK', message: 'Le serveur ne répond pas. Vérifiez la connexion puis rechargez la page.', details: String(err) });
-        })
-        .uiCall(action, params || {}, write ? uuid() : null);
-    });
-  }
-  function plural(n, one, many) { return n + ' ' + (Math.abs(n) > 1 ? many : one); }
   function fail(e) { toast(ppmErrorText(e), true); }
-  function openDialog(d) { if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
-  function closeDialog(d) { if (d.close) d.close(); else d.removeAttribute('open'); }
 
   // ------------------------------------------------------------ formulaire générique et confirmation
   function fillSelect(sel, options, value) {

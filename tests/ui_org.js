@@ -21,7 +21,7 @@ const check = (cond, msg) => { if (!cond) { failed++; console.error('✗ ' + msg
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function openPage(user, tab, mode) {
-  const html = src('Structure.html').replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Header') ?>", src('Header.html'))
+  const html = src('Structure.html').replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Common') ?>", src('Common.html')).replace("<?!= include('Header') ?>", src('Header.html'))
     .replace('<?= theme ?>', 'auto')
     .replace('<?!= boot ?>', JSON.stringify({ project: w.p1.id, program: '', tab: tab, mode: mode || '', baseUrl: 'https://app.test/exec', appsheetUrl: '', version: 'test', view: 'structure', home: 'gantt', isAdmin: false }))
     .replace(/<link rel="stylesheet" href="https:[^"]+">/g, '').replace(/<link rel="preconnect"[^>]*>/g, '');
@@ -185,6 +185,7 @@ function openPage(user, tab, mode) {
   await p.until(() => c.repoGet('Resource', w.mia.id).team_id === '');
   await p.until(() => !/Mia/.test(p.text('details')));
   check(true, 'membre retiré de l’équipe');
+  await p.until(() => p.$('team-delete')); // le panneau se redessine après le retrait : on attend le bouton
   p.click(p.$('team-delete'));
   await p.until(() => p.$('confirm').open);
   p.click(p.$('confirm-ok'));

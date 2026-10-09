@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.12.0)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.12.1)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -41,6 +41,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `43_Budget.gs` | 0.9.0 : CPN (projet et sous-projet), grille de taux, lignes de budget et étalement, bilan par CPN |
 | `45_Overview.gs` | 0.10.0 : page Overview : création et renommage de projet, indicateurs délais, qualité et coût |
 | `46_Resources.gs` | 0.10.0 : page Ressources : personnes, équipes, rôle de projet, taux journalier par personne |
+| `00_Pages.gs` | 0.12.1 : registre des pages, source unique lue par le serveur, la fabrication, les aperçus et les tests |
 | `47_Demo.gs` | 0.11.0 : démo complète (`seedDemo_()`), découpée en 17 étapes qui reprennent là où elles se sont arrêtées ; 0.12.0 : réunions, actions et synthèse du fil d'actualités |
 | `48_News.gs` | 0.12.0 : fil d'actualités du projet (lecture des comptes rendus, rattachement des réunions, actions, synthèse du matin, journal du projet, collecteur d'agenda) |
 | `44_Orders.gs` | 0.9.0 : commandes d'achat (PO) : saisie, statuts, répartition par livrable, constats et rappels de GR |
@@ -60,7 +61,8 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `Admin.html` | Page Administration (réservée aux administrateurs) : réglages, santé, jours fériés, journaux |
 | `Copilote.html` | Page Copilote : synthèse, simulation, questions, suggestions (**en suspens** depuis 0.11.0 : page masquée) |
 | `Header.html` | Bannière commune (navigation, bouton jour/nuit), données préchargées et fenêtres d'information (inclus par `include('Header')`) |
-| `Style.html` | Charte graphique commune, thèmes jour et nuit (inclus par `include('Style')`) |
+| `Style.html` | Charte graphique commune, thèmes jour et nuit, composants CSS communs (inclus par `include('Style')`) |
+| `Common.html` | 0.12.1 : outils JavaScript communs à toutes les pages (`ppm.el`, `ppm.call`, `ppm.toast`, `ppm.frDate`…), inclus par `include('Common')` |
 
 ## Déploiement (compte propriétaire : Max, environ 15 minutes)
 
@@ -158,6 +160,7 @@ node tests/ui_org.js          # dépendances, rôles, personnes et équipes dans
 node tests/ui_budget.js       # page Budget : bilan, PO, lignes de budget
 node tests/ui_overview.js     # page Overview : indicateurs, création et renommage de projet
 node tests/ui_ressources.js   # page Ressources : personnes, équipes, rôles, taux, accès
+node tests/test_pages.js        # (inclus dans run.js) cohérence du registre des pages, de la barre du haut et des fichiers
 node tests/ui_news.js         # page Actualités, carte de l'Overview, « Mes actions » de Mon compte
 node tests/ui_nav.js          # barre du haut : pas de menu d'onglets, projet courant d'une page à l'autre, lien du copilote
 

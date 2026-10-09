@@ -1,0 +1,72 @@
+<script>
+/**
+ * PPM — outils communs à toutes les pages (0.12.1). Une seule version de chacun : le corriger ici le corrige partout.
+ * Inclus par chaque page, comme Style et Header (balise d'inclusion de Common, juste après celle de Style). Chaque page les reprend sous des noms courts
+ * (var el = ppm.el, …) puis ne contient plus que sa logique propre.
+ */
+(function (root) {
+  'use strict';
+  var ppm = root.ppm = root.ppm || {};
+  var toastTimer = null;
+
+  /** Crée un élément : attrs (text, class, onclick…, ou tout autre attribut), children (texte ou éléments ; le vide est ignoré). */
+  ppm.el = function (tag, attrs, children) {
+    var n = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (k === 'text') n.textContent = attrs[k];
+      else if (k === 'class') n.className = attrs[k];
+      else if (k.indexOf('on') === 0) n.addEventListener(k.slice(2), attrs[k]);
+      else n.setAttribute(k, attrs[k]);
+    });
+    (children || []).forEach(function (c) { if (c) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return n;
+  };
+
+  ppm.clear = function (n) { while (n.firstChild) n.removeChild(n.firstChild); };
+
+  /** Identifiant d'une écriture : le serveur ignore une écriture rejouée avec le même identifiant. */
+  ppm.uuid = function () {
+    if (root.crypto && root.crypto.randomUUID) return root.crypto.randomUUID();
+    return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  };
+
+  ppm.plural = function (n, one, many) { return n + ' ' + (Math.abs(n) > 1 ? many : one); };
+
+  /** AAAA-MM-JJ (ou date-heure ISO) → JJ/MM/AAAA ; `empty` est rendu quand il n'y a pas de date lisible (par défaut : rien). */
+  ppm.frDate = function (s, empty) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ''));
+    return m ? m[3] + '/' + m[2] + '/' + m[1] : (empty === undefined ? '' : empty);
+  };
+
+  /** Message bref en bas de page (élément #toast) ; une erreur reste plus longtemps. */
+  ppm.toast = function (msg, isError) {
+    var t = document.getElementById('toast');
+    if (!t) return;
+    t.textContent = msg; t.className = 'toast' + (isError ? ' error' : ''); t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.hidden = true; }, isError ? 8000 : 3500);
+  };
+
+  /** Appel du serveur : réponse préchargée avec la page s'il y en a une, sinon google.script.run. Rend une promesse. */
+  ppm.call = function (action, params, write) {
+    var pre = root.ppmPreloaded && root.ppmPreloaded(action, params, write);
+    if (pre) return pre;
+    return new Promise(function (resolve, reject) {
+      document.body.classList.add('busy');
+      root.google.script.run
+        .withSuccessHandler(function (res) {
+          document.body.classList.remove('busy');
+          if (res && res.ok) resolve(res.data); else reject(res && res.error ? res.error : { code: 'INTERNAL', message: 'Réponse inattendue du serveur.' });
+        })
+        .withFailureHandler(function (err) {
+          document.body.classList.remove('busy');
+          reject({ code: 'NETWORK', message: 'Le serveur ne répond pas. Vérifiez la connexion puis rechargez la page.', details: String(err) });
+        })
+        .uiCall(action, params || {}, write ? ppm.uuid() : null);
+    });
+  };
+
+  ppm.openDialog = function (d) { if (d.showModal) d.showModal(); else d.setAttribute('open', ''); };
+  ppm.closeDialog = function (d) { if (d.close) d.close(); else d.removeAttribute('open'); };
+})(window);
+</script>

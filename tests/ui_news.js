@@ -22,7 +22,7 @@ const flat = (s) => String(s).replace(/\s+/g, ' ').trim();
 const NOTES = ['Résumé', 'Revue de la conception.', '', 'Décisions', '- Le plan d’essais est validé.', '', 'Étapes suivantes', '- [Carla] Envoyer le planning révisé : avant le 30/10', '- Mia: relancer le fournisseur pour le 12 novembre', '- [Rémi] Mettre à jour le dossier de calcul'].join('\n');
 
 function openPage(user, file, view) {
-  const html = src(file || 'Actualites.html').replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Header') ?>", src('Header.html'))
+  const html = src(file || 'Actualites.html').replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Common') ?>", src('Common.html')).replace("<?!= include('Header') ?>", src('Header.html'))
     .replace('<?= theme ?>', 'auto')
     .replace('<?!= boot ?>', JSON.stringify({ project: w.p1.id, program: '', tab: '', mode: '', baseUrl: 'https://app.test/exec', appsheetUrl: '', version: 'test', view: view || 'actualites', home: 'overview', isAdmin: false, canBudget: true }))
     .replace(/<link rel="stylesheet" href="https:[^"]+">/g, '').replace(/<link rel="preconnect"[^>]*>/g, '');

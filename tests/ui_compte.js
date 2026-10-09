@@ -22,7 +22,7 @@ const check = (cond, msg) => { if (!cond) { failed++; console.error('✗ ' + msg
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function openPage(file, user, boot) {
-  const html = src(file).replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Header') ?>", src('Header.html'))
+  const html = src(file).replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Common') ?>", src('Common.html')).replace("<?!= include('Header') ?>", src('Header.html'))
     .replace('<?= theme ?>', 'auto')
     .replace('<?!= boot ?>', JSON.stringify(Object.assign({ project: '', program: '', tab: '', baseUrl: 'https://app.test/exec', appsheetUrl: '', version: 'test', home: 'overview', isAdmin: user === ADMIN, view: file === 'Compte.html' ? 'compte' : 'admin' }, boot || {})))
     .replace(/<link rel="stylesheet" href="https:[^"]+">/g, '').replace(/<link rel="preconnect"[^>]*>/g, '');

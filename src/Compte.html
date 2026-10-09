@@ -3,25 +3,22 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.12.0">
+<meta name="ppm-version" content="0.12.1">
 <?!= include('Style') ?>
+<?!= include('Common') ?>
 <style>
-  .panel { padding: 8px 24px 32px; max-width: 880px; }
-  .panel[hidden] { display: none; }
   .box { margin: 0 0 20px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .panel { padding: 8px 24px 32px; max-width: 880px; }
   .box h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
   .note { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
-  .muted { color: var(--muted); }
   .who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin: 0 0 12px; }
   .who strong { font-size: 18px; }
   .form { display: grid; gap: 12px; max-width: 460px; }
   .form label.lbl { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
   .form input[type=text] { padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; color: var(--ink); }
-  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
   .opt { display: flex; align-items: flex-start; gap: 8px; margin: 6px 0; cursor: pointer; }
   fieldset { margin: 0 0 12px; padding: 0; border: 0; }
   legend { margin: 0 0 4px; font-weight: 600; }
-  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12.5px; background: var(--tint); color: var(--ink); white-space: nowrap; }
   .lbl { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
   .lbl input[type=number] { width: 120px; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--ink); }
   #preview { width: 100%; height: 320px; margin-top: 12px; border: 1px solid var(--rule); border-radius: 6px; background: #FFFFFF; }
@@ -53,50 +50,13 @@ var BOOT = <?!= boot ?>;
 <script>
 (function () {
   'use strict';
+  var el = ppm.el, clear = ppm.clear, uuid = ppm.uuid, toast = ppm.toast, call = ppm.call, frDate = ppm.frDate;
 
   var state = { acct: null, suggestions: null };
   var $ = function (id) { return document.getElementById(id); };
   var HOMES = [['overview', 'Overview projet'], ['gantt', 'Planning'], ['structure', 'OBS/WBS'], ['ressources', 'Ressources'], ['suivi', 'Suivi']].concat(BOOT.copilot ? [['copilote', 'Copilote']] : []).concat([['budget', 'Budget']]);
 
   // ------------------------------------------------------------ outils
-  function el(tag, attrs, children) {
-    var n = document.createElement(tag);
-    Object.keys(attrs || {}).forEach(function (k) {
-      if (k === 'text') n.textContent = attrs[k];
-      else if (k === 'class') n.className = attrs[k];
-      else if (k.indexOf('on') === 0) n.addEventListener(k.slice(2), attrs[k]);
-      else n.setAttribute(k, attrs[k]);
-    });
-    (children || []).forEach(function (c) { if (c !== null && c !== undefined) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
-    return n;
-  }
-  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
-  function uuid() { return window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2); }
-  var toastTimer = null;
-  function toast(msg, isError) {
-    var t = $('toast');
-    t.textContent = msg; t.className = 'toast' + (isError ? ' error' : ''); t.hidden = false;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { t.hidden = true; }, isError ? 7000 : 3500);
-  }
-  function call(action, params, write) {
-    var pre = window.ppmPreloaded && window.ppmPreloaded(action, params, write);
-    if (pre) return pre;
-    return new Promise(function (resolve, reject) {
-      document.body.classList.add('busy');
-      google.script.run
-        .withSuccessHandler(function (res) {
-          document.body.classList.remove('busy');
-          if (res && res.ok) resolve(res.data); else reject(res && res.error ? res.error : { code: 'INTERNAL', message: 'Réponse inattendue du serveur.' });
-        })
-        .withFailureHandler(function (err) {
-          document.body.classList.remove('busy');
-          reject({ code: 'NETWORK', message: 'Le serveur ne répond pas. Vérifiez la connexion puis rechargez la page.', details: String(err) });
-        })
-        .uiCall(action, params || {}, write ? uuid() : null);
-    });
-  }
-  function frDate(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
   function box(title, children) { return el('div', { class: 'box' }, [el('h2', { text: title })].concat(children)); }
 
   // ------------------------------------------------------------ Ma fiche

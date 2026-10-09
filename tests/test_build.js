@@ -8,7 +8,7 @@ module.exports = function () {
 
   test('Fabrication : 12 fichiers, sources dans l’ordre, style et bannière intégrés, versions cohérentes', () => {
     const r = require('../tools/build').build();
-    eq(r.out, ['Actualites.html', 'Admin.html', 'Budget.html', 'Compte.html', 'Copilote.html', 'Gantt.html', 'Overview.html', 'PPM_Core.gs', 'Ressources.html', 'Structure.html', 'Suivi.html', 'appsscript.json']);
+    eq(r.out, freshCore().PPM_PAGES.map((p) => p.file + '.html').concat(['PPM_Core.gs', 'appsscript.json']).sort(), 'les pages du registre, le Core et le manifeste');
     const core = fs.readFileSync(path.join(root, 'dist', 'PPM_Core.gs'), 'utf8');
     const gs = fs.readdirSync(path.join(root, 'src')).filter((f) => f.endsWith('.gs')).sort();
     const pos = gs.map((f) => core.indexOf('// ' + f + '\n'));

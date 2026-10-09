@@ -23,6 +23,7 @@ require('./test_mails')();
 require('./test_suspension')();
 require('./test_demo')();
 require('./test_news')();
+require('./test_pages')();
 console.log('\n' + results.passed + ' réussis, ' + results.failed + ' en échec');
 if (results.failed) {
   results.failures.forEach((f) => console.log('\n✗ ' + f.name + '\n' + (f.error && f.error.stack)));
