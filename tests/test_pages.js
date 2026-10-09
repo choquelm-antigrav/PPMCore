@@ -15,7 +15,7 @@ module.exports = function () {
   test('Registre : une entrée complète par page, sans doublon', () => {
     ok(pages.length >= 10, pages.length + ' pages');
     pages.forEach((p) => {
-      ok(/^[a-z]+$/.test(p.view) && /^[A-Z][A-Za-z]+$/.test(p.file) && /^PPM — /.test(p.title) && p.eyebrow && Array.isArray(p.tabs) && p.tabs.length >= 1 && ['bar', 'icon'].includes(p.nav) && typeof p.share === 'boolean', 'entrée complète : ' + p.view);
+      ok(/^[a-z]+$/.test(p.view) && /^[A-Z][A-Za-z]+$/.test(p.file) && /^PPM — /.test(p.title) && p.eyebrow && Array.isArray(p.tabs) && p.tabs.length >= 1 && ['bar', 'icon'].includes(p.nav) && typeof p.share === 'boolean' && Array.isArray(p.parts), 'entrée complète : ' + p.view);
     });
     eq(new Set(pages.map((p) => p.view)).size, pages.length, 'une vue par entrée');
     eq(new Set(pages.map((p) => p.file)).size, pages.length, 'un fichier par entrée');
@@ -31,8 +31,15 @@ module.exports = function () {
   });
 
   test('Registre : aucune page de src/ n’échappe au registre', () => {
-    const files = fs.readdirSync(path.join(root, 'src')).filter((f) => /\.html$/.test(f) && !['Style.html', 'Common.html', 'Header.html'].includes(f)).sort();
-    eq(files, pages.map((p) => p.file + '.html').sort(), 'les pages de src/ sont exactement celles du registre');
+    const parts = [].concat(...pages.map((p) => p.parts));
+    const files = fs.readdirSync(path.join(root, 'src')).filter((f) => /\.html$/.test(f) && !['Style.html', 'Common.html', 'Header.html'].includes(f) && !parts.includes(f.replace(/\.html$/, ''))).sort();
+    eq(files, pages.map((p) => p.file + '.html').sort(), 'les fichiers de src/ sont les pages du registre, leurs morceaux et les trois parties communes');
+    eq(new Set(parts).size, parts.length, 'un morceau n’appartient qu’à une page');
+    pages.forEach((p) => {
+      const h = read(p.file + '.html'), order = p.parts.map((n) => h.indexOf("<?!= include('" + n + "') ?>"));
+      p.parts.forEach((n, i) => { ok(fs.existsSync(path.join(root, 'src', n + '.html')) && order[i] >= 0, p.file + ' : le morceau ' + n + ' existe et est inclus'); });
+      ok(order.every((x, i) => i === 0 || x > order[i - 1]), p.file + ' : morceaux inclus dans l’ordre du registre');
+    });
   });
 
   test('Registre : la barre du haut connaît chaque page (lien ou icône, libellé, partage du projet courant)', () => {

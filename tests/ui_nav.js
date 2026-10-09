@@ -19,7 +19,7 @@ const check = (cond, msg) => { if (!cond) { failed++; console.error('✗ ' + msg
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function openPage(file, view, boot) {
-  const html = src(file).replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Common') ?>", src('Common.html')).replace("<?!= include('Header') ?>", src('Header.html'))
+  const html = src(file).replace(/<\?!= include\('(?!Style'|Common'|Header')(\w+)'\) \?>/g, (m, n) => require('fs').readFileSync(require('path').join(__dirname, '..', 'src', n + '.html'), 'utf8')).replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Common') ?>", src('Common.html')).replace("<?!= include('Header') ?>", src('Header.html'))
     .replace('<?= theme ?>', 'auto')
     .replace('<?!= boot ?>', JSON.stringify(Object.assign({ project: w.p1.id, program: '', tab: '', mode: '', baseUrl: 'https://app.test/exec', appsheetUrl: '', version: 'test', view: view, home: 'overview', isAdmin: false, canBudget: true, copilot: false }, boot || {})))
     .replace(/<link rel="stylesheet" href="https:[^"]+">/g, '').replace(/<link rel="preconnect"[^>]*>/g, '');

@@ -105,7 +105,7 @@ const src = (f) => fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8')
 const deps = process.env.UI_DEPS || path.join(__dirname, '..', 'node_modules');
 const pages = Object.fromEntries(c.PPM_PAGES.map((p) => [p.view, p.file + '.html'])); // registre des pages (src/00_Pages.gs)
 function template(view) {
-  let html = src(pages[view] || 'Structure.html').replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Common') ?>", src('Common.html')).replace("<?!= include('Header') ?>", src('Header.html'));
+  let html = src(pages[view] || 'Structure.html').replace(/<\?!= include\('(?!Style'|Common'|Header')(\w+)'\) \?>/g, (m, n) => require('fs').readFileSync(require('path').join(__dirname, '..', 'src', n + '.html'), 'utf8')).replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Common') ?>", src('Common.html')).replace("<?!= include('Header') ?>", src('Header.html'));
   if (view === 'gantt') {
     const dist = path.join(deps, 'frappe-gantt', 'dist');
     html = html.replace(/<link rel="stylesheet" href="https:\/\/cdn\.jsdelivr[^"]+">/, '<style>' + fs.readFileSync(path.join(dist, 'frappe-gantt.css'), 'utf8') + '</style>')

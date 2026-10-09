@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.12.1)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.12.2)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -32,7 +32,8 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `000_Menu.gs` | Les six points d'entrée à lancer à la main, placés **en tête** du fichier fabriqué et de la liste des fonctions de l'éditeur : `A1_INSTALLER_PPM`, `A2_SEED_DEMO`, `A3_VERIFIER_INSTALLATION`, `A4_DIAGNOSTIC_ACCES`, `A5_INSTALLER_DECLENCHEURS` |
 | `20_Setup.gs` | `installerPpm_()` (installation en une fois), `setupPpm()`, `selfCheck()` (vérifie aussi la version de chaque page), `diagnosticAcces_()` |
 | `30_Api.gs` | Web app `doPost` / `doGet` et actions de base |
-| `32_Views.gs` | Gantt projet, vue programme, organisation (OBS), attribution des rôles, pages web |
+| `31_Pages.gs` | 0.12.2 : rendu des pages web (tables déduites du registre, données préchargées, assemblage d'une page) |
+| `32_Views.gs` | Gantt projet, vue programme, organisation (OBS), attribution des rôles |
 | `33_Structure.gs` | Fonction et organisation des personnes, arbres OBS (rôles, équipes) et WBS, catalogue des attributs affichables, préférences par utilisateur |
 | `34_Baselines.gs` | Lot 2 : baselines (demande, gel, refus, réactivation), écarts, fil des changements à valider |
 | `35_Workspace.gs` | Lot 2 : agenda Google et dossier Drive par projet, annuaire, import de personnes depuis une feuille |
@@ -43,6 +44,8 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `46_Resources.gs` | 0.10.0 : page Ressources : personnes, équipes, rôle de projet, taux journalier par personne |
 | `00_Pages.gs` | 0.12.1 : registre des pages, source unique lue par le serveur, la fabrication, les aperçus et les tests |
 | `47_Demo.gs` | 0.11.0 : démo complète (`seedDemo_()`), découpée en 17 étapes qui reprennent là où elles se sont arrêtées ; 0.12.0 : réunions, actions et synthèse du fil d'actualités |
+| `47_DemoData.gs`, `47_DemoClean.gs` | 0.12.2 : les données de la démo ; `A6_EFFACER_ANCIENNE_DEMO` (suppression de l'ancienne démo). Les étapes restent dans `47_Demo.gs` |
+| `48_NewsText.gs`, `49_NewsCollect.gs` | 0.12.2 : lecture des textes et rattachement des réunions (calcul sans service Google) ; collecteur d'agenda et déclencheur. Le reste du module est dans `48_News.gs` |
 | `48_News.gs` | 0.12.0 : fil d'actualités du projet (lecture des comptes rendus, rattachement des réunions, actions, synthèse du matin, journal du projet, collecteur d'agenda) |
 | `44_Orders.gs` | 0.9.0 : commandes d'achat (PO) : saisie, statuts, répartition par livrable, constats et rappels de GR |
 | `42_Org.gs` | 0.8.0 : dépendances d'un élément (`deps.item`), rôles attribuables (`roles.options`), retrait d'une personne, équipes hiérarchiques (`teams.*`) |
@@ -51,7 +54,8 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `38_Copilot.gs` | Lot 4 : copilote (modes off, manual, api), garde-fou des chiffres, journal AiLog, quota, questions, décisions sur les suggestions |
 | `40_Jobs.gs` | Traitement nocturne par tranches (journal, règles, agenda et Drive, annuaire, sauvegardes), récapitulatif de 7 h |
 | `Gantt.html` | Page du planning (Frappe Gantt 0.6.1, chargé depuis jsDelivr) |
-| `Structure.html` | Page OBS/WBS (anciennement Structure) : organisation et découpage, l'un sous l'autre, dessinés en SVG sans bibliothèque externe |
+| `Structure.html` | Page OBS/WBS (anciennement Structure) : mise en page, marquage, assemblage des deux schémas (organisation et découpage) dessinés en SVG sans bibliothèque externe. 0.12.2 : le code est coupé en six morceaux inclus dans l'ordre, voir ci-dessous |
+| `StructureState.html`, `StructureDraw.html`, `StructureLoad.html`, `StructureDetail.html`, `StructureEdit.html`, `StructureOrg.html` | 0.12.2 : morceaux de `Structure.html` (état et choix d'affichage ; mise en page, cartes et dessin ; chargement et sélecteurs ; panneau de détail ; création et édition du WBS ; dépendances, rôles, personnes et équipes). Ils partagent la fermeture de `createStructure` : un morceau n'est pas un module indépendant |
 | `Suivi.html` | Page Suivi : écarts à la baseline, changements à valider, baselines, agenda et Drive, mes notifications |
 | `Overview.html` | Page d'accueil : verdict, indicateurs délais, qualité, coût, portefeuille, création de projet |
 | `Ressources.html` | Page Ressources : personnes, équipes, rôle dans le projet, taux, accès |

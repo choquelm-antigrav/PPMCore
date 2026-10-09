@@ -1,0 +1,292 @@
+  // ------------------------------------------------------------ mise en page d'un arbre
+  /**
+   * Arbre « propre » : chaque nœud est centré au-dessus (ou à côté) de ses enfants.
+   * nodes : [{ id, parent, w, h }] ; dir : 'down' (organigramme) ou 'right' (arbre horizontal).
+   */
+  function layoutTree(nodes, dir, gapSib, gapLevel) {
+    var kids = {}, byId = {}, roots = [];
+    nodes.forEach(function (n) { byId[n.id] = n; kids[n.id] = []; });
+    nodes.forEach(function (n) { if (n.parent && byId[n.parent]) kids[n.parent].push(n); else roots.push(n); });
+    var horizontal = dir === 'right';
+    var breadth = function (n) { return horizontal ? n.h : n.w; };
+    var extent = function (n) { return horizontal ? n.w : n.h; };
+    var sub = {}, kidsTotal = {}, depth = {}, levelMax = [];
+
+    var measure = function (n) {
+      var total = 0;
+      kids[n.id].forEach(function (k, i) { measure(k); total += sub[k.id] + (i ? gapSib : 0); });
+      kidsTotal[n.id] = total;
+      sub[n.id] = Math.max(breadth(n), total);
+    };
+    var walk = function (n, d) {
+      depth[n.id] = d;
+      levelMax[d] = Math.max(levelMax[d] || 0, extent(n));
+      kids[n.id].forEach(function (k) { walk(k, d + 1); });
+    };
+    roots.forEach(measure);
+    roots.forEach(function (r) { walk(r, 0); });
+
+    var levelPos = [], acc = 0;
+    levelMax.forEach(function (m, i) { levelPos[i] = acc; acc += m + gapLevel; });
+
+    var pos = {}, edges = [];
+    var place = function (n, start) {
+      var s = sub[n.id], center = start + s / 2, d = levelPos[depth[n.id]];
+      pos[n.id] = horizontal ? { x: d, y: center - n.h / 2 } : { x: center - n.w / 2, y: d };
+      var offset = start + (s - kidsTotal[n.id]) / 2;
+      kids[n.id].forEach(function (k) {
+        place(k, offset);
+        offset += sub[k.id] + gapSib;
+        edges.push({ from: n.id, to: k.id });
+      });
+    };
+    var cursor = 0;
+    roots.forEach(function (r) { place(r, cursor); cursor += sub[r.id] + gapSib * 2; });
+
+    var width = 0, height = 0;
+    nodes.forEach(function (n) {
+      width = Math.max(width, pos[n.id].x + n.w);
+      height = Math.max(height, pos[n.id].y + n.h);
+    });
+    return { pos: pos, edges: edges, width: width, height: height, kids: kids, byId: byId };
+  }
+
+  function visibleNodes(nodes) {
+    var kids = {}, byId = {}, out = [];
+    nodes.forEach(function (n) { byId[n.id] = n; kids[n.id] = []; });
+    var roots = [];
+    nodes.forEach(function (n) { if (n.parent && byId[n.parent]) kids[n.parent].push(n); else roots.push(n); });
+    var walk = function (n) {
+      out.push(n);
+      if (!state.collapsed[n.id]) kids[n.id].forEach(walk);
+    };
+    roots.forEach(walk);
+    return { list: out, kids: kids };
+  }
+  function countBelow(kids, id) {
+    var c = 0;
+    (kids[id] || []).forEach(function (k) { c += 1 + countBelow(kids, k.id); });
+    return c;
+  }
+
+  // ------------------------------------------------------------ contenu des cartes
+  var NONE = '—';
+
+  /** Lignes d'attributs d'une personne selon les attributs choisis. muted = valeur absente. */
+  function personLines(p, attrs) {
+    var out = [];
+    var line = function (label, value, always) {
+      if (value === '' || value === null || value === undefined) { if (always) out.push({ text: label + ' : ' + NONE, muted: true }); return; }
+      out.push({ text: label + ' : ' + value });
+    };
+    if (has(attrs, 'job_function')) line('Fonction', p.job_function, true);
+    if (has(attrs, 'organization')) line('Organisation', p.organization, true);
+    if (has(attrs, 'team')) line('Équipe', p.team);
+    if (has(attrs, 'country')) line('Pays', p.country);
+    if (has(attrs, 'resource_type')) line('Type', p.resource_type);
+    if (has(attrs, 'supplier')) line('Fournisseur', p.supplier);
+    if (has(attrs, 'capacity')) line('Capacité', p.capacity === '' ? '' : p.capacity + ' j/mois');
+    if (has(attrs, 'email')) line('E-mail', p.email);
+    return out;
+  }
+
+  var OBS_W = 272, WBS_W = 288, LINE = 16;
+
+  /** Carte d'un rôle (vue par rôles) ou d'une équipe (vue par équipes). */
+  function obsSpec(n) {
+    var attrs = prefs().attrs;
+    var s = { id: n.id, parent: n.parent, w: OBS_W, blocks: [], head: [], node: n };
+    if (state.data.mode === 'teams') {
+      if (has(attrs, 'members')) s.w = OBS_W + 72;
+      s.head.push({ cls: 't-title', text: n.name });
+      if (has(attrs, 'cost_center') && n.cost_center) s.head.push({ cls: 't-caption', text: 'Centre de coût : ' + n.cost_center });
+      if (n.manager) s.blocks.push({ person: n.manager, title: n.manager.name + ' (responsable)', lines: personLines(n.manager, attrs) });
+      if (has(attrs, 'members')) {
+        var shown = n.members.slice(0, 12);
+        shown.forEach(function (m) {
+          var lines = [];
+          var l = personLines(m, attrs);
+          if (l.length) lines = [{ text: l.map(function (x) { return x.text.replace(/^[^:]+ : /, ''); }).join(' · '), muted: l.every(function (x) { return x.muted; }) }];
+          s.blocks.push({ person: m, title: m.name, lines: lines });
+        });
+        if (n.members.length > shown.length) s.foot = '+ ' + (n.members.length - shown.length) + ' autres membres';
+      } else if (n.member_count) {
+        s.foot = plural(n.member_count, 'membre', 'membres');
+      }
+    } else {
+      s.head.push({ cls: 't-title', text: n.role_label });
+      if (has(attrs, 'scope')) s.head.push({ cls: 't-caption', text: n.scope_label });
+      n.people.forEach(function (p) { s.blocks.push({ person: p, title: p.name, lines: personLines(p, attrs) }); });
+    }
+    var h = 10 + s.head.length * 18;
+    s.blocks.forEach(function (b) { b.h = 26 + b.lines.length * LINE; h += b.h; });
+    if (s.foot) h += 22;
+    s.h = Math.max(h + 8, 44);
+    return s;
+  }
+
+  function wbsSpec(n, levelOf) {
+    var attrs = prefs().attrs;
+    var kindLabel = n.kind === 'project' ? 'Projet' : n.kind === 'wp' ? (levelOf[n.id] > 1 ? 'Sous-workpackage' : 'Workpackage') : n.item_type;
+    var title = (has(attrs, 'wbs_code') && n.code ? n.code + ' ' : '') + n.name;
+    var lines = [];
+    var add = function (t, muted) { lines.push({ text: t, muted: !!muted }); };
+    if (has(attrs, 'owner')) n.owner ? add('Responsable : ' + n.owner) : add('Responsable : ' + NONE, true);
+    if (has(attrs, 'owner_org') && n.owner) n.owner_org ? add('Organisation : ' + n.owner_org) : add('Organisation : ' + NONE, true);
+    if (has(attrs, 'dates') && n.start) {
+      if (n.kind === 'item' && n.item_type === 'Jalon') add('Date : ' + frDate(n.finish || n.start));
+      else add(frDate(n.start) + ' → ' + frDate(n.finish));
+    }
+    if (has(attrs, 'progress') && (n.kind !== 'item' || n.item_type === 'Livrable')) add('Avancement : ' + n.progress + ' %');
+    if (has(attrs, 'status') && n.status) add('Statut : ' + n.status);
+    if (has(attrs, 'charge_code') && n.kind === 'wp' && n.charge_code) add('Imputation : ' + n.charge_code);
+    if (has(attrs, 'float')) {
+      if (n.float !== null && n.float !== undefined && n.float < 0) add('Décale un successeur de ' + plural(-n.float, 'jour ouvré', 'jours ouvrés'));
+      else if (n.critical) add('Sur le chemin critique');
+      else if (n.float > 0) add('Marge : ' + plural(n.float, 'jour ouvré', 'jours ouvrés'));
+    }
+    return { id: n.id, parent: n.parent, w: WBS_W, h: 12 + 18 + 22 + lines.length * LINE + 6, node: n, caption: kindLabel, title: title, lines: lines };
+  }
+
+  // ------------------------------------------------------------ dessin
+  function textNode(cls, x, y, text, maxPx, full) {
+    var bold = cls === 't-title', shown = clip(text, maxPx, bold);
+    var t = sv('text', { class: cls, x: x, y: y, text: shown });
+    if (full && full !== shown) t.appendChild(sv('title', { text: full }));
+    return t;
+  }
+
+  function drawObsCard(s, pos) {
+    var g = sv('g', { class: 'node', transform: 'translate(' + pos.x + ',' + pos.y + ')', tabindex: '0', role: 'button',
+      'data-id': s.id, 'aria-label': (s.node.role_label || s.node.name) + (s.node.scope_label ? ', ' + s.node.scope_label : '') });
+    g.appendChild(sv('rect', { class: 'card', width: s.w, height: s.h, rx: 6 }));
+    var y = 22;
+    s.head.forEach(function (h, i) {
+      g.appendChild(textNode(h.cls, 12, y, h.text, s.w - 24, h.text));
+      y += i === 0 ? 18 : 18;
+    });
+    y = 10 + s.head.length * 18;
+    s.blocks.forEach(function (b) {
+      var pg = sv('g', { class: 'person', tabindex: '0', role: 'button', 'data-person': b.person.resource_id,
+        'aria-label': b.person.name + (b.person.job_function ? ', ' + b.person.job_function : '') });
+      pg.appendChild(sv('rect', { class: 'person-bg', x: 4, y: y, width: s.w - 8, height: b.h, rx: 3 }));
+      pg.appendChild(sv('rect', { x: 8, y: y + 4, width: 4, height: b.h - 8, rx: 2, fill: personColor(b.person, s.node) }));
+      pg.appendChild(textNode('t-title', 20, y + 18, b.title, s.w - 32, b.title));
+      b.lines.forEach(function (l, i) {
+        pg.appendChild(textNode(l.muted ? 't-muted' : 't-line', 20, y + 18 + LINE * (i + 1), l.text, s.w - 32, l.text));
+      });
+      g.appendChild(pg);
+      y += b.h;
+    });
+    if (s.foot) g.appendChild(textNode('t-muted', 12, y + 16, s.foot, s.w - 24, s.foot));
+    return g;
+  }
+
+  function drawWbsCard(s, pos) {
+    var n = s.node;
+    var g = sv('g', { class: 'node', transform: 'translate(' + pos.x + ',' + pos.y + ')', tabindex: '0', role: 'button',
+      'data-id': s.id, 'aria-label': s.caption + ' ' + n.name });
+    g.appendChild(sv('rect', { class: 'card', width: s.w, height: s.h, rx: 6 }));
+    g.appendChild(sv('rect', { x: 0, y: 0, width: 6, height: s.h, rx: 3, fill: wbsColor(n) }));
+    g.appendChild(textNode('t-caption', 16, 20, s.caption, s.w - 28, s.caption));
+    g.appendChild(textNode('t-title', 16, 40, s.title, s.w - 28, s.title));
+    s.lines.forEach(function (l, i) {
+      g.appendChild(textNode(l.muted ? 't-muted' : 't-line', 16, 58 + LINE * i, l.text, s.w - 28, l.text));
+    });
+    return g;
+  }
+
+  function drawToggle(id, x, y, collapsed, hidden, name) {
+    var label = collapsed ? '+' + hidden : '−';
+    var w = collapsed ? Math.max(26, 10 + String(label).length * 8) : 22;
+    var b = sv('g', { class: 'toggle-badge', transform: 'translate(' + x + ',' + y + ')', tabindex: '0', role: 'button',
+      'data-toggle': id, 'aria-label': (collapsed ? 'Déplier ' : 'Replier ') + name + (collapsed ? ' (' + plural(hidden, 'élément', 'éléments') + ')' : '') });
+    b.appendChild(sv('rect', { x: -w / 2, y: -9, width: w, height: 18, rx: 9 }));
+    b.appendChild(sv('text', { x: 0, y: 4, text: label }));
+    return b;
+  }
+
+  function draw() {
+    if (!state.data) return;
+    var canvas = $('canvas'), data = state.data, nodes = data.nodes;
+    clear(canvas);
+    if (!nodes.length) { renderLegend(); showEmptyFor(data); return; }
+
+    // couleurs par organisation : calculées sur toutes les personnes, pas seulement les cartes visibles
+    if (prefs().colorBy === 'organization') {
+      var orgs = [];
+      if (state.tab === 'wbs') nodes.forEach(function (n) { orgs.push(n.owner_org); });
+      else nodes.forEach(function (n) {
+        (n.people || []).concat(n.members || [], n.manager ? [n.manager] : []).forEach(function (p) { orgs.push(p.organization); });
+      });
+      buildOrgColors(orgs);
+    }
+    renderLegend();
+
+    var vis = state.tab === 'wbs' && !prefs().showItems
+      ? nodes.filter(function (n) { return n.kind !== 'item'; }) : nodes;
+    var shown = visibleNodes(vis);
+    var levelOf = {};
+    var byId = {};
+    vis.forEach(function (n) { byId[n.id] = n; });
+    vis.forEach(function (n) { var d = 0, c = n; while (c && c.parent && byId[c.parent] && d < 20) { d++; c = byId[c.parent]; } levelOf[n.id] = d; });
+
+    var specs = shown.list.map(function (n) { return state.tab === 'obs' ? obsSpec(n) : wbsSpec(n, levelOf); });
+    var lay = layoutTree(specs, state.tab === 'obs' ? 'down' : 'right', state.tab === 'obs' ? 24 : 12, state.tab === 'obs' ? 44 : 56);
+    var pad = 24, W = Math.ceil(lay.width + pad * 2), H = Math.ceil(lay.height + pad * 2 + 12);
+    state.layout = { width: W, height: H, root: specs.length ? { x: pad + lay.pos[specs[0].id].x, y: pad + 6 + lay.pos[specs[0].id].y, w: specs[0].w, h: specs[0].h } : null };
+
+    var svg = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, width: Math.round(W * state.zoom), height: Math.round(H * state.zoom),
+      role: 'group', 'aria-label': state.tab === 'obs' ? 'Organigramme' : 'Découpage du projet (WBS)' });
+    var root = sv('g', { transform: 'translate(' + pad + ',' + (pad + 6) + ')' });
+    svg.appendChild(root);
+
+    var down = state.tab === 'obs';
+    lay.edges.forEach(function (e) {
+      var a = lay.byId[e.from], b = lay.byId[e.to], pa = lay.pos[e.from], pb = lay.pos[e.to], d;
+      if (down) {
+        var mid = pb.y - 22;
+        d = 'M' + (pa.x + a.w / 2) + ' ' + (pa.y + a.h) + 'V' + mid + 'H' + (pb.x + b.w / 2) + 'V' + pb.y;
+      } else {
+        var mx = pb.x - 28;
+        d = 'M' + (pa.x + a.w) + ' ' + (pa.y + a.h / 2) + 'H' + mx + 'V' + (pb.y + b.h / 2) + 'H' + pb.x;
+      }
+      root.appendChild(sv('path', { class: 'edge', d: d }));
+    });
+    specs.forEach(function (s) {
+      var g = state.tab === 'obs' ? drawObsCard(s, lay.pos[s.id]) : drawWbsCard(s, lay.pos[s.id]);
+      if (state.selected === s.id) g.classList.add('selected');
+      root.appendChild(g);
+    });
+    specs.forEach(function (s) {
+      var kidsCount = (shown.kids[s.id] || []).length;
+      var totalBelow = 0;
+      if (state.collapsed[s.id]) {
+        totalBelow = vis.filter(function (n) { return isBelow(vis, n, s.id); }).length;
+      }
+      if (!kidsCount && !state.collapsed[s.id]) return;
+      var p = lay.pos[s.id];
+      var name = s.node.name || s.node.role_label;
+      var t = down ? drawToggle(s.id, p.x + s.w / 2, p.y + s.h, !!state.collapsed[s.id], totalBelow, name)
+        : drawToggle(s.id, p.x + s.w, p.y + s.h / 2, !!state.collapsed[s.id], totalBelow, name);
+      root.appendChild(t);
+    });
+    canvas.appendChild(svg);
+  }
+
+  function isBelow(list, node, ancestorId) {
+    var byId = {};
+    list.forEach(function (n) { byId[n.id] = n; });
+    var c = node, g = 0;
+    while (c && c.parent && g++ < 50) { if (c.parent === ancestorId) return true; c = byId[c.parent]; }
+    return false;
+  }
+
+  function showEmptyFor(data) {
+    var canvas = $('canvas');
+    var msg;
+    if (state.tab === 'wbs') msg = ['Ce projet n’a pas encore de workpackage ni d’élément.', 'Ajoutez-les dans l’application AppSheet, puis cliquez sur Actualiser.'];
+    else if (data.mode === 'teams') msg = ['Aucune équipe hiérarchique.', 'Créez les équipes dans l’application AppSheet (table Équipes), puis cliquez sur Actualiser.'];
+    else msg = ['Aucun rôle attribué sur ce périmètre.', 'Attribuez des rôles dans l’application AppSheet (Organisation), puis cliquez sur Actualiser.'];
+    canvas.appendChild(el('div', { class: 'empty' }, [el('strong', { text: msg[0] }), el('span', { text: msg[1] })]));
+  }

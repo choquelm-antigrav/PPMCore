@@ -51,8 +51,14 @@ function build() {
     let html = fs.readFileSync(path.join(src, p + '.html'), 'utf8');
     ['Style', 'Common', 'Header'].forEach((n) => {
       if (html.indexOf("<?!= include('" + n + "') ?>") < 0) throw new Error(p + '.html : include(\'' + n + '\') absent');
-      html = html.replace("<?!= include('" + n + "') ?>", partial(n));
     });
+    // toutes les inclusions sont résolues, y compris les morceaux propres à une page (registre : champ « parts ») ;
+    // le remplacement passe par une fonction pour qu'un « $' » ou un « $& » du code ne soit pas pris pour un motif
+    for (let guard = 0, m; (m = /<\?!= include\('(\w+)'\) \?>/.exec(html)); guard++) {
+      if (guard > 60) throw new Error(p + '.html : inclusions sans fin');
+      if (!fs.existsSync(path.join(src, m[1] + '.html'))) throw new Error(p + '.html : include(\'' + m[1] + '\') — src/' + m[1] + '.html introuvable');
+      html = html.replace(m[0], () => partial(m[1]));
+    }
     if (/include\(/.test(html.replace(/function include\(/g, ''))) throw new Error(p + '.html : un include() n’a pas été intégré');
     const meta = /<meta name="ppm-version" content="([^"]+)">/.exec(html);
     if (!meta) throw new Error(p + '.html : balise <meta name="ppm-version"> absente');

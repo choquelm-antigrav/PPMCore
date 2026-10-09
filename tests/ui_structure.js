@@ -38,7 +38,7 @@ call(A, 'dependencies.create', { values: { predecessor_id: spec.id, successor_id
 call(A, 'dependencies.create', { values: { predecessor_id: plans.id, successor_id: rev.id, dep_type: 'FS' } });
 
 const template = fs.readFileSync(path.join(__dirname, '..', 'src', 'Structure.html'), 'utf8')
-  .replace("<?!= include('Style') ?>", fs.readFileSync(path.join(__dirname, '..', 'src', 'Style.html'), 'utf8')).replace("<?!= include('Common') ?>", fs.readFileSync(path.join(__dirname, '..', 'src', 'Common.html'), 'utf8')).replace("<?!= include('Header') ?>", fs.readFileSync(path.join(__dirname, '..', 'src', 'Header.html'), 'utf8'));
+  .replace(/<\?!= include\('(?!Style'|Common'|Header')(\w+)'\) \?>/g, (m, n) => require('fs').readFileSync(require('path').join(__dirname, '..', 'src', n + '.html'), 'utf8')).replace("<?!= include('Style') ?>", fs.readFileSync(path.join(__dirname, '..', 'src', 'Style.html'), 'utf8')).replace("<?!= include('Common') ?>", fs.readFileSync(path.join(__dirname, '..', 'src', 'Common.html'), 'utf8')).replace("<?!= include('Header') ?>", fs.readFileSync(path.join(__dirname, '..', 'src', 'Header.html'), 'utf8'));
 
 let failed = 0;
 const check = (cond, msg) => { if (!cond) { failed++; console.error('✗ ' + msg); } else console.log('  ✓ ' + msg); };

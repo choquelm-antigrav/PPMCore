@@ -19,7 +19,7 @@ const check = (cond, msg) => { if (!cond) { failed++; console.error('✗ ' + msg
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function openPage(user) {
-  const html = src('Structure.html').replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Common') ?>", src('Common.html')).replace("<?!= include('Header') ?>", src('Header.html'))
+  const html = src('Structure.html').replace(/<\?!= include\('(?!Style'|Common'|Header')(\w+)'\) \?>/g, (m, n) => require('fs').readFileSync(require('path').join(__dirname, '..', 'src', n + '.html'), 'utf8')).replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Common') ?>", src('Common.html')).replace("<?!= include('Header') ?>", src('Header.html'))
     .replace('<?= theme ?>', 'auto')
     .replace('<?!= boot ?>', JSON.stringify({ project: w.p1.id, program: '', tab: 'wbs', mode: '', baseUrl: 'https://app.test/exec', appsheetUrl: '', version: 'test', view: 'structure', home: 'gantt', isAdmin: false }))
     .replace(/<link rel="stylesheet" href="https:[^"]+">/g, '').replace(/<link rel="preconnect"[^>]*>/g, '');

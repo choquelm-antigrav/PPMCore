@@ -1,0 +1,150 @@
+  // ------------------------------------------------------------ détail
+  function closeDetails() {
+    state.selected = '';
+    clear($('details'));
+    $('details').hidden = true;
+    $('main').classList.remove('with-details');
+    Array.prototype.forEach.call(document.querySelectorAll('.selected'), function (n) { n.classList.remove('selected'); });
+  }
+  function openDetails(nodes) {
+    var a = $('details'); clear(a);
+    a.appendChild(el('button', { type: 'button', class: 'close', 'aria-label': 'Fermer le détail', text: '×', onclick: closeDetails }));
+    nodes.forEach(function (n) { if (n) a.appendChild(n); });
+    a.hidden = false;
+    $('main').classList.add('with-details');
+  }
+  function facts(pairs) {
+    var dl = el('dl');
+    pairs.forEach(function (p) {
+      if (p[1] === null || p[1] === undefined || p[1] === '') return;
+      dl.appendChild(el('dt', { text: p[0] })); dl.appendChild(el('dd', { text: String(p[1]) }));
+    });
+    return dl;
+  }
+  function markSelected(id) {
+    state.selected = id;
+    Array.prototype.forEach.call(document.querySelectorAll('.selected'), function (n) { n.classList.remove('selected'); });
+    var g = $('canvas').querySelector('[data-id="' + cssEscape(id) + '"]');
+    if (g) g.classList.add('selected');
+  }
+  function cssEscape(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&'); }
+
+  function allPeople() {
+    var out = [];
+    state.data.nodes.forEach(function (n) {
+      (n.people || []).concat(n.members || [], n.manager ? [n.manager] : []).forEach(function (p) { out.push({ p: p, node: n }); });
+    });
+    // les personnes sans aucun rôle ne sont sur aucune carte : on les retrouve dans la zone « Ressources à positionner »
+    ((state.data.unplaced && state.data.unplaced.people) || []).forEach(function (p) { out.push({ p: p, node: { unplaced: true } }); });
+    return out;
+  }
+  function isUnplaced(id) {
+    return ((state.data && state.data.unplaced && state.data.unplaced.people) || []).some(function (p) { return p.resource_id === id; });
+  }
+  /** Zone des personnes sans rôle (organigramme seulement) : une pastille par personne. */
+  function renderUnplaced() {
+    if (TAB !== 'obs') return;
+    var box = $('unplaced'), list = $('unplaced-list'), u = state.data && state.data.unplaced;
+    clear(list);
+    if (!u || !u.total) { box.hidden = true; return; }
+    box.hidden = false;
+    $('unplaced-count').textContent = '(' + u.total + ')';
+    u.people.forEach(function (p) {
+      list.appendChild(el('button', { type: 'button', class: 'chip-person', 'data-unplaced': p.resource_id, 'aria-pressed': String(state.selected === 'person:' + p.resource_id),
+        title: p.resource_type === 'Externe' ? 'Ressource externe' : 'Ressource interne', text: p.name + (p.resource_type === 'Externe' ? ' · externe' : ''),
+        onclick: function () { state.selected = 'person:' + p.resource_id; showPerson(p.resource_id); renderUnplaced(); } }));
+    });
+    if (u.total > u.people.length) list.appendChild(el('span', { class: 'muted', text: '… et ' + (u.total - u.people.length) + ' autres' }));
+  }
+
+  function showPerson(personId) {
+    var hits = allPeople().filter(function (x) { return x.p.resource_id === personId; });
+    if (!hits.length) return;
+    var p = hits[0].p;
+    var nodes = [el('h2', { text: p.name }), el('p', { class: 'kind', text: p.job_function || 'Fonction non renseignée' })];
+    nodes.push(facts([
+      ['Organisation', p.organization || 'Non renseignée'], ['Fonction', p.job_function || 'Non renseignée'],
+      ['E-mail', p.email], ['Équipe', p.team], ['Pays', p.country], ['Type', p.resource_type], ['Fournisseur', p.supplier],
+      ['Capacité', p.capacity === '' ? '' : p.capacity + ' jours par mois']
+    ]));
+    var unplaced = isUnplaced(personId);
+    if (unplaced) {
+      nodes.push(el('p', { class: 'hint' , text: 'Aucun rôle pour l’instant : cette personne n’est pas encore positionnée dans l’organigramme.' }));
+      if (state.data.canEditAll) nodes.push(el('div', { class: 'links' }, [el('button', { type: 'button', class: 'btn primary', id: 'person-place', text: 'Positionner dans l’organigramme', onclick: function () { assignRoleGeneral(personId); } })]));
+    } else if (state.data.mode === 'roles') {
+      var seen = {};
+      var roles = hits.map(function (h) { return h.node.role_label + ', ' + h.node.scope_label; }).filter(function (t) { if (seen[t]) return false; seen[t] = true; return true; });
+      nodes.push(el('h3', { text: 'Rôles dans cette vue', style: 'font-size:15px;margin:0 0 6px' }));
+      nodes.push(el('ul', { class: 'roles' }, roles.map(function (t) { return el('li', { text: t }); })));
+    }
+    if (state.data.canEditAll) nodes.push(personActions(p));
+    else if (p.canEdit) nodes.push(editForm(p));
+    else nodes.push(el('p', { class: 'hint', text: 'Seuls la personne elle-même, un chef de projet, un DPL ou un Program Leader peuvent modifier cette fiche.' }));
+    openDetails(nodes);
+  }
+
+  function ensureSuggestions() {
+    if (state.suggestions) return Promise.resolve(state.suggestions);
+    return call('resources.list', { limit: 500 }).then(function (rows) {
+      var f = {}, o = {};
+      rows.forEach(function (r) { if (r.job_function) f[r.job_function] = true; if (r.organization) o[r.organization] = true; });
+      state.suggestions = { functions: Object.keys(f).sort(), organizations: Object.keys(o).sort() };
+      return state.suggestions;
+    }).catch(function () { return { functions: [], organizations: [] }; });
+  }
+
+  function editForm(p) {
+    var fn = el('input', { type: 'text', id: 'edit-function', maxlength: '80', list: 'dl-functions', value: p.job_function });
+    var org = el('input', { type: 'text', id: 'edit-org', maxlength: '80', list: 'dl-orgs', value: p.organization });
+    var dlF = el('datalist', { id: 'dl-functions' }), dlO = el('datalist', { id: 'dl-orgs' });
+    ensureSuggestions().then(function (s) {
+      s.functions.forEach(function (v) { dlF.appendChild(el('option', { value: v })); });
+      s.organizations.forEach(function (v) { dlO.appendChild(el('option', { value: v })); });
+    });
+    var submit = el('button', { type: 'submit', class: 'btn primary', text: 'Enregistrer' });
+    return el('form', { class: 'edit', onsubmit: function (e) {
+      e.preventDefault();
+      submit.disabled = true;
+      call('resources.update', { id: p.resource_id, version: p.version, patch: { job_function: fn.value, organization: org.value } }, true)
+        .then(function () { state.suggestions = null; toast('Fiche de ' + p.name + ' enregistrée.'); return load(); })
+        .catch(function (err) {
+          submit.disabled = false;
+          toast(err.code === 'CONFLICT' ? 'Cette fiche a été modifiée entre-temps : rechargez puis recommencez.' : (window.ppmErrorText ? ppmErrorText(err) : (err.message || 'Enregistrement impossible.')), true);
+        });
+    } }, [
+      el('h3', { text: 'Compléter la fiche' }),
+      el('label', {}, ['Fonction', fn]), el('label', {}, ['Organisation', org]), dlF, dlO, submit
+    ]);
+  }
+
+  function showNode(id) {
+    var n = state.data.nodes.filter(function (x) { return x.id === id; })[0];
+    if (!n) return;
+    markSelected(id);
+    var nodes = [];
+    if (state.tab === 'wbs') {
+      var kind = n.kind === 'project' ? 'Projet' : n.kind === 'wp' ? 'Workpackage' : n.item_type;
+      nodes.push(el('h2', { text: (n.code ? n.code + ' ' : '') + n.name }), el('p', { class: 'kind', text: kind }));
+      var flt = n.float === null || n.float === undefined ? '' : (n.float < 0 ? 'Décale un successeur de ' + plural(-n.float, 'jour ouvré', 'jours ouvrés') : n.float === 0 ? 'Aucune : chemin critique' : plural(n.float, 'jour ouvré', 'jours ouvrés'));
+      nodes.push(facts([
+        ['Responsable', n.owner], ['Organisation', n.owner ? (n.owner_org || 'Non renseignée') : ''], ['Fonction', n.owner_function],
+        ['Début', frDate(n.start)], ['Fin', frDate(n.finish)],
+        ['Avancement', n.kind === 'item' && n.item_type === 'Jalon' ? '' : n.progress + ' %'],
+        ['Statut', n.status], ['Imputation', n.charge_code], ['Marge', flt]
+      ]));
+      if (n.late) nodes.push(el('p', { class: 'flag alert', text: 'Au moins un élément est en retard sur sa date de fin prévue.' }));
+      if (n.canEdit) nodes.push(wbsActions(n));
+      if (n.kind === 'item') nodes.push(depsBlock(n));
+    } else if (state.data.mode === 'teams') {
+      nodes.push(el('h2', { text: n.name }), el('p', { class: 'kind', text: 'Équipe hiérarchique' }));
+      nodes.push(facts([['Centre de coût', n.cost_center], ['Responsable', n.manager ? n.manager.name : 'Non désigné'], ['Membres', n.member_count]]));
+      nodes.push(teamMembers(n));
+      if (state.data.canEditAll && n.team_id) nodes.push(teamActions(n));
+    } else {
+      nodes.push(el('h2', { text: n.role_label }), el('p', { class: 'kind', text: n.scope_label }));
+      nodes.push(roleMembers(n));
+      if (n.canAssign) nodes.push(roleActions(n));
+    }
+    if (BOOT.appsheetUrl) nodes.push(el('div', { class: 'links' }, [el('a', { class: 'btn', href: BOOT.appsheetUrl, target: '_blank', rel: 'noopener', text: 'Modifier dans AppSheet' })]));
+    openDetails(nodes);
+  }

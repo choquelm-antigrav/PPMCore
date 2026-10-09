@@ -14,8 +14,8 @@ Un fichier ne dépend que de ceux qui le précèdent dans cette liste (la fabric
 | Données | `10_Repository`, `11_ChangeLog` | lecture et écriture des feuilles, suppression douce, journal des changements |
 | Installation | `20_Setup` | création des classeurs, vérifications |
 | Accès | `30_Api` | `defineAction`, contrôle des droits, une réponse uniforme |
-| Vues et pages | `32_Views` | vues du planning, rendu des pages, données préchargées |
-| Modules métier | `33_Structure` … `48_News` | un module par sujet (structure, baselines, Workspace, récapitulatif, copilote, compte, tâches nocturnes, édition, organisation, budget, achats, Overview, ressources, démo, actualités) |
+| Pages et vues | `31_Pages`, `32_Views` | rendu des pages web et données préchargées ; vues du planning |
+| Modules métier | `33_Structure` … `49_NewsCollect` | un module par sujet (structure, baselines, Workspace, récapitulatif, copilote, compte, tâches nocturnes, édition, organisation, budget, achats, Overview, ressources, démo, actualités) |
 
 Règles :
 - **Une action = `defineAction('module.action', function (p, ctx) {…})`**, qui commence par vérifier les droits (`can`, `requireCan`). Le résultat est une donnée simple.
@@ -29,10 +29,12 @@ Chaque page est `src/<Nom>.html` et inclut, dans cet ordre, `Style` (charte et c
 
 Les pages existantes sont listées dans le **registre `src/00_Pages.gs`**, lu par le serveur, la fabrication, les aperçus et les tests.
 
+**Une grosse page se coupe en morceaux** (champ `parts` du registre) : `Structure.html` garde le marquage et l'assemblage, et inclut dans l'ordre `StructureState`, `StructureDraw`, `StructureLoad`, `StructureDetail`, `StructureEdit` et `StructureOrg`. La fabrication les assemble en une seule page. Les morceaux partagent la fermeture de la page : ce sont des tranches de lecture, pas des modules indépendants. Les fichiers serveur d'un même module se coupent de la même façon (`47_Demo*.gs`, `48_News*.gs`, `49_NewsCollect.gs`) et se retrouvent par leur préfixe.
+
 ## Ajouter
 
 - **Une page** : voir l'en-tête de `00_Pages.gs`. `node tests/run.js` dit ce qui manque (`test_pages.js`).
-- **Une action** : dans le module concerné, avec ses droits et ses tests. Si la page doit la précharger : `preloadFor_` (`32_Views.gs`).
+- **Une action** : dans le module concerné, avec ses droits et ses tests. Si la page doit la précharger : `preloadFor_` (`31_Pages.gs`).
 - **Une table** : `01_Schema.gs` (colonnes, obligatoires, énumérations). Les colonnes ajoutées à une table existante sont créées toutes seules à l'installation.
 - **Un droit** : `00_Config.gs` (`PERMISSIONS`).
 

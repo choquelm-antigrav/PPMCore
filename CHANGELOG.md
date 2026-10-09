@@ -1,5 +1,15 @@
 # Journal des versions
 
+## 0.12.2 — découpage des gros fichiers
+
+Aucun changement de fonctionnement, vérifié deux fois.
+
+- **`Structure.html` (1 593 lignes) coupée en six morceaux** par sujet (`StructureState`, `StructureDraw`, `StructureLoad`, `StructureDetail`, `StructureEdit`, `StructureOrg`) ; le fichier garde le marquage et l'assemblage (397 lignes). La page fabriquée est identique à l'octet près à celle de la 0.12.1.
+- **Fichiers serveur coupés** : le rendu des pages web de `32_Views.gs` vers `31_Pages.gs` ; `47_Demo.gs` en étapes, données (`47_DemoData.gs`) et effacement de l'ancienne démo (`47_DemoClean.gs`) ; `48_News.gs` en lecture des textes (`48_NewsText.gs`), cœur et collecteur (`49_NewsCollect.gs`). Les 502 fonctions et variables du Core fabriqué sont textuellement identiques à celles de la 0.12.1 : seul leur emplacement change.
+- **Fabrication** : toutes les inclusions sont résolues (plus seulement `Style`, `Common` et `Header`), et un morceau de code contenant `$'` n'est plus mal interprété.
+- **Registre** : champ `parts` ; `test_pages.js` vérifie que chaque morceau existe, est inclus dans l'ordre et n'est à aucune autre page.
+- Tests : 204 serveur, plus douze essais de pages.
+
 ## 0.12.1 — nettoyage : outils communs, CSS commun, registre des pages
 
 Aucun changement de fonctionnement, sauf les deux corrections ci-dessous.
