@@ -73,10 +73,10 @@ module.exports = function () {
     eq(w.raw(CP, 'admin.get', {}).error.code, 'FORBIDDEN', 'et celui-ci perd l’accès aussitôt');
   });
 
-  test('Copilote : clé Gemini en écriture seule, mode api conditionné, quota borné, chaque changement tracé', () => {
+  test('Copilote : clé Gemini commune en écriture seule, mode api sans clé commune (chacun a la sienne), quota borné, chaque changement tracé', () => {
     const w = lot2World();
     const KEY = 'AbCdEfGhIjKlMnOpQrStUvWxYz_0123456789';
-    ok(/clé Gemini et le nom du modèle/.test(adminSet(w, { ai_mode: 'api' }).error.message), 'api sans clé ni modèle refusé');
+    ok(!adminSet(lot2World(), { ai_mode: 'api' }).error, 'mode api accepté sans clé commune : chaque personne enregistre sa propre clé (0.13.0)');
     eq(adminSet(w, { ai_mode: 'perroquet' }).error.code, 'VALIDATION');
     eq(adminSet(w, { gemini_key: 'trop court' }).error.code, 'VALIDATION');
     eq(adminSet(w, { ai_model: 'modèle avec espaces' }).error.code, 'VALIDATION');
@@ -88,7 +88,7 @@ module.exports = function () {
     const events = w.c.repoList('ChangeEvent').filter((e) => e.table_name === 'Réglages');
     ok(events.some((e) => e.field === 'gemini_key' && e.new_value === 'remplacée') && events.every((e) => !JSON.stringify(e).includes(KEY)), 'trace sans la clé');
     ok(events.some((e) => e.field === 'ai_mode' && e.old_value === 'off' && e.new_value === 'api' && e.actor === ADMIN), 'trace du mode : avant, après, auteur');
-    ok(/clé Gemini/.test(adminSet(w, { clear_gemini_key: true }).error.message), 'on ne supprime pas la clé d’un copilote en mode api');
+    ok(!adminSet(w, { clear_gemini_key: true }).error, 'on peut supprimer la clé commune : les clés personnelles prennent le relais');
     const off = w.call(ADMIN, 'admin.set', { values: { ai_mode: 'manual', clear_gemini_key: true } });
     eq([off.ai_mode, off.gemini_key_set, w.c.getProp(w.c.PROP.GEMINI_KEY, '')], ['manual', false, '']);
     [0, 501, 2.5, 'beaucoup'].forEach((q) => eq(adminSet(w, { ai_quota: q }).error.code, 'VALIDATION', 'quota ' + q));

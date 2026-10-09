@@ -118,6 +118,7 @@ function validateAdminSettings_(v, cur, actor) {
     change('admins', PROP.ADMINS, cur.admins.join(','), list.join(','));
   }
 
+  if (v.copilot_enabled !== undefined) change('copilot', PROP.COPILOT, cur.copilot_enabled ? 'oui' : 'non', v.copilot_enabled ? 'oui' : 'non');
   var mode = v.ai_mode !== undefined ? String(v.ai_mode) : cur.ai_mode;
   var model = v.ai_model !== undefined ? String(v.ai_model).trim() : cur.ai_model;
   var keySet = cur.gemini_key_set;
@@ -134,9 +135,6 @@ function validateAdminSettings_(v, cur, actor) {
     props[PROP.GEMINI_KEY] = k;
     audit.push({ field: 'gemini_key', old: keySet ? 'définie' : 'aucune', new: 'remplacée' });
     keySet = true;
-  }
-  if (mode === 'api' && (!keySet || !model)) {
-    throw new PpmError('VALIDATION', 'Le mode « api » demande une clé Gemini et le nom du modèle (à n’activer qu’avec l’accord de la DSI).');
   }
   change('ai_mode', PROP.AI_MODE, cur.ai_mode, mode);
   change('ai_model', PROP.GEMINI_MODEL, cur.ai_model, model);

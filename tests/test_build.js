@@ -40,4 +40,24 @@ module.exports = function () {
     c.A1_INSTALLER_PPM();
     eq(c.adminEmails(), ['a@entreprise.com', 'b@entreprise.com'], 'des réglages existants ne sont jamais écrasés');
   });
+
+  test('Manifeste : chaque service Google utilisé dans le code a son autorisation déclarée (sinon il échoue dans le vrai Apps Script)', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, 'src', 'appsscript.json'), 'utf8'));
+    const scopes = manifest.oauthScopes || [];
+    const code = fs.readdirSync(path.join(root, 'src')).filter((f) => /\.gs$/.test(f)).map((f) => fs.readFileSync(path.join(root, 'src', f), 'utf8'))
+      .join('\n').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const need = [
+      [/\bSpreadsheetApp\./, 'https://www.googleapis.com/auth/spreadsheets'], [/\bDriveApp\./, 'https://www.googleapis.com/auth/drive'],
+      [/\bCalendarApp\.|\bCalendar\.(Events|Calendars|Acl|CalendarList)\b/, 'https://www.googleapis.com/auth/calendar'], [/\bDocumentApp\./, 'https://www.googleapis.com/auth/documents'],
+      [/\bUrlFetchApp\.fetch/, 'https://www.googleapis.com/auth/script.external_request'], [/\bMailApp\./, 'https://www.googleapis.com/auth/script.send_mail'],
+      [/\bScriptApp\./, 'https://www.googleapis.com/auth/script.scriptapp'], [/Session\.getActiveUser\(\)/, 'https://www.googleapis.com/auth/userinfo.email']
+    ];
+    const missing = need.filter(([re, scope]) => re.test(code) && !scopes.includes(scope)).map(([, scope]) => scope);
+    eq(missing, [], 'autorisations manquantes au manifeste');
+    const unused = scopes.filter((s) => !need.some(([re, scope]) => scope === s && re.test(code)));
+    eq(unused, [], 'autorisations déclarées mais sans usage (à ne pas demander aux utilisateurs pour rien)');
+    ok(!/\bGmailApp\./.test(code), 'GmailApp n’est pas utilisé : son autorisation (très large) n’est donc pas demandée');
+    eq(manifest.runtimeVersion, 'V8', 'moteur V8 : requis par String.normalize et la syntaxe employée');
+    ok(!manifest.urlFetchWhitelist, 'aucune liste blanche d’adresses : elle bloquerait Google si elle était incomplète');
+  });
 };

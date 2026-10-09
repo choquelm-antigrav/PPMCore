@@ -1,4 +1,4 @@
-# Premiers pas : installer et essayer PPM (version 0.12.3)
+# Premiers pas : installer et essayer PPM (version 0.13.0)
 
 Environ 15 minutes. Pas besoin d'AppSheet pour ces essais. Tout ce qu'il faut est dans le dossier `dist` de l'archive : **12 fichiers**.
 
@@ -48,7 +48,7 @@ Le bouton en haut à droite de la bannière bascule en thème nuit (par défaut,
 
 Le logo Airbus n'est pas fourni : si vous avez son adresse `https://…` (portail de marque interne), ajoutez son adresse dans Administration → Réglages (ou la propriété du script `PPM_LOGO_URL`).
 
-Le copilote fonctionne sans IA. Pour essayer la préparation de textes à coller dans Gemini : ajouter la propriété du script `PPM_AI_MODE` = `manual` (roue dentée → **Propriétés du script**). L'appel direct à Gemini (`api`) attend l'accord de la DSI (H12).
+Le copilote est **suspendu par défaut**. Pour l'activer : **Administration → Réglages → Copilote → « Activer le Copilote »**, puis Enregistrer et recharger la page. Avant cela, validez avec votre DSI l'usage de clés Gemini personnelles (voir README, « Copilote : la clé Gemini de chaque personne »). Chaque personne ouvre ensuite la page **Copilote** et suit les trois gestes : bouton bleu (ouvre la page de Google), « Créer une clé API » puis « Copier », retour sur la page, « Coller » puis « Enregistrer et tester ». Après la mise à jour 0.13.0, exécutez `A1_INSTALLER_PPM` et acceptez la nouvelle autorisation (appels vers Google).
 
 ## Mettre à jour plus tard
 

@@ -24,7 +24,7 @@ var PPM_PAGES = [
   { view: 'ressources', file: 'Ressources', title: 'PPM — Ressources',      eyebrow: 'Ressources · Équipes et rôles',         tabs: [''], nav: 'bar',  share: true, shared: ['CommonForms'], parts: [] },
   { view: 'suivi',      file: 'Suivi',      title: 'PPM — Suivi',           eyebrow: 'Suivi · Baselines',                     tabs: [''], nav: 'bar',  share: true, shared: [], parts: [] },
   { view: 'actualites', file: 'Actualites', title: 'PPM — Actualités',      eyebrow: 'Actualités · Réunions et actions',      tabs: [''], nav: 'bar',  share: true, shared: [], parts: [] },
-  { view: 'copilote',   file: 'Copilote',   title: 'PPM — Copilote',        eyebrow: 'Copilote · Analyse',                    tabs: ['synthese', 'simulation', 'questions', 'suggestions'], nav: 'bar', share: true, shared: [], parts: [] },
+  { view: 'copilote',   file: 'Copilote',   title: 'PPM — Copilote',        eyebrow: 'Copilote · Votre clé Gemini',                    tabs: [''], nav: 'bar', share: true, shared: [], parts: [] },
   { view: 'budget',     file: 'Budget',     title: 'PPM — Budget',          eyebrow: 'Budget · CPN et achats',                tabs: [''], nav: 'bar',  share: true, shared: ['CommonForms'], parts: [] },
   { view: 'compte',     file: 'Compte',     title: 'PPM — Mon compte',      eyebrow: 'Mon compte',                            tabs: [''], nav: 'icon', share: false, shared: [], parts: [] },
   { view: 'admin',      file: 'Admin',      title: 'PPM — Administration',  eyebrow: 'Administration',                        tabs: [''], nav: 'icon', share: false, shared: [], parts: [] }

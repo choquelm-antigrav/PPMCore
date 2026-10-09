@@ -73,4 +73,16 @@ module.exports = function () {
     ok(msg.split('\n').length === 1 + w.c.liveSmokeTest_().rows.length, 'une ligne par contrôle');
     ok(/✓ OK · Moteur JavaScript/.test(msg) && /\(\d+ ms\)/.test(msg), 'lignes lisibles, avec leur durée');
   });
+
+  test('A7 : le droit d’appeler Google (clé Gemini) est contrôlé, et son absence est expliquée', () => {
+    const run = (mutate) => { const w = installed(lot2World()); as(w, ADMIN); mutate(w.c); return w.c.liveSmokeTest_().rows.find((r) => r.name.indexOf('Appels externes') === 0); };
+    const none = run(() => {});
+    eq([none.status, none.detail], ['ATTENTION', 'non vérifiable ici'], 'hors Apps Script : attention, pas d’échec');
+    const good = run((c) => { c.AI_FETCH = () => ({ code: 403, text: '{"error":{"message":"API key missing"}}' }); });
+    ok(good.status === 'OK' && /Google répond \(403/.test(good.detail), 'Google répond « clé manquante » : le droit et le réseau sont bons : ' + good.detail);
+    const perm = run((c) => { c.AI_FETCH = () => { throw new Error('You do not have permission to call UrlFetchApp.fetch. Required permissions: https://www.googleapis.com/auth/script.external_request'); }; });
+    ok(perm.status === 'ÉCHEC' && /external_request/.test(perm.detail), 'autorisation manquante : échec qui nomme l’autorisation : ' + perm.detail);
+    const down = run((c) => { c.AI_FETCH = () => ({ code: 503, text: 'unavailable' }); });
+    ok(down.status === 'ÉCHEC' && /503/.test(down.detail), 'Google en panne : échec avec le code');
+  });
 };

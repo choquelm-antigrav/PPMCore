@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.12.3)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.13.0)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -51,6 +51,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `42_Org.gs` | 0.8.0 : dépendances d'un élément (`deps.item`), rôles attribuables (`roles.options`), retrait d'une personne, équipes hiérarchiques (`teams.*`) |
 | `41_Edit.gs` | 0.7.0 : création, modification, déplacement et suppression sûre du WBS (`wbs.create`, `wbs.update`, `wbs.delete`) |
 | `39_Account.gs` | 0.6.0 : Mon compte (`account.get`) et Administration (`admin.*` : réglages validés, santé, journaux, jours fériés) |
+| `38_CopilotKey.gs` | 0.13.0 : clé Gemini personnelle de chaque utilisateur (stockage privé, vérification chez Google, test, choix du modèle) |
 | `38_Copilot.gs` | Lot 4 : copilote (modes off, manual, api), garde-fou des chiffres, journal AiLog, quota, questions, décisions sur les suggestions |
 | `40_Jobs.gs` | Traitement nocturne par tranches (journal, règles, agenda et Drive, annuaire, sauvegardes), récapitulatif de 7 h |
 | `Gantt.html` | Page du planning (Frappe Gantt 0.6.1, chargé depuis jsDelivr) |
@@ -63,7 +64,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `Budget.html` | Page Budget : bilan par CPN, achats (PO), lignes de budget |
 | `Compte.html` | Page Mon compte : fiche, rôles en lecture seule, notifications, affichage (thème, page d'accueil) |
 | `Admin.html` | Page Administration (réservée aux administrateurs) : réglages, santé, jours fériés, journaux |
-| `Copilote.html` | Page Copilote : synthèse, simulation, questions, suggestions (**en suspens** depuis 0.11.0 : page masquée) |
+| `Copilote.html` | Page Copilote (0.13.0) : obtenir et enregistrer sa clé Gemini en trois gestes ; masquée tant que le copilote n'est pas activé par un administrateur. Les synthèses, questions et suggestions reviendront sur cette page |
 | `Header.html` | Bannière commune (navigation, bouton jour/nuit), données préchargées et fenêtres d'information (inclus par `include('Header')`) |
 | `Style.html` | Charte graphique commune, thèmes jour et nuit, composants CSS communs (inclus par `include('Style')`) |
 | `CommonForms.html` | 0.12.3 : formulaire générique et fenêtre de confirmation (`ppm.forms`), inclus par les seules pages qui en ont (Budget, Overview, Ressources, Structure ; champ `shared` du registre) |
@@ -159,7 +160,8 @@ npm i --no-save jsdom@24 frappe-gantt@0.6.1
 node tests/ui_smoke.js        # page Gantt
 node tests/ui_structure.js    # page OBS/WBS : organisation et découpage empilés
 node tests/ui_suivi.js        # page Suivi et baseline du Gantt
-node tests/ui_copilote.js     # page Copilote, dans les trois modes
+node tests/ui_copilote.js     # page Copilote : clé Gemini (coller, enregistrer, tester, supprimer, refus de Google)
+node tests/test_copilot_key.js  # (inclus dans run.js) clé personnelle : empreinte, isolation, jamais renvoyée ni journalisée
 node tests/ui_compte.js       # pages Mon compte et Administration
 node tests/ui_edit.js         # création et édition du WBS dans la page Structure
 node tests/ui_org.js          # dépendances, rôles, personnes et équipes dans la page Structure
@@ -189,6 +191,18 @@ Les tests chargent les fichiers `.gs` tels quels, avec des tables en mémoire à
 - **Reprise** : chaque étape est enregistrée dans la propriété `PPM_DEMO_STEP`. Si une étape échoue, le message dit laquelle, les précédentes sont conservées, et il suffit de relancer. **Limite** : il n'y a pas de fonction pour effacer la démo ; pour repartir de zéro, installer sur de nouveaux classeurs (les noms de la démo, retrouvés par leur plus récent homonyme, ne se mélangent pas à de vraies fiches).
 - **Aperçu** : `node tests/preview_demo.js 8124` sert toutes les pages sur la démo complète.
 - **Overview, repère « Personnes »** : il compte maintenant les membres du projet (il comptait les adresses joignables, ce qui est trompeur pour des personnes sans adresse). **Indicateur de coût** : un dépassement du budget externe sur un seul CPN le met en alerte, même si le total du projet reste sous son budget (les analyses se font par CPN).
+
+## Copilote : la clé Gemini de chaque personne (0.13.0)
+
+Le copilote se réactive d'une case à cocher : **Administration → Réglages → Copilote → « Activer le Copilote »** (tracé dans le journal des réglages ; il n'est plus nécessaire de toucher aux propriétés du script). Le lien « Copilote » apparaît alors dans la barre du haut après rechargement.
+
+- **La page Copilote ne fait, pour l'instant, qu'une chose : connecter la clé Gemini de la personne.** Un gros bouton ouvre **directement** la page de Google où l'on crée la clé (`https://aistudio.google.com/apikey`, le lien officiel de la documentation de Google) ; trois gestes (ouvrir ; « Créer une clé API » puis « Copier » ; revenir « Coller » puis « Enregistrer et tester ») ; un bouton « Coller » qui lit le presse-papiers ; une aide si la création est bloquée par l'entreprise, avec **un message prêt à envoyer au support** ; un avertissement sur l'usage des données.
+- **Stockage et confidentialité** : la clé est rangée dans une propriété **privée** du script, sous un nom dérivé de l'adresse par une empreinte SHA-256 (l'adresse n'y apparaît pas), **jamais dans une feuille** que l'équipe peut ouvrir. Elle n'est **jamais renvoyée** à une page ni écrite dans un journal : on ne montre que ses quatre derniers caractères. Elle ne sert qu'aux demandes de la personne qui l'a enregistrée ; à défaut de clé personnelle, la clé commune de l'administrateur (si elle existe) est utilisée. Un test vérifie que la clé n'apparaît ni dans les feuilles, ni dans le journal des changements, ni dans les réglages, ni dans le journal des échanges.
+- **Vérifiée avant d'être gardée** : l'outil interroge Google (liste des modèles, clé envoyée dans l'en-tête `x-goog-api-key`, jamais dans l'adresse). Une clé que Google refuse n'est pas enregistrée, avec un message simple ; une panne ou un quota de Google n'empêche pas l'enregistrement mais est signalé. « Tester ma clé » refait la vérification en trois étapes lisibles (clé acceptée, modèle choisi, petite question à Gemini).
+- **Le modèle n'est plus figé** : il se choisit dans la liste que Google renvoie pour la clé (l'alias `gemini-flash-latest` s'il existe, sinon le « flash » le plus récent, versions comparées par rangs : 3.10 > 3.9 ; jamais un modèle d'image, de voix ou d'embeddings). Le nom de modèle réglé par l'administrateur reste prioritaire.
+- **Nouvelle autorisation Google** : `script.external_request` (appels vers Google), absente jusqu'ici : **réautoriser l'outil** (exécuter `A1_INSTALLER_PPM`) après la mise à jour. Un test compare désormais chaque service Google utilisé dans le code avec les autorisations du manifeste (et signale celles demandées pour rien) ; `A7_TESTER_DANS_APPS_SCRIPT` vérifie que Google répond.
+- **Avant d'activer, à valider avec la DSI** (conditions de Google) : avec une clé gratuite (Google AI Studio et quota gratuit de l'API), Google peut utiliser le contenu envoyé et les réponses pour améliorer ses produits, et des personnes peuvent les relire ; avec un service payant, non. Les comptes professionnels peuvent aussi se voir interdire la création de clés par leur administrateur. Les anciennes clés « standard » sans restriction sont refusées par Google : il faut en créer une nouvelle.
+- **Limites** : ni la création d'une clé, ni l'appel à Gemini n'ont été essayés avec un vrai compte Google (faux Google dans les tests) ; les synthèses, simulations, questions et suggestions du copilote ne sont plus proposées sur la page (le code serveur existe toujours) : elles reviendront une fois la connexion éprouvée.
 
 ## Fil d'actualités du projet (0.12.0, phase 1 de la spécification « step 1 et 2 »)
 
@@ -290,7 +304,7 @@ Règles appliquées par le serveur (`41_Edit.gs`), donc aussi pour l'API :
 
 **Administration** (`?view=admin`, icône d'engrenage, visible des seuls administrateurs de `PPM_ADMINS`) :
 
-- **Réglages** : administrateurs, mode du copilote, modèle, quota, clé Gemini, adresses AppSheet et logo, dossier des projets. Tout est validé avant écriture et chaque changement est tracé dans le journal. La clé se saisit mais ne se relit jamais ; on ne peut pas se retirer soi-même des administrateurs ; le mode `api` demande une clé et un modèle.
+- **Réglages** : administrateurs, **activation du copilote (case à cocher)**, mode du copilote, modèle, quota, clé Gemini commune, adresses AppSheet et logo, dossier des projets. Tout est validé avant écriture et chaque changement est tracé dans le journal. La clé se saisit mais ne se relit jamais ; on ne peut pas se retirer soi-même des administrateurs ; le mode `api` demande une clé et un modèle.
 - **Santé** : vérification de l'installation (dont la version de chaque page), déclencheurs, résultat et durée de chaque étape de la dernière nuit, dernier récapitulatif, usage du copilote, quota de mails, volumes.
 - **Jours fériés** : liste par pays et année, ajout d'années, ajustement par site (ponts, fermetures) ; les projets en tiennent compte aussitôt.
 - **Journaux** : derniers changements de données et de réglages, échanges avec le copilote.

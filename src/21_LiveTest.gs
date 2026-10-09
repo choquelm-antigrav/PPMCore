@@ -103,6 +103,12 @@ function liveSmokeTest_(opts) {
     expect(r && Object.prototype.hasOwnProperty.call(r, 'items'), 'réponse de l’agenda inattendue');
     return 'lecture autorisée';
   });
+  step('Appels externes : Google atteignable (clé Gemini, 0.13.0)', function () {
+    if (typeof UrlFetchApp === 'undefined' && !AI_FETCH) return { warn: 'non vérifiable ici' };
+    var r = aiFetch_(GEMINI_BASE + '/models?pageSize=1', { method: 'get' }); // sans clé : Google doit répondre « clé manquante », ce qui prouve le droit et le réseau
+    expect(r && r.code > 0 && r.code < 500, 'Google a répondu ' + (r && r.code));
+    return 'Google répond (' + r.code + ', normal sans clé)';
+  });
   step('Mails : quota du jour', function () {
     if (!has('MailApp') || !MailApp.getRemainingDailyQuota) return { warn: 'non vérifiable ici' };
     var q = MailApp.getRemainingDailyQuota();

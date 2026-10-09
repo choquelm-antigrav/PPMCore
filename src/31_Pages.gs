@@ -37,6 +37,7 @@ function preloadFor_(view, boot, email) {
     return res;
   };
   if (view === 'compte') { put('account.get', {}); return pre; }
+  if (view === 'copilote') { put('copilot.key.status', {}); return pre; } // la page ne parle que de la clé de la personne : ni catalogue ni projet
   if (view === 'overview') { put('overview.get', { projectId: boot.project || '' }); return pre; }
   if (view === 'admin') { if (boot.isAdmin) { put('admin.get', {}); put('admin.health', {}); put('admin.holidays', {}); put('admin.logs', {}); } return pre; }
   if (view === 'budget') {
@@ -82,9 +83,6 @@ function preloadFor_(view, boot, email) {
     put('ressources.get', { projectId: first });
   } else if (view === 'actualites' && first) {
     put('news.get', { projectId: first });
-  } else if (view === 'copilote' && first) {
-    put('copilot.status', { projectId: first });
-    if (boot.tab === 'synthese') put('copilot.brief', { projectId: first });
   }
   return pre;
 }

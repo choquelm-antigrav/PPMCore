@@ -1,5 +1,16 @@
 # Journal des versions
 
+## 0.13.0 — Copilote : la clé Gemini de chaque personne
+
+- **Réactivation du copilote d'une case à cocher** dans Administration (tracée), sans toucher aux propriétés du script.
+- **Page Copilote refaite** : un gros bouton ouvre directement la page de Google où créer la clé ; trois gestes ; « Coller » depuis le presse-papiers ; « Enregistrer et tester » ; aide et message prêt à envoyer au support si l'entreprise bloque la création ; avertissement sur l'usage des données avec une clé gratuite. Les anciens onglets (synthèse, simulation, questions, suggestions) ne sont plus proposés, le code serveur reste.
+- **Clé personnelle** (`38_CopilotKey.gs`) : rangée dans une propriété privée du script (jamais dans une feuille), jamais renvoyée ni journalisée, vérifiée chez Google avant d'être gardée, avec test en trois étapes et suppression ; utilisée pour les demandes de cette personne seulement.
+- **Modèle choisi chez Google** (plus figé) : alias `gemini-flash-latest` sinon le « flash » le plus récent, versions comparées par rangs.
+- **Correction importante** : le manifeste n'autorisait pas les appels externes (`script.external_request`) ; sans elle, tout appel à Gemini échouait dans le vrai Apps Script. Ajoutée ; **à réautoriser** (`A1_INSTALLER_PPM`).
+- **Nouveau garde-fou** : un test compare chaque service Google utilisé dans le code avec les autorisations du manifeste, dans les deux sens. `A7` vérifie que Google répond.
+- Le mode « api » n'exige plus de clé commune ni de nom de modèle (chacun a sa clé). Le lien « Voir les suggestions » de l'Overview est retiré (la page n'a plus ces suggestions).
+- Tests : 223 serveur, plus douze essais de pages.
+
 ## 0.12.3 — formulaires communs, test dans Apps Script
 
 - **`A7_TESTER_DANS_APPS_SCRIPT`** : test de contrôle à lancer dans le vrai Apps Script, en lecture seule (rien n'est écrit ni envoyé, vérifié par un test). Il contrôle le moteur, les services, le fuseau horaire et les changements d'heure, l'installation, l'autorisation, les déclencheurs, l'agenda, le quota de mails, et les appels de chaque page avec le compte qui l'exécute, chronométrés.

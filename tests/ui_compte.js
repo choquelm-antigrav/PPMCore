@@ -149,10 +149,6 @@ function openPage(file, user, boot) {
   await a.until(() => !a.doc.getElementById('cfg-error').hidden);
   check(/vous retirer vous-même/.test(a.text('cfg-error')) && /DPL|dora/.test(c.getProp(c.PROP.ADMINS, '')) === false, 'se retirer des administrateurs refusé, message sous le formulaire : ' + a.text('cfg-error'));
   a.doc.getElementById('f-admins').value = ADMIN + '\ndora@entreprise.com';
-  a.doc.getElementById('f-mode').value = 'api'; a.doc.getElementById('f-model').value = '';
-  a.submit(a.doc.querySelector('form.form'));
-  await a.until(() => /clé Gemini et le nom du modèle/.test(a.text('cfg-error')));
-  check(c.adminEmails().length === 1, 'mode api sans clé ni modèle refusé : rien n’a été enregistré, même pour le reste du formulaire');
   const KEY = 'AbCdEfGhIjKlMnOpQrStUvWxYz_0123456789';
   a.doc.getElementById('f-mode').value = 'manual'; a.doc.getElementById('f-key').value = KEY;
   a.doc.getElementById('f-quota').value = '40';
@@ -162,6 +158,19 @@ function openPage(file, user, boot) {
   check(c.adminEmails().join() === ADMIN + ',dora@entreprise.com' && c.aiQuota_() === 40 && c.aiMode_() === 'manual' && c.getProp(c.PROP.GEMINI_KEY, '') === KEY, 'administrateurs, quota, mode et clé enregistrés');
   await a.until(() => a.doc.getElementById('f-key').placeholder.includes('clé enregistrée'));
   check(!a.doc.documentElement.outerHTML.includes(KEY), 'la clé n’apparaît nulle part dans la page après enregistrement');
+  // 0.13.0 : l'administrateur active ou suspend le copilote d'une case à cocher
+  check(a.doc.getElementById('f-copilot').checked === true && /rechargement de la page/.test(a.text('copilot-note')) && /accord de votre entreprise/.test(a.text('copilot-note')), 'copilote : case d’activation visible, cochée car activé, avec l’avertissement et la note de rechargement');
+  a.doc.getElementById('f-copilot').checked = false;
+  a.submit(a.doc.querySelector('form.form'));
+  await a.until(() => c.copilotEnabled_() === false && /1 réglage enregistré/.test(a.text('toast')));
+  check(c.copilotEnabled_() === false && /1 réglage enregistré/.test(a.text('toast')), 'décocher suspend le copilote, tracé comme un réglage : ' + a.text('toast'));
+  await a.until(() => !a.doc.getElementById('f-mode'));
+  check(!a.doc.getElementById('f-mode') && !!a.doc.getElementById('f-copilot'), 'suspendu : les réglages techniques de l’IA disparaissent, la case reste');
+  await a.until(() => a.doc.getElementById('f-copilot'));
+  a.doc.getElementById('f-copilot').checked = true;
+  a.submit(a.doc.querySelector('form.form'));
+  await a.until(() => c.copilotEnabled_() === true && !!a.doc.getElementById('f-mode'));
+  check(c.copilotEnabled_() === true && !!a.doc.getElementById('f-mode'), 'recocher réactive le copilote et rend ses réglages');
 
   await a.until(() => a.doc.getElementById('f-reminder-days'));
   check(a.doc.getElementById('f-reminder-on').checked && a.doc.getElementById('f-reminder-days').value === '10', 'rappels : actifs, 10 jours ouvrés par défaut');

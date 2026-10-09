@@ -27,13 +27,10 @@ function aiQuota_() {
   return q > 0 ? Math.floor(q) : 30;
 }
 
-function aiProvider_() {
+/** Le fournisseur d'IA de la personne qui demande : sa clé personnelle (38_CopilotKey.gs), à défaut la clé commune de l'administrateur. */
+function aiProvider_(ctx) {
   if (AI_PROVIDER) return AI_PROVIDER;
-  var key = getProp(PROP.GEMINI_KEY, ''), model = getProp(PROP.GEMINI_MODEL, '');
-  if (!key || !model) {
-    throw new PpmError('CONFIG', 'Mode « api » : renseigner PPM_GEMINI_API_KEY et PPM_GEMINI_MODEL dans les propriétés du script.');
-  }
-  return geminiRest_(key, model);
+  return geminiProviderFor_(ctx);
 }
 
 /** API Gemini (REST generateContent). Les parties renvoyées par le modèle sont rejouées telles quelles. */
@@ -46,17 +43,16 @@ function geminiRest_(key, model) {
       if (req.tools && req.tools.length) body.tools = [{ functionDeclarations: req.tools }];
       var r;
       try {
-        r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
-          method: 'post', contentType: 'application/json', headers: { 'x-goog-api-key': key },
-          payload: JSON.stringify(body), muteHttpExceptions: true
+        r = aiFetch_(GEMINI_BASE + '/models/' + encodeURIComponent(model) + ':generateContent', {
+          method: 'post', contentType: 'application/json', headers: { 'x-goog-api-key': key }, payload: JSON.stringify(body)
         });
       } catch (err) {
         throw new PpmError('CONFIG', 'Appel à Gemini impossible (autorisation « script.external_request » ajoutée au manifeste ?) : ' + (err && err.message ? err.message : err));
       }
-      var code = r.getResponseCode();
-      var json = parseJsonSafe(r.getContentText(), {});
+      var code = r.code;
+      var json = parseJsonSafe(r.text, {});
       if (code === 429) throw new PpmError('QUOTA', 'Gemini : quota atteint, réessayer plus tard.');
-      if (code >= 300) throw new PpmError('INTERNAL', 'Gemini a répondu ' + code + ' : ' + truncate((json.error && json.error.message) || r.getContentText(), 300));
+      if (code >= 300) throw new PpmError('INTERNAL', 'Gemini a répondu ' + code + ' : ' + truncate((json.error && json.error.message) || r.text, 300));
       var parts = (((json.candidates || [])[0] || {}).content || {}).parts || [];
       return {
         raw: parts,
@@ -138,7 +134,7 @@ function runAi_(ctx, projectId, purpose, task, facts, opts) {
     return { mode: 'manual', prompt: prompt, logId: id };
   }
   if (aiUsedToday_(ctx.email) >= aiQuota_()) throw new PpmError('QUOTA', 'Quota du copilote atteint pour aujourd’hui (' + aiQuota_() + ' demandes).');
-  var provider = aiProvider_();
+  var provider = aiProvider_(ctx);
   var contents = [{ role: 'user', parts: [{ text: 'Faits calculés par l’outil (JSON) :\n' + JSON.stringify(facts) + (opts.extra ? '\n\n' + opts.extra : '') + '\n\nDemande : ' + task }] }];
   var sources = [facts, task, opts.extra || ''];
   var steps = [];

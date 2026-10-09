@@ -15,7 +15,7 @@ Un fichier ne dépend que de ceux qui le précèdent dans cette liste (la fabric
 | Installation | `20_Setup` | création des classeurs, vérifications |
 | Accès | `30_Api` | `defineAction`, contrôle des droits, une réponse uniforme |
 | Pages et vues | `31_Pages`, `32_Views` | rendu des pages web et données préchargées ; vues du planning |
-| Modules métier | `33_Structure` … `49_NewsCollect` | un module par sujet (structure, baselines, Workspace, récapitulatif, copilote, compte, tâches nocturnes, édition, organisation, budget, achats, Overview, ressources, démo, actualités) |
+| Modules métier | `33_Structure` … `49_NewsCollect` (dont `38_CopilotKey` : la clé Gemini personnelle) | un module par sujet (structure, baselines, Workspace, récapitulatif, copilote, compte, tâches nocturnes, édition, organisation, budget, achats, Overview, ressources, démo, actualités) |
 
 Règles :
 - **Une action = `defineAction('module.action', function (p, ctx) {…})`**, qui commence par vérifier les droits (`can`, `requireCan`). Le résultat est une donnée simple.

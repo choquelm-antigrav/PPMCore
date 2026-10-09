@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.12.3">
+<meta name="ppm-version" content="0.13.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -494,7 +494,7 @@
     document.getElementById('ppm-admin').hidden = !B.isAdmin;
     document.getElementById('nav-budget').hidden = !B.canBudget;
     document.getElementById('nav-copilot').hidden = !B.copilot; // copilote en suspens tant que PPM_COPILOT n'est pas « oui »
-    var EYEBROW = { overview: 'Overview · Projet', gantt: 'Planning · Gantt', structure: 'OBS/WBS · Organisation et découpage', ressources: 'Ressources · Équipes et rôles', suivi: 'Suivi · Baselines', actualites: 'Actualités · Réunions et actions', copilote: 'Copilote · Analyse', budget: 'Budget · CPN et achats', compte: 'Mon compte', admin: 'Administration' };
+    var EYEBROW = { overview: 'Overview · Projet', gantt: 'Planning · Gantt', structure: 'OBS/WBS · Organisation et découpage', ressources: 'Ressources · Équipes et rôles', suivi: 'Suivi · Baselines', actualites: 'Actualités · Réunions et actions', copilote: 'Copilote · Votre clé Gemini', budget: 'Budget · CPN et achats', compte: 'Mon compte', admin: 'Administration' };
     var titleBox = document.querySelector('header .title');
     if (titleBox && EYEBROW[B.view] && !titleBox.querySelector('.eyebrow')) {
       var eb = document.createElement('span');
@@ -610,6 +610,8 @@ var BOOT = <?!= boot ?>;
     var quota = el('input', { type: 'number', id: 'f-quota', min: '1', max: '500', step: '1', value: String(c.ai_quota) });
     var key = el('input', { type: 'password', id: 'f-key', autocomplete: 'new-password', placeholder: c.gemini_key_set ? '•••• clé enregistrée (laisser vide pour la garder)' : 'coller la clé ici' });
     var clearKey = el('input', { type: 'checkbox', id: 'f-clear-key' });
+    var copilotOn = el('input', { type: 'checkbox', id: 'f-copilot' });
+    copilotOn.checked = !!c.copilot_enabled;
     var remOn = el('input', { type: 'checkbox', id: 'f-reminder-on' });
     remOn.checked = !!c.reminder_on;
     var remDays = el('input', { type: 'number', id: 'f-reminder-days', min: '1', max: '60', step: '1', value: String(c.reminder_days) });
@@ -625,7 +627,7 @@ var BOOT = <?!= boot ?>;
       var values = {
         admins: admins.value.split(/[\s,;]+/).filter(Boolean), ai_mode: mode.value, ai_model: model.value, ai_quota: Number(quota.value),
         appsheet_url: appsheet.value, logo_url: logo.value, projects_folder_id: folder.value,
-        reminder_on: remOn.checked, reminder_days: Number(remDays.value)
+        reminder_on: remOn.checked, reminder_days: Number(remDays.value), copilot_enabled: copilotOn.checked
       };
       if (domainsInput.value.trim() !== initialDomains.trim()) values.domains = domainsInput.value;
       if (key.value.trim()) values.gemini_key = key.value.trim();
@@ -645,6 +647,9 @@ var BOOT = <?!= boot ?>;
       el('section', { class: 'grp' }, [el('h3', { text: 'Administrateurs' }), field('Une adresse par ligne ; vous devez rester dans la liste', admins)]),
       el('section', { class: 'grp' }, [el('h3', { text: 'Accès à l’outil' }),
         field('Domaines autorisés, séparés par une virgule (au plus cinq ; vous ne pouvez pas retirer le vôtre)', domainsInput)]),
+      el('section', { class: 'grp' }, [el('h3', { text: 'Copilote' }),
+        el('label', { class: 'opt' }, [copilotOn, el('span', { text: 'Activer le Copilote : chaque personne y enregistre sa propre clé Gemini (page Copilote)' })]),
+        el('p', { class: 'note', id: 'copilot-note', text: 'Avec une clé gratuite, Google peut utiliser les données envoyées pour améliorer ses produits ; n’activer qu’avec l’accord de votre entreprise. Le lien « Copilote » apparaît dans la barre du haut après rechargement de la page.' })]),
       c.copilot_enabled ? el('section', { class: 'grp' }, [el('h3', { text: 'Copilote IA' }),
         field('Mode', mode), field('Modèle Gemini', model), field('Quota : demandes par personne et par jour', quota),
         field('Clé Gemini (jamais réaffichée)', key),

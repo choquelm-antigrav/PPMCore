@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.12.3">
+<meta name="ppm-version" content="0.13.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -347,43 +347,40 @@
 })(window);
 </script>
 <style>
-  .panel { padding: 16px 24px 32px; max-width: 1100px; }
-  .intro { margin: 0 0 16px; max-width: 72ch; }
-  .note { margin: 8px 0 16px; color: var(--muted); max-width: 72ch; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 0 0 16px; }
-  .card { padding: 12px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
-  .lines { margin: 0 0 20px; padding: 0; list-style: none; display: grid; gap: 6px; max-width: 80ch; }
-  .lines li { padding: 8px 12px; background: var(--surface); border-left: 4px solid var(--rule); border-radius: 2px; }
-  .lines li.alert { border-left-color: var(--red); }
-  .lines li.warn { border-left-color: var(--amber); }
-  h2.sec { font-size: 16px; margin: 22px 0 8px; }
-  .ai { margin: 20px 0 0; padding: 14px 16px; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; max-width: 80ch; }
-  .ai h3 { margin: 0 0 8px; font-size: 15px; }
-  .ai .answer { white-space: pre-wrap; margin: 0 0 10px; line-height: 1.5; }
-  .ai textarea { width: 100%; min-height: 160px; font: 12.5px/1.4 ui-monospace, Menlo, Consolas, monospace; padding: 8px; border: 1px solid var(--rule); border-radius: 4px; }
-  .warnbox { margin: 8px 0; padding: 8px 10px; background: var(--warn-bg); border-radius: 4px; color: var(--warn-ink); font-size: 14px; }
-  .mode { margin-left: 8px; }
-  .hyp { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; margin: 0 0 12px; }
-  .hyp label { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
-  .hyp select { min-width: 260px; max-width: 100%; }
-  .hyp input[type=number] { width: 90px; padding: 5px 8px; border: 1px solid var(--rule); border-radius: 4px; }
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
-  .chip { padding: 4px 10px; border: 1px solid var(--rule); border-radius: 14px; background: var(--surface); cursor: pointer; font-size: 13.5px; }
-  .chip .x { margin-left: 6px; color: var(--muted); }
-  .ask textarea { width: 100%; max-width: 80ch; min-height: 70px; padding: 8px; border: 1px solid var(--rule); border-radius: 4px; font: inherit; }
-  .qa { margin: 16px 0 0; display: grid; gap: 12px; max-width: 80ch; }
-  .qa .q { font-weight: 600; margin: 0 0 4px; }
-  .sugg { display: grid; gap: 10px; max-width: 90ch; }
-  .sugg article { padding: 12px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
-  .sugg p { margin: 4px 0; }
-  .sugg input[type=text] { flex: 1; min-width: 180px; padding: 5px 8px; border: 1px solid var(--rule); border-radius: 4px; }
-  @media (max-width: 700px) {
-    .panel { padding: 12px; }
-    .status .seg { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
-    #reload { margin-left: 0 !important; }
-    .hyp select { min-width: 0; width: 100%; }
-    .hyp label { width: 100%; }
-  }
+  .panel { padding: 8px 24px 28px; max-width: 880px; }
+  .zone[hidden], .panel[hidden] { display: none; }
+  h2.sec { margin: 24px 0 12px; font-size: 16px; font-weight: 600; }
+  .box { margin: 0 0 16px; padding: 18px 20px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .box p { margin: 0 0 8px; }
+  .muted { color: var(--muted); }
+  .note { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+  .state { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .state .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--faint, #8a94a6); flex: none; }
+  .state.on .dot { background: var(--green); }
+  .state strong { font-size: 17px; }
+  .big { display: inline-flex; align-items: center; gap: 10px; padding: 14px 24px; font-size: 17px; font-weight: 600; border-radius: 8px; text-decoration: none; background: var(--accent); color: #fff; border: 0; cursor: pointer; }
+  .big:hover { filter: brightness(.94); }
+  ol.steps { margin: 16px 0 0; padding: 0; list-style: none; display: grid; gap: 14px; counter-reset: s; }
+  ol.steps li { position: relative; padding: 2px 0 2px 46px; font-size: 16px; line-height: 1.45; counter-increment: s; }
+  ol.steps li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 32px; height: 32px; border-radius: 50%; background: var(--tint); color: var(--accent); font-weight: 700; display: grid; place-items: center; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+  .field { display: grid; gap: 4px; }
+  .field label { font-size: 14px; color: var(--muted); }
+  .field input { padding: 12px 14px; font-size: 16px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); color: var(--ink); width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 13px; background: var(--tint); }
+  .badge.ok { background: var(--ok-bg); color: var(--ok-ink); }
+  .warn { background: var(--warn-bg); color: var(--warn-ink); border-left: 4px solid var(--amber); border-radius: 4px; padding: 12px 16px; margin: 0 0 16px; font-size: 15px; }
+  .error { margin: 10px 0 0; color: var(--red); font-weight: 500; }
+  .result { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 15px; }
+  .result li { display: flex; gap: 10px; align-items: baseline; }
+  .result .ok { color: var(--green); font-weight: 700; }
+  .result .ko { color: var(--red); font-weight: 700; }
+  details { margin: 0 0 10px; }
+  details summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+  details p { margin: 6px 0 6px 18px; font-size: 15px; }
+  dialog { width: min(480px, calc(100% - 32px)); }
+  dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  @media (max-width: 700px) { .panel { padding: 8px 12px 24px; } .big { width: 100%; justify-content: center; } }
 </style>
 </head>
 <body>
@@ -509,7 +506,7 @@
     document.getElementById('ppm-admin').hidden = !B.isAdmin;
     document.getElementById('nav-budget').hidden = !B.canBudget;
     document.getElementById('nav-copilot').hidden = !B.copilot; // copilote en suspens tant que PPM_COPILOT n'est pas « oui »
-    var EYEBROW = { overview: 'Overview · Projet', gantt: 'Planning · Gantt', structure: 'OBS/WBS · Organisation et découpage', ressources: 'Ressources · Équipes et rôles', suivi: 'Suivi · Baselines', actualites: 'Actualités · Réunions et actions', copilote: 'Copilote · Analyse', budget: 'Budget · CPN et achats', compte: 'Mon compte', admin: 'Administration' };
+    var EYEBROW = { overview: 'Overview · Projet', gantt: 'Planning · Gantt', structure: 'OBS/WBS · Organisation et découpage', ressources: 'Ressources · Équipes et rôles', suivi: 'Suivi · Baselines', actualites: 'Actualités · Réunions et actions', copilote: 'Copilote · Votre clé Gemini', budget: 'Budget · CPN et achats', compte: 'Mon compte', admin: 'Administration' };
     var titleBox = document.querySelector('header .title');
     if (titleBox && EYEBROW[B.view] && !titleBox.querySelector('.eyebrow')) {
       var eb = document.createElement('span');
@@ -558,27 +555,70 @@
 <header>
   <div class="title">
     <h1 id="title">Copilote</h1>
-    <p class="context" id="context"></p>
-  </div>
-  <div class="controls">
-    <select id="picker" aria-label="Projet"></select>
+    <span class="context" id="context">Connecter votre clé Gemini</span>
   </div>
 </header>
 
-<div class="status">
-  <div class="seg" role="tablist" aria-label="Rubriques">
-    <button type="button" data-tab="synthese" aria-pressed="true">Synthèse</button>
-    <button type="button" data-tab="simulation" aria-pressed="false">Simulation « et si… »</button>
-    <button type="button" data-tab="questions" aria-pressed="false">Questions</button>
-    <button type="button" data-tab="suggestions" aria-pressed="false" id="tab-sugg">Suggestions</button>
-  </div>
-  <button type="button" class="icon-btn" id="reload" style="margin-left:auto" aria-label="Actualiser" title="Actualiser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
-</div>
+<div class="zone"><h2 class="sec">Votre connexion à Gemini</h2></div>
+<section class="panel" id="panel-status" aria-live="polite"></section>
 
-<section class="panel" id="panel-synthese" aria-label="Synthèse"></section>
-<section class="panel" id="panel-simulation" aria-label="Simulation" hidden></section>
-<section class="panel" id="panel-questions" aria-label="Questions" hidden></section>
-<section class="panel" id="panel-suggestions" aria-label="Suggestions" hidden></section>
+<div class="zone"><h2 class="sec">Obtenir votre clé en trois gestes</h2></div>
+<section class="panel" id="panel-get">
+  <div class="box">
+    <p>Une clé est un mot de passe que Google vous donne pour que l’outil puisse poser des questions à Gemini <strong>avec votre compte</strong>. Elle est à vous seul.</p>
+    <p style="margin-top:14px"><a class="big" id="get-key" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">① Ouvrir la page de Google pour créer ma clé ↗</a></p>
+    <ol class="steps">
+      <li>Cliquez sur le bouton bleu : la page de Google s’ouvre dans un <strong>nouvel onglet</strong>. Connectez-vous avec votre compte Google professionnel.</li>
+      <li>Cliquez sur <strong>« Créer une clé API »</strong> (acceptez les conditions si Google les propose), puis sur <strong>« Copier »</strong> à côté de la clé.</li>
+      <li>Revenez ici, cliquez sur <strong>« Coller »</strong> dans la case ci-dessous, puis sur <strong>« Enregistrer et tester »</strong>. C’est tout.</li>
+    </ol>
+  </div>
+  <details id="help">
+    <summary>Ça ne marche pas : le bouton est grisé, ou Google refuse l’accès</summary>
+    <p>Votre entreprise limite sans doute la création de clés. Ce n’est pas un défaut de l’outil : il faut demander l’accès à votre support informatique.</p>
+    <p>Cliquez sur « Copier un message pour le support » et envoyez-le tel quel.</p>
+    <div class="row"><button type="button" class="btn" id="support-copy">Copier un message pour le support</button>
+      <a id="help-doc" href="https://ai.google.dev/gemini-api/docs/workspace" target="_blank" rel="noopener noreferrer">Ce que Google explique pour les comptes professionnels ↗</a></div>
+  </details>
+  <details>
+    <summary>Google refuse ma clé quand je l’enregistre</summary>
+    <p>Recopiez la clé en entier, sans rien ajouter avant ou après. Si elle vient d’une ancienne manipulation, créez-en une <strong>nouvelle</strong> avec le bouton bleu : Google remplace progressivement les anciennes clés, et seules les nouvelles sont sûres de fonctionner.</p>
+  </details>
+</section>
+
+<div class="zone"><h2 class="sec">Enregistrer votre clé</h2></div>
+<section class="panel" id="panel-save">
+  <div class="box">
+    <div class="field">
+      <label for="key-input">Votre clé (elle n’est jamais réaffichée après l’enregistrement)</label>
+      <input type="password" id="key-input" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="collez la clé ici">
+    </div>
+    <div class="row">
+      <button type="button" class="btn" id="key-paste">② Coller</button>
+      <button type="button" class="btn primary" id="key-save">③ Enregistrer et tester</button>
+    </div>
+    <p class="error" id="key-error" role="alert" hidden></p>
+  </div>
+</section>
+
+<div class="zone"><h2 class="sec">À savoir avant de commencer</h2></div>
+<section class="panel" id="panel-know">
+  <p class="warn" id="data-warning"><strong>Vos données.</strong> Avec une clé gratuite de Google, ce qui est envoyé à Gemini peut servir à améliorer les produits de Google, et des personnes peuvent le relire ; ce n’est pas le cas avec une clé facturée (conditions de Google). N’envoyez pas de données confidentielles de l’entreprise sans son accord.</p>
+  <div class="box">
+    <p><strong>Où va votre clé ?</strong> Dans un coffre privé du serveur de l’outil, rangé à part des données des projets. Personne d’autre ne peut la voir ni l’utiliser, et l’outil ne vous la montre plus une fois enregistrée. Elle ne sert qu’à <em>vos</em> demandes.</p>
+    <p><strong>La supprimer ?</strong> Ici, à tout moment. Si vous pensez qu’elle a fuité, supprimez-la aussi côté Google.</p>
+    <p class="muted" style="margin-bottom:0"><strong>La suite.</strong> Cette page prépare la connexion. Les synthèses, questions et simulations du Copilote viendront ensuite, avec cette même clé.</p>
+  </div>
+</section>
+
+<dialog id="clear-dialog" aria-labelledby="clear-title">
+  <h2 id="clear-title" style="margin-top:0">Supprimer votre clé ?</h2>
+  <p>L’outil l’oublie. Vous pourrez en enregistrer une autre quand vous voulez.</p>
+  <div class="actions">
+    <button type="button" class="btn" id="clear-cancel">Garder</button>
+    <button type="button" class="btn danger" id="clear-ok">Supprimer</button>
+  </div>
+</dialog>
 
 <div class="toast" id="toast" role="status" hidden></div>
 
@@ -588,357 +628,97 @@ var BOOT = <?!= boot ?>;
 <script>
 (function () {
   'use strict';
-  var el = ppm.el, clear = ppm.clear, uuid = ppm.uuid, plural = ppm.plural, toast = ppm.toast, call = ppm.call, frDate = function (s) { return ppm.frDate(s, '—'); };
-
-  var state = { tab: 'synthese', projectId: '', catalog: null, status: null, brief: null, briefAi: null,
-    items: null, hyps: [], sim: null, simAi: null, qa: [], sugg: null, seq: 0 };
+  var el = ppm.el, clear = ppm.clear, call = ppm.call, toast = ppm.toast, openDialog = ppm.openDialog, closeDialog = ppm.closeDialog, frDate = ppm.frDate;
   var $ = function (id) { return document.getElementById(id); };
-  var GEMINI_URL = 'https://gemini.google.com/app';
+  var SUPPORT = 'Bonjour,\n\nJe voudrais créer une clé API Gemini dans Google AI Studio (https://aistudio.google.com/apikey) pour utiliser le Copilote de l’outil PPM. Avec mon compte professionnel, le bouton « Créer une clé API » est indisponible ou Google refuse l’accès.\n\nPouvez-vous m’accorder l’accès à Google AI Studio et la permission de créer une clé (ou m’indiquer la démarche prévue par l’entreprise) ?\n\nMerci.';
+  var state = { st: null };
 
-  // ------------------------------------------------------------ outils
-  function days(n) { return n === null || n === undefined ? '' : n === 0 ? '=' : (n > 0 ? '+' : '−') + plural(Math.abs(n), 'jour', 'jours'); }
-  function loading(panel) { clear(panel); panel.appendChild(el('p', { class: 'loading', text: 'Chargement…' })); }
-  function empty(panel, title, text) { clear(panel); panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: title }), el('span', { text: text || '' })])); }
-  function card(k, v, s, alert) {
-    return el('div', { class: 'card' + (alert ? ' alert' : '') }, [el('p', { class: 'k', text: k }), el('p', { class: 'v', text: v }), s ? el('p', { class: 's', text: s }) : null]);
-  }
-  function table(head, rows) {
-    return el('div', { class: 'table-wrap' }, [el('table', {}, [
-      el('thead', {}, [el('tr', {}, head.map(function (h) { return el('th', { scope: 'col', text: h }); }))]), el('tbody', {}, rows)])]);
-  }
-  function mode() { return state.status ? state.status.mode : 'off'; }
-
-  // ------------------------------------------------------------ bloc IA (réponse, texte à copier, avis)
-  function aiBlock(ai, title) {
-    var box = el('div', { class: 'ai' }, [el('h3', { text: title })]);
-    if (ai.mode === 'manual') {
-      var ta = el('textarea', { readonly: 'readonly', 'aria-label': 'Texte à coller dans Gemini', class: 'prompt' });
-      ta.value = ai.prompt;
-      box.appendChild(el('p', { class: 'note', text: 'Copiez ce texte et collez-le dans Gemini : il contient les consignes et les chiffres calculés par l’outil. Relisez la réponse avant de l’utiliser.' }));
-      box.appendChild(ta);
-      box.appendChild(el('div', { class: 'row' }, [
-        el('button', { type: 'button', class: 'btn primary', text: 'Copier le texte', onclick: function () { copy(ta); } }),
-        el('a', { class: 'btn', href: GEMINI_URL, target: '_blank', rel: 'noopener', text: 'Ouvrir Gemini' })
-      ]));
-      return box;
-    }
-    box.appendChild(el('p', { class: 'answer', text: ai.text }));
-    if (ai.unverified && ai.unverified.length) {
-      box.appendChild(el('p', { class: 'warnbox', text: 'Chiffres absents des données de l’outil : ' + ai.unverified.join(', ') + '. Ne les reprenez pas sans vérification.' }));
-    } else {
-      box.appendChild(el('p', { class: 'note', text: 'Tous les chiffres cités se retrouvent dans les données calculées par l’outil.' + (ai.steps && ai.steps.length ? ' Données consultées : ' + ai.steps.map(stepLabel).join(', ') + '.' : '') }));
-    }
-    var fb = el('div', { class: 'row' }, [el('span', { class: 'muted', text: 'Cette réponse vous est-elle utile ?' })]);
-    [['Utile', true], ['Pas utile', false]].forEach(function (b) {
-      fb.appendChild(el('button', { type: 'button', class: 'btn', text: b[0], onclick: function (e) {
-        var btns = fb.querySelectorAll('button');
-        Array.prototype.forEach.call(btns, function (x) { x.disabled = true; });
-        call('copilot.feedback', { logId: ai.logId, useful: b[1] }, true).then(function () { e.target.textContent = b[0] + ' ✓'; toast('Merci : votre avis sert à mesurer la pertinence du copilote.'); })
-          .catch(function (err) { Array.prototype.forEach.call(btns, function (x) { x.disabled = false; }); toast(err.message || 'Avis non enregistré.', true); });
-      } }));
-    });
-    box.appendChild(fb);
-    return box;
-  }
-  function stepLabel(s) {
-    return { get_brief: 'synthèse', list_items: 'liste des livrables', simulate_shift: 'simulation', list_risks: 'risques', list_alerts: 'alertes' }[s] || s;
-  }
-  function copy(ta) {
-    var done = function () { toast('Texte copié : collez-le dans Gemini.'); };
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(ta.value).then(done, fallback); return; }
-    } catch (e) { /* voir ci-dessous */ }
-    fallback();
-    function fallback() {
-      ta.focus(); ta.select();
-      try { if (document.execCommand('copy')) { done(); return; } } catch (e) { /* rien */ }
-      toast('Texte sélectionné : faites Ctrl+C (ou Cmd+C) pour le copier.');
-    }
-  }
-  function aiButtonLabel(what) {
-    return mode() === 'api' ? what + ' avec Gemini' : 'Préparer le texte pour Gemini';
-  }
-
-  // ------------------------------------------------------------ navigation
-  function remember() {
-    var base = BOOT.baseUrl || '', q = state.projectId ? '&project=' + state.projectId : '';
-    $('nav-plan').setAttribute('href', base + '?view=gantt' + q);
-    $('nav-struct').setAttribute('href', base + '?view=structure' + q);
-    $('nav-suivi').setAttribute('href', base + '?view=suivi' + q);
-    $('nav-copilot').setAttribute('href', base + '?view=copilote' + q + '&tab=' + state.tab);
-    try { google.script.history.replace(null, { view: 'copilote', project: state.projectId, tab: state.tab }); } catch (e) { /* hors web app */ }
-  }
-  function fillPicker() {
-    var sel = $('picker'); clear(sel);
-    var cat = state.catalog, byProgram = {};
-    cat.projects.forEach(function (p) { (byProgram[p.program_id || ''] = byProgram[p.program_id || ''] || []).push(p); });
-    var sortCode = function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); };
-    var group = function (label, list) {
-      if (!list || !list.length) return;
-      var og = el('optgroup', { label: label });
-      list.sort(sortCode).forEach(function (p) { og.appendChild(el('option', { value: p.id, text: p.code + ' ' + p.name + (p.status === 'Clos' ? ' (clos)' : '') })); });
-      sel.appendChild(og);
+  function copyText(text, okMsg) {
+    var done = function () { toast(okMsg); };
+    var fallback = function () {
+      var ta = el('textarea', { style: 'position:fixed;left:-9999px;top:0' }); ta.value = text; document.body.appendChild(ta); ta.select();
+      var ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      if (ok) done(); else toast('Copie impossible ici : sélectionnez le texte et copiez-le à la main.', true);
     };
-    cat.programs.slice().sort(sortCode).forEach(function (g) { group(g.code + ' ' + g.name, byProgram[g.id]); });
-    group('Hors programme', byProgram['']);
-    sel.value = state.projectId;
-  }
-  function syncTabs() {
-    Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-tab') === state.tab)); });
-    ['synthese', 'simulation', 'questions', 'suggestions'].forEach(function (t) { $('panel-' + t).hidden = t !== state.tab; });
-  }
-  function setTab(t) { state.tab = t; syncTabs(); remember(); return render(); }
-  function renderContext() {
-    var p = state.catalog.projects.filter(function (x) { return x.id === state.projectId; })[0];
-    $('title').textContent = p ? p.code + ' ' + p.name : 'Copilote';
-    var m = mode();
-    var ctx = $('context'); clear(ctx);
-    ctx.appendChild(el('span', { class: 'badge mode ' + (m === 'off' ? '' : 'ok'), id: 'mode-badge',
-      text: m === 'api' ? 'IA : Gemini' + (state.status.model ? ' (' + state.status.model + ')' : '') + ' — ' + state.status.quota.used + '/' + state.status.quota.limit + ' demandes aujourd’hui'
-        : m === 'manual' ? 'IA : texte à coller dans Gemini' : 'IA désactivée' }));
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback); else fallback();
   }
 
-  function loadProject(id) {
-    state.projectId = id; state.brief = null; state.briefAi = null; state.items = null; state.hyps = []; state.sim = null; state.simAi = null; state.qa = []; state.sugg = null;
-    $('picker').value = id;
-    remember();
-    return call('copilot.status', { projectId: id }).then(function (s) { state.status = s; renderContext(); return render(); })
-      .catch(function (e) { toast(e.message || 'Erreur.', true); });
-  }
-  function render() {
-    if (state.tab === 'synthese') return renderSynthese();
-    if (state.tab === 'simulation') return renderSimulation();
-    if (state.tab === 'questions') { renderQuestions(); return Promise.resolve(); }
-    return renderSuggestions();
-  }
-
-  // ------------------------------------------------------------ synthèse
-  function renderSynthese() {
-    var panel = $('panel-synthese');
-    if (!state.brief) {
-      loading(panel);
-      var ticket = ++state.seq;
-      return call('copilot.brief', { projectId: state.projectId }).then(function (b) {
-        if (ticket !== state.seq) return;
-        state.brief = b; renderSynthese();
-      }).catch(function (e) { empty(panel, 'Synthèse indisponible.', e.message); });
-    }
-    var f = state.brief.facts, st = f.schedule;
-    clear(panel);
-    var cards = el('div', { class: 'cards' });
-    cards.appendChild(card('Avancement', f.progress.weighted_pct + ' %', plural(f.progress.done, 'élément terminé', 'éléments terminés') + ' sur ' + f.progress.items));
-    cards.appendChild(card('Fin du plan', frDate(st.plan_end), st.margin_to_target === null ? (st.target_end ? '' : 'Pas de fin visée') :
-      (st.margin_to_target >= 0 ? plural(st.margin_to_target, 'jour ouvré', 'jours ouvrés') + ' de marge' : plural(-st.margin_to_target, 'jour ouvré', 'jours ouvrés') + ' après la fin visée'), st.margin_to_target !== null && st.margin_to_target < 0));
-    cards.appendChild(card('Écart à la baseline', f.baseline ? days(st.slip_vs_baseline) : '—', f.baseline ? f.baseline.label + ' du ' + frDate(f.baseline.frozen_on) : 'Pas de baseline', st.slip_vs_baseline > 0));
-    cards.appendChild(card('En retard', String(f.late_count), f.late_count ? 'dont « ' + f.late[0].name + ' »' : 'aucun élément', f.late_count > 0));
-    cards.appendChild(card('Alertes', String(f.insights.alerte), plural(f.insights.vigilance, 'vigilance', 'vigilances'), f.insights.alerte > 0));
-    panel.appendChild(cards);
-    panel.appendChild(el('ul', { class: 'lines', id: 'brief-lines' }, state.brief.lines.map(function (l) { return el('li', { class: l.tone || '', text: l.text }); })));
-
-    if (f.upcoming_milestones.length) {
-      panel.appendChild(el('h2', { class: 'sec', text: 'Jalons des 90 prochains jours' }));
-      panel.appendChild(table(['Jalon', 'Date', 'Dans', 'Écart à la baseline', 'Menacé par'], f.upcoming_milestones.map(function (m) {
-        return el('tr', {}, [el('td', { text: m.name }), el('td', { text: frDate(m.date) }), el('td', { text: plural(m.in_days, 'jour', 'jours') }),
-          el('td', { class: 'num' + (m.slip_vs_baseline > 0 ? ' late' : ''), text: m.slip_vs_baseline === null ? '—' : days(m.slip_vs_baseline) }),
-          el('td', { class: m.threatened_by.length ? 'late' : '', text: m.threatened_by.join(', ') || '—' })]);
-      })));
-    }
-    if (f.due_soon.length) {
-      panel.appendChild(el('h2', { class: 'sec', text: 'Échéances des 14 prochains jours' }));
-      panel.appendChild(table(['Livrable', 'Fin prévue', 'Avancement', 'Responsable'], f.due_soon.map(function (d) {
-        return el('tr', {}, [el('td', {}, [d.name, d.critical ? el('span', { class: 'badge warn', text: 'critique', style: 'margin-left:6px' }) : null]),
-          el('td', { text: frDate(d.finish) }), el('td', { class: 'num', text: d.progress_pct + ' %' }), el('td', { text: d.owner || '—' })]);
-      })));
-    }
-    if (f.weak_signals.length) {
-      panel.appendChild(el('h2', { class: 'sec', text: 'Signaux faibles' }));
-      panel.appendChild(el('p', { class: 'note', text: 'Commentaires d’avancement récents qui annoncent un blocage, avant que la date ne bouge.' }));
-      panel.appendChild(table(['Livrable', 'Déclaré le', 'Commentaire'], f.weak_signals.map(function (s) {
-        return el('tr', {}, [el('td', { text: s.item }), el('td', { text: frDate(s.date) }), el('td', { text: '« ' + s.comment + ' »' })]);
-      })));
-    }
-
-    if (mode() === 'off') {
-      panel.appendChild(el('p', { class: 'note', text: 'Synthèse calculée par l’outil ; rédaction par Gemini non activée.' }));
+  // ------------------------------------------------------------ état de la connexion
+  function renderStatus() {
+    var s = state.st, box = $('panel-status'); clear(box);
+    var card = el('div', { class: 'box' });
+    if (s && s.has) {
+      card.appendChild(el('div', { class: 'state on', id: 'key-state' }, [el('span', { class: 'dot' }), el('strong', { text: 'Clé enregistrée' }),
+        el('span', { class: 'badge ok', id: 'key-last4', text: '…' + s.last4 }), s.saved_on ? el('span', { class: 'muted', text: 'le ' + frDate(s.saved_on) }) : null]));
+      card.appendChild(el('p', { class: 'note', text: 'Le Copilote peut utiliser Gemini avec votre compte. Pour changer de clé, collez-en simplement une autre plus bas.' }));
+      var res = el('ul', { class: 'result', id: 'test-result', hidden: '' });
+      card.appendChild(el('div', { class: 'row' }, [
+        el('button', { type: 'button', class: 'btn', id: 'key-test', text: 'Tester ma clé', onclick: testKey }),
+        el('button', { type: 'button', class: 'btn', id: 'key-clear', text: 'Supprimer ma clé', onclick: function () { openDialog($('clear-dialog')); } })]));
+      card.appendChild(res);
     } else {
-      panel.appendChild(el('div', { class: 'row', style: 'margin-top:16px' }, [el('button', { type: 'button', class: 'btn primary', id: 'brief-ai',
-        text: aiButtonLabel('Rédiger la synthèse'), onclick: function (e) {
-          e.target.disabled = true;
-          call('copilot.brief', { projectId: state.projectId, ai: true }, true).then(function (b) { state.briefAi = b.ai; refreshStatus(); renderSynthese(); })
-            .catch(function (err) { e.target.disabled = false; toast(err.message || 'Échec.', true); });
-        } })]));
-      if (state.briefAi) panel.appendChild(aiBlock(state.briefAi, state.briefAi.mode === 'manual' ? 'Texte à coller dans Gemini' : 'Synthèse rédigée par Gemini'));
+      card.appendChild(el('div', { class: 'state', id: 'key-state' }, [el('span', { class: 'dot' }), el('strong', { text: 'Pas encore de clé' })]));
+      card.appendChild(el('p', { class: 'note', text: 'Suivez les trois gestes ci-dessous : cela prend environ une minute.' }));
     }
-  }
-  function refreshStatus() { call('copilot.status', { projectId: state.projectId }).then(function (s) { state.status = s; renderContext(); }).catch(function () { /* rien */ }); }
-
-  // ------------------------------------------------------------ simulation
-  function renderSimulation() {
-    var panel = $('panel-simulation');
-    if (!state.items) {
-      loading(panel);
-      return call('gantt.project', { projectId: state.projectId }).then(function (g) {
-        state.items = g.rows.filter(function (r) { return r.kind === 'item' && r.finish && !r.external; });
-        renderSimulation();
-      }).catch(function (e) { empty(panel, 'Planning indisponible.', e.message); });
-    }
-    clear(panel);
-    if (!state.items.length) { panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucun élément daté dans ce projet.' })])); return Promise.resolve(); }
-    var sel = el('select', { id: 'sim-item', 'aria-label': 'Élément à décaler' });
-    state.items.forEach(function (r) { sel.appendChild(el('option', { value: r.id, text: r.name + ' — fin ' + frDate(r.finish) })); });
-    var nb = el('input', { type: 'number', id: 'sim-days', value: '5', min: '-200', max: '200', step: '1', 'aria-label': 'Décalage en jours ouvrés' });
-    panel.appendChild(el('div', { class: 'hyp' }, [
-      el('label', {}, ['Élément', sel]), el('label', {}, ['Décalage (jours ouvrés, négatif pour avancer)', nb]),
-      el('button', { type: 'button', class: 'btn', id: 'sim-add', text: 'Ajouter l’hypothèse', onclick: function () {
-        var n = Math.round(Number(nb.value));
-        if (!n) { toast('Indiquez un décalage différent de zéro.', true); return; }
-        var it = state.items.filter(function (r) { return r.id === sel.value; })[0];
-        state.hyps = state.hyps.filter(function (h) { return h.itemId !== it.id; }).concat([{ itemId: it.id, name: it.name, shiftDays: n }]);
-        state.sim = null; state.simAi = null; renderSimulation();
-      } })
-    ]));
-    var chips = el('div', { class: 'chips', id: 'sim-hyps' });
-    state.hyps.forEach(function (h) {
-      chips.appendChild(el('span', { class: 'chip' }, [h.name + ' ' + (h.shiftDays > 0 ? '+' : '−') + plural(Math.abs(h.shiftDays), 'jour', 'jours'),
-        el('button', { type: 'button', class: 'x', 'aria-label': 'Retirer ' + h.name, text: '×', style: 'border:0;background:none;cursor:pointer', onclick: function () {
-          state.hyps = state.hyps.filter(function (x) { return x !== h; }); state.sim = null; state.simAi = null; renderSimulation();
-        } })]));
-    });
-    panel.appendChild(chips);
-    var go = el('button', { type: 'button', class: 'btn primary', id: 'sim-run', text: 'Simuler', onclick: runSim });
-    go.disabled = !state.hyps.length;
-    panel.appendChild(el('div', { class: 'row' }, [go, el('span', { class: 'muted', text: state.hyps.length ? '' : 'Ajoutez au moins une hypothèse.' })]));
-    if (state.sim) renderSimResult(panel);
-    return Promise.resolve();
-  }
-  function runSim() {
-    call('simulations.run', { projectId: state.projectId, changes: state.hyps.map(function (h) { return { itemId: h.itemId, shiftDays: h.shiftDays }; }) })
-      .then(function (r) { state.sim = r; state.simAi = null; renderSimulation(); })
-      .catch(function (e) { toast(e.message || 'Simulation impossible.', true); });
-  }
-  function renderSimResult(panel) {
-    var r = state.sim, pe = r.plan_end;
-    var box = el('div', { id: 'sim-result' });
-    box.appendChild(el('h2', { class: 'sec', text: 'Résultat' }));
-    var cards = el('div', { class: 'cards' });
-    cards.appendChild(card('Fin du plan', frDate(pe.after), pe.shift ? days(pe.shift) + ' ouvrés (avant : ' + frDate(pe.before) + ')' : 'Inchangée', pe.shift > 0));
-    if (pe.baseline) cards.appendChild(card('Écart à la baseline', days(pe.slip_vs_baseline), 'fin figée le ' + frDate(pe.baseline), pe.slip_vs_baseline > 0));
-    cards.appendChild(card('Décalés en cascade', String(r.domino), r.domino ? 'successeurs repoussés' : 'la marge absorbe', r.domino > 0));
-    cards.appendChild(card('Jalons menacés', String(r.newly_threatened.length), '', r.newly_threatened.length > 0));
-    cards.appendChild(card('Autres projets', String(r.external_impacts.length), r.external_impacts.length ? 'à prévenir' : 'aucun impact', r.external_impacts.length > 0));
-    box.appendChild(cards);
-    box.appendChild(table(['Élément', 'Fin avant', 'Fin après', 'Décalage', 'Pourquoi'], r.moved.map(function (m) {
-      return el('tr', {}, [el('td', { text: m.name }), el('td', { text: frDate(m.before_finish) }), el('td', { text: frDate(m.finish) }),
-        el('td', { class: 'num' + (m.shift > 0 ? ' late' : ''), text: days(m.shift) }), el('td', { text: m.hypothesis ? 'Hypothèse' : 'Suit « ' + m.cause + ' »' })]);
-    })));
-    var list = function (title, items) { if (!items.length) return; box.appendChild(el('h2', { class: 'sec', text: title })); box.appendChild(el('ul', {}, items.map(function (t) { return el('li', { text: t }); }))); };
-    list('Jalons qui deviendraient menacés', r.newly_threatened.map(function (t) { return '« ' + t.milestone + ' » (' + frDate(t.milestone_date) + ') : « ' + t.deliverable + ' » finirait le ' + frDate(t.deliverable_finish) + '.'; }));
-    list('Autres projets touchés', r.external_impacts.map(function (e) { return e.project + ' · « ' + e.name + ' » devrait être repoussé de ' + plural(e.gap, 'jour ouvré', 'jours ouvrés') + ' (à cause de « ' + e.because + ' »).'; }));
-    list('Éléments qui passeraient sur le chemin critique', r.newly_critical.map(function (n) { return n; }));
-    r.notes.forEach(function (n) { box.appendChild(el('p', { class: 'note', text: n })); });
-    box.appendChild(el('p', { class: 'note', text: 'Rien n’est enregistré. Pour appliquer une hypothèse, déplacez les barres dans le Planning.' }));
-    if (mode() !== 'off') {
-      box.appendChild(el('button', { type: 'button', class: 'btn', id: 'sim-ai', text: aiButtonLabel('Expliquer'), onclick: function (e) {
-        e.target.disabled = true;
-        call('simulations.run', { projectId: state.projectId, explain: true, changes: state.hyps.map(function (h) { return { itemId: h.itemId, shiftDays: h.shiftDays }; }) }, true)
-          .then(function (res) { state.simAi = res.ai; refreshStatus(); renderSimulation(); })
-          .catch(function (err) { e.target.disabled = false; toast(err.message || 'Échec.', true); });
-      } }));
-      if (state.simAi) box.appendChild(aiBlock(state.simAi, state.simAi.mode === 'manual' ? 'Texte à coller dans Gemini' : 'Explication de Gemini'));
-    }
-    panel.appendChild(box);
+    box.appendChild(card);
   }
 
-  // ------------------------------------------------------------ questions
-  var EXAMPLES = ['Quels livrables risquent de retarder le prochain jalon ?', 'Que se passe-t-il si le livrable le plus en retard glisse encore de 5 jours ?', 'Quels points aborder au prochain COPIL ?'];
-  function renderQuestions() {
-    var panel = $('panel-questions');
-    clear(panel);
-    if (mode() === 'off') {
-      empty(panel, 'Questions au copilote : non activées.', 'Le copilote répond aux questions en consultant les données du projet par l’outil. Il faut d’abord qu’un administrateur active Gemini (propriété PPM_AI_MODE), avec l’accord de la DSI.');
-      return;
-    }
-    var ta = el('textarea', { id: 'question', maxlength: '1000', 'aria-label': 'Votre question', placeholder: 'Votre question…' });
-    var chips = el('div', { class: 'chips' }, EXAMPLES.map(function (q) { return el('button', { type: 'button', class: 'chip', text: q, onclick: function () { ta.value = q; ta.focus(); } }); }));
-    var ask = el('button', { type: 'button', class: 'btn primary', id: 'ask-btn', text: mode() === 'api' ? 'Demander' : 'Préparer le texte pour Gemini', onclick: function () {
-      var q = ta.value.trim();
-      if (!q) { toast('Posez une question.', true); return; }
-      ask.disabled = true;
-      call('copilot.ask', { projectId: state.projectId, question: q }, true).then(function (a) {
-        state.qa.unshift({ q: q, a: a }); ta.value = ''; refreshStatus(); renderQuestions();
-      }).catch(function (e) { ask.disabled = false; toast(e.message || 'Échec.', true); });
-    } });
-    panel.appendChild(el('div', { class: 'ask' }, [chips, ta, el('div', { class: 'row', style: 'margin-top:8px' }, [ask])]));
-    var qa = el('div', { class: 'qa', id: 'qa' });
-    state.qa.forEach(function (x) { qa.appendChild(el('div', {}, [el('p', { class: 'q', text: x.q }), aiBlock(x.a, x.a.mode === 'manual' ? 'Texte à coller dans Gemini' : 'Réponse')])); });
-    panel.appendChild(qa);
-  }
-
-  // ------------------------------------------------------------ suggestions
-  function renderSuggestions() {
-    var panel = $('panel-suggestions');
-    loading(panel);
-    return call('copilot.suggestions', { projectId: state.projectId }).then(function (s) {
-      state.sugg = s;
-      $('tab-sugg').textContent = 'Suggestions' + (s.pending.length ? ' (' + s.pending.length + ')' : '');
-      clear(panel);
-      if (!s.canDecide) panel.appendChild(el('p', { class: 'note', text: 'Lecture seule : le chef de projet, le DPL ou le Program Leader décident.' }));
-      var st = s.stats;
-      var cards = el('div', { class: 'cards' });
-      cards.appendChild(card('En attente', String(s.pending.length), ''));
-      cards.appendChild(card('Taux d’acceptation', st.accept_rate === null ? '—' : st.accept_rate + ' %', 'des suggestions traitées'));
-      if (st.ai_answers) cards.appendChild(card('Réponses de Gemini', String(st.ai_answers), st.ai_useful + ' utiles, ' + st.ai_not_useful + ' pas utiles'));
-      panel.appendChild(cards);
-      if (!s.pending.length) panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucune suggestion en attente.' })]));
-      var list = el('div', { class: 'sugg', id: 'sugg-list' });
-      s.pending.forEach(function (x) {
-        var art = el('article', { 'data-insight': x.id }, [
-          el('div', { class: 'row' }, [el('span', { class: 'badge ' + (x.severity === 'Alerte' ? 'alert' : x.severity === 'Vigilance' ? 'warn' : ''), text: x.severity })]),
-          el('p', { text: x.message }), x.suggestion ? el('p', { class: 'muted', text: 'Suggestion : ' + x.suggestion }) : null
-        ]);
-        if (s.canDecide) {
-          var note = el('input', { type: 'text', maxlength: '500', placeholder: 'Note (facultative)', 'aria-label': 'Note' });
-          var decide = function (d) {
-            return function () {
-              call('insights.decide', { id: x.id, version: x.version, decision: d, note: note.value }, true)
-                .then(function () { toast(d === 'Accepté' ? 'Suggestion acceptée.' : 'Suggestion ignorée.'); return renderSuggestions(); })
-                .catch(function (e) { toast(e.message || 'Échec.', true); });
-            };
-          };
-          art.appendChild(el('div', { class: 'row', style: 'margin-top:8px' }, [note,
-            el('button', { type: 'button', class: 'btn primary', text: 'Accepter', onclick: decide('Accepté') }),
-            el('button', { type: 'button', class: 'btn', text: 'Ignorer', onclick: decide('Ignoré') })]));
-        }
-        list.appendChild(art);
+  function loadStatus() {
+    return call('copilot.key.status', {}).then(function (s) { state.st = s; if (s.keys_url) $('get-key').setAttribute('href', s.keys_url); renderStatus(); })
+      .catch(function (e) {
+        clear($('panel-status'));
+        $('panel-status').appendChild(el('div', { class: 'box' }, [el('p', { class: 'error', id: 'status-error', text: ppmErrorText(e) })]));
       });
-      panel.appendChild(list);
-      if (s.recent.length) {
-        panel.appendChild(el('h2', { class: 'sec', text: 'Décisions récentes' }));
-        panel.appendChild(table(['Constat', 'Décision', 'Par', 'Note'], s.recent.map(function (r) {
-          return el('tr', {}, [el('td', { text: r.message }), el('td', {}, [el('span', { class: 'badge ' + (r.status === 'Accepté' ? 'ok' : ''), text: r.status })]),
-            el('td', { text: r.decided_by + ' · ' + frDate(r.decided_at) }), el('td', { text: r.note || '' })]);
-        })));
-      }
-    }).catch(function (e) { empty(panel, 'Suggestions indisponibles.', e.message); });
   }
 
-  // ------------------------------------------------------------ événements et démarrage
-  Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) { b.addEventListener('click', function () { setTab(b.getAttribute('data-tab')); }); });
-  $('picker').addEventListener('change', function () { loadProject(this.value); });
-  $('reload').addEventListener('click', function () { loadProject(state.projectId); });
+  // ------------------------------------------------------------ coller et enregistrer
+  function paste() {
+    var inp = $('key-input');
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      navigator.clipboard.readText().then(function (t) { inp.value = String(t || '').trim(); inp.focus(); if (!inp.value) toast('Le presse-papiers est vide : copiez d’abord la clé chez Google.', true); },
+        function () { inp.focus(); toast('Votre navigateur bloque « Coller » : cliquez dans la case et faites Ctrl+V (ou ⌘+V).', true); });
+    } else { inp.focus(); toast('Cliquez dans la case et faites Ctrl+V (ou ⌘+V).'); }
+  }
 
-  state.tab = BOOT.tab || 'synthese';
-  syncTabs();
-  call('planning.catalog', {}).then(function (cat) {
-    state.catalog = cat;
-    var first = BOOT.project || (cat.projects.filter(function (p) { return p.status !== 'Clos'; })[0] || cat.projects[0] || {}).id;
-    if (!first) { empty($('panel-' + state.tab), 'Aucun projet pour l’instant.', 'Créez un projet dans l’application AppSheet, puis revenez ici.'); return; }
-    state.projectId = first;
-    fillPicker();
-    return loadProject(first);
-  }).catch(function (e) { empty($('panel-' + state.tab), 'Chargement impossible.', e.message); });
+  function save() {
+    var inp = $('key-input'), err = $('key-error'), btn = $('key-save');
+    err.hidden = true; btn.disabled = true;
+    call('copilot.key.set', { key: inp.value }, true).then(function (r) {
+      inp.value = '';                                    // la clé ne reste pas à l'écran
+      state.st = r; renderStatus();
+      toast(r.warning ? r.warning : 'Clé enregistrée et vérifiée par Google' + (r.model ? ' (modèle : ' + r.model + ')' : '') + '.', !!r.warning);
+    }).catch(function (e) { err.textContent = ppmErrorText(e); err.hidden = false; }).then(function () { btn.disabled = false; });
+  }
 
-  window.__ppm = { state: state, setTab: setTab };
+  function testKey() {
+    var out = $('test-result'), btn = $('key-test');
+    btn.disabled = true; out.hidden = false; clear(out); out.appendChild(el('li', {}, [el('span', { class: 'muted', text: 'Vérification en cours…' })]));
+    call('copilot.key.test', {}).then(function (r) {
+      clear(out);
+      r.steps.forEach(function (s) { out.appendChild(el('li', {}, [el('span', { class: s.ok ? 'ok' : 'ko', text: s.ok ? '✓' : '✗' }), el('span', { text: s.name + (s.detail ? ' — ' + s.detail : '') + (s.ms ? ' (' + s.ms + ' ms)' : '') })])); });
+      out.appendChild(el('li', {}, [el('strong', { id: 'test-verdict', text: r.ok ? 'Tout fonctionne.' : 'Il y a un souci : ' + r.message + (r.refused ? '. Supprimez cette clé et créez-en une nouvelle.' : '') })]));
+    }).catch(function (e) { clear(out); out.appendChild(el('li', {}, [el('span', { class: 'ko', text: '✗' }), el('span', { text: ppmErrorText(e) })])); })
+      .then(function () { var b = $('key-test'); if (b) b.disabled = false; });
+  }
+
+  function clearKey() {
+    $('clear-ok').disabled = true;
+    call('copilot.key.clear', {}, true).then(function (s) { closeDialog($('clear-dialog')); state.st = s; renderStatus(); toast('Clé supprimée.'); })
+      .catch(function (e) { toast(ppmErrorText(e), true); }).then(function () { $('clear-ok').disabled = false; });
+  }
+
+  // ------------------------------------------------------------ démarrage
+  $('key-paste').addEventListener('click', paste);
+  $('key-save').addEventListener('click', save);
+  $('key-input').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); save(); } });
+  $('support-copy').addEventListener('click', function () { copyText(SUPPORT, 'Message copié : collez-le dans un mail à votre support.'); });
+  $('clear-cancel').addEventListener('click', function () { closeDialog($('clear-dialog')); });
+  $('clear-ok').addEventListener('click', clearKey);
+  var base = BOOT.baseUrl || '';
+  if ($('nav-plan')) $('nav-plan').setAttribute('href', base + '?view=gantt' + (BOOT.project ? '&project=' + BOOT.project : ''));
+  loadStatus();
+  window.__ppm = { state: state, load: loadStatus };
 })();
 </script>
 </body>
