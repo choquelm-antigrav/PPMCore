@@ -22,20 +22,20 @@ module.exports = function () {
   const demo = (() => { const c = core(); const msg = c.seedDemo_(); return { c, msg }; })();
   const c = demo.c;
 
-  test('Les six points d’entrée sont en tête de la liste des fonctions, avant les cent autres', () => {
-    const names = ['A1_INSTALLER_PPM', 'A2_SEED_DEMO', 'A3_VERIFIER_INSTALLATION', 'A4_DIAGNOSTIC_ACCES', 'A5_INSTALLER_DECLENCHEURS', 'A6_EFFACER_ANCIENNE_DEMO'];
+  test('Les sept points d’entrée sont en tête de la liste des fonctions, avant les cent autres', () => {
+    const names = ['A1_INSTALLER_PPM', 'A2_SEED_DEMO', 'A3_VERIFIER_INSTALLATION', 'A4_DIAGNOSTIC_ACCES', 'A5_INSTALLER_DECLENCHEURS', 'A6_EFFACER_ANCIENNE_DEMO', 'A7_TESTER_DANS_APPS_SCRIPT'];
     names.forEach((n) => eq(typeof c[n], 'function', n));
     ['installerPpm', 'seedDemo', 'diagnosticAcces'].forEach((n) => eq(typeof c[n], 'undefined', 'l’ancien nom public ' + n + ' a disparu : il encombrait la liste'));
     // dans le fichier fabriqué : définis en premier (ordre de définition) ...
     const bundle = fs.readFileSync(path.join(__dirname, '..', 'dist', 'PPM_Core.gs'), 'utf8');
     const decl = [...bundle.matchAll(/^function ([A-Za-z0-9_$]+)\(/gm)].map((m) => m[1]);
-    eq(decl.slice(0, 6), names, 'les six premières fonctions du fichier');
+    eq(decl.slice(0, 7), names, 'les sept premières fonctions du fichier');
     // ... et en tête dans l'ordre alphabétique, avec ou sans casse (les fonctions finissant par « _ » sont privées : absentes de la liste)
     const publics = decl.filter((n) => !n.endsWith('_'));
     ok(publics.length > 100, publics.length + ' fonctions publiques dans la liste');
-    eq([...publics].sort().slice(0, 6), names, 'en tête dans l’ordre des codes de caractères');
-    eq([...publics].sort((a, b) => a.localeCompare(b, 'fr')).slice(0, 6), names, 'en tête dans l’ordre alphabétique des langues');
-    eq([...publics].sort((a, b) => a.toLowerCase() < b.toLowerCase() ? -1 : 1).slice(0, 6), names, 'en tête, sans tenir compte de la casse');
+    eq([...publics].sort().slice(0, 7), names, 'en tête dans l’ordre des codes de caractères');
+    eq([...publics].sort((a, b) => a.localeCompare(b, 'fr')).slice(0, 7), names, 'en tête dans l’ordre alphabétique des langues');
+    eq([...publics].sort((a, b) => a.toLowerCase() < b.toLowerCase() ? -1 : 1).slice(0, 7), names, 'en tête, sans tenir compte de la casse');
   });
 
   test('La démo se crée d’un coup et annonce sa fin', () => {

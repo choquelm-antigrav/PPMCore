@@ -15,7 +15,7 @@ module.exports = function () {
   test('Registre : une entrée complète par page, sans doublon', () => {
     ok(pages.length >= 10, pages.length + ' pages');
     pages.forEach((p) => {
-      ok(/^[a-z]+$/.test(p.view) && /^[A-Z][A-Za-z]+$/.test(p.file) && /^PPM — /.test(p.title) && p.eyebrow && Array.isArray(p.tabs) && p.tabs.length >= 1 && ['bar', 'icon'].includes(p.nav) && typeof p.share === 'boolean' && Array.isArray(p.parts), 'entrée complète : ' + p.view);
+      ok(/^[a-z]+$/.test(p.view) && /^[A-Z][A-Za-z]+$/.test(p.file) && /^PPM — /.test(p.title) && p.eyebrow && Array.isArray(p.tabs) && p.tabs.length >= 1 && ['bar', 'icon'].includes(p.nav) && typeof p.share === 'boolean' && Array.isArray(p.parts) && Array.isArray(p.shared), 'entrée complète : ' + p.view);
     });
     eq(new Set(pages.map((p) => p.view)).size, pages.length, 'une vue par entrée');
     eq(new Set(pages.map((p) => p.file)).size, pages.length, 'un fichier par entrée');
@@ -31,8 +31,10 @@ module.exports = function () {
   });
 
   test('Registre : aucune page de src/ n’échappe au registre', () => {
-    const parts = [].concat(...pages.map((p) => p.parts));
-    const files = fs.readdirSync(path.join(root, 'src')).filter((f) => /\.html$/.test(f) && !['Style.html', 'Common.html', 'Header.html'].includes(f) && !parts.includes(f.replace(/\.html$/, ''))).sort();
+    const parts = [].concat(...pages.map((p) => p.parts)), shared = [...new Set([].concat(...pages.map((p) => p.shared)))];
+    const files = fs.readdirSync(path.join(root, 'src')).filter((f) => /\.html$/.test(f) && !['Style.html', 'Common.html', 'Header.html'].includes(f) && !parts.includes(f.replace(/\.html$/, '')) && !shared.includes(f.replace(/\.html$/, ''))).sort();
+    shared.forEach((n) => ok(fs.existsSync(path.join(root, 'src', n + '.html')) && pages.some((p) => p.shared.includes(n)), 'partie commune facultative ' + n + ' existe et est employée'));
+    pages.forEach((p) => p.shared.forEach((n) => ok(read(p.file + '.html').includes("<?!= include('" + n + "') ?>"), p.file + ' : inclut ' + n)));
     eq(files, pages.map((p) => p.file + '.html').sort(), 'les fichiers de src/ sont les pages du registre, leurs morceaux et les trois parties communes');
     eq(new Set(parts).size, parts.length, 'un morceau n’appartient qu’à une page');
     pages.forEach((p) => {

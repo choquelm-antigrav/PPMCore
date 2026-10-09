@@ -3,9 +3,10 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.12.2">
+<meta name="ppm-version" content="0.12.3">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
+<?!= include('CommonForms') ?>
 <style>
   main { padding: 16px 24px 28px; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
   .box { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px; }
@@ -104,56 +105,8 @@ var BOOT = <?!= boot ?>;
   function fail(e) { toast(ppmErrorText(e), true); }
 
   // ------------------------------------------------------------ formulaire générique et confirmation
-  function fillSelect(sel, options, value) {
-    clear(sel);
-    options.forEach(function (o) { sel.appendChild(el('option', { value: o.value, text: o.label })); });
-    sel.value = value === undefined || value === null ? (options[0] ? options[0].value : '') : value;
-  }
-  function openForm(spec) {
-    $('gf-title').textContent = spec.title;
-    var body = $('gf-body'); clear(body);
-    var inputs = {}, pending = null;
-    var flush = function () { if (pending) { body.appendChild(el('div', { class: 'ed-row2' }, pending)); pending = null; } };
-    spec.fields.forEach(function (f) {
-      var c;
-      if (f.type === 'select') { c = el('select', { id: 'gf-' + f.key }); fillSelect(c, f.options || [], f.value); }
-      else {
-        var a = { type: f.type || 'text', id: 'gf-' + f.key, autocomplete: 'off' };
-        if (f.maxlength) a.maxlength = String(f.maxlength);
-        if (f.type === 'number') { a.min = '0'; a.step = 'any'; }
-        c = el('input', a); c.value = f.value === undefined || f.value === null ? '' : f.value;
-      }
-      inputs[f.key] = c;
-      var lab = el('label', { class: 'lbl' }, [f.label, c]);
-      if (f.half) { pending = pending || []; pending.push(lab); if (pending.length === 2) flush(); } else { flush(); body.appendChild(lab); }
-    });
-    flush();
-    if (spec.note) body.appendChild(el('p', { class: 'note', text: spec.note }));
-    state.gform = { spec: spec, inputs: inputs };
-    $('gf-error').hidden = true; $('gf-ok').textContent = spec.ok || 'Enregistrer'; $('gf-ok').disabled = false;
-    openDialog($('genform'));
-    var first = body.querySelector('input, select'); if (first) first.focus();
-  }
-  function submitForm() {
-    var g = state.gform;
-    if (!g) return;
-    var values = {};
-    Object.keys(g.inputs).forEach(function (k) { values[k] = g.inputs[k].value; });
-    $('gf-ok').disabled = true;
-    Promise.resolve().then(function () { return g.spec.onSubmit(values); }).then(function () { closeDialog($('genform')); }).catch(function (err) {
-      $('gf-ok').disabled = false;
-      var m = $('gf-error'); m.textContent = err && err.code === 'CONFLICT' ? 'Modifié entre-temps par quelqu’un d’autre : fermez, actualisez puis recommencez.' : ppmErrorText(err); m.hidden = false;
-    });
-  }
-  function openConfirm(title, text, okLabel, action) {
-    $('confirm-title').textContent = title; $('confirm-text').textContent = text;
-    $('confirm-ok').textContent = okLabel; $('confirm-error').hidden = true; $('confirm-ok').disabled = false;
-    state.confirmAction = function () {
-      $('confirm-ok').disabled = true;
-      return action().then(function () { closeDialog($('confirm')); }).catch(function (err) { $('confirm-ok').disabled = false; var m = $('confirm-error'); m.textContent = ppmErrorText(err); m.hidden = false; });
-    };
-    openDialog($('confirm'));
-  }
+  var forms = ppm.forms({ $: $, state: state });
+  var fillSelect = forms.fillSelect, openForm = forms.openForm, submitForm = forms.submitForm, openConfirm = forms.openConfirm;
 
   // ------------------------------------------------------------ chargement et rendu
   function load() {

@@ -25,7 +25,7 @@ Règles :
 
 ## Côté pages : trois parties communes et une logique propre
 
-Chaque page est `src/<Nom>.html` et inclut, dans cet ordre, `Style` (charte et composants CSS communs), `Common` (outils JavaScript communs : `ppm.el`, `ppm.call`, `ppm.toast`, `ppm.frDate`…) et `Header` (barre du haut, données préchargées). Elle ne contient que sa mise en page et sa logique. Elle parle au serveur par `call('module.action', params, write)`.
+Chaque page est `src/<Nom>.html` et inclut, dans cet ordre, `Style` (charte et composants CSS communs), `Common` (outils JavaScript communs : `ppm.el`, `ppm.call`, `ppm.toast`, `ppm.frDate`…) et `Header` (barre du haut, données préchargées). Une page qui a des formulaires inclut en plus `CommonForms` (`ppm.forms` : formulaire générique et confirmation ; champ `shared` du registre) : les autres pages n'en portent pas le poids. Elle ne contient que sa mise en page et sa logique. Elle parle au serveur par `call('module.action', params, write)`.
 
 Les pages existantes sont listées dans le **registre `src/00_Pages.gs`**, lu par le serveur, la fabrication, les aperçus et les tests.
 
@@ -43,4 +43,5 @@ Les pages existantes sont listées dans le **registre `src/00_Pages.gs`**, lu pa
 - `node tools/build.js` fabrique `dist/` (le fichier à installer). Ne jamais le modifier à la main.
 - `node tests/run.js` : les tests du serveur. `PPM_BUNDLE=dist/PPM_Core.gs node tests/run.js` : les mêmes sur le fichier fabriqué.
 - `node tests/ui_*.js` : un essai par page dans jsdom, avec le vrai Core.
+- **`A7_TESTER_DANS_APPS_SCRIPT`** : le seul test qui tourne dans le vrai Apps Script (`21_LiveTest.gs`), en lecture seule. Les tests de développement utilisent de faux services : à lancer après chaque mise à jour pour ce qu'ils ne voient pas (droits réels, fuseau horaire, autorisation, déclencheurs, agenda, temps de réponse). Tout nouvel appel de page en lecture seule s'y ajoute ; il ne doit jamais écrire.
 - `node tests/preview_demo.js 8124` : la démo complète dans un navigateur ; pour s'assurer qu'un nettoyage ne change rien, lancer l'ancienne et la nouvelle version côte à côte et comparer les captures.

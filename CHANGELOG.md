@@ -1,5 +1,12 @@
 # Journal des versions
 
+## 0.12.3 — formulaires communs, test dans Apps Script
+
+- **`A7_TESTER_DANS_APPS_SCRIPT`** : test de contrôle à lancer dans le vrai Apps Script, en lecture seule (rien n'est écrit ni envoyé, vérifié par un test). Il contrôle le moteur, les services, le fuseau horaire et les changements d'heure, l'installation, l'autorisation, les déclencheurs, l'agenda, le quota de mails, et les appels de chaque page avec le compte qui l'exécute, chronométrés.
+- **Formulaire générique et confirmation** (`ppm.forms`) : une seule version à la place de quatre copies dans Budget, Overview, Ressources et Structure ; elle accepte l'union de leurs options. Elle est dans `CommonForms.html`, incluse par ces seules pages (champ `shared` du registre) : les six autres pages sont inchangées, au même octet.
+- **Mesure de performance** (0.12.2 contre 0.12.3, démo complète, passages alternés) : taille des pages +1,5 % au total (les quatre pages à formulaires gagnent 2 à 3 Ko, les six autres 0) ; temps d'affichage sans écart mesurable (page Structure : premier schéma dessiné en 181 ms avant, 179 ms après ; découpage 233 ms avant, 225 ms après).
+- Tests : 209 serveur (dont 5 pour A7), plus douze essais de pages.
+
 ## 0.12.2 — découpage des gros fichiers
 
 Aucun changement de fonctionnement, vérifié deux fois.

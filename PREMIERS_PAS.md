@@ -1,4 +1,4 @@
-# Premiers pas : installer et essayer PPM (version 0.12.2)
+# Premiers pas : installer et essayer PPM (version 0.12.3)
 
 Environ 15 minutes. Pas besoin d'AppSheet pour ces essais. Tout ce qu'il faut est dans le dossier `dist` de l'archive : **12 fichiers**.
 
@@ -87,3 +87,11 @@ En cas de doute, exécutez `A4_DIAGNOSTIC_ACCES` dans l'éditeur (Exécuter, pui
 - **Réautoriser l'outil** : la version 0.12.0 demande en plus l'accès aux Google Docs. Après avoir copié les fichiers, exécuter `A1_INSTALLER_PPM` et accepter la nouvelle autorisation.
 - **Collecte automatique** : exécuter `A5_INSTALLER_DECLENCHEURS` pour poser les deux déclencheurs (1 h et 13 h). Elle lit **l'agenda du compte qui les a posés**, pas celui des autres membres.
 - **Sans collecte, rien n'est perdu** : la saisie manuelle d'un compte rendu et la synthèse du matin fonctionnent seules.
+
+## Vérifier dans votre Apps Script : A7
+
+Après avoir copié les fichiers et exécuté `A1_INSTALLER_PPM`, exécutez **`A7_TESTER_DANS_APPS_SCRIPT`** (Exécuter, puis Journal d'exécution). C'est un test **en lecture seule** : il n'écrit rien et n'envoie aucun mail. Il vérifie avec les vrais services Google : le moteur, le fuseau horaire et les changements d'heure, l'installation, les déclencheurs, l'accès à l'agenda, et chaque appel de page avec votre compte, chronométré.
+
+- **✓ OK** : rien à faire. **⚠ ATTENTION** : à lire, sans blocage (par exemple « déclencheurs à poser : exécuter A5 »). **✗ ÉCHEC** : à corriger ; le message dit quoi.
+- Une ligne « accès refusé à ce compte » est normale si vous n'avez pas le rôle voulu.
+- Pour demander de l'aide, copiez-collez tout le journal : chaque ligne porte le nom du contrôle, le résultat et la durée.

@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.12.2">
+<meta name="ppm-version" content="0.12.3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -346,6 +346,98 @@
   ppm.closeDialog = function (d) { if (d.close) d.close(); else d.removeAttribute('open'); };
 })(window);
 </script>
+<script>
+/**
+ * PPM — formulaire générique et fenêtre de confirmation (0.12.3), pour les pages qui en ont : Budget, Overview, Ressources, Structure.
+ * Inclus après Common par ces seules pages (champ « shared » du registre), pour ne rien ajouter aux autres.
+ */
+(function (root) {
+  'use strict';
+  var ppm = root.ppm;
+
+  /**
+   * Formulaire générique (dialogue #genform : champs décrits par un objet) et fenêtre de confirmation (#confirm).
+   * cfg : $ résolveur d'identifiant de la page (Structure : suffixe -wbs ; par défaut getElementById) ;
+   *       state objet de la page où garder le formulaire ouvert (state.gform) et l'action à confirmer (state.confirmAction) ;
+   *       closeDialog fermeture propre à la page, si elle fait plus que fermer ;
+   *       confirmClass classe du bouton de confirmation (Structure : 'btn danger') ; onConfirm rappel à l'ouverture d'une confirmation.
+   * Champs : { key, label, type: text | number | date | select | textarea, value, options, maxlength, placeholder, list, half },
+   * spec : { title, fields, ok, note, datalists, after(inputs), extra: { label, run(inputs) }, onSubmit(values) }.
+   */
+  ppm.forms = function (cfg) {
+    var $ = cfg.$ || function (id) { return document.getElementById(id); };
+    var state = cfg.state, el = ppm.el, clear = ppm.clear, closeDialog = cfg.closeDialog || ppm.closeDialog;
+
+    function fillSelect(sel, options, value) {
+      clear(sel);
+      options.forEach(function (o) { sel.appendChild(el('option', { value: o.value, text: o.label })); });
+      sel.value = value === undefined || value === null ? (options[0] ? options[0].value : '') : value;
+    }
+
+    function openForm(spec) {
+      $('gf-title').textContent = spec.title;
+      var body = $('gf-body'); clear(body);
+      var inputs = {}, pending = null;
+      var flush = function () { if (pending) { body.appendChild(el('div', { class: 'ed-row2' }, pending)); pending = null; } };
+      spec.fields.forEach(function (f) {
+        var c;
+        if (f.type === 'select') { c = el('select', { id: 'gf-' + f.key }); fillSelect(c, f.options || [], f.value); }
+        else if (f.type === 'textarea') { c = el('textarea', { id: 'gf-' + f.key, rows: '8' }); c.value = f.value || ''; }
+        else {
+          var a = { type: f.type || 'text', id: 'gf-' + f.key, autocomplete: 'off' };
+          if (f.maxlength) a.maxlength = String(f.maxlength);
+          if (f.placeholder) a.placeholder = f.placeholder;
+          if (f.list) a.list = f.list;
+          if (f.type === 'number') { a.min = '0'; a.step = 'any'; }
+          c = el('input', a); c.value = f.value === undefined || f.value === null ? '' : f.value;
+        }
+        inputs[f.key] = c;
+        var lab = el('label', { class: 'lbl' }, [f.label, c]);
+        if (f.half) { pending = pending || []; pending.push(lab); if (pending.length === 2) flush(); } else { flush(); body.appendChild(lab); }
+      });
+      flush();
+      (spec.datalists || []).forEach(function (d) { body.appendChild(el('datalist', { id: d.id }, d.values.map(function (v) { return el('option', { value: v }); }))); });
+      if (spec.note) body.appendChild(el('p', { class: 'note', text: spec.note }));
+      if (spec.after) spec.after(inputs);
+      var extra = $('gf-extra');
+      if (extra) { extra.hidden = !spec.extra; if (spec.extra) { extra.textContent = spec.extra.label; extra.onclick = function () { spec.extra.run(inputs); }; } }
+      state.gform = { spec: spec, inputs: inputs };
+      $('gf-error').hidden = true; $('gf-ok').textContent = spec.ok || 'Enregistrer'; $('gf-ok').disabled = false;
+      ppm.openDialog($('genform'));
+      var first = body.querySelector('input, select, textarea'); if (first) first.focus();
+    }
+
+    function submitForm() {
+      var g = state.gform;
+      if (!g) return;
+      var values = {};
+      Object.keys(g.inputs).forEach(function (k) { values[k] = g.inputs[k].value; });
+      $('gf-ok').disabled = true;
+      Promise.resolve().then(function () { return g.spec.onSubmit(values); }).then(function () { closeDialog($('genform')); }).catch(function (err) {
+        $('gf-ok').disabled = false;
+        var m = $('gf-error'); m.textContent = err && err.code === 'CONFLICT' ? 'Modifié entre-temps par quelqu’un d’autre : fermez, actualisez puis recommencez.' : ppmErrorText(err); m.hidden = false;
+      });
+    }
+
+    function openConfirm(title, text, okLabel, action) {
+      if (cfg.onConfirm) cfg.onConfirm();
+      $('confirm-title').textContent = title; $('confirm-text').textContent = text;
+      $('confirm-ok').textContent = okLabel; if (cfg.confirmClass) $('confirm-ok').className = cfg.confirmClass;
+      $('confirm-error').hidden = true; $('confirm-ok').disabled = false;
+      state.confirmAction = function () {
+        $('confirm-ok').disabled = true;
+        return action().then(function () { closeDialog($('confirm')); }).catch(function (err) {
+          $('confirm-ok').disabled = false;
+          var m = $('confirm-error'); m.textContent = ppmErrorText(err); m.hidden = false;
+        });
+      };
+      ppm.openDialog($('confirm'));
+    }
+
+    return { fillSelect: fillSelect, openForm: openForm, submitForm: submitForm, openConfirm: openConfirm };
+  };
+})(window);
+</script>
 <style>
   header .title { flex: 1 1 360px; }
   header .chips-row { display: flex; flex-wrap: wrap; gap: 6px; flex: 0 0 100%; margin-top: 6px; }
@@ -634,46 +726,8 @@ var BOOT = <?!= boot ?>;
   // ------------------------------------------------------------ outils
 
   // ------------------------------------------------------------ formulaire générique
-  function fillSelect(sel, options, value) {
-    clear(sel);
-    options.forEach(function (o) { sel.appendChild(el('option', { value: o.value, text: o.label })); });
-    sel.value = value === undefined || value === null ? (options[0] ? options[0].value : '') : value;
-  }
-  function openForm(spec) {
-    $('gf-title').textContent = spec.title;
-    var body = $('gf-body'); clear(body);
-    var inputs = {}, pending = null;
-    var flush = function () { if (pending) { body.appendChild(el('div', { class: 'ed-row2' }, pending)); pending = null; } };
-    spec.fields.forEach(function (f) {
-      var c;
-      if (f.type === 'select') { c = el('select', { id: 'gf-' + f.key }); fillSelect(c, f.options || [], f.value); }
-      else {
-        var a = { type: f.type || 'text', id: 'gf-' + f.key, autocomplete: 'off' };
-        if (f.maxlength) a.maxlength = String(f.maxlength);
-        c = el('input', a); c.value = f.value === undefined || f.value === null ? '' : f.value;
-      }
-      inputs[f.key] = c;
-      var lab = el('label', { class: 'lbl' }, [f.label, c]);
-      if (f.half) { pending = pending || []; pending.push(lab); if (pending.length === 2) flush(); } else { flush(); body.appendChild(lab); }
-    });
-    flush();
-    if (spec.note) body.appendChild(el('p', { class: 'note', text: spec.note }));
-    state.gform = { spec: spec, inputs: inputs };
-    $('gf-error').hidden = true; $('gf-ok').textContent = spec.ok || 'Enregistrer'; $('gf-ok').disabled = false;
-    openDialog($('genform'));
-    var first = body.querySelector('input, select'); if (first) first.focus();
-  }
-  function submitForm() {
-    var g = state.gform;
-    if (!g) return;
-    var values = {};
-    Object.keys(g.inputs).forEach(function (k) { values[k] = g.inputs[k].value; });
-    $('gf-ok').disabled = true;
-    Promise.resolve().then(function () { return g.spec.onSubmit(values); }).then(function () { closeDialog($('genform')); }).catch(function (err) {
-      $('gf-ok').disabled = false;
-      var m = $('gf-error'); m.textContent = err && err.code === 'CONFLICT' ? 'Modifié entre-temps par quelqu’un d’autre : fermez, actualisez puis recommencez.' : ppmErrorText(err); m.hidden = false;
-    });
-  }
+  var forms = ppm.forms({ $: $, state: state });
+  var fillSelect = forms.fillSelect, openForm = forms.openForm, submitForm = forms.submitForm, openConfirm = forms.openConfirm;
 
   // ------------------------------------------------------------ rendu
   function levelDots(k) {
