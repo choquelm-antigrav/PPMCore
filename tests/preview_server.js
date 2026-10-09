@@ -103,7 +103,7 @@ call('admin@entreprise.com', 'admin.set', { values: { ai_quota: 40, logo_url: 'h
 
 const src = (f) => fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8');
 const deps = process.env.UI_DEPS || path.join(__dirname, '..', 'node_modules');
-const pages = { structure: 'Structure.html', suivi: 'Suivi.html', gantt: 'Gantt.html', copilote: 'Copilote.html', compte: 'Compte.html', admin: 'Admin.html', budget: 'Budget.html', overview: 'Overview.html', ressources: 'Ressources.html' };
+const pages = { structure: 'Structure.html', suivi: 'Suivi.html', gantt: 'Gantt.html', copilote: 'Copilote.html', compte: 'Compte.html', admin: 'Admin.html', budget: 'Budget.html', overview: 'Overview.html', ressources: 'Ressources.html', actualites: 'Actualites.html' };
 function template(view) {
   let html = src(pages[view] || 'Structure.html').replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Header') ?>", src('Header.html'));
   if (view === 'gantt') {
@@ -125,7 +125,7 @@ const server = http.createServer((req, res) => {
     }); return;
   }
   const view = url.searchParams.get('view') || 'structure';
-  const defTab = { structure: 'obs', suivi: 'ecarts', gantt: '', copilote: 'synthese', compte: 'fiche', admin: 'reglages', budget: 'bilan', overview: '', ressources: '' }[view];
+  const defTab = { structure: 'obs', suivi: 'ecarts', gantt: '', copilote: 'synthese', compte: 'fiche', admin: 'reglages', budget: 'bilan', overview: '', ressources: '', actualites: '' }[view];
   const boot = { project: url.searchParams.get('project') === 'p1' ? p1.id : (url.searchParams.get('project') || ''), program: '', tab: url.searchParams.get('tab') || defTab, mode: url.searchParams.get('mode') || '', baseUrl: '', appsheetUrl: '', version: 'preview', view: view, home: 'gantt', isAdmin: (url.searchParams.get('as') || user) === 'admin@entreprise.com', canBudget: true };
   if (url.searchParams.get('program')) boot.program = prog.id;
   const as = url.searchParams.get('as');

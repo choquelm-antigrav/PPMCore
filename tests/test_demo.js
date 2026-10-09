@@ -143,11 +143,33 @@ module.exports = function () {
     w.runRules = () => { throw new Error('panne simulée'); };
     let err;
     try { w.seedDemo_(); } catch (e) { err = e; }
-    ok(err && /étape 15\/15/.test(err.message) && /panne simulée/.test(err.message) && /relancez/.test(err.message), err && err.message);
-    eq(w.getProp(w.PROP.DEMO_STEP, ''), '14', 'les 14 premières étapes sont conservées');
+    ok(err && /étape 17\/17/.test(err.message) && /panne simulée/.test(err.message) && /relancez/.test(err.message), err && err.message);
+    eq(w.getProp(w.PROP.DEMO_STEP, ''), '16', 'les 16 premières étapes sont conservées');
     w.runRules = real;
     ok(/^Démo complète/.test(w.seedDemo_()), 'relancée, elle termine');
     eq(counts(w), counts(demo.c), 'sans doublon');
+  });
+
+  test('Démo : le fil d’actualités de NAC-1 (réunions de l’agenda et saisies, actions à tous les états, synthèse du jour, réunions à trier)', () => {
+    const nac1 = c.repoList('Project').find((p) => p.code === 'NAC-1'), nac2 = c.repoList('Project').find((p) => p.code === 'NAC-2');
+    const g = call(c, 'news.get', { projectId: nac1.id });
+    eq([g.project.news_on, g.project.keywords], [true, 'NAC-1, nacelle'], 'la collecte est activée sur NAC-1');
+    eq(g.meetings.length, 8, 'huit réunions des deux dernières semaines');
+    eq([...new Set(g.meetings.map((m) => m.source))].sort(), ['Agenda', 'Manuel'], 'des réunions de l’agenda et des saisies à la main');
+    ok(g.meetings.every((m) => m.summary || m.decisions.length || m.action_list.length), 'chaque réunion a un contenu');
+    const all = g.meetings.reduce((a, m) => a.concat(m.action_list), []);
+    ok(all.length >= 17, all.length + ' actions');
+    eq(all.filter((a) => !a.owner_id).length, 0, 'tous les responsables des notes sont reconnus parmi les membres du projet : ' + all.filter((a) => !a.owner_id).map((a) => a.owner_label + ' / ' + a.text).join(' ; '));
+    eq([...new Set(all.map((a) => a.status))].sort(), ['Acceptée', 'Contestée', 'Faite', 'Proposée'], 'les quatre états d’une action');
+    ok(all.filter((a) => a.item).length >= 4 && all.filter((a) => a.due_date).length >= 15, 'des actions rattachées à un livrable, la plupart avec une échéance');
+    ok(all.every((a) => !a.due_date || a.due_date >= c.addCalendarDays(c.todayStr(), -20)), 'des échéances plausibles : proches d’aujourd’hui');
+    eq(g.digest.date, c.todayStr(), 'une synthèse publiée aujourd’hui');
+    eq(c.newsValidateDigest_(g.digest.text).ok, true, 'et au format attendu : ' + c.newsValidateDigest_(g.digest.text).found.join(', '));
+    eq(g.triage.length, 2, 'deux réunions à trier, dont NAC-1 est candidat');
+    const n2 = call(c, 'news.get', { projectId: nac2.id });
+    eq([n2.meetings.length, n2.triage.length], [1, 2], 'NAC-2 a sa réunion et voit les mêmes réunions à trier');
+    ok(c.repoList('Resource').every((r) => !r.email || r.email === ME), 'personne n’a d’adresse e-mail : aucune action ne peut déclencher de mail à un tiers');
+    eq(c.repoList('Meeting', (m) => m.status === 'À trier').length, 2);
   });
 
   // ---------------------------------------------------------------- remplacer l'ancienne démo (A6_EFFACER_ANCIENNE_DEMO)

@@ -252,41 +252,46 @@
   @media (max-width: 900px) { header { padding: 14px 12px 12px; } header .title h1 { font-size: 22px; } .zone { padding: 16px 12px 0; } }
 </style>
 <style>
-  .panel { padding: 8px 24px 32px; max-width: 1100px; }
+  .panel { padding: 8px 24px 32px; max-width: 1240px; }
   .panel[hidden] { display: none; }
-  .box { margin: 0 0 20px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); }
-  .box h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
-  .note { margin: 8px 0 0; color: var(--muted); font-size: 14px; max-width: 72ch; }
+  .zone[hidden] { display: none; }
+  .box { margin: 0 0 16px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); }
+  h2.sec { margin: 24px 0 12px; font-size: 16px; font-weight: 600; }
+  .note { margin: 8px 0 0; color: var(--muted); font-size: 14px; max-width: 76ch; }
   .muted { color: var(--muted); }
   .late { color: var(--red); font-weight: 500; }
-  .form { display: grid; gap: 12px; max-width: 560px; }
-  .grp { display: grid; gap: 12px; margin: 0; padding: 0; border: 0; min-width: 0; }
-  .grp h3 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
-  .grp + .grp { padding-top: 16px; border-top: 1px solid var(--rule); }
-  .form label.lbl { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
-  .form input[type=text], .form input[type=password], .form input[type=number], .form textarea, .editor textarea, .inline input {
-    padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; color: var(--ink); background: var(--surface); }
-  .form textarea { min-height: 84px; resize: vertical; font-family: inherit; }
-  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-  .opt { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
-  .readonly { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; font-size: 14px; }
-  .readonly dd { overflow-wrap: anywhere; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 0 0 16px; }
-  .card { padding: 12px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); }
-  .card .k { margin: 0; color: var(--muted); font-size: 13px; }
-  .card .v { margin: 2px 0 0; font-size: 20px; font-weight: 600; }
-  .card .s { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
-  .card.alert .v { color: var(--red); }
-  .card.ok .v { color: var(--green); }
-  .checks { margin: 0 0 16px; padding-left: 20px; }
-  .checks li { margin: 4px 0; color: var(--alert-ink); }
-  .editor { margin-top: 16px; }
-  .editor textarea { width: 100%; min-height: 220px; font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; }
   .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12.5px; background: var(--tint); color: var(--ink); white-space: nowrap; }
   .badge.alert { background: var(--alert-bg); color: var(--alert-ink); }
-  .badge.ok { background: var(--ok-bg); color: var(--ok-ink); }
   .badge.warn { background: var(--warn-bg); color: var(--warn-ink); }
-  @media (max-width: 700px) { .panel { padding: 8px 12px 24px; } .status .seg { display: grid; grid-template-columns: 1fr 1fr; width: 100%; } }
+  .badge.ok { background: var(--ok-bg); color: var(--ok-ink); }
+  td small { display: block; color: var(--muted); }
+  td.nowrap { white-space: nowrap; }
+  .actions-cell { display: flex; gap: 6px; flex-wrap: wrap; }
+  .actions-cell .btn { padding: 3px 10px; font-size: 13.5px; }
+  .digest { white-space: pre-wrap; line-height: 1.55; margin: 8px 0 0; font-size: 15px; }
+  .digest-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  .meeting { margin: 0 0 12px; }
+  .meeting h3 { margin: 0; font-size: 15.5px; font-weight: 600; }
+  .meeting .meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; color: var(--muted); font-size: 13.5px; margin: 2px 0 6px; }
+  .meeting p { margin: 4px 0; }
+  .meeting ul { margin: 4px 0 4px 20px; padding: 0; }
+  .meeting li { margin: 2px 0; }
+  .meeting .k { font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin: 8px 0 2px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 0 0 10px; }
+  dialog { width: min(640px, calc(100% - 32px)); max-width: none; max-height: calc(100vh - 32px); overflow: auto; }
+  .ed-grid { display: grid; gap: 12px; }
+  .ed-grid label.lbl { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
+  .ed-grid input, .ed-grid select, .ed-grid textarea, .box textarea, .box input[type=text], .box input[type=date] { padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--ink); min-width: 0; width: 100%; font: inherit; }
+  .ed-grid textarea, .box textarea { min-height: 120px; resize: vertical; }
+  textarea.big { min-height: 220px; }
+  textarea.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+  .ed-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .ed-error { margin: 12px 0 0; color: var(--red); font-weight: 500; }
+  dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  .form-grid { display: grid; gap: 10px; }
+  label.lbl { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
+  @media (max-width: 700px) { .panel { padding: 8px 12px 24px; } .ed-row2 { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -459,17 +464,68 @@
 })();
 </script>
 <header>
-  <div class="title"><h1 id="title">Administration</h1></div>
+  <div class="title">
+    <h1 id="title">Actualités</h1>
+    <span class="context" id="context"></span>
+  </div>
+  <div class="controls">
+    <select id="picker" aria-label="Projet"></select>
+  </div>
 </header>
 
-<div class="zone" id="zone-reglages"><h2 class="sec">Réglages</h2></div>
-<section class="panel" id="panel-reglages" aria-label="Réglages"></section>
-<div class="zone" id="zone-sante"><h2 class="sec">Santé de l’installation</h2></div>
-<section class="panel" id="panel-sante" aria-label="Santé"></section>
-<div class="zone" id="zone-feries"><h2 class="sec">Jours fériés</h2></div>
-<section class="panel" id="panel-feries" aria-label="Jours fériés"></section>
-<div class="zone" id="zone-journaux"><h2 class="sec">Journaux</h2></div>
-<section class="panel" id="panel-journaux" aria-label="Journaux"></section>
+<div class="zone" id="zone-digest"><h2 class="sec">Synthèse du matin</h2></div>
+<section class="panel" id="panel-digest" aria-label="Synthèse du matin"></section>
+
+<div class="zone" id="zone-actions"><h2 class="sec">Actions issues des réunions</h2></div>
+<section class="panel" id="panel-actions" aria-label="Actions"></section>
+
+<div class="zone" id="zone-feed"><h2 class="sec">Fil du projet</h2></div>
+<section class="panel" id="panel-feed" aria-label="Réunions"></section>
+
+<div class="zone" id="zone-triage" hidden><h2 class="sec">Réunions à trier</h2></div>
+<section class="panel" id="panel-triage" aria-label="Réunions à trier" hidden></section>
+
+<div class="zone" id="zone-add" hidden><h2 class="sec">Ajouter un compte rendu</h2></div>
+<section class="panel" id="panel-add" aria-label="Ajouter un compte rendu" hidden></section>
+
+<div class="zone" id="zone-settings" hidden><h2 class="sec">Repères et journal du projet</h2></div>
+<section class="panel" id="panel-settings" aria-label="Repères et journal" hidden></section>
+
+<dialog id="prompt-dialog" aria-labelledby="prompt-title">
+  <h2 id="prompt-title">Prompt du jour</h2>
+  <p class="note" id="prompt-note">Copiez ce texte, collez-le dans le carnet NotebookLM du projet (ou dans Gemini), puis revenez publier la réponse.</p>
+  <div class="ed-grid"><textarea id="prompt-text" class="big mono" readonly aria-label="Prompt du jour"></textarea></div>
+  <div class="actions">
+    <button type="button" class="btn" id="prompt-close">Fermer</button>
+    <button type="button" class="btn primary" id="prompt-copy">Copier</button>
+  </div>
+</dialog>
+
+<dialog id="publish-dialog" aria-labelledby="publish-title">
+  <form id="publish-form" novalidate>
+    <h2 id="publish-title">Publier les actualités</h2>
+    <p class="note">Collez la réponse de NotebookLM ou de Gemini. PPM vérifie les sections (décisions, dates qui bougent, risques, blocages, actions), la publie et prévient les membres du projet par mail.</p>
+    <div class="ed-grid"><textarea id="publish-text" class="big" aria-label="Synthèse à publier" placeholder="Décisions :&#10;…"></textarea>
+      <label class="lbl" style="grid-auto-flow:column;justify-content:start;align-items:center;gap:8px"><input type="checkbox" id="publish-notify" checked style="width:auto"> Envoyer aussi par mail aux membres du projet</label></div>
+    <p class="ed-error" id="publish-error" role="alert" hidden></p>
+    <div class="actions">
+      <button type="button" class="btn" id="publish-cancel">Annuler</button>
+      <button type="submit" class="btn primary" id="publish-ok">Publier</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="action-dialog" aria-labelledby="action-title">
+  <form id="action-form" novalidate>
+    <h2 id="action-title">Compléter l’action</h2>
+    <div class="ed-grid" id="action-body"></div>
+    <p class="ed-error" id="action-error" role="alert" hidden></p>
+    <div class="actions">
+      <button type="button" class="btn" id="action-cancel">Annuler</button>
+      <button type="submit" class="btn primary" id="action-ok">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
 
 <div class="toast" id="toast" role="status" hidden></div>
 
@@ -480,11 +536,9 @@ var BOOT = <?!= boot ?>;
 (function () {
   'use strict';
 
-  var state = { cfg: null, health: null, holidays: null, logs: null, editing: '' };
+  var state = { projectId: '', data: null, catalog: null, mineOnly: false, seq: 0 };
   var $ = function (id) { return document.getElementById(id); };
-  var COUNTRY_NAMES = { FR: 'France', DE: 'Allemagne', UK: 'Royaume-Uni', IN: 'Inde' };
-  var STEP_LABELS = { reconcile: 'Réconciliation du journal', rules: 'Moteur de règles', workspace: 'Agenda et Drive', directory: 'Annuaire', backup: 'Sauvegarde des classeurs' };
-  var MODES = [['off', 'Désactivé'], ['manual', 'Texte à coller dans Gemini'], ['api', 'Appel direct à Gemini (accord de la DSI requis)']];
+  var STATUS_TONE = { 'Proposée': 'warn', 'Acceptée': '', 'Contestée': 'alert', 'Faite': 'ok' };
 
   // ------------------------------------------------------------ outils
   function el(tag, attrs, children) {
@@ -524,212 +578,271 @@ var BOOT = <?!= boot ?>;
         .uiCall(action, params || {}, write ? uuid() : null);
     });
   }
-  function loading(p) { clear(p); p.appendChild(el('p', { class: 'loading', text: 'Chargement…' })); }
-  function empty(p, title, text) { clear(p); p.appendChild(el('div', { class: 'empty' }, [el('strong', { text: title }), el('span', { text: text || '' })])); }
+  function fail(e) { toast(ppmErrorText(e), true); }
+  function openDialog(d) { if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
+  function closeDialog(d) { if (d.close) d.close(); else d.removeAttribute('open'); }
+  function frDate(s) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || '')); return m ? m[3] + '/' + m[2] + '/' + m[1] : ''; }
   function plural(n, one, many) { return n + ' ' + (Math.abs(n) > 1 ? many : one); }
-  function frDateTime(s) {
-    if (!s) return '—';
-    var d = new Date(s);
-    if (isNaN(d.getTime())) return String(s);
-    var z = function (n) { return (n < 10 ? '0' : '') + n; };
-    return z(d.getDate()) + '/' + z(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + z(d.getHours()) + ':' + z(d.getMinutes());
+  function sel(list, value, emptyLabel) {
+    var s = el('select', { class: 'inline' });
+    if (emptyLabel !== null) s.appendChild(el('option', { value: '', text: emptyLabel || '—' }));
+    list.forEach(function (o) { s.appendChild(el('option', { value: o.id, text: o.name })); });
+    s.value = value || '';
+    return s;
   }
-  function frDate(s) { if (!s) return ''; var p = String(s).slice(0, 10).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
-  function seconds(ms) { return ms < 1000 ? '< 1 s' : Math.round(ms / 100) / 10 + ' s'; }
-  function box(title, children) { return el('div', { class: 'box' }, [el('h2', { text: title })].concat(children)); }
-  function card(k, v, s, tone) { return el('div', { class: 'card' + (tone ? ' ' + tone : '') }, [el('p', { class: 'k', text: k }), el('p', { class: 'v', text: v }), s ? el('p', { class: 's', text: s }) : null]); }
-  function table(head, rows) {
-    return el('div', { class: 'table-wrap' }, [el('table', {}, [
-      el('thead', {}, [el('tr', {}, head.map(function (h) { return el('th', { scope: 'col', text: h }); }))]), el('tbody', {}, rows)])]);
-  }
-  function field(label, input) { return el('label', { class: 'lbl' }, [label, input]); }
 
-  // ------------------------------------------------------------ navigation
-  /** Plus d'onglets : toutes les rubriques se chargent et s'affichent ensemble. */
-  function render() {
-    renderSettings();
-    loadHealth();
-    loadHolidays();
-    loadLogs();
+  // ------------------------------------------------------------ synthèse du matin
+  function renderDigest() {
+    var d = state.data, box = $('panel-digest'), a = d.access;
+    clear(box);
+    var card = el('div', { class: 'box' });
+    if (d.digest) {
+      var late = d.digest.date !== d.today;
+      card.appendChild(el('div', { class: 'digest-head' }, [
+        el('strong', { text: 'Synthèse du ' + frDate(d.digest.date) }),
+        el('span', { class: 'badge' + (late ? ' warn' : ' ok'), text: late ? 'pas celle d’aujourd’hui' : 'publiée aujourd’hui' }),
+        el('span', { class: 'muted', text: 'par ' + (d.digest.by || '—') })
+      ]));
+      card.appendChild(el('p', { class: 'digest', id: 'digest-text', text: d.digest.text }));
+    } else {
+      card.appendChild(el('p', { class: 'muted', id: 'digest-empty', text: 'Aucune synthèse publiée pour l’instant.' + (d.meetings.length ? ' Le récapitulatif du matin reprend alors le journal brut des réunions.' : '') }));
+    }
+    if (a.manage) {
+      card.appendChild(el('div', { class: 'row', style: 'margin-top:12px' }, [
+        el('button', { type: 'button', class: 'btn', id: 'prompt-btn', text: 'Copier le prompt du jour', onclick: showPrompt }),
+        el('button', { type: 'button', class: 'btn primary', id: 'publish-btn', text: 'Publier les actualités', onclick: function () { $('publish-error').hidden = true; $('publish-text').value = ''; openDialog($('publish-dialog')); } })
+      ]));
+      card.appendChild(el('p', { class: 'note', text: 'Chaque matin : resynchroniser la source du journal dans NotebookLM, coller le prompt du jour, puis publier la réponse ici (environ trois minutes).' }));
+    }
+    box.appendChild(card);
   }
-  function failed(p, e) { empty(p, 'Chargement impossible.', (e && e.message) || 'Erreur inconnue.'); }
+  function showPrompt() {
+    call('news.digest.prompt', { projectId: state.projectId }).then(function (r) {
+      $('prompt-text').value = r.prompt;
+      $('prompt-note').textContent = 'Copiez ce texte, collez-le dans le carnet NotebookLM du projet (ou dans Gemini), puis revenez publier la réponse. ' + plural(r.meetings, 'réunion', 'réunions') + ' depuis le ' + frDate(r.since) + '.';
+      openDialog($('prompt-dialog'));
+    }).catch(fail);
+  }
+  function copyPrompt() {
+    var ta = $('prompt-text');
+    var done = function () { toast('Prompt copié.'); };
+    var fallback = function () { ta.focus(); ta.select(); try { if (document.execCommand('copy')) { done(); return; } } catch (e) { /* ignoré */ } toast('Texte sélectionné : faites Ctrl+C (ou ⌘+C).'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value).then(done, fallback); else fallback();
+  }
+  function submitPublish(e) {
+    e.preventDefault();
+    var err = $('publish-error'); err.hidden = true;
+    $('publish-ok').disabled = true;
+    call('news.digest.publish', { projectId: state.projectId, text: $('publish-text').value, notify: $('publish-notify').checked }, true).then(function (r) {
+      closeDialog($('publish-dialog'));
+      toast('Actualités publiées' + (r.notified ? ' et envoyées à ' + plural(r.notified, 'personne', 'personnes') : '') + '.');
+      return load();
+    }).catch(function (x) { err.textContent = ppmErrorText(x); err.hidden = false; }).then(function () { $('publish-ok').disabled = false; });
+  }
 
-  // ------------------------------------------------------------ Réglages
-  function renderSettings() {
-    var panel = $('panel-reglages'), c = state.cfg;
-    clear(panel);
-    var admins = el('textarea', { id: 'f-admins', 'aria-label': 'Administrateurs' });
-    admins.value = c.admins.join('\n');
-    var mode = el('select', { id: 'f-mode', 'aria-label': 'Mode du copilote' }, MODES.map(function (m) { return el('option', { value: m[0], text: m[1] }); }));
-    mode.value = c.ai_mode;
-    var model = el('input', { type: 'text', id: 'f-model', maxlength: '80', value: c.ai_model, placeholder: 'nom du modèle validé' });
-    var quota = el('input', { type: 'number', id: 'f-quota', min: '1', max: '500', step: '1', value: String(c.ai_quota) });
-    var key = el('input', { type: 'password', id: 'f-key', autocomplete: 'new-password', placeholder: c.gemini_key_set ? '•••• clé enregistrée (laisser vide pour la garder)' : 'coller la clé ici' });
-    var clearKey = el('input', { type: 'checkbox', id: 'f-clear-key' });
-    var remOn = el('input', { type: 'checkbox', id: 'f-reminder-on' });
-    remOn.checked = !!c.reminder_on;
-    var remDays = el('input', { type: 'number', id: 'f-reminder-days', min: '1', max: '60', step: '1', value: String(c.reminder_days) });
-    var initialDomains = String(c.domain || '');
-    var domainsInput = el('input', { type: 'text', id: 'f-domains', 'aria-label': 'Domaines autorisés', autocomplete: 'off' });
-    domainsInput.value = initialDomains;
-    var appsheet = el('input', { type: 'text', id: 'f-appsheet', value: c.appsheet_url, placeholder: 'https://…' });
-    var logo = el('input', { type: 'text', id: 'f-logo', value: c.logo_url, placeholder: 'https://… (logo officiel, portail de marque)' });
-    var folder = el('input', { type: 'text', id: 'f-folder', value: c.projects_folder_id, placeholder: 'identifiant du dossier Drive' });
-    var save = el('button', { type: 'submit', class: 'btn primary', id: 'save-cfg', text: 'Enregistrer les réglages' });
-    var form = el('form', { class: 'form', onsubmit: function (e) {
-      e.preventDefault();
-      var values = {
-        admins: admins.value.split(/[\s,;]+/).filter(Boolean), ai_mode: mode.value, ai_model: model.value, ai_quota: Number(quota.value),
-        appsheet_url: appsheet.value, logo_url: logo.value, projects_folder_id: folder.value,
-        reminder_on: remOn.checked, reminder_days: Number(remDays.value)
-      };
-      if (domainsInput.value.trim() !== initialDomains.trim()) values.domains = domainsInput.value;
-      if (key.value.trim()) values.gemini_key = key.value.trim();
-      if (clearKey.checked) values.clear_gemini_key = true;
-      save.disabled = true;
-      call('admin.set', { values: values }, true).then(function (r) {
-        state.cfg = r;
-        toast(r.changed.length ? plural(r.changed.length, 'réglage enregistré', 'réglages enregistrés') + '.' : 'Aucun changement.');
-        renderSettings();
-      }).catch(function (err) {
-        save.disabled = false;
-        var m = $('cfg-error'); m.textContent = err.message || 'Enregistrement impossible.'; m.hidden = false;
-        toast(err.message || 'Enregistrement impossible.', true);
-      });
-    } }, [
-      el('p', { class: 'late', id: 'cfg-error', role: 'alert', hidden: 'hidden' }),
-      el('section', { class: 'grp' }, [el('h3', { text: 'Administrateurs' }), field('Une adresse par ligne ; vous devez rester dans la liste', admins)]),
-      el('section', { class: 'grp' }, [el('h3', { text: 'Accès à l’outil' }),
-        field('Domaines autorisés, séparés par une virgule (au plus cinq ; vous ne pouvez pas retirer le vôtre)', domainsInput)]),
-      c.copilot_enabled ? el('section', { class: 'grp' }, [el('h3', { text: 'Copilote IA' }),
-        field('Mode', mode), field('Modèle Gemini', model), field('Quota : demandes par personne et par jour', quota),
-        field('Clé Gemini (jamais réaffichée)', key),
-        el('label', { class: 'opt' }, [clearKey, el('span', { text: 'Supprimer la clé enregistrée' })])]) : null,
-      el('section', { class: 'grp' }, [el('h3', { text: 'Rappels avant livraison' }),
-        el('label', { class: 'opt' }, [remOn, el('span', { text: 'Ajouter un rappel dans l’agenda du responsable de chaque livrable' })]),
-        field('Délai par défaut, en jours ouvrés avant la livraison (chacun peut régler le sien)', remDays)]),
-      el('section', { class: 'grp' }, [el('h3', { text: 'Adresses (facultatives)' }),
-        field('Application AppSheet', appsheet), field('Logo Airbus', logo), field('Dossier Drive des projets', folder)]),
-      el('div', { class: 'row' }, [save])
+  // ------------------------------------------------------------ actions
+  function decide(a, decision, label) {
+    call('news.action.decide', { id: a.id, decision: decision }, true).then(function () { toast(label); return load(); }).catch(fail);
+  }
+  function renderActions() {
+    var d = state.data, box = $('panel-actions'); clear(box);
+    var me = d.me || '';
+    var list = d.actions.filter(function (a) { return !state.mineOnly || (me && a.owner_id === me); });
+    var top = el('div', { class: 'filters' }, [
+      el('label', { class: 'row', style: 'margin:0' }, [el('input', { type: 'checkbox', id: 'mine-only' }), ' Seulement les miennes']),
+      el('span', { class: 'muted', id: 'actions-count', text: plural(list.length, 'action ouverte', 'actions ouvertes') })
     ]);
-    panel.appendChild(box('Réglages de l’outil', [form,
-      el('p', { class: 'note', text: 'Le mode « api » envoie des données de projet à Gemini : ne l’activez qu’avec l’accord de la DSI. La clé n’est stockée que dans les propriétés du script.' })]));
-    var ro = el('dl', { class: 'readonly' });
-    [['Domaines autorisés', c.domain], ['Adresse de l’application', c.webapp_url || 'inconnue : ouvrir l’application une fois'], ['Dossier des sauvegardes', c.backup_folder_id || 'pas encore créé']].forEach(function (x) {
-      ro.appendChild(el('dt', { class: 'muted', text: x[0] })); ro.appendChild(el('dd', { text: x[1] }));
+    top.querySelector('input').checked = state.mineOnly;
+    top.querySelector('input').addEventListener('change', function () { state.mineOnly = this.checked; renderActions(); });
+    box.appendChild(top);
+    if (!list.length) { box.appendChild(el('div', { class: 'box' }, [el('p', { class: 'muted', id: 'actions-empty', text: state.mineOnly ? 'Aucune action ne vous est confiée.' : 'Aucune action ouverte.' })])); return; }
+    var table = el('table', { id: 'actions-table' });
+    table.appendChild(el('thead', {}, [el('tr', {}, ['Action', 'Responsable', 'Échéance', 'Livrable', 'Statut', ''].map(function (h) { return el('th', { text: h }); }))]));
+    var tb = el('tbody');
+    list.forEach(function (a) {
+      var late = a.due_date && a.due_date < d.today;
+      var mine = me && a.owner_id === me;
+      var btns = [];
+      if (mine || d.access.manage) {
+        if (a.status !== 'Acceptée' && a.status !== 'Faite') btns.push(el('button', { type: 'button', class: 'btn', 'data-act': 'accept', text: 'Accepter', onclick: function () { decide(a, 'accept', 'Action acceptée.'); } }));
+        if (a.status !== 'Contestée' && a.status !== 'Faite') btns.push(el('button', { type: 'button', class: 'btn', 'data-act': 'contest', text: 'Contester', onclick: function () { decide(a, 'contest', 'Action contestée : le chef de projet est prévenu.'); } }));
+        btns.push(el('button', { type: 'button', class: 'btn', 'data-act': 'done', text: 'Faite', onclick: function () { decide(a, 'done', 'Action marquée faite.'); } }));
+      }
+      if (d.access.manage) btns.push(el('button', { type: 'button', class: 'btn', 'data-act': 'edit', text: 'Compléter', onclick: function () { openActionForm(a); } }));
+      tb.appendChild(el('tr', { 'data-id': a.id }, [
+        el('td', {}, [a.text]),
+        el('td', {}, [a.owner || (a.owner_label ? el('span', {}, [a.owner_label, el('small', { text: 'non reconnu : à compléter' })]) : el('span', { class: 'muted', text: '—' }))]),
+        el('td', { class: 'nowrap' + (late ? ' late' : ''), text: a.due_date ? frDate(a.due_date) + (late ? ' (en retard)' : '') : '—' }),
+        el('td', { text: a.item || '—' }),
+        el('td', {}, [el('span', { class: 'badge ' + (STATUS_TONE[a.status] || ''), text: a.status })]),
+        el('td', {}, [el('div', { class: 'actions-cell' }, btns)])
+      ]));
     });
-    panel.appendChild(box('Lecture seule', [ro, el('p', { class: 'note', text: 'Le manifeste, le déploiement et les autorisations se gèrent dans l’éditeur Apps Script.' })]));
+    table.appendChild(tb);
+    box.appendChild(el('div', { class: 'table-wrap' }, [table]));
+  }
+  function openActionForm(a) {
+    var d = state.data, body = $('action-body'); clear(body);
+    var text = el('textarea', { id: 'af-text', maxlength: '300' }); text.value = a.text;
+    var owner = sel(d.people, a.owner_id, '— à désigner —'); owner.id = 'af-owner';
+    var due = el('input', { type: 'date', id: 'af-due' }); due.value = a.due_date || '';
+    var item = sel(d.items, a.item_id, '— aucun —'); item.id = 'af-item';
+    body.appendChild(el('label', { class: 'lbl' }, ['Action', text]));
+    body.appendChild(el('div', { class: 'ed-row2' }, [el('label', { class: 'lbl' }, ['Responsable', owner]), el('label', { class: 'lbl' }, ['Échéance', due])]));
+    body.appendChild(el('label', { class: 'lbl' }, ['Livrable concerné', item]));
+    $('action-error').hidden = true;
+    state.editing = a;
+    openDialog($('action-dialog'));
+  }
+  function submitAction(e) {
+    e.preventDefault();
+    var a = state.editing; if (!a) return;
+    call('news.action.update', { id: a.id, version: a.version, patch: { text: $('af-text').value, owner_resource_id: $('af-owner').value, due_date: $('af-due').value, item_id: $('af-item').value } }, true)
+      .then(function () { closeDialog($('action-dialog')); toast('Action enregistrée.'); return load(); })
+      .catch(function (x) { $('action-error').textContent = ppmErrorText(x); $('action-error').hidden = false; });
   }
 
-  // ------------------------------------------------------------ Santé
-  function loadHealth() {
-    var panel = $('panel-sante');
-    loading(panel);
-    call('admin.health', {}).then(function (h) { state.health = h; renderHealth(); }).catch(function (e) { failed(panel, e); });
-  }
-  function renderHealth() {
-    var panel = $('panel-sante'), h = state.health, n = h.night;
-    clear(panel);
-    var cards = el('div', { class: 'cards' });
-    cards.appendChild(card('Installation', h.ok ? 'Conforme' : plural(h.checks.length, 'point à corriger', 'points à corriger'), 'version ' + h.version, h.ok ? 'ok' : 'alert'));
-    cards.appendChild(card('Dernière nuit', n ? (n.ok ? 'Réussie' : 'Échec') : 'Jamais exécutée', n ? frDateTime(n.endedAt) : 'lancer nightlyRun ou installTriggers', n && !n.ok ? 'alert' : (n ? 'ok' : '')));
-    cards.appendChild(card('Dernier récapitulatif', h.digest ? plural(h.digest.sent, 'mail', 'mails') : '—', h.digest ? frDateTime(h.digest.at) + (h.digest.skipped ? ', ' + h.digest.skipped + ' reporté(s)' : '') : 'pas encore envoyé'));
-    if (h.copilot_enabled) cards.appendChild(card('Copilote', h.ai.mode === 'api' ? h.ai.used_today + ' demandes' : 'IA ' + (h.ai.mode === 'off' ? 'désactivée' : 'en copier-coller'), h.ai.mode === 'api' ? 'aujourd’hui, limite ' + h.ai.per_person_limit + ' par personne' : ''));
-    if (h.mail_quota !== null) cards.appendChild(card('Mails restants', String(h.mail_quota), 'quota du jour', h.mail_quota < 50 ? 'alert' : ''));
-    cards.appendChild(card('Cache des lectures', h.cache ? 'Actif' : 'Inactif', h.cache ? 'les tables ne sont relues que si elles ont changé' : 'chaque page relit les feuilles'));
-    cards.appendChild(card('Données', plural(h.counts.projects, 'projet', 'projets') + ', ' + plural(h.counts.items, 'élément', 'éléments'), plural(h.counts.people, 'personne', 'personnes') + ', ' + plural(h.counts.administrators, 'administrateur', 'administrateurs')));
-    panel.appendChild(cards);
-    if (h.checks.length) panel.appendChild(el('ul', { class: 'checks', id: 'checks' }, h.checks.map(function (c) { return el('li', { text: c }); })));
-    if (h.running) panel.appendChild(el('p', { class: 'note', text: 'Un traitement de nuit est en cours (étape « ' + (STEP_LABELS[h.running.step] || h.running.step) + ' »).' }));
-    if (h.triggers) {
-      panel.appendChild(el('p', { class: 'note', id: 'triggers', text: 'Déclencheurs : nuit ' + h.triggers.nightlyRun + ', récapitulatif de 7 h ' + h.triggers.sendDigests + (h.triggers.continueNightly ? ', reprise en cours ' + h.triggers.continueNightly : '') + '.' }));
+  // ------------------------------------------------------------ fil des réunions
+  function renderFeed() {
+    var d = state.data, box = $('panel-feed'); clear(box);
+    if (!d.meetings.length) {
+      box.appendChild(el('div', { class: 'box' }, [el('p', { class: 'muted', id: 'feed-empty', text: 'Aucune réunion retenue pour ce projet ces 45 derniers jours.' + (d.access.add ? ' Ajoutez un compte rendu ci-dessous, ou activez la collecte dans « Repères et journal ».' : '') })]));
+      return;
     }
-    if (n) {
-      panel.appendChild(el('h2', { style: 'font-size:16px;margin:20px 0 8px', text: 'Étapes de la dernière nuit' }));
-      panel.appendChild(table(['Étape', 'Durée', 'Résultat'], n.steps.map(function (s) {
-        var bad = !n.ok && n.failedStep === s.name;
-        return el('tr', {}, [el('td', { text: STEP_LABELS[s.name] || s.name }), el('td', { text: seconds(s.ms) }),
-          el('td', {}, [el('span', { class: 'badge ' + (bad ? 'alert' : 'ok'), text: bad ? 'Échec : ' + n.error : 'Terminée' })])]);
-      })));
-    }
-    panel.appendChild(el('div', { class: 'row', style: 'margin-top:16px' }, [el('button', { type: 'button', class: 'btn', id: 'health-reload', text: 'Vérifier à nouveau', onclick: loadHealth })]));
-  }
-
-  // ------------------------------------------------------------ Jours fériés
-  function loadHolidays() {
-    var panel = $('panel-feries');
-    loading(panel);
-    call('admin.holidays', {}).then(function (r) { state.holidays = r; renderHolidays(); }).catch(function (e) { failed(panel, e); });
-  }
-  function renderHolidays() {
-    var panel = $('panel-feries'), r = state.holidays;
-    clear(panel);
-    var years = el('input', { type: 'text', id: 'hol-years', placeholder: 'ex. 2029, 2030', 'aria-label': 'Années à ajouter', style: 'padding:8px 10px;border:1px solid var(--rule);border-radius:6px;width:180px' });
-    panel.appendChild(box('Ajouter des années', [el('div', { class: 'row' }, [years,
-      el('button', { type: 'button', class: 'btn', id: 'hol-add', text: 'Ajouter', onclick: function () {
-        var list = years.value.split(/[\s,;]+/).filter(Boolean).map(Number);
-        call('admin.holidays.seed', { years: list }, true).then(function (res) { state.holidays = res; toast('Années ajoutées : jours fériés calculés pour les 4 pays.'); renderHolidays(); })
-          .catch(function (e) { toast(e.message || 'Ajout impossible.', true); });
-      } })]),
-      el('p', { class: 'note', text: 'Les jours fériés se calculent automatiquement. Ajustez-les ici pour un site (pont, fermeture) ou pour compléter l’Inde, dont seuls les jours nationaux sont fournis. Les projets en tiennent compte aussitôt.' })]));
-    var rows = r.sets.map(function (s) {
-      return el('tr', { 'data-set': s.id }, [el('td', { text: (COUNTRY_NAMES[s.country] || s.country) + ' (' + s.country + ')' }), el('td', { text: String(s.year) }), el('td', { class: 'num', text: String(s.count) }),
-        el('td', {}, [el('button', { type: 'button', class: 'btn', text: 'Modifier', onclick: function () { state.editing = s.id; renderHolidays(); } })])]);
+    d.meetings.forEach(function (m) {
+      var card = el('div', { class: 'box meeting', 'data-id': m.id });
+      card.appendChild(el('h3', { text: m.title }));
+      card.appendChild(el('div', { class: 'meta' }, [
+        el('span', { text: frDate(m.held_on) }),
+        el('span', { class: 'badge', text: m.source === 'Agenda' ? 'agenda' : 'saisi à la main' }),
+        m.participants ? el('span', { text: m.participants }) : null,
+        m.doc_url ? el('a', { href: m.doc_url, target: '_blank', rel: 'noopener', text: 'Source' }) : null
+      ]));
+      if (m.summary) card.appendChild(el('p', { text: m.summary }));
+      if (m.decisions.length) {
+        card.appendChild(el('p', { class: 'k', text: 'Décisions' }));
+        card.appendChild(el('ul', {}, m.decisions.map(function (t) { return el('li', { text: t }); })));
+      }
+      if (m.action_list.length) {
+        card.appendChild(el('p', { class: 'k', text: 'Actions' }));
+        card.appendChild(el('ul', {}, m.action_list.map(function (a) {
+          return el('li', {}, [a.text, ' — ', a.owner || a.owner_label || 'sans responsable', a.due_date ? ' — ' + frDate(a.due_date) : '', ' ', el('span', { class: 'badge ' + (STATUS_TONE[a.status] || ''), text: a.status })]);
+        })));
+      }
+      box.appendChild(card);
     });
-    panel.appendChild(table(['Pays', 'Année', 'Jours', ''], rows));
-    var set = r.sets.filter(function (s) { return s.id === state.editing; })[0];
-    if (set) {
-      var ta = el('textarea', { id: 'hol-text', 'aria-label': 'Jours fériés de ' + set.id });
-      ta.value = set.dates.map(function (d) { return d.date + (d.name ? ' ' + d.name : ''); }).join('\n');
-      panel.appendChild(el('div', { class: 'editor box' }, [
-        el('h2', { text: 'Jours fériés ' + (COUNTRY_NAMES[set.country] || set.country) + ' ' + set.year }),
-        el('p', { class: 'note', text: 'Une date par ligne : AAAA-MM-JJ, puis un nom facultatif.' }), ta,
-        el('div', { class: 'row', style: 'margin-top:12px' }, [
-          el('button', { type: 'button', class: 'btn primary', id: 'hol-save', text: 'Enregistrer', onclick: function () {
-            var dates = ta.value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean).map(function (l) {
-              var i = l.search(/\s/);
-              return i < 0 ? { date: l, name: '' } : { date: l.slice(0, i), name: l.slice(i).trim() };
-            });
-            call('admin.holidays.set', { id: set.id, version: set.version, dates: dates }, true).then(function () { toast('Jours fériés enregistrés.'); state.editing = ''; loadHolidays(); })
-              .catch(function (e) { toast(e.code === 'CONFLICT' ? 'Ce jeu a été modifié entre-temps : rechargez puis recommencez.' : (e.message || 'Enregistrement impossible.'), true); });
-          } }),
-          el('button', { type: 'button', class: 'btn', text: 'Annuler', onclick: function () { state.editing = ''; renderHolidays(); } })])]));
-    }
   }
 
-  // ------------------------------------------------------------ Journaux
-  function loadLogs() {
-    var panel = $('panel-journaux');
-    loading(panel);
-    call('admin.logs', {}).then(function (l) { state.logs = l; renderLogs(); }).catch(function (e) { failed(panel, e); });
+  // ------------------------------------------------------------ à trier, ajout, repères
+  function renderTriage() {
+    var d = state.data, on = d.access.manage && d.triage.length;
+    $('zone-triage').hidden = !on; $('panel-triage').hidden = !on;
+    var box = $('panel-triage'); clear(box);
+    if (!on) return;
+    box.appendChild(el('p', { class: 'note', text: 'Ces réunions pouvaient aller dans plusieurs projets (à égalité de membres invités, ou plusieurs repères dans le titre). Rattachez-les à ce projet ou ignorez-les.' }));
+    d.triage.forEach(function (m) {
+      box.appendChild(el('div', { class: 'box meeting', 'data-id': m.id }, [
+        el('h3', { text: m.title }),
+        el('div', { class: 'meta' }, [el('span', { text: frDate(m.held_on) }), m.participants ? el('span', { text: m.participants }) : null]),
+        m.summary ? el('p', { text: m.summary }) : null,
+        el('div', { class: 'actions-cell' }, [
+          el('button', { type: 'button', class: 'btn primary', 'data-act': 'assign', text: 'Rattacher à ce projet', onclick: function () {
+            call('news.triage.assign', { id: m.id, projectId: state.projectId }, true).then(function () { toast('Réunion rattachée.'); return load(); }).catch(fail); } }),
+          el('button', { type: 'button', class: 'btn', 'data-act': 'drop', text: 'Ignorer', onclick: function () {
+            call('news.triage.drop', { id: m.id }, true).then(function () { toast('Réunion ignorée.'); return load(); }).catch(fail); } })
+        ])
+      ]));
+    });
   }
-  function renderLogs() {
-    var panel = $('panel-journaux'), l = state.logs;
-    clear(panel);
-    panel.appendChild(el('h2', { style: 'font-size:16px;margin:8px 0', text: 'Derniers changements' }));
-    if (!l.changes.length) panel.appendChild(el('p', { class: 'note', text: 'Aucun changement enregistré.' }));
-    else panel.appendChild(table(['Quand', 'Qui', 'Quoi', 'Champ', 'Avant → Après', 'Origine'], l.changes.map(function (e) {
-      return el('tr', {}, [el('td', { text: frDateTime(e.at) }), el('td', { text: e.actor }), el('td', { text: e.what }), el('td', { text: e.field }),
-        el('td', { text: (e.old_value || '∅') + ' → ' + (e.new_value || '∅') }), el('td', { text: e.source })]);
-    })));
-    if (l.copilot_enabled) panel.appendChild(el('h2', { style: 'font-size:16px;margin:24px 0 8px', text: 'Échanges avec le copilote' }));
-    if (!l.copilot_enabled) { /* copilote en suspens : pas d'échanges à montrer */ } else if (!l.ai.length) panel.appendChild(el('p', { class: 'note', text: 'Aucun échange enregistré.' }));
-    else panel.appendChild(table(['Quand', 'Qui', 'Objet', 'Mode', 'Chiffres non vérifiés', 'Avis', 'Extrait'], l.ai.map(function (x) {
-      return el('tr', {}, [el('td', { text: frDateTime(x.at) }), el('td', { text: x.actor }), el('td', { text: x.purpose }), el('td', { text: x.mode }),
-        el('td', {}, [x.unverified ? el('span', { class: 'badge warn', text: x.unverified }) : '—']), el('td', { text: x.feedback || '—' }), el('td', { text: x.excerpt })]);
-    })));
+  function renderAdd() {
+    var d = state.data, on = d.access.add;
+    $('zone-add').hidden = !on; $('panel-add').hidden = !on;
+    var box = $('panel-add'); clear(box);
+    if (!on) return;
+    var title = el('input', { type: 'text', id: 'add-title', maxlength: '140', placeholder: 'Revue de conception fuselage' });
+    var held = el('input', { type: 'date', id: 'add-date' }); held.value = d.today;
+    var who = el('input', { type: 'text', id: 'add-who', maxlength: '400', placeholder: 'Facultatif : noms des participants' });
+    var doc = el('input', { type: 'text', id: 'add-doc', placeholder: 'Facultatif : lien du Google Doc (notes Gemini ou compte rendu)' });
+    var text = el('textarea', { id: 'add-text', class: 'big', placeholder: 'Collez ici les notes Gemini ou le compte rendu.\nLes lignes « Prochaines étapes » avec un nom, ou « Action : … — Nom — 30/10 », deviennent des actions proposées.' });
+    var err = el('p', { class: 'ed-error', id: 'add-error', role: 'alert', hidden: '' });
+    var ok = el('button', { type: 'button', class: 'btn primary', id: 'add-ok', text: 'Ajouter au fil', onclick: function () {
+      err.hidden = true; ok.disabled = true;
+      call('news.meeting.add', { projectId: state.projectId, title: title.value, held_on: held.value, participants: who.value, text: text.value, docUrl: doc.value }, true).then(function (r) {
+        toast(r.duplicate ? 'Ce compte rendu est déjà dans le fil.' : 'Ajouté : ' + plural(r.detected || 0, 'action détectée', 'actions détectées') + '.');
+        return load();
+      }).catch(function (x) { err.textContent = ppmErrorText(x); err.hidden = false; }).then(function () { ok.disabled = false; });
+    } });
+    var form = el('div', { class: 'box form-grid' }, [
+      el('div', { class: 'ed-row2' }, [el('label', { class: 'lbl' }, ['Titre de la réunion', title]), el('label', { class: 'lbl' }, ['Date', held])]),
+      el('label', { class: 'lbl' }, ['Participants', who]),
+      el('label', { class: 'lbl' }, ['Lien du document', doc]),
+      el('label', { class: 'lbl' }, ['Compte rendu', text]),
+      err, el('div', {}, [ok])
+    ]);
+    box.appendChild(form);
+  }
+  function renderSettings() {
+    var d = state.data, on = d.access.manage;
+    $('zone-settings').hidden = !on; $('panel-settings').hidden = !on;
+    var box = $('panel-settings'); clear(box);
+    if (!on) return;
+    var enabled = el('input', { type: 'checkbox', id: 'set-on', style: 'width:auto' }); enabled.checked = d.project.news_on;
+    var words = el('textarea', { id: 'set-words', maxlength: '500', placeholder: 'NAC-1, nacelle, ✈️ (séparés par des virgules)' }); words.value = d.project.keywords;
+    words.style.minHeight = '64px';
+    var save = el('button', { type: 'button', class: 'btn primary', id: 'set-save', text: 'Enregistrer', onclick: function () {
+      call('news.settings.set', { projectId: state.projectId, enabled: enabled.checked, keywords: words.value }, true).then(function () { toast('Réglages enregistrés.'); return load(); }).catch(fail); } });
+    box.appendChild(el('div', { class: 'box form-grid' }, [
+      el('label', { class: 'row', style: 'margin:0' }, [enabled, ' Activer la collecte automatique des réunions pour ce projet']),
+      el('label', { class: 'lbl' }, ['Repères : un mot du titre rattache une réunion à ce projet (lettres, sigle, logo, titre)', words]),
+      el('p', { class: 'note', style: 'margin:0', text: 'Une réunion est aussi retenue quand au moins deux membres du projet y sont invités. La collecte lit l’agenda du compte qui exécute l’outil, à 1 h et à 13 h' + (d.project.last_collect ? ' ; dernière collecte : ' + frDate(d.project.last_collect) + '.' : '.') }),
+      el('div', {}, [save])
+    ]));
+    var jl = el('div', { class: 'box' });
+    jl.appendChild(el('strong', { text: 'Journal du projet' }));
+    jl.appendChild(el('p', { class: 'note', id: 'journal-note' }, [d.project.journal_url ? el('span', {}, ['Un Google Doc tenu à jour par PPM, à ajouter comme source du carnet NotebookLM : ', el('a', { href: d.project.journal_url, target: '_blank', rel: 'noopener', id: 'journal-link', text: 'ouvrir le journal' }), '.']) : 'Pas encore créé : il se crée à la première collecte, ou tout de suite avec le bouton ci-dessous.']));
+    jl.appendChild(el('div', { class: 'row', style: 'margin-top:10px' }, [el('button', { type: 'button', class: 'btn', id: 'journal-btn', text: 'Mettre à jour le journal maintenant', onclick: function () {
+      call('news.journal.update', { projectId: state.projectId }, true).then(function (r) { toast('Journal ' + (r.created ? 'créé' : 'mis à jour') + ' : ' + plural(r.meetings, 'réunion', 'réunions') + '.'); return load(); }).catch(fail); } })]));
+    box.appendChild(jl);
+  }
+
+  // ------------------------------------------------------------ chargement
+  function render() {
+    var d = state.data;
+    $('title').textContent = 'Actualités';
+    $('context').textContent = d.project.code + ' ' + d.project.name + ' · ' + plural(d.meetings.length, 'réunion', 'réunions') + ' · ' + plural(d.actions.length, 'action ouverte', 'actions ouvertes');
+    renderDigest(); renderActions(); renderFeed(); renderTriage(); renderAdd(); renderSettings();
+    var base = BOOT.baseUrl || '';
+    $('nav-plan').setAttribute('href', base + '?view=gantt&project=' + state.projectId);
+    $('nav-news').setAttribute('href', base + '?view=actualites&project=' + state.projectId);
+  }
+  function load() {
+    return call('news.get', { projectId: state.projectId }).then(function (d) { state.data = d; render(); }).catch(function (e) {
+      state.data = null;
+      ['digest', 'actions', 'feed'].forEach(function (z) { clear($('panel-' + z)); });
+      $('panel-feed').appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Actualités indisponibles.' }), el('span', { text: ppmErrorText(e) })]));
+    });
   }
 
   // ------------------------------------------------------------ démarrage
-  if (!BOOT.isAdmin) {
-    ['sante', 'feries', 'journaux'].forEach(function (t) { $('panel-' + t).hidden = true; $('zone-' + t).hidden = true; });
-    $('zone-reglages').hidden = true;
-    empty($('panel-reglages'), 'Réservé aux administrateurs.', 'Vos réglages personnels sont dans « Mon compte ».');
-  } else {
-    call('admin.get', {}).then(function (c) { state.cfg = c; render(); }).catch(function (e) { failed($('panel-reglages'), e); });
-  }
+  $('picker').addEventListener('change', function () { state.projectId = this.value; load(); });
+  $('prompt-close').addEventListener('click', function () { closeDialog($('prompt-dialog')); });
+  $('prompt-copy').addEventListener('click', copyPrompt);
+  $('publish-cancel').addEventListener('click', function () { closeDialog($('publish-dialog')); });
+  $('publish-form').addEventListener('submit', submitPublish);
+  $('action-cancel').addEventListener('click', function () { closeDialog($('action-dialog')); });
+  $('action-form').addEventListener('submit', submitAction);
 
-  window.__ppm = { state: state, render: render };
+  call('planning.catalog', {}).then(function (cat) {
+    state.catalog = cat;
+    var s = $('picker'); clear(s);
+    var sortCode = function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); };
+    cat.projects.slice().sort(sortCode).forEach(function (p) { s.appendChild(el('option', { value: p.id, text: p.code + ' ' + p.name + (p.status === 'Clos' ? ' (clos)' : '') })); });
+    state.projectId = BOOT.project || (cat.projects.filter(function (p) { return p.status !== 'Clos'; })[0] || cat.projects[0] || {}).id || '';
+    s.value = state.projectId;
+    return load();
+  }).catch(fail);
+
+  window.__ppm = { state: state, load: load };
 })();
 </script>
 </body>

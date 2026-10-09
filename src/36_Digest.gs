@@ -126,6 +126,9 @@ function buildDigests(data, today, opts) {
       }) });
     }
 
+    // 4. Actualités des projets et actions issues des réunions
+    newsDigestSections_(data, r, today, windowStart, link).forEach(function (s) { sections.push(s); });
+
     if (!sections.length && !opts.onlyEmail) return;
     var count = sections.reduce(function (a, s) { return a + s.lines.length; }, 0);
     var subject = (freq === 'Hebdomadaire' && !opts.onlyEmail ? 'Votre point de la semaine' : 'Votre point du ' + frDate_(today)) +
@@ -180,6 +183,7 @@ function loadDigestData_() {
     projects: projects, planitems: repoList('PlanItem'), resources: repoList('Resource'),
     assignments: repoList('RoleAssignment'), settings: repoList('UserSetting'), insights: repoList('Insight'),
     baselines: repoList('Baseline'), workpackages: repoList('WorkPackage'), budgetLines: repoList('BudgetLine'),
+    news: { meetings: repoList('Meeting'), actions: repoList('NewsAction'), digests: repoList('NewsDigest') },
     pendingChanges: pendingChangeCounts_(projects, repoList('ChangeEvent')),
     purchaseOrders: repoList('PurchaseOrder', function (o) { return o.status === 'Lancée'; }),
     cpnProject: (function () { var m = {}, idx = cpnIndex_(); Object.keys(idx).forEach(function (k) { m[k] = idx[k].project.id; }); return m; })()

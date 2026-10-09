@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.11.1">
+<meta name="ppm-version" content="0.12.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -287,6 +287,7 @@
     <a id="nav-struct" data-view="structure" href="#">OBS/WBS</a>
     <a id="nav-res" data-view="ressources" href="#">Ressources</a>
     <a id="nav-suivi" data-view="suivi" href="#">Suivi</a>
+    <a id="nav-news" data-view="actualites" href="#">Actualités</a>
     <a id="nav-copilot" data-view="copilote" href="#">Copilote</a>
     <a id="nav-budget" data-view="budget" href="#" hidden>Budget</a>
   </nav>
@@ -397,7 +398,7 @@
     document.getElementById('ppm-admin').hidden = !B.isAdmin;
     document.getElementById('nav-budget').hidden = !B.canBudget;
     document.getElementById('nav-copilot').hidden = !B.copilot; // copilote en suspens tant que PPM_COPILOT n'est pas « oui »
-    var EYEBROW = { overview: 'Overview · Projet', gantt: 'Planning · Gantt', structure: 'OBS/WBS · Organisation et découpage', ressources: 'Ressources · Équipes et rôles', suivi: 'Suivi · Baselines', copilote: 'Copilote · Analyse', budget: 'Budget · CPN et achats', compte: 'Mon compte', admin: 'Administration' };
+    var EYEBROW = { overview: 'Overview · Projet', gantt: 'Planning · Gantt', structure: 'OBS/WBS · Organisation et découpage', ressources: 'Ressources · Équipes et rôles', suivi: 'Suivi · Baselines', actualites: 'Actualités · Réunions et actions', copilote: 'Copilote · Analyse', budget: 'Budget · CPN et achats', compte: 'Mon compte', admin: 'Administration' };
     var titleBox = document.querySelector('header .title');
     if (titleBox && EYEBROW[B.view] && !titleBox.querySelector('.eyebrow')) {
       var eb = document.createElement('span');
@@ -450,6 +451,8 @@
 
 <div class="zone"><h2 class="sec">Ma fiche</h2></div>
 <section class="panel" id="panel-fiche" aria-label="Ma fiche"></section>
+<div class="zone" id="zone-mine" hidden><h2 class="sec">Mes actions issues des réunions</h2></div>
+<section class="panel" id="panel-mine" aria-label="Mes actions" hidden></section>
 <div class="zone"><h2 class="sec">Notifications</h2></div>
 <section class="panel" id="panel-notifications" aria-label="Notifications"></section>
 <div class="zone"><h2 class="sec">Affichage</h2></div>
@@ -646,9 +649,43 @@ var BOOT = <?!= boot ?>;
   }
 
   /** Plus d'onglets : les trois rubriques s'affichent ensemble. */
+  /** Mes actions issues des réunions, tous projets confondus : la zone n'apparaît que s'il y en a. */
+  function renderMine() {
+    return call('news.mine', {}).then(function (r) {
+      var zone = $('zone-mine'), box = $('panel-mine'); clear(box);
+      var list = (r && r.actions) || [];
+      zone.hidden = !list.length; box.hidden = !list.length;
+      if (!list.length) return;
+      var today = new Date().toISOString().slice(0, 10);
+      var table = el('table', { id: 'mine-table' });
+      table.appendChild(el('thead', {}, [el('tr', {}, ['Projet', 'Action', 'Échéance', 'Réunion', 'Statut', ''].map(function (h) { return el('th', { text: h }); }))]));
+      var tb = el('tbody');
+      list.forEach(function (a) {
+        var late = a.due_date && a.due_date < today;
+        var answer = function (decision, msg) { return function () { call('news.action.decide', { id: a.id, decision: decision }, true).then(function () { toast(msg); return renderMine(); }).catch(function (e) { toast(ppmErrorText(e), true); }); }; };
+        var btns = [];
+        if (a.status === 'Proposée' || a.status === 'Contestée') btns.push(el('button', { type: 'button', class: 'btn', 'data-act': 'accept', text: 'Accepter', onclick: answer('accept', 'Action acceptée.') }));
+        if (a.status !== 'Contestée') btns.push(el('button', { type: 'button', class: 'btn', 'data-act': 'contest', text: 'Contester', onclick: answer('contest', 'Action contestée : le chef de projet est prévenu.') }));
+        btns.push(el('button', { type: 'button', class: 'btn', 'data-act': 'done', text: 'Faite', onclick: answer('done', 'Action marquée faite.') }));
+        tb.appendChild(el('tr', { 'data-id': a.id }, [
+          el('td', { text: a.project }), el('td', { text: a.text }),
+          el('td', { style: late ? 'color:var(--red);font-weight:500' : '', text: a.due_date ? frDate(a.due_date) + (late ? ' (en retard)' : '') : '—' }),
+          el('td', { text: a.meeting ? a.meeting + (a.held_on ? ' · ' + frDate(a.held_on) : '') : '—' }),
+          el('td', {}, [el('span', { class: 'badge', text: a.status })]),
+          el('td', {}, [el('div', { class: 'row' }, btns)])
+        ]));
+      });
+      table.appendChild(tb);
+      box.appendChild(el('div', { class: 'table-wrap' }, [table]));
+      var link = el('p', { style: 'margin:8px 0 0;font-size:14px;color:var(--muted)' }, ['Le détail de chaque projet est dans la page ', el('a', { href: (BOOT.baseUrl || '') + '?view=actualites', text: 'Actualités' }), '.']);
+      box.appendChild(link);
+    }).catch(function () { $('zone-mine').hidden = true; $('panel-mine').hidden = true; });
+  }
+
   function render() {
     if (!state.acct) return;
     renderFiche();
+    renderMine();
     renderNotifications();
     renderAffichage();
   }

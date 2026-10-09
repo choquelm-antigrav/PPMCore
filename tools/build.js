@@ -19,7 +19,7 @@ const crypto = require('crypto');
 const root = path.join(__dirname, '..');
 const src = path.join(root, 'src');
 const dist = path.join(root, 'dist');
-const PAGES = ['Gantt', 'Structure', 'Suivi', 'Copilote', 'Compte', 'Admin', 'Budget', 'Overview', 'Ressources'];
+const PAGES = ['Gantt', 'Structure', 'Suivi', 'Copilote', 'Compte', 'Admin', 'Budget', 'Overview', 'Ressources', 'Actualites'];
 
 function build() {
   const files = fs.readdirSync(src).filter((f) => f.endsWith('.gs')).sort();

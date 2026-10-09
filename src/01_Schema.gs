@@ -26,7 +26,8 @@ var SCHEMA = {
   Project: {
     book: 'data',
     cols: ['id', 'code', 'name', 'program_id', 'manager_resource_id', 'status', 'holiday_country',
-      'start_date', 'end_date', 'active_baseline_id', 'drive_folder_id', 'calendar_id', 'cpn', 'cpn_label'],
+      'start_date', 'end_date', 'active_baseline_id', 'drive_folder_id', 'calendar_id', 'cpn', 'cpn_label',
+      'news_on', 'news_keywords', 'news_journal_id'],
     required: ['code', 'name'],
     enums: { status: ['Préparation', 'Actif', 'En pause', 'Clos'], holiday_country: COUNTRIES }
   },
@@ -88,6 +89,29 @@ var SCHEMA = {
     cols: ['id', 'resource_id', 'role_code', 'scope_type', 'scope_id', 'start_date', 'end_date'],
     required: ['resource_id', 'role_code', 'scope_type', 'scope_id'],
     enums: { role_code: ROLES, scope_type: ['program', 'project', 'workpackage'] }
+  },
+
+  // ---------- Classeur Données : fil d'actualités du projet (0.12.0) ----------
+  /** Une réunion retenue pour un projet (ou « à trier » : projet vide, candidats listés), lue de l'agenda ou saisie à la main. */
+  Meeting: {
+    book: 'data',
+    cols: ['id', 'project_id', 'source', 'event_id', 'held_on', 'title', 'participants', 'doc_url', 'summary', 'decisions',
+      'status', 'candidates', 'dedupe_key', 'added_by'],
+    required: ['title', 'held_on'],
+    enums: { source: ['Manuel', 'Agenda'], status: ['Publiée', 'À trier'] }
+  },
+  /** Une action tirée d'une réunion, proposée à une personne, qui l'accepte ou la conteste. */
+  NewsAction: {
+    book: 'data',
+    cols: ['id', 'meeting_id', 'project_id', 'owner_resource_id', 'owner_label', 'text', 'due_date', 'item_id', 'status', 'decided_by', 'decided_on'],
+    required: ['text'],
+    enums: { status: ['Proposée', 'Acceptée', 'Contestée', 'Faite'] }
+  },
+  /** La synthèse du jour publiée par le chef de projet. */
+  NewsDigest: {
+    book: 'data',
+    cols: ['id', 'project_id', 'digest_date', 'text', 'published_by'],
+    required: ['project_id', 'digest_date', 'text']
   },
 
   // ---------- Classeur Données : budget ----------
@@ -230,7 +254,7 @@ var REF_TARGETS = {
 };
 
 var DATE_COLS = ['start_date', 'end_date', 'planned_start', 'planned_finish', 'actual_finish',
-  'review_date', 'treatment_due', 'effective_date', 'generated_on'];
+  'review_date', 'treatment_due', 'effective_date', 'generated_on', 'held_on', 'digest_date', 'due_date', 'decided_on'];
 
 /** Longueur maximale des libellés libres (fonction, organisation). */
 var TEXT_MAX_LENGTH = { job_function: 80, organization: 80 };

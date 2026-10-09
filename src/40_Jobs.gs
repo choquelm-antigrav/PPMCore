@@ -18,9 +18,12 @@ function installTriggers() {
   deleteTriggers_('nightlyRun');
   deleteTriggers_('continueNightly');
   deleteTriggers_('sendDigests');
+  deleteTriggers_('newsCollectRun');
   ScriptApp.newTrigger('nightlyRun').timeBased().atHour(2).everyDays(1).create();
   ScriptApp.newTrigger('sendDigests').timeBased().atHour(7).everyDays(1).create();
-  return 'Déclencheurs installés : traitement nocturne à 2 h, récapitulatif à 7 h (fuseau du script).';
+  ScriptApp.newTrigger('newsCollectRun').timeBased().atHour(1).everyDays(1).create();
+  ScriptApp.newTrigger('newsCollectRun').timeBased().atHour(13).everyDays(1).create();
+  return 'Déclencheurs installés : collecte des réunions à 1 h et à 13 h, traitement nocturne à 2 h, récapitulatif à 7 h (fuseau du script).';
 }
 
 function deleteTriggers_(handler) {

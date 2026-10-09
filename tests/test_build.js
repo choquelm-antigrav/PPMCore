@@ -6,9 +6,9 @@ module.exports = function () {
   console.log('\nFabrication du fichier unique et installation');
   const root = path.join(__dirname, '..');
 
-  test('Fabrication : 11 fichiers, sources dans l’ordre, style et bannière intégrés, versions cohérentes', () => {
+  test('Fabrication : 12 fichiers, sources dans l’ordre, style et bannière intégrés, versions cohérentes', () => {
     const r = require('../tools/build').build();
-    eq(r.out, ['Admin.html', 'Budget.html', 'Compte.html', 'Copilote.html', 'Gantt.html', 'Overview.html', 'PPM_Core.gs', 'Ressources.html', 'Structure.html', 'Suivi.html', 'appsscript.json']);
+    eq(r.out, ['Actualites.html', 'Admin.html', 'Budget.html', 'Compte.html', 'Copilote.html', 'Gantt.html', 'Overview.html', 'PPM_Core.gs', 'Ressources.html', 'Structure.html', 'Suivi.html', 'appsscript.json']);
     const core = fs.readFileSync(path.join(root, 'dist', 'PPM_Core.gs'), 'utf8');
     const gs = fs.readdirSync(path.join(root, 'src')).filter((f) => f.endsWith('.gs')).sort();
     const pos = gs.map((f) => core.indexOf('// ' + f + '\n'));

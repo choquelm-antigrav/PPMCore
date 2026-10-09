@@ -1,5 +1,16 @@
 # Journal des versions
 
+## 0.12.0 — fil d'actualités du projet (phase 1)
+
+- **Page Actualités** : synthèse du matin, actions issues des réunions, fil des réunions, réunions à trier, ajout d'un compte rendu, repères et journal.
+- **Saisie manuelle** de notes Gemini ou de minutes (texte ou lien d'un Google Doc) ; **actions** lues sans IA, proposées à chacun qui accepte, conteste ou termine ; contestation notifiée au chef de projet.
+- **Collecteur pilote** de l'agenda du compte du script, à 1 h et 13 h : deux membres invités ou un repère dans le titre ; égalités « à trier » ; événements privés jamais lus.
+- **Journal du projet** (Google Doc) et **synthèse du matin** : prompt à copier, publication vérifiée, mail aux membres ; carte dans l'Overview ; section dans le récapitulatif de 7 h.
+- **Mon compte** : zone « Mes actions issues des réunions ».
+- **Démo** : deux étapes d'actualités (8 réunions, 17 actions, synthèse du jour, 2 réunions à trier).
+- Nouvelle autorisation Google : lecture et écriture de Google Docs (à réautoriser).
+- Tests : 199 serveur, plus douze essais de pages.
+
 ## 0.11.1 — remplacer l'ancienne démo
 
 - **`A6_EFFACER_ANCIENNE_DEMO`** : supprime l'ancienne démo (programme `DEMO`, projet `PILOTE`, deux personnes fictives) et ce qui s'y est rattaché ; deux lancements (le premier montre, le second supprime), suppression douce, réservée aux administrateurs. `A2_SEED_DEMO` signale si l'ancienne démo est toujours là.

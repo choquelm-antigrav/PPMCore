@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.11.1">
+<meta name="ppm-version" content="0.12.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -304,6 +304,13 @@
   .ed-error { margin: 12px 0 0; color: var(--red); font-weight: 500; }
   dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
   @media (max-width: 900px) { .cols { grid-template-columns: 1fr; padding: 12px; } .kpis { padding: 14px 12px 4px; } .mission { margin: 16px 12px 0; } .bar-row { grid-template-columns: 78px 1fr 40px; } .ed-row2 { grid-template-columns: 1fr; } }
+  .news-meta { margin: 4px 0; color: var(--muted); font-size: 13.5px; }
+  .news-text { margin: 4px 0 8px; font-size: 14.5px; white-space: pre-wrap; line-height: 1.5; max-height: 260px; overflow: auto; }
+  .news-item { margin: 6px 0; font-size: 14.5px; }
+  .news-item strong { display: block; font-weight: 600; }
+  .news-sub { display: block; color: var(--muted); font-size: 13.5px; }
+  .news-link { display: inline-block; margin-top: 6px; font-weight: 500; }
+  #news-box[hidden] { display: none; }
 </style>
 </head>
 <body>
@@ -318,6 +325,7 @@
     <a id="nav-struct" data-view="structure" href="#">OBS/WBS</a>
     <a id="nav-res" data-view="ressources" href="#">Ressources</a>
     <a id="nav-suivi" data-view="suivi" href="#">Suivi</a>
+    <a id="nav-news" data-view="actualites" href="#">Actualités</a>
     <a id="nav-copilot" data-view="copilote" href="#">Copilote</a>
     <a id="nav-budget" data-view="budget" href="#" hidden>Budget</a>
   </nav>
@@ -428,7 +436,7 @@
     document.getElementById('ppm-admin').hidden = !B.isAdmin;
     document.getElementById('nav-budget').hidden = !B.canBudget;
     document.getElementById('nav-copilot').hidden = !B.copilot; // copilote en suspens tant que PPM_COPILOT n'est pas « oui »
-    var EYEBROW = { overview: 'Overview · Projet', gantt: 'Planning · Gantt', structure: 'OBS/WBS · Organisation et découpage', ressources: 'Ressources · Équipes et rôles', suivi: 'Suivi · Baselines', copilote: 'Copilote · Analyse', budget: 'Budget · CPN et achats', compte: 'Mon compte', admin: 'Administration' };
+    var EYEBROW = { overview: 'Overview · Projet', gantt: 'Planning · Gantt', structure: 'OBS/WBS · Organisation et découpage', ressources: 'Ressources · Équipes et rôles', suivi: 'Suivi · Baselines', actualites: 'Actualités · Réunions et actions', copilote: 'Copilote · Analyse', budget: 'Budget · CPN et achats', compte: 'Mon compte', admin: 'Administration' };
     var titleBox = document.querySelector('header .title');
     if (titleBox && EYEBROW[B.view] && !titleBox.querySelector('.eyebrow')) {
       var eb = document.createElement('span');
@@ -497,6 +505,7 @@
     <div>
       <section class="panel-box" aria-label="Prochains jalons"><h2 class="sec">Prochains jalons</h2><ul class="list" id="milestones"></ul></section>
       <section class="panel-box" style="margin-top:20px" aria-label="Alertes ouvertes"><h2 class="sec">Alertes ouvertes</h2><ul class="list" id="alerts"></ul></section>
+      <section class="panel-box" style="margin-top:20px" id="news-box" aria-label="Actualités du projet" hidden><h2 class="sec">Actualités du projet</h2><div id="news"></div></section>
       <section class="panel-box" style="margin-top:20px" aria-label="Repères"><h2 class="sec">Repères</h2><dl class="facts" id="facts"></dl></section>
     </div>
   </div>
@@ -700,8 +709,32 @@ var BOOT = <?!= boot ?>;
     var base = BOOT.baseUrl || '';
     Array.prototype.forEach.call(document.querySelectorAll('.ppm-bar [data-view]'), function (n) {
       var vw = n.getAttribute('data-view');
-      if (['overview', 'gantt', 'structure', 'ressources', 'suivi', 'copilote', 'budget'].indexOf(vw) >= 0) n.setAttribute('href', base + '?view=' + vw + '&project=' + p.id);
+      if (['overview', 'gantt', 'structure', 'ressources', 'suivi', 'actualites', 'copilote', 'budget'].indexOf(vw) >= 0) n.setAttribute('href', base + '?view=' + vw + '&project=' + p.id);
     });
+  }
+
+  /** Carte « Actualités » : la dernière synthèse (ou les dernières réunions) et les actions ouvertes ; masquée pour qui n'est pas membre du projet. */
+  function loadNews(projectId) {
+    var box = $('news-box');
+    call('news.summary', { projectId: projectId }).then(function (n) {
+      if (state.data && current() && current().id !== projectId) return;
+      var host = $('news'); clear(host);
+      var any = n && n.visible && (n.digest || n.meetings.length || n.open_actions);
+      box.hidden = !any;
+      if (!any) return;
+      var base = BOOT.baseUrl || '';
+      if (n.digest) {
+        host.appendChild(el('p', { class: 'news-meta', text: 'Synthèse du ' + n.digest.date.split('-').reverse().join('/') }));
+        host.appendChild(el('p', { class: 'news-text', id: 'news-digest', text: n.digest.text }));
+      } else {
+        n.meetings.forEach(function (m) {
+          host.appendChild(el('p', { class: 'news-item' }, [el('strong', { text: m.held_on.split('-').reverse().join('/') + ' · ' + m.title }), m.summary ? el('span', { class: 'news-sub', text: m.summary }) : null]));
+        });
+      }
+      var line = n.open_actions + (n.open_actions > 1 ? ' actions ouvertes' : ' action ouverte') + (n.mine ? ', dont ' + n.mine + ' pour vous' : '');
+      host.appendChild(el('p', { class: 'news-meta', id: 'news-actions', text: line }));
+      host.appendChild(el('a', { class: 'news-link', id: 'news-link', href: base + '?view=actualites&project=' + projectId, text: 'Ouvrir les actualités →' }));
+    }).catch(function () { box.hidden = true; });
   }
 
   function load(projectId) {
@@ -709,6 +742,7 @@ var BOOT = <?!= boot ?>;
     return call('overview.get', { projectId: projectId || '' }).then(function (d) {
       if (ticket !== state.seq) return;
       state.data = d; render();
+      var cur = current(); if (cur) loadNews(cur.id);
     }).catch(function (e) { var k = $('kpis'); clear(k); k.appendChild(el('div', { class: 'empty', style: 'grid-column:1/-1' }, [el('strong', { text: 'Chargement impossible.' }), el('span', { text: (e && e.message) || 'Erreur inconnue.' })])); });
   }
   function select(id) { state.data.selected = id; return load(id); }

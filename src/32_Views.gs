@@ -468,9 +468,9 @@ function uiCall(action, params, requestId) {
     currentUserEmail_());
 }
 
-var PAGES = { gantt: 'Gantt', structure: 'Structure', suivi: 'Suivi', copilote: 'Copilote', compte: 'Compte', admin: 'Admin', budget: 'Budget', overview: 'Overview', ressources: 'Ressources' };
-var PAGE_TITLES = { gantt: 'PPM — Planning', structure: 'PPM — OBS/WBS', suivi: 'PPM — Suivi', copilote: 'PPM — Copilote', compte: 'PPM — Mon compte', admin: 'PPM — Administration', budget: 'PPM — Budget', overview: 'PPM — Overview projet', ressources: 'PPM — Ressources' };
-var PAGE_TABS = { gantt: [''], structure: [''], suivi: [''], copilote: ['synthese', 'simulation', 'questions', 'suggestions'], compte: [''], admin: [''], budget: [''], overview: [''], ressources: [''] };
+var PAGES = { gantt: 'Gantt', structure: 'Structure', suivi: 'Suivi', copilote: 'Copilote', compte: 'Compte', admin: 'Admin', budget: 'Budget', overview: 'Overview', ressources: 'Ressources', actualites: 'Actualites' };
+var PAGE_TITLES = { gantt: 'PPM — Planning', structure: 'PPM — OBS/WBS', suivi: 'PPM — Suivi', copilote: 'PPM — Copilote', compte: 'PPM — Mon compte', admin: 'PPM — Administration', budget: 'PPM — Budget', overview: 'PPM — Overview projet', ressources: 'PPM — Ressources', actualites: 'PPM — Actualités' };
+var PAGE_TABS = { gantt: [''], structure: [''], suivi: [''], copilote: ['synthese', 'simulation', 'questions', 'suggestions'], compte: [''], admin: [''], budget: [''], overview: [''], ressources: [''], actualites: [''] };
 
 /** JSON à clés triées : la page et le serveur calculent la même clé pour les mêmes paramètres. */
 function stableJson_(v) {
@@ -537,6 +537,8 @@ function preloadFor_(view, boot, email) {
     }
   } else if (view === 'ressources' && first) {
     put('ressources.get', { projectId: first });
+  } else if (view === 'actualites' && first) {
+    put('news.get', { projectId: first });
   } else if (view === 'copilote' && first) {
     put('copilot.status', { projectId: first });
     if (boot.tab === 'synthese') put('copilot.brief', { projectId: first });

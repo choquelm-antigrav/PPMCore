@@ -1,18 +1,18 @@
-# Premiers pas : installer et essayer PPM (version 0.11.1)
+# Premiers pas : installer et essayer PPM (version 0.12.0)
 
-Environ 15 minutes. Pas besoin d'AppSheet pour ces essais. Tout ce qu'il faut est dans le dossier `dist` de l'archive : **11 fichiers**.
+Environ 15 minutes. Pas besoin d'AppSheet pour ces essais. Tout ce qu'il faut est dans le dossier `dist` de l'archive : **12 fichiers**.
 
 ## 1. Créer le projet
 
 1. Aller sur **script.google.com**, cliquer **Nouveau projet**, le nommer **PPM Core**.
 2. Roue dentée (**Paramètres du projet**) : cocher **Afficher le fichier manifeste « appsscript.json »**.
 
-## 2. Copier les 11 fichiers
+## 2. Copier les 12 fichiers
 
 | Fichier de `dist` | Dans l'éditeur |
 | --- | --- |
 | `PPM_Core.gs` | Renommer `Code.gs` en `PPM_Core`, remplacer tout son contenu |
-| `Gantt.html`, `Structure.html`, `Suivi.html`, `Copilote.html`, `Compte.html`, `Admin.html`, `Budget.html`, `Overview.html`, `Ressources.html` | Pour chacun : **+** → **HTML**, même nom sans `.html`, coller |
+| `Gantt.html`, `Structure.html`, `Suivi.html`, `Copilote.html`, `Compte.html`, `Admin.html`, `Budget.html`, `Overview.html`, `Ressources.html`, `Actualites.html` | Pour chacun : **+** → **HTML**, même nom sans `.html`, coller |
 | `appsscript.json` | Ouvrir le fichier existant, remplacer tout son contenu |
 
 ## 3. Installer
@@ -38,6 +38,7 @@ Ouvrir l'URL suivie de `?view=gantt`. Les liens en haut de chaque page mènent a
 | **Suivi** | Zone **Baselines** → **Figer la baseline B0**. Déplacer ensuite une barre dans le Planning : un trait gris garde l'ancienne place. **Changements à valider** → **Tout valider**. **Agenda et Drive** → **Créer l'agenda et le dossier du projet**.  |
 | **Mon compte** (icône de personne, en haut à droite) | **Notifications** → **Me l'envoyer maintenant** : le mail récapitulatif arrive dans votre boîte. Même page : le **rappel avant livraison** (votre délai en jours ouvrés, 10 par défaut). **Affichage** : choisir le thème et la page d'accueil. |
 | **Administration** (icône d'engrenage, administrateurs seulement) | **Santé** : l'installation doit être « Conforme ». **Réglages** : ajouter un second administrateur. **Jours fériés** : ajouter une année. |
+| **Actualités** | **Ajouter un compte rendu** : coller des notes Gemini ou des minutes (`Action : faire X — Nom — 30/10`) → les actions sont proposées à chacun. **Copier le prompt du jour** puis **Publier les actualités** : coller la réponse de NotebookLM ou de Gemini. **Repères et journal** : cocher « Activer la collecte automatique », saisir des repères (sigle du projet), **Mettre à jour le journal maintenant**. Mon compte → **Mes actions** : accepter, contester ou terminer. |
 | **Overview** (page d'accueil) | Créer un projet (« Nouveau projet »), le renommer, lire les indicateurs délais, qualité, coût. |
 | **Ressources** | Ajouter les personnes (avec leur adresse professionnelle : c'est elle qui donne accès), créer les équipes, choisir le rôle de chacun dans le projet, saisir son taux journalier. La colonne **Accès** dit qui peut se connecter. |
 | **Budget** | Définir le **CPN** du projet. Les taux se saisissent dans **Ressources**. **Budget par livrable** : ajouter une ligne (interne : jours ; externe : forfait). **Achats (PO)** : ajouter une PO (numéro Click and Buy, CPN, ressource externe, montant, date de GR attendue, répartition par livrable), la passer en Lancée puis GR. **Bilan par CPN** : engagé et reste. |
@@ -51,7 +52,7 @@ Le copilote fonctionne sans IA. Pour essayer la préparation de textes à coller
 
 ## Mettre à jour plus tard
 
-1. Remplacer le contenu des 11 fichiers par ceux de la nouvelle archive (toujours les 11 : c'est plus sûr que de chercher ce qui a changé).
+1. Remplacer le contenu des 12 fichiers par ceux de la nouvelle archive (toujours les 12 : c'est plus sûr que de chercher ce qui a changé).
 2. Exécuter **A1_INSTALLER_PPM** (il ajoute les nouvelles colonnes et vérifie que chaque page est à la bonne version).
 3. **Déployer** → **Gérer les déploiements** → crayon → Version : **Nouvelle version** → **Déployer**. L'URL ne change pas.
 
@@ -81,3 +82,8 @@ Le message dit pourquoi et quoi faire. Les causes habituelles :
 
 En cas de doute, exécutez `A4_DIAGNOSTIC_ACCES` dans l'éditeur (Exécuter, puis Journal d'exécution) : il montre le compte qui exécute, le compte détecté et les domaines autorisés.
 
+## Fil d'actualités : à savoir avant de l'essayer sur de vrais comptes
+
+- **Réautoriser l'outil** : la version 0.12.0 demande en plus l'accès aux Google Docs. Après avoir copié les fichiers, exécuter `A1_INSTALLER_PPM` et accepter la nouvelle autorisation.
+- **Collecte automatique** : exécuter `A5_INSTALLER_DECLENCHEURS` pour poser les deux déclencheurs (1 h et 13 h). Elle lit **l'agenda du compte qui les a posés**, pas celui des autres membres.
+- **Sans collecte, rien n'est perdu** : la saisie manuelle d'un compte rendu et la synthèse du matin fonctionnent seules.

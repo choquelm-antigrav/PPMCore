@@ -5,7 +5,7 @@
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.11.1';
+var PPM_VERSION = '0.12.0';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -64,6 +64,8 @@ var PERMISSIONS = {
   'changes.ack':      ['DPL', 'CP'],
   'workspace.manage': ['PL', 'DPL', 'CP'],
   'insight.decide':   ['PL', 'DPL', 'CP'],
+  'news.add':         ['PL', 'DPL', 'CP'],
+  'news.manage':      ['PL', 'DPL', 'CP'],
   'addon.install':    ['*']
 };
 
@@ -92,6 +94,8 @@ var PROP = {
   COPILOT: 'PPM_COPILOT',
   DEMO_STEP: 'PPM_DEMO_STEP',
   DEMO_CLEAN: 'PPM_DEMO_CLEAN', // horodatage de la demande de suppression de l'ancienne démo (confirmation par un second lancement)
+  NEWS_LAST: 'PPM_NEWS_LAST', // fin de la dernière collecte des réunions (ISO)
+  LAST_NEWS: 'PPM_LAST_NEWS', // résultat de la dernière collecte (pour l'administration)
   REMINDER_ON: 'PPM_REMINDER_ON',
   REMINDER_DAYS: 'PPM_REMINDER_DAYS'
 };

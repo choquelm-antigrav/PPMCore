@@ -614,6 +614,8 @@ var DEMO_STEPS = [
   { name: 'Budget de NAC-1 (1/2)', run: function (d) { demoBudget_(d, 0, 20); } },
   { name: 'Budget de NAC-1 (2/2) et de NAC-2', run: function (d) { demoBudget_(d, 20, 60); } },
   { name: 'Commandes d’achat', run: function (d) { demoOrders_(d); } },
+  { name: 'Actualités de NAC-1 : réunions', run: function (d) { demoNewsMeetings_(d); } },
+  { name: 'Actualités : actions, synthèse du jour, réunions à trier', run: function (d) { demoNewsActions_(d); } },
   { name: 'Constats du moteur de règles', run: function (d) { demoFindings_(d); } }
 ];
 
@@ -649,6 +651,106 @@ function seedDemo_() {
   }
   console.log(msg);
   return msg;
+}
+
+// ---------------------------------------------------------------- actualités du projet (0.12.0)
+
+/** Jour et mois d'un jour relatif à aujourd'hui, tels qu'on les écrit dans un compte rendu : « 16/10 ». */
+function demoDM_(d, n) { var s = d.day(n); return s.slice(8, 10) + '/' + s.slice(5, 7); }
+
+/** Les réunions de NAC-1 : [jours avant aujourd'hui, titre, agenda ou saisie à la main, participants, texte du compte rendu]. */
+function demoMeetings_(d) {
+  var f = function (n) { return demoDM_(d, n); };
+  return [
+    [1, 'Revue d’avancement hebdomadaire NAC-1', true, 'Anaïs Moreau, Thomas Weber, Hélène Roux, Ravi Patel',
+      ['Résumé', 'Point hebdomadaire : les essais statiques prennent du retard et la revue critique de conception est maintenue.', '',
+        'Décisions', '- La revue critique de conception (CDR) est maintenue.', '- Les essais de fatigue passent avant les essais statiques.', '',
+        'Étapes suivantes', '- [Thomas Weber] Confirmer la date de la campagne d’essais statiques avant le ' + f(8),
+        '- [Hélène Roux] Livrer la note de calcul de fatigue pour le ' + f(6), '- [Anaïs Moreau] Informer le programme du glissement de la fin du plan'].join('\n')],
+    [2, 'Point fournisseur Alpha Test', false, 'Anaïs Moreau, Thomas Weber, Carl Weber',
+      ['Point avec le fournisseur des essais.', 'Décision : le devis complémentaire est accepté sous réserve de la réception.',
+        'Action : relancer le fournisseur sur le planning des essais — Thomas Weber — ' + f(7),
+        'Action : valider le devis complémentaire — Anaïs Moreau — ' + f(10)].join('\n')],
+    [4, 'Préparation de la revue préliminaire de conception (PDR)', true, 'Marc Lefèvre, Hélène Roux, Paul Girard, Nadia Benali, Sophie Martin',
+      ['Résumé', 'Dernière préparation de la PDR : dossier structure complet, aérodynamique à finaliser.', '',
+        'Décisions', '- La PDR a lieu comme prévu, avec le dossier aérodynamique en annexe.', '',
+        'Prochaines étapes', '- [Paul Girard] Finaliser le rapport aérodynamique préliminaire pour le ' + f(3),
+        '- [Nadia Benali] Compléter la sélection des matériaux composites avant le ' + f(5), '- Sophie Martin: valider l’architecture système antigivrage pour le ' + f(4)].join('\n')],
+    [5, 'Atelier risques NAC-1', false, 'Anaïs Moreau, Lucie Perrin, Olivier Faure',
+      ['Atelier de revue du registre des risques.', 'Décision : le risque de retard fournisseur passe en critique.',
+        'Action : proposer un plan de traitement du retard fournisseur — Lucie Perrin — ' + f(9),
+        'Action : mettre à jour le registre des risques — Lucie Perrin — ' + f(4)].join('\n')],
+    [7, 'Comité de pilotage programme nacelle', true, 'Anaïs Moreau, Marc Lefèvre, Karim Haddad',
+      ['Résumé', 'Comité de pilotage : la fin visée du projet est maintenue, un point sur le budget externe est demandé.', '',
+        'Décisions', '- Le budget externe est suivi chaque semaine jusqu’à la CDR.', '',
+        'Étapes suivantes', '- [Anaïs Moreau] Présenter la consommation du budget externe au prochain comité pour le ' + f(14),
+        '- [Karim Haddad] Confirmer le lancement des outillages pour le ' + f(20)].join('\n')],
+    [8, 'Point soufflerie', true, 'Ravi Patel, Paul Girard, Thomas Weber',
+      ['Résumé', 'Les essais en soufflerie démarrent avec une semaine de retard sur le créneau initial.', '',
+        'Étapes suivantes', '- [Ravi Patel] Réserver un nouveau créneau en soufflerie avant le ' + f(5),
+        '- Paul Girard: transmettre les cas de charge à la soufflerie pour le ' + f(2)].join('\n')],
+    [10, 'Revue de lancement des outillages', false, 'Karim Haddad, Étienne Roche, Yann Leroy',
+      ['Revue de lancement.', 'Décision : les outillages sont lancés après la CDR.',
+        'Action : chiffrer les outillages de drapage — Étienne Roche — ' + f(12),
+        'Action : préparer les gammes de fabrication — Yann Leroy — ' + f(25)].join('\n')],
+    [13, 'Point certification', true, 'Olivier Faure, Lucie Perrin, Anaïs Moreau',
+      ['Résumé', 'Premier point sur le dossier de certification : le plan de conformité est à stabiliser.', '',
+        'Décisions', '- Le plan de conformité est partagé avec l’autorité avant la fin du mois.', '',
+        'Étapes suivantes', '- [Olivier Faure] Stabiliser le plan de conformité pour le ' + f(6)].join('\n')]
+  ];
+}
+
+function demoNewsMeetings_(d) {
+  var nac1 = d.project('NAC-1');
+  d.call('news.settings.set', { projectId: nac1.id, enabled: true, keywords: 'NAC-1, nacelle' });
+  demoMeetings_(d).forEach(function (m, i) {
+    var r = d.call('news.meeting.add', { projectId: nac1.id, title: m[1], held_on: d.day(-m[0]), participants: m[3], text: m[4] });
+    if (m[2]) repoUpdate('Meeting', r.meeting.id, { source: 'Agenda', event_id: 'demo-evt-' + (i + 1), dedupe_key: 'ev:demo-evt-' + (i + 1), added_by: 'collecteur' }, null, d.a);
+  });
+}
+
+function demoNewsActions_(d) {
+  var nac1 = d.project('NAC-1'), nac2 = d.project('NAC-2');
+  var byTitle = function (t) { return repoList('Meeting', function (m) { return m.title === t && m.project_id === nac1.id; })[0]; };
+  var actionOf = function (title, startsWith) {
+    var m = byTitle(title);
+    return m ? repoList('NewsAction', function (a) { return a.meeting_id === m.id && a.text.indexOf(startsWith) === 0; })[0] : null;
+  };
+  var link = function (title, startsWith, item) { var a = actionOf(title, startsWith); if (a) repoUpdate('NewsAction', a.id, { item_id: d.item('NAC-1', item).id }, null, d.a); };
+  var answer = function (title, startsWith, decision) { var a = actionOf(title, startsWith); if (a) d.call('news.action.decide', { id: a.id, decision: decision }); };
+  // livrables concernés
+  link('Revue d’avancement hebdomadaire NAC-1', 'Livrer la note de calcul de fatigue', 'Note de calcul de fatigue');
+  link('Préparation de la revue préliminaire de conception (PDR)', 'Finaliser le rapport aérodynamique', 'Rapport aérodynamique préliminaire');
+  link('Préparation de la revue préliminaire de conception (PDR)', 'Compléter la sélection des matériaux', 'Sélection des matériaux composites');
+  link('Préparation de la revue préliminaire de conception (PDR)', 'valider l’architecture système', 'Architecture système antigivrage');
+  // réponses des personnes : des actions acceptées, une contestée, des terminées
+  answer('Revue d’avancement hebdomadaire NAC-1', 'Livrer la note de calcul de fatigue', 'accept');
+  answer('Revue d’avancement hebdomadaire NAC-1', 'Confirmer la date de la campagne', 'accept');
+  answer('Point fournisseur Alpha Test', 'relancer le fournisseur', 'accept');
+  answer('Atelier risques NAC-1', 'proposer un plan de traitement', 'contest');
+  answer('Préparation de la revue préliminaire de conception (PDR)', 'Finaliser le rapport aérodynamique', 'accept');
+  answer('Point certification', 'Stabiliser le plan de conformité', 'done');
+  answer('Revue de lancement des outillages', 'chiffrer les outillages', 'done');
+  // synthèse du jour publiée par le chef de projet, sans envoi de mail
+  d.call('news.digest.publish', { projectId: nac1.id, notify: false, text: [
+    'Décisions : la revue critique de conception est maintenue ; les essais de fatigue passent avant les essais statiques (Revue d’avancement hebdomadaire NAC-1) ; le devis complémentaire du fournisseur est accepté sous réserve de la réception (Point fournisseur Alpha Test).',
+    'Dates qui bougent : les essais en soufflerie démarrent avec une semaine de retard (Point soufflerie) ; la fin du plan reste à +2 jours ouvrés sur la baseline.',
+    'Risques : le retard du fournisseur des essais passe en critique (Atelier risques NAC-1) ; le budget externe est suivi chaque semaine jusqu’à la CDR (Comité de pilotage programme nacelle).',
+    'Blocages : le dossier aérodynamique de la PDR n’est pas finalisé ; le créneau de soufflerie reste à confirmer.',
+    'Actions : Thomas Weber — confirmer la campagne d’essais statiques — ' + demoDM_(d, 8) + ' — Campagne d’essais statiques ; Hélène Roux — livrer la note de calcul de fatigue — ' + demoDM_(d, 6) + ' — Note de calcul de fatigue ; Paul Girard — finaliser le rapport aérodynamique — ' + demoDM_(d, 3) + ' — Rapport aérodynamique préliminaire.'
+  ].join('\n') });
+  // un second projet avec quelques réunions
+  d.call('news.settings.set', { projectId: nac2.id, enabled: true, keywords: 'NAC-2, systèmes embarqués' });
+  d.call('news.meeting.add', { projectId: nac2.id, title: 'Revue d’avancement NAC-2', held_on: d.day(-3), participants: 'Sophie Martin, Karim Haddad',
+    text: 'Résumé\nLes systèmes embarqués sont dans le plan.\n\nDécisions\n- La phase d’intégration démarre comme prévu.\n\nÉtapes suivantes\n- [Sophie Martin] Préparer le dossier d’intégration pour le ' + demoDM_(d, 9) });
+  // deux réunions qui pouvaient aller dans plusieurs projets : à trier
+  var cand = nac1.id + ',' + nac2.id;
+  [['Point transverse systèmes embarqués', 'Alignement des interfaces entre les deux projets.', ['Aligner l’interface capteurs'], 2],
+   ['Revue des interfaces nacelle', 'Revue des interfaces mécaniques et électriques.', ['Mettre à jour le document d’interfaces'], 4]].forEach(function (x, i) {
+    var mt = repoInsert('Meeting', { project_id: '', source: 'Agenda', event_id: 'demo-triage-' + (i + 1), held_on: d.day(-x[3]), title: x[0], participants: 'Sophie Martin, Anaïs Moreau', doc_url: '',
+      summary: x[1], decisions: '', status: 'À trier', candidates: cand, dedupe_key: 'ev:demo-triage-' + (i + 1), added_by: 'collecteur' }, d.a);
+    x[2].forEach(function (t) { repoInsert('NewsAction', { meeting_id: mt.id, project_id: '', owner_resource_id: '', owner_label: 'Sophie Martin', text: t, due_date: '', item_id: '', status: 'Proposée' }, d.a); });
+  });
 }
 
 // ---------------------------------------------------------------- remplacer l'ancienne démo (A6_EFFACER_ANCIENNE_DEMO)

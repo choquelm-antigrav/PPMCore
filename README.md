@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.11.1)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.12.0)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -9,7 +9,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | Dossier | Rôle |
 | --- | --- |
 | `src/` | Les sources, modulaires : un fichier par sujet. C'est ici qu'on modifie le code. |
-| `dist/` | La version à installer, fabriquée depuis `src/` par `node tools/build.js` : **11 fichiers** (`PPM_Core.gs`, neuf pages, le manifeste). Ne jamais la modifier à la main. |
+| `dist/` | La version à installer, fabriquée depuis `src/` par `node tools/build.js` : **12 fichiers** (`PPM_Core.gs`, dix pages, le manifeste). Ne jamais la modifier à la main. |
 | `tools/` | `build.js`, qui fabrique `dist/` |
 | `PREMIERS_PAS.md` | Installation et premiers essais, pas à pas |
 | `tests/` | Tests hors ligne (Node 18+) : `node tests/run.js` |
@@ -41,7 +41,8 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `43_Budget.gs` | 0.9.0 : CPN (projet et sous-projet), grille de taux, lignes de budget et étalement, bilan par CPN |
 | `45_Overview.gs` | 0.10.0 : page Overview : création et renommage de projet, indicateurs délais, qualité et coût |
 | `46_Resources.gs` | 0.10.0 : page Ressources : personnes, équipes, rôle de projet, taux journalier par personne |
-| `47_Demo.gs` | 0.11.0 : démo complète (`seedDemo_()`), découpée en 15 étapes qui reprennent là où elles se sont arrêtées |
+| `47_Demo.gs` | 0.11.0 : démo complète (`seedDemo_()`), découpée en 17 étapes qui reprennent là où elles se sont arrêtées ; 0.12.0 : réunions, actions et synthèse du fil d'actualités |
+| `48_News.gs` | 0.12.0 : fil d'actualités du projet (lecture des comptes rendus, rattachement des réunions, actions, synthèse du matin, journal du projet, collecteur d'agenda) |
 | `44_Orders.gs` | 0.9.0 : commandes d'achat (PO) : saisie, statuts, répartition par livrable, constats et rappels de GR |
 | `42_Org.gs` | 0.8.0 : dépendances d'un élément (`deps.item`), rôles attribuables (`roles.options`), retrait d'une personne, équipes hiérarchiques (`teams.*`) |
 | `41_Edit.gs` | 0.7.0 : création, modification, déplacement et suppression sûre du WBS (`wbs.create`, `wbs.update`, `wbs.delete`) |
@@ -53,6 +54,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `Suivi.html` | Page Suivi : écarts à la baseline, changements à valider, baselines, agenda et Drive, mes notifications |
 | `Overview.html` | Page d'accueil : verdict, indicateurs délais, qualité, coût, portefeuille, création de projet |
 | `Ressources.html` | Page Ressources : personnes, équipes, rôle dans le projet, taux, accès |
+| `Actualites.html` | Page Actualités : synthèse du matin, actions issues des réunions, fil des réunions, réunions à trier, ajout d'un compte rendu, repères et journal |
 | `Budget.html` | Page Budget : bilan par CPN, achats (PO), lignes de budget |
 | `Compte.html` | Page Mon compte : fiche, rôles en lecture seule, notifications, affichage (thème, page d'accueil) |
 | `Admin.html` | Page Administration (réservée aux administrateurs) : réglages, santé, jours fériés, journaux |
@@ -66,7 +68,7 @@ Le pas à pas détaillé est dans `PREMIERS_PAS.md`. En résumé :
 
 1. **Ranger dans un Drive partagé** : créer un Drive partagé « PPM » et y placer le projet Apps Script, les classeurs, les sauvegardes et un dossier « PPM Sources ». L'outil n'est alors pas lié à un compte personnel.
 2. **Créer le projet** : sur script.google.com, *Nouveau projet* nommé **PPM Core**, puis cocher « Afficher le fichier manifeste » dans *Paramètres du projet*.
-3. **Copier les 11 fichiers de `dist/`** : `PPM_Core.gs` (à la place de `Code.gs`), les pages `Gantt`, `Structure`, `Suivi`, `Copilote`, `Compte`, `Admin`, `Budget`, `Overview`, `Ressources` (fichiers *HTML*, sans l'extension) et `appsscript.json` (il active le service avancé « Google Calendar API », qui sert à partager l'agenda d'un projet à ses membres). Ou bien les envoyer d'un coup avec `clasp` (voir `PREMIERS_PAS.md`).
+3. **Copier les 12 fichiers de `dist/`** : `PPM_Core.gs` (à la place de `Code.gs`), les pages `Gantt`, `Structure`, `Suivi`, `Copilote`, `Compte`, `Admin`, `Budget`, `Overview`, `Ressources`, `Actualites` (fichiers *HTML*, sans l'extension) et `appsscript.json` (il active le service avancé « Google Calendar API », qui sert à partager l'agenda d'un projet à ses membres). Ou bien les envoyer d'un coup avec `clasp` (voir `PREMIERS_PAS.md`).
 4. **Installer** : dans la liste des fonctions de l'éditeur, **la première** est `A1_INSTALLER_PPM` : l'exécuter et accepter les autorisations. Il règle le domaine et l'administrateur d'après ton compte (propriétés `PPM_DOMAIN`, `PPM_ADMINS`, sans rien écraser s'ils existent), crée les classeurs **PPM Données** et **PPM Historique**, installe les déclencheurs (nuit à 2 h, récapitulatif à 7 h) et vérifie l'installation. Ajouter ensuite un second administrateur dans `PPM_ADMINS` (adresses séparées par des virgules) et déplacer les classeurs dans le Drive partagé.
 5. **Données d'essai** (facultatif) : exécuter `A2_SEED_DEMO`, la deuxième de la liste. La démo est complète (voir « Démo complète » plus bas) ; elle représente plusieurs centaines d'écritures et s'arrête avant la limite de 6 minutes d'Apps Script : **relancer `A2_SEED_DEMO` jusqu'à « Démo complète »**, elle reprend à l'étape suivante. Une démo déjà complète n'est jamais recréée.
 6. **Publier** : *Déployer → Nouveau déploiement → Application Web*, « Exécuter en tant que : moi », « Accès : tous les utilisateurs du domaine ». Noter l'URL `/exec`.
@@ -95,7 +97,7 @@ Le dépôt Git est la référence du code ; Apps Script n'en est que le lieu d'e
 2. Modifier `src/`, tester hors ligne : `node tests/run.js` doit rester entièrement vert.
 3. Changer `PPM_VERSION` (`00_Config.gs`) et la balise `ppm-version` des neuf pages, puis fabriquer : `node tools/build.js` (il refuse une page dont la version ne correspond pas). `dist/` est versionné : il doit toujours correspondre aux sources.
 4. Valider et pousser : `git add -A && git commit -m "…" && git push`, puis fusionner la branche.
-5. Mettre en production : remplacer le contenu des 11 fichiers du dossier `dist/` dans le projet Apps Script (ou `clasp push -f` depuis `dist/`), puis exécuter `A1_INSTALLER_PPM`.
+5. Mettre en production : remplacer le contenu des 12 fichiers du dossier `dist/` dans le projet Apps Script (ou `clasp push -f` depuis `dist/`), puis exécuter `A1_INSTALLER_PPM`.
 6. *Déployer → Gérer les déploiements → Modifier (crayon) → Version : nouvelle version*. L'URL `/exec` ne change pas, AppSheet continue de fonctionner.
 7. Poser une étiquette sur la version publiée : `git tag v0.5.1 && git push --tags`. Elle remplace l'archive déposée dans « PPM Sources » (on peut en garder une copie).
 8. Retour arrière : même écran Apps Script, choisir la version précédente ; côté code, `git revert`.
@@ -140,7 +142,7 @@ Actions disponibles :
 node tests/run.js                    # 177 tests : calendriers, graphe, droits, journal, règles, API, marges, vues, personnes, OBS, WBS,
                                      # préférences, baselines, écarts, fil des changements, agenda, Drive, annuaire, récapitulatif,
                                      # simulation, synthèse, copilote (faux modèle), signaux faibles, fabrication, installation
-node tools/build.js                  # fabrique dist/ (11 fichiers)
+node tools/build.js                  # fabrique dist/ (12 fichiers)
 PPM_BUNDLE=dist/PPM_Core.gs node tests/run.js   # la même suite, sur le fichier unique
 node tests/gen_appsheet_columns.js   # régénère appsheet/COLONNES.md après une évolution du schéma
 
@@ -156,6 +158,7 @@ node tests/ui_org.js          # dépendances, rôles, personnes et équipes dans
 node tests/ui_budget.js       # page Budget : bilan, PO, lignes de budget
 node tests/ui_overview.js     # page Overview : indicateurs, création et renommage de projet
 node tests/ui_ressources.js   # page Ressources : personnes, équipes, rôles, taux, accès
+node tests/ui_news.js         # page Actualités, carte de l'Overview, « Mes actions » de Mon compte
 node tests/ui_nav.js          # barre du haut : pas de menu d'onglets, projet courant d'une page à l'autre, lien du copilote
 
 # Aperçu visuel des pages avec un jeu de données fourni, Agenda et Drive simulés (hors production) :
@@ -175,6 +178,20 @@ Les tests chargent les fichiers `.gs` tels quels, avec des tables en mémoire à
 - **Reprise** : chaque étape est enregistrée dans la propriété `PPM_DEMO_STEP`. Si une étape échoue, le message dit laquelle, les précédentes sont conservées, et il suffit de relancer. **Limite** : il n'y a pas de fonction pour effacer la démo ; pour repartir de zéro, installer sur de nouveaux classeurs (les noms de la démo, retrouvés par leur plus récent homonyme, ne se mélangent pas à de vraies fiches).
 - **Aperçu** : `node tests/preview_demo.js 8124` sert toutes les pages sur la démo complète.
 - **Overview, repère « Personnes »** : il compte maintenant les membres du projet (il comptait les adresses joignables, ce qui est trompeur pour des personnes sans adresse). **Indicateur de coût** : un dépassement du budget externe sur un seul CPN le met en alerte, même si le total du projet reste sous son budget (les analyses se font par CPN).
+
+## Fil d'actualités du projet (0.12.0, phase 1 de la spécification « step 1 et 2 »)
+
+Une page **Actualités** (`?view=actualites`, lien dans la barre du haut) rassemble ce qui s'est dit en réunion. Visible des membres du projet (toute personne qui y a un rôle, et les administrateurs). Aucune IA n'est appelée.
+
+- **A. Saisie manuelle** : le chef de projet colle des notes Gemini ou un compte rendu (ou le lien d'un Google Doc, lu avec le compte de l'outil). L'outil en tire un résumé, les décisions et les actions. Un même compte rendu n'est jamais ajouté deux fois.
+- **D. Actions** : lues sans IA dans les « prochaines étapes » nominatives (`[Nom] action : avant le 30/10`, `Nom : action pour le 12 novembre`, `action (Nom)`) ou dans les lignes `Action : texte — Nom — date` et `Décision : texte`. Le nom est reconnu parmi les membres du projet sans ambiguïté ; sinon l'action reste « sans responsable » et le chef de projet la complète (personne, échéance, livrable). Chaque personne accepte, conteste ou déclare faite l'action qui lui est confiée (page Actualités ou **Mon compte → Mes actions**). Une contestation prévient le chef de projet par mail. Les actions en attente et celles qui arrivent à échéance figurent dans le récapitulatif du matin.
+- **E. Repères** : par projet, jusqu'à dix mots (lettres, sigle, logo) qui rattachent une réunion au projet quand ils figurent dans son titre ; case « Activer la collecte automatique ».
+- **F. Collecteur pilote** : deux déclencheurs, à **1 h et 13 h** (posés par `A5_INSTALLER_DECLENCHEURS`, fonction `newsCollectRun`), lisent l'**agenda du compte qui exécute les déclencheurs** (pas celui des autres membres : la spécification prévoit de commencer par le chef de projet), depuis la dernière passe. Une réunion est retenue si **au moins deux membres du projet y sont invités** ou si son **titre contient un repère** ; un repère l'emporte. Si plusieurs projets se la disputent à égalité, elle va dans la liste **« à trier »** du chef de projet (rattacher ou ignorer). Les **événements privés ou confidentiels ne sont jamais lus**, ni les annulés. Les notes jointes à l'invitation (Google Doc dont le titre évoque « Notes », « Gemini », « compte rendu », « CR », « minutes », « MoM ») sont lues et analysées. La passe est reprenable (150 secondes au plus) et ne crée jamais deux fois la même réunion.
+- **B. Journal du projet** : un Google Doc tenu à jour par l'outil (fiche du projet, puis les réunions de la plus récente à la plus ancienne), créé dans le dossier Drive du projet quand il existe. Mis à jour par la collecte quand il y a du nouveau, ou à la demande (bouton). À ajouter comme source du carnet NotebookLM.
+- **C. Synthèse du matin** : bouton « Copier le prompt du jour » (cinq sections : décisions, dates qui bougent, risques, blocages, actions, avec rappel des réunions) à coller dans NotebookLM ou Gemini ; bouton « Publier les actualités » : l'outil vérifie le format (au moins trois des cinq sections), publie, et prévient par mail les membres du projet qui ont une adresse. Une seule synthèse par jour et par projet (la seconde remplace la première). L'Overview montre la dernière synthèse (ou les dernières réunions) et le nombre d'actions ouvertes. Sans synthèse publiée, le récapitulatif de 7 h reprend le **journal brut** des réunions de la veille. *Écart avec la spécification : elle prévoyait un mail de repli à 9 h ; il passe dans le récapitulatif de 7 h déjà existant.*
+- **Nouveau droit de Google** : l'outil lit et écrit des Google Docs (notes jointes, journal), d'où l'autorisation `documents` ajoutée au manifeste : **réautoriser l'outil** (exécuter une fonction depuis l'éditeur) après la mise à jour, et la faire valider par la sécurité informatique.
+- **Données** : tables `Meeting`, `NewsAction`, `NewsDigest` ; colonnes `news_on`, `news_keywords`, `news_journal_id` du projet ; propriétés `PPM_NEWS_LAST` (fin de la dernière collecte) et `PPM_LAST_NEWS` (son résultat). Droits `news.add` et `news.manage` : PL, DPL, CP. Fonctions de calcul pures, testées sans service Google : `newsFindDate_`, `newsParseNotes_`, `newsParseActionLine_`, `newsMatchProject_`, `newsValidateDigest_`, `newsPrompt_`, `newsJournalLines_` ; l'agenda et les Docs passent par un adaptateur remplaçable (`NEWS_ADAPTER`).
+- **Limites** : le collecteur et la lecture des Google Docs n'ont été essayés qu'avec un faux agenda ; l'analyse des notes repose sur la forme habituelle des notes Gemini en français, à confirmer sur un exemple réel ; pas encore de lecture des agendas des autres membres (accord de chacun et de la sécurité requis), ni de bouton « ne pas publier » par réunion.
 
 ## Pages sans onglets, OBS/WBS, copilote en suspens (0.11.0)
 
