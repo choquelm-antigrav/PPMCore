@@ -1,4 +1,4 @@
-# Premiers pas : installer et essayer PPM (version 0.13.0)
+# Premiers pas : installer et essayer PPM (version 0.13.2)
 
 Environ 15 minutes. Pas besoin d'AppSheet pour ces essais. Tout ce qu'il faut est dans le dossier `dist` de l'archive : **12 fichiers**.
 
@@ -21,7 +21,7 @@ En haut de l'éditeur, choisir **A1_INSTALLER_PPM** (la première de la liste de
 
 Le journal d'exécution doit finir par « Installation conforme ». Le domaine et l'administrateur sont déduits de votre compte.
 
-Pour avoir des données d'essai : exécuter aussi **A2_SEED_DEMO** (la deuxième de la liste) : un programme complet, quatre projets dont un complexe (planning en retard, baselines, budget, commandes d'achat, risques) et 38 personnes avec leurs taux. Cela prend plusieurs minutes : **relancez-la jusqu'à voir « Démo complète »** ; elle reprend là où elle s'est arrêtée. Si le journal répond « La démo existe déjà (programme NAC) », une démo est déjà dans le classeur : rien n'est recréé ni remplacé. **Si vous aviez essayé une version antérieure à la 0.11.0**, son ancienne démo (programme DEMO, projet PILOTE) est encore là : exécutez d'abord **A6_EFFACER_ANCIENNE_DEMO** (la sixième de la liste) ; le premier lancement dit seulement ce qui serait supprimé, relancez-la dans les 10 minutes pour confirmer, puis lancez A2_SEED_DEMO. Personne d'autre que vous n'a d'adresse : rien n'est envoyé.
+Pour avoir des données d'essai : exécuter aussi **A2_SEED_DEMO** (la deuxième de la liste) : un programme complet, quatre projets dont un complexe (planning en retard, baselines, budget, commandes d'achat, risques) et 38 personnes avec leurs taux. Cela prend plusieurs minutes : **relancez-la jusqu'à voir « Démo complète »** ; elle reprend là où elle s'est arrêtée. Si le journal répond « La démo existe déjà (programme NAC) », une démo est déjà dans le classeur : rien n'est recréé ni remplacé. **Si vous aviez essayé une version antérieure à la 0.11.0**, son ancienne démo (programme DEMO, projet PILOTE) est encore là : exécutez d'abord **A6_EFFACER_DEMO** (la sixième de la liste) ; le premier lancement dit seulement ce qui serait supprimé, relancez-la dans les 10 minutes pour confirmer, puis lancez A2_SEED_DEMO. Personne d'autre que vous n'a d'adresse : rien n'est envoyé.
 
 ## 4. Publier
 
@@ -87,6 +87,10 @@ En cas de doute, exécutez `A4_DIAGNOSTIC_ACCES` dans l'éditeur (Exécuter, pui
 - **Réautoriser l'outil** : la version 0.12.0 demande en plus l'accès aux Google Docs. Après avoir copié les fichiers, exécuter `A1_INSTALLER_PPM` et accepter la nouvelle autorisation.
 - **Collecte automatique** : exécuter `A5_INSTALLER_DECLENCHEURS` pour poser les deux déclencheurs (1 h et 13 h). Elle lit **l'agenda du compte qui les a posés**, pas celui des autres membres.
 - **Sans collecte, rien n'est perdu** : la saisie manuelle d'un compte rendu et la synthèse du matin fonctionnent seules.
+
+## Si la démo est vide ou s'arrête (0.13.2)
+
+La démo se crée en plusieurs lancements. **Relancez `A2_SEED_DEMO` tant que le message ne commence pas par « Démo complète »** : un message « Démo en cours… » signifie qu'elle est INCOMPLÈTE. À la fin, le message donne les chiffres relus dans la base (projets, workpackages, livrables et jalons…). Si la démo est cassée ou à moitié faite : `A6_EFFACER_DEMO` **deux fois** (le premier lancement montre, le second supprime), puis `A2_SEED_DEMO`. Après chaque mise à jour, exécutez aussi **`A8_VERIFIER_ECRITURE`** (il écrit dans une feuille temporaire qu'il supprime) : il vérifie que les textes comme les codes de workpackage « 1.1 » ou « 2.10 » restent intacts dans votre Google Sheets.
 
 ## Vérifier dans votre Apps Script : A7
 

@@ -280,6 +280,20 @@ var DEMO_STEPS = [
  * Crée la démo, étape par étape ; relançable jusqu'à « Démo complète ». Le compte qui la lance doit être administrateur.
  * Une démo déjà complète n'est jamais recréée (pas de doublons).
  */
+/** Relit la base après la démo : chaque projet a-t-il son planning ? Une démo « terminée » sans livrables ne doit jamais être annoncée comme complète. */
+function demoVerify_() {
+  var progs = repoList('Program', function (p) { return p.code === 'NAC'; }), pid = {}; progs.forEach(function (p) { pid[p.id] = true; });
+  var projects = repoList('Project', function (p) { return pid[p.program_id]; }), ids = {}; projects.forEach(function (p) { ids[p.id] = true; });
+  var items = repoList('PlanItem', function (i) { return ids[i.project_id]; }), wps = repoList('WorkPackage', function (w) { return ids[w.project_id]; });
+  var iid = {}; items.forEach(function (i) { iid[i.id] = true; });
+  var deps = repoList('Dependency', function (d) { return iid[d.predecessor_id]; }).length, lines = repoList('BudgetLine', function (b) { return iid[b.deliverable_id]; }).length;
+  var meetings = repoList('Meeting', function (m) { return ids[m.project_id]; }).length;
+  var empty = projects.filter(function (p) { return !items.some(function (i) { return i.project_id === p.id; }); }).map(function (p) { return p.code; });
+  var text = projects.length + ' projets, ' + wps.length + ' workpackages, ' + items.length + ' livrables et jalons, ' + deps + ' dépendances, ' + lines + ' lignes de budget, ' + meetings + ' réunions';
+  var ok = projects.length === 4 && items.length >= 60 && wps.length >= 20 && deps > 0 && lines > 0 && meetings > 0 && !empty.length;
+  return { ok: ok, text: ok ? text : text + (empty.length ? ' ; projets sans aucun livrable : ' + empty.join(', ') : '') };
+}
+
 function seedDemo_() {
   var t0 = Date.now(), next = Number(getProp(PROP.DEMO_STEP, '0')) || 0;
   if (next === 0 && repoList('Program', function (p) { return p.code === 'NAC'; }).length) {
@@ -302,9 +316,11 @@ function seedDemo_() {
   var at = Number(getProp(PROP.DEMO_STEP, '0')) || 0, msg;
   if (at >= DEMO_STEPS.length) {
     deleteProp(PROP.DEMO_STEP);
-    msg = 'Démo complète : programme NAC, 4 projets, ' + DEMO_PEOPLE.length + ' personnes, ' + DEMO_TEAMS.length + ' équipes. Ouvrez la page Overview.' + oldDemoNote_();
+    var v = demoVerify_();
+    msg = v.ok ? 'Démo complète : programme NAC, 4 projets, ' + DEMO_PEOPLE.length + ' personnes, ' + DEMO_TEAMS.length + ' équipes. Relu dans la base : ' + v.text + '. Ouvrez la page Overview.' + oldDemoNote_()
+      : 'DÉMO INCOMPLÈTE malgré toutes les étapes : ' + v.text + '. Exécutez A6_EFFACER_DEMO (deux fois) puis A2_SEED_DEMO, et envoyez-moi le journal.';
   } else {
-    msg = 'Démo en cours : étape ' + at + ' sur ' + DEMO_STEPS.length + ' terminée (' + ran.join(' ; ') + '). Relancez A2_SEED_DEMO pour continuer.';
+    msg = 'Démo en cours : étape ' + at + ' sur ' + DEMO_STEPS.length + ' terminée (' + ran.join(' ; ') + '). Relancez A2_SEED_DEMO pour continuer. ⚠ TANT QUE VOUS NE VOYEZ PAS « Démo complète », LA DÉMO EST INCOMPLÈTE (pas de planning, de budget ni d’actualités).';
   }
   console.log(msg);
   return msg;

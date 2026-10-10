@@ -201,7 +201,7 @@ function listTriggers_() {
 
 defineAction('admin.health', function (p, ctx) {
   requireAdmin_(ctx);
-  var checks = checkInstall_();
+  var checks = checkInstallCached_(!!(p && p.refresh));
   var handlers = listTriggers_();
   var triggers = null;
   if (handlers) {

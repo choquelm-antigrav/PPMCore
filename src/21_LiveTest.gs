@@ -109,6 +109,14 @@ function liveSmokeTest_(opts) {
     expect(r && r.code > 0 && r.code < 500, 'Google a répondu ' + (r && r.code));
     return 'Google répond (' + r.code + ', normal sans clé)';
   });
+  step('Démo : contenu des projets NAC (si elle a été créée)', function () {
+    if (!repoList('Program', function (p) { return p.code === 'NAC'; }).length) return 'aucune démo NAC dans ce classeur';
+    var pending = getProp(PROP.DEMO_STEP, '');
+    if (pending) return { warn: 'démo INTERROMPUE : ' + pending + ' étape(s) sur ' + DEMO_STEPS.length + ' faites ; relancez A2_SEED_DEMO jusqu’à « Démo complète »' };
+    var v = demoVerify_();
+    if (!v.ok) return { warn: 'démo incomplète (' + v.text + ') : exécutez A6_EFFACER_DEMO deux fois puis A2_SEED_DEMO' };
+    return v.text;
+  });
   step('Mails : quota du jour', function () {
     if (!has('MailApp') || !MailApp.getRemainingDailyQuota) return { warn: 'non vérifiable ici' };
     var q = MailApp.getRemainingDailyQuota();
@@ -172,3 +180,51 @@ function testerDansAppsScript_() {
   console.log(rep);
   return rep;
 }
+
+/**
+ * A8_VERIFIER_ECRITURE : le SEUL test qui écrit. Dans une feuille TEMPORAIRE du classeur Données (supprimée à la fin, même en cas d'erreur),
+ * il écrit des textes à risque (codes « 1.1 », « 2.10 », « =1+1 », « TRUE »…) avec la vraie couche d'écriture de l'outil, les relit, et compare.
+ * Il prouve avec le vrai Google Sheets que les textes restent des textes. Aucune donnée réelle n'est touchée.
+ */
+function verifierEcriture_() {
+  var book = openBook_('data'), name = '_ppm_test_ecriture', rows = [];
+  var leftover = book.getSheetByName(name);
+  if (leftover) book.deleteSheet(leftover);
+  var sh = book.insertSheet(name), bad = 0;
+  try {
+    var headers = tableColumns('WorkPackage');
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+    var t = sheetTableOn_('WorkPackage', sh);
+    var cases = ['1', '1.1', '2.10', '1.10', '10', '0012', '=1+1', '=IMPORTXML("http://exemple.test")', '+5', '-x', '@a', 'TRUE', 'false', '10%', '.5', '2026-10-05', '2026-11', '1/2', '12:30', '1e3',
+      "'déjà", "l'apostrophe", 'texte normal', 'é€😀', 'deux\nlignes'];
+    cases.forEach(function (v, i) { t.appendRows([{ id: 'essai' + i, project_id: 'p', wbs_code: v, name: v, charge_code: v, cpn: v }]); });
+    var back = t.readAll();
+    cases.forEach(function (v, i) {
+      var r = back.filter(function (x) { return x.id === 'essai' + i; })[0] || {};
+      var same = r.wbs_code === v && r.name === v && r.charge_code === v && r.cpn === v;
+      if (!same) bad++;
+      rows.push((same ? '✓ ' : '✗ ') + JSON.stringify(v) + (same ? '' : ' relu ' + JSON.stringify(r.wbs_code) + ' (' + typeof r.wbs_code + ')'));
+    });
+    var distinct = {}; back.forEach(function (r) { distinct[r.wbs_code] = true; });
+    if (Object.keys(distinct).length !== cases.length) { bad++; rows.push('✗ des codes distincts se sont confondus à la relecture'); }
+    // une cellule déjà devenue nombre (écrite avant la protection) doit être relue comme du texte
+    sh.getRange(2 + cases.length, 1, 1, 1).setValues([['ancien']]);
+    sh.getRange(2 + cases.length, headers.indexOf('wbs_code') + 1, 1, 1).setValues([[1.1]]);
+    var old = t.readAll().filter(function (x) { return x.id === 'ancien'; })[0] || {};
+    var oldOk = old.wbs_code === '1.1';
+    if (!oldOk) bad++;
+    rows.push((oldOk ? '✓ ' : '✗ ') + 'ancienne cellule numérique 1,1 relue comme texte « 1.1 »' + (oldOk ? '' : ' : ' + JSON.stringify(old.wbs_code)));
+    // une colonne réelle au format « texte brut » conserverait l'apostrophe : on le signale
+    var real = openBook_('data').getSheetByName('WorkPackage'), warn = '';
+    if (real && typeof real.getRange(2, 1).getNumberFormat === 'function') {
+      var idx = tableColumns('WorkPackage').indexOf('wbs_code');
+      if (idx >= 0 && real.getRange(2, idx + 1).getNumberFormat() === '@') warn = ' ⚠ La colonne wbs_code de la feuille WorkPackage est au format « Texte brut » : l’apostrophe y serait conservée. Remettez le format « Automatique ».';
+    }
+  } finally {
+    book.deleteSheet(sh);
+  }
+  var head = 'A8 — écriture dans Google Sheets (feuille temporaire, supprimée) : ' + (bad ? 'ÉCHEC, ' + bad + ' cas altéré(s)' : 'OK, ' + (rows.length) + ' contrôles, aucun cas altéré') + '.' + (typeof warn === 'string' ? warn : '');
+  return head + '\n' + rows.join('\n');
+}
+
+function verifierEcritureAvecJournal_() { var r = verifierEcriture_(); console.log(r); return r; }

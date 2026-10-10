@@ -191,6 +191,19 @@ function checkInstall_() {
   return problems.concat(checkPageVersions_());
 }
 
+/**
+ * Pour la page Administration : le contrôle complet lit les en-têtes de toutes les feuilles (une dizaine de secondes dans Apps Script).
+ * Un résultat « aucun problème » est gardé dix minutes, par version du Core (une nouvelle version relit tout). Un problème n'est jamais
+ * gardé : il s'affiche aussitôt. A7_TESTER_DANS_APPS_SCRIPT et selfCheck relisent toujours tout.
+ */
+function checkInstallCached_(force) {
+  var cache = typeof CacheService !== 'undefined' ? CacheService.getScriptCache() : null, key = 'ppm_install_ok_' + PPM_VERSION;
+  if (!force && cache && cache.get(key)) return [];
+  var problems = checkInstall_();
+  if (cache) { if (problems.length) cache.remove(key); else cache.put(key, '1', 600); }
+  return problems;
+}
+
 function selfCheck() {
   var problems = checkInstall_();
   var msg = problems.length ? 'À corriger :\n- ' + problems.join('\n- ') : 'Installation conforme (PPM Core ' + PPM_VERSION + ').';

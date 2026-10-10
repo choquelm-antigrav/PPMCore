@@ -1,5 +1,18 @@
 # Journal des versions
 
+## 0.13.2 — textes protégés dans les feuilles, démo réparable
+
+- **Défaut corrigé (constaté dans le vrai Apps Script)** : Sheets interprétait les textes écrits comme une saisie au clavier. Le code de workpackage « 1 » devenait le nombre 1 et ne se retrouvait plus (la démo s'arrêtait à l'étape 4 : « workpackage introuvable NAC-1 1 », donc aucun livrable ni planning), « 2.10 » et « 2.1 » se confondaient, « TRUE » devenait un booléen, « 2026-11 » une date, et un texte commençant par « = » **une formule exécutée** (injection). Les colonnes de texte écrivent désormais une apostrophe devant les textes à risque et relisent du texte, même pour les anciennes cellules.
+- **Faux Google Sheets fidèle** (`tests/fake_sheets.js`) et `test_sheets_layer.js` : la vraie couche d'écriture est enfin testée ; la démo complète y donne exactement les mêmes données qu'en mémoire.
+- **`A8_VERIFIER_ECRITURE`** : écrit 25 textes à risque dans une feuille temporaire du vrai Sheets, les relit, compare, supprime la feuille.
+- **`A6_EFFACER_DEMO`** (ex-`A6_EFFACER_ANCIENNE_DEMO`) efface aussi la démo NAC (équipes, réunions, commandes, personnes fictives), détache l'administrateur des équipes fictives et remet A2 à zéro. A2 annonce qu'une démo en cours est incomplète, relit la base à la fin et refuse de dire « complète » si un projet n'a aucun livrable ; A7 signale une démo interrompue ou vide.
+- Tests : 235 serveur (dont 11 nouveaux), plus douze essais de pages.
+
+## 0.13.1 — page Administration plus rapide
+
+- **Mesure dans le vrai Apps Script** (premier journal de A7, 0.13.0, 24 contrôles OK) : le contrôle d'installation, qui lit les en-têtes de toutes les feuilles, durait **10 s**, et la page Administration l'appelait à chaque ouverture. Un résultat « aucun problème » est désormais gardé 10 minutes (mémoire du script, par version du Core) ; un problème n'est jamais gardé et s'affiche aussitôt ; les déclencheurs et le dernier traitement nocturne restent calculés en direct. `A7_TESTER_DANS_APPS_SCRIPT` et `selfCheck` relisent toujours tout. Les autres appels de pages mesurés vont de 94 ms à 976 ms.
+- Tests : 224 serveur, plus douze essais de pages.
+
 ## 0.13.0 — Copilote : la clé Gemini de chaque personne
 
 - **Réactivation du copilote d'une case à cocher** dans Administration (tracée), sans toucher aux propriétés du script.

@@ -26,6 +26,7 @@ require('./test_news')();
 require('./test_pages')();
 require('./test_livetest')();
 require('./test_copilot_key')();
+require('./test_sheets_layer')();
 console.log('\n' + results.passed + ' réussis, ' + results.failed + ' en échec');
 if (results.failed) {
   results.failures.forEach((f) => console.log('\n✗ ' + f.name + '\n' + (f.error && f.error.stack)));

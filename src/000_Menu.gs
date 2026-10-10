@@ -9,8 +9,9 @@
  *   A3_VERIFIER_INSTALLATION  contrôle de l'installation
  *   A4_DIAGNOSTIC_ACCES       quand « Accès réservé » s'affiche
  *   A5_INSTALLER_DECLENCHEURS (re)pose les déclencheurs de la nuit et du récapitulatif de 7 h
- *   A6_EFFACER_ANCIENNE_DEMO  supprime l'ancienne démo (programme DEMO, jusqu'en 0.10.0) ; deux lancements : le premier montre, le second supprime
+ *   A6_EFFACER_DEMO           supprime la démo (programmes DEMO et NAC) pour la recréer ; deux lancements : le premier montre, le second supprime
  *   A7_TESTER_DANS_APPS_SCRIPT  test de contrôle avec les vrais services Google, en lecture seule (rien n'est écrit)
+ *   A8_VERIFIER_ECRITURE        le seul test qui écrit : une feuille temporaire (supprimée) pour vérifier que les textes restent des textes
  * Les implémentations sont dans 20_Setup.gs, 21_LiveTest.gs, 40_Jobs.gs et 47_Demo.gs.
  */
 function A1_INSTALLER_PPM() { return installerPpm_(); }
@@ -18,5 +19,6 @@ function A2_SEED_DEMO() { return seedDemo_(); }
 function A3_VERIFIER_INSTALLATION() { return selfCheck(); }
 function A4_DIAGNOSTIC_ACCES() { return diagnosticAcces_(); }
 function A5_INSTALLER_DECLENCHEURS() { return installTriggers(); }
-function A6_EFFACER_ANCIENNE_DEMO() { return effacerAncienneDemo_(); }
+function A6_EFFACER_DEMO() { return effacerDemo_(); }
 function A7_TESTER_DANS_APPS_SCRIPT() { return testerDansAppsScript_(); }
+function A8_VERIFIER_ECRITURE() { return verifierEcritureAvecJournal_(); }

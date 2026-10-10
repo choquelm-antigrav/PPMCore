@@ -191,20 +191,51 @@ function openBook_(book) {
   return _bookCache[book];
 }
 
+/**
+ * Colonnes dont Google Sheets doit INTERPRÉTER la saisie : nombres, booléens, dates et horodatages. Toutes les autres sont du TEXTE.
+ * Sheets traite ce que setValues écrit comme une saisie au clavier : « 1 » devient le nombre 1, « 1.1 » le nombre 1,1, « 2.10 » le nombre 2,1
+ * (« 2.10 » et « 2.1 » se confondent), « TRUE » un booléen, « 2026-11 » une date, et « =… » une FORMULE exécutée (injection). Pour les colonnes de
+ * texte, un texte à risque est donc écrit avec une apostrophe au début, que Sheets n'enregistre pas ; à la lecture, un nombre trouvé dans une
+ * colonne de texte (cellule écrite avant cette protection) redevient du texte.
+ */
+var SHEET_PARSED_COLS = {};
+['ac', 'amount', 'bac', 'capacity_days_month', 'cpi', 'daily_rate', 'days', 'eac', 'ev', 'financial_value', 'fixed_amount', 'frozen_rate', 'impact', 'lag_days', 'number',
+  'planned_amount', 'planned_days', 'probability', 'progress_pct', 'pv', 'reminder_days', 'score', 'spi', 'version', 'year', 'deleted', 'acknowledged', 'enabled',
+  'is_external', 'news_on', 'reminder_off', 'unverified', 'status_date', 'at'].concat(DATE_COLS).forEach(function (c) { SHEET_PARSED_COLS[c] = true; });
+
+function sheetParsedCol_(h) { return !!SHEET_PARSED_COLS[h] || /_at$/.test(h) || /_on$/.test(h); }
+
+/** Un texte que Sheets risque d'interpréter : formule, signe, chiffre ou point au début, booléen, ou apostrophe déjà là. */
+function sheetNeedsQuote_(v) { return /^[=+\-@'.\d]/.test(v) || /^(true|false)$/i.test(v); }
+
 function sheetTable_(name) {
   var def = SCHEMA[name];
   if (!def) throw new PpmError('NOT_FOUND', 'Table inconnue : ' + name);
   var sh = openBook_(def.book).getSheetByName(name);
   if (!sh) throw new PpmError('CONFIG', 'Feuille manquante : ' + name + ' (relancer setupPpm).');
+  return sheetTableOn_(name, sh);
+}
+
+/** La table d'un schéma sur une feuille donnée (A8_VERIFIER_ECRITURE l'emploie sur une feuille temporaire). */
+function sheetTableOn_(name, sh) {
   var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+  var isText = headers.map(function (h) { return !sheetParsedCol_(h); });
 
   function toObj(row) {
     var o = {};
-    headers.forEach(function (h, i) { o[h] = normalizeValue(row[i]); });
+    headers.forEach(function (h, i) {
+      var v = normalizeValue(row[i]);
+      if (isText[i]) { if (typeof v === 'number') v = String(v); else if (typeof v === 'boolean') v = v ? 'TRUE' : 'FALSE'; }
+      o[h] = v;
+    });
     return o;
   }
   function toRow(obj) {
-    return headers.map(function (h) { return obj[h] === undefined || obj[h] === null ? '' : obj[h]; });
+    return headers.map(function (h, i) {
+      var v = obj[h];
+      if (v === undefined || v === null) return '';
+      return isText[i] && typeof v === 'string' && sheetNeedsQuote_(v) ? "'" + v : v;
+    });
   }
   function dataRows() { return Math.max(0, sh.getLastRow() - 1); }
 

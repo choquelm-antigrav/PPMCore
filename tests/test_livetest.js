@@ -85,4 +85,33 @@ module.exports = function () {
     const down = run((c) => { c.AI_FETCH = () => ({ code: 503, text: 'unavailable' }); });
     ok(down.status === 'ÉCHEC' && /503/.test(down.detail), 'Google en panne : échec avec le code');
   });
+
+  test('A7 et A2 : une démo interrompue ou vide est signalée, jamais annoncée comme complète', () => {
+    const row = (w) => w.c.liveSmokeTest_().rows.find((r) => r.name.indexOf('Démo : contenu') === 0);
+    const none = installed(lot2World()); as(none, ADMIN);
+    eq([row(none).status, row(none).detail], ['OK', 'aucune démo NAC dans ce classeur'], 'sans démo : rien à signaler');
+    // démo interrompue après trois étapes : exactement le cas rencontré en vrai
+    const cut = installed(lot2World()); as(cut, ADMIN); cut.c.DEMO_BUDGET_MS = 0;
+    const m1 = cut.c.seedDemo_(), m2 = cut.c.seedDemo_(); cut.c.seedDemo_();
+    eq(cut.c.getProp(cut.c.PROP.DEMO_STEP, ''), '3', 'après trois lancements, la démo est arrêtée à l’étape 3 : exactement le cas rencontré en vrai');
+    ok(/^Démo en cours/.test(m2), 'chaque lancement intermédiaire commence par « Démo en cours »');
+    ok(/TANT QUE VOUS NE VOYEZ PAS « Démo complète », LA DÉMO EST INCOMPLÈTE/.test(m1) && /Relancez A2_SEED_DEMO/.test(m1), 'le message d’étape intermédiaire dit en toutes lettres que la démo est incomplète : ' + m1.slice(-140));
+    const r1 = row(cut);
+    ok(r1.status === 'ATTENTION' && /INTERROMPUE/.test(r1.detail) && /relancez A2_SEED_DEMO/.test(r1.detail), 'A7 signale la démo interrompue : ' + r1.detail);
+    // démo complète : relue dans la base
+    const full = installed(lot2World()); as(full, ADMIN); full.c.DEMO_BUDGET_MS = 1e9;
+    const done = full.c.seedDemo_();
+    ok(/^Démo complète/.test(done) && /Relu dans la base : 4 projets, \d+ workpackages, \d+ livrables et jalons, \d+ dépendances, \d+ lignes de budget, \d+ réunions/.test(done), done);
+    const r2 = row(full);
+    ok(r2.status === 'OK' && /^4 projets/.test(r2.detail), 'A7 : ' + r2.detail);
+    // une démo « terminée » dont les livrables ont disparu : jamais « complète »
+    full.c.repoList('PlanItem').forEach((i) => full.c.repoSoftDelete('PlanItem', i.id, null, { actor: ADMIN, source: 'test' }));
+    const v = full.c.demoVerify_();
+    ok(!v.ok && /projets sans aucun livrable : NAC-1, NAC-2, NAC-3, NAC-4/.test(v.text), 'la relecture voit des projets sans livrable : ' + v.text);
+    const r3 = row(full);
+    ok(r3.status === 'ATTENTION' && /démo incomplète/.test(r3.detail) && /A6_EFFACER_DEMO/.test(r3.detail), 'A7 : ' + r3.detail);
+    // et A2, si la relecture échoue après toutes les étapes
+    const bad = installed(lot2World()); as(bad, ADMIN); bad.c.DEMO_BUDGET_MS = 1e9; bad.c.demoVerify_ = () => ({ ok: false, text: '0 livrable' });
+    ok(/^DÉMO INCOMPLÈTE malgré toutes les étapes : 0 livrable\. Exécutez A6_EFFACER_DEMO/.test(bad.c.seedDemo_()), 'A2 refuse de dire « Démo complète » quand la base dit le contraire');
+  });
 };

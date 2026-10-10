@@ -196,4 +196,31 @@ module.exports = function () {
     eq(Object.keys(w.c.preloadFor_('admin', boot('reglages', false), CP)), [], 'rien pour un non-administrateur');
     eq([w.c.PAGES.compte, w.c.PAGES.admin, w.c.PAGE_TABS.compte, w.c.PAGE_TABS.admin], ['Compte', 'Admin', [''], ['']], 'plus d’onglets : rubriques en zones');
   });
+
+  test('Santé : le contrôle d’installation, long dans Apps Script, est gardé dix minutes quand tout va bien, jamais en cas de problème', () => {
+    const w = lot2World(); w.c.setProp(w.c.PROP.DATA_ID, 'd'); w.c.setProp(w.c.PROP.HISTORY_ID, 'h');
+    const store = {}; let runs = 0, now = 0;
+    w.c.CacheService = { getScriptCache: () => ({ get: (k) => (store[k] && store[k].until > now ? store[k].v : null), put: (k, v, s) => { store[k] = { v, until: now + s * 1000 }; }, remove: (k) => { delete store[k]; } }) };
+    const real = w.c.checkInstall_; w.c.checkInstall_ = () => { runs++; return real(); };
+    eq(w.call(ADMIN, 'admin.health', {}).checks.length, 0, 'installation conforme');
+    eq(runs, 1, 'premier appel : lecture complète');
+    w.call(ADMIN, 'admin.health', {}); w.call(ADMIN, 'admin.health', {});
+    eq(runs, 1, 'les suivants, dans les dix minutes : aucune relecture');
+    w.call(ADMIN, 'admin.health', { refresh: true });
+    eq(runs, 2, '« actualiser » force la relecture');
+    now += 601000; w.call(ADMIN, 'admin.health', {});
+    eq(runs, 3, 'après dix minutes : relecture');
+    ok(Object.keys(store).every((k) => k.indexOf('ppm_install_ok_' + w.c.PPM_VERSION) === 0), 'la mémoire est propre à la version du Core : une nouvelle version relit tout');
+    // un problème n'est jamais gardé
+    w.c.deleteProp(w.c.PROP.DATA_ID); Object.keys(store).forEach((k) => delete store[k]);
+    ok(w.call(ADMIN, 'admin.health', {}).checks.some((x) => /Propriété manquante/.test(x)), 'problème signalé');
+    w.c.setProp(w.c.PROP.DATA_ID, 'd'); const before = runs;
+    eq(w.call(ADMIN, 'admin.health', {}).checks.length, 0, 'une fois corrigé, le problème disparaît aussitôt (jamais gardé en mémoire)');
+    eq(runs, before + 1);
+    // A7 relit toujours tout, même quand la mémoire dit « conforme »
+    const r0 = runs;
+    w.c.Session = { getActiveUser: () => ({ getEmail: () => ADMIN }) };
+    w.c.liveSmokeTest_();
+    ok(runs > r0, 'A7 ne se fie jamais à la mémoire');
+  });
 };
