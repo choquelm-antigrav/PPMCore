@@ -1,5 +1,13 @@
 # Journal des versions
 
+## 0.14.0 — version A : ajout toujours possible, livrables par personne, pages en grille
+
+- **WBS** : « Ajouter un workpackage », « un livrable » et « un jalon » toujours dans la barre ; le formulaire propose « Rattaché à » (projet ou workpackage, sous-workpackages compris), avec le workpackage sélectionné proposé d'office. Correction au passage : la liste des parents possibles d'un nouveau workpackage n'offrait que la racine.
+- **Ressources** : colonne « Livrables » (responsable de N livrables et M jalons ; contribue à P).
+- **Compte, Budget, Administration** : grille de cartes qui se réagence selon la largeur, sans colonne vide ni tableau rogné ; réglages de l'administration sur toute la largeur en colonnes.
+- **Démo** : contributeurs affectés aux workpackages de NAC-2, NAC-3 et NAC-4.
+- Tests : 238 serveur, plus douze essais de pages.
+
 ## 0.13.2 — textes protégés dans les feuilles, démo réparable
 
 - **Défaut corrigé (constaté dans le vrai Apps Script)** : Sheets interprétait les textes écrits comme une saisie au clavier. Le code de workpackage « 1 » devenait le nombre 1 et ne se retrouvait plus (la démo s'arrêtait à l'étape 4 : « workpackage introuvable NAC-1 1 », donc aucun livrable ni planning), « 2.10 » et « 2.1 » se confondaient, « TRUE » devenait un booléen, « 2026-11 » une date, et un texte commençant par « = » **une formule exécutée** (injection). Les colonnes de texte écrivent désormais une apostrophe devant les textes à risque et relisent du texte, même pour les anciennes cellules.

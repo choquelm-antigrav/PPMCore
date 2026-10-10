@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.13.2">
+<meta name="ppm-version" content="0.14.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -252,6 +252,16 @@
   @media (max-width: 900px) { header { padding: 14px 12px 12px; } header .title h1 { font-size: 22px; } .zone { padding: 16px 12px 0; } }
   /* ---- composants communs aux pages (0.12.1) : une seule définition, reprise des pages ---- */
   .panel[hidden] { display: none; }
+  /* Pages en zones (Compte, Budget, Administration) : une grille qui se réagence selon la largeur, des cartes comme dans l'Overview, sans place vide.
+     --cell-min = largeur minimale d'une carte ; --max-cols = nombre maximal de colonnes (jamais de colonne vide sur un grand écran) ; .wide = une carte sur toute la largeur (gros tableaux) ; une carte dont le panneau est masqué disparaît. */
+  .zones { display: grid; grid-template-columns: repeat(auto-fit, minmax(max(min(100%, var(--cell-min, 460px)), calc((100% - (var(--max-cols, 4) - 1) * 20px) / var(--max-cols, 4))), 1fr)); gap: 20px; padding: 16px 24px 28px; align-items: start; }
+  .zones .cell { min-width: 0; background: var(--surface); border: 1px solid var(--rule); border-left: 4px solid var(--accent); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .zones .cell.wide { grid-column: 1 / -1; }
+  .zones .cell:has(> .panel[hidden]) { display: none; }
+  .zones .cell > .zone { padding: 16px 20px 0; }
+  .zones .cell > .panel { max-width: none; padding: 8px 20px 20px; }
+  .zones .form { max-width: none; }
+  @media (max-width: 700px) { .zones { padding: 12px; gap: 12px; } .zones .cell > .zone { padding: 12px 12px 0; } .zones .cell > .panel { padding: 8px 12px 14px; } }
   .muted { color: var(--muted); }
   .late { color: var(--red); font-weight: 500; }
   .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12.5px; background: var(--tint); color: var(--ink); white-space: nowrap; }
@@ -736,6 +746,17 @@ var BOOT = <?!= boot ?>;
     return el('span', { class: 'badge warn', text: 'Sans adresse', title: 'Sans adresse e-mail professionnelle, la personne figure dans les listes mais ne peut pas se connecter.' });
   }
 
+  /** Livrables et jalons dont la personne est responsable, et ce à quoi elle contribue sans en être responsable. */
+  function deliverablesCell(p) {
+    var own = (p.deliverables || 0) + (p.milestones || 0);
+    if (!own && !p.contributes) return el('span', { class: 'muted', text: '—' });
+    var detail = [];
+    if (p.deliverables) detail.push(p.deliverables + (p.deliverables > 1 ? ' livrables' : ' livrable'));
+    if (p.milestones) detail.push(p.milestones + (p.milestones > 1 ? ' jalons' : ' jalon'));
+    if (p.contributes) detail.push('contribue à ' + p.contributes);
+    return el('div', {}, [el('strong', { class: 'deliv-n', text: String(own) }), el('small', { text: detail.join(' · ') })]);
+  }
+
   function roleCell(p) {
     var d = state.data;
     if (!state.projectId) return el('span', { class: 'muted', text: '—' });
@@ -779,7 +800,7 @@ var BOOT = <?!= boot ?>;
     var host = $('people'); clear(host);
     if (!rows.length) host.appendChild(el('div', { class: 'empty' }, [el('strong', { text: d.people.length ? 'Aucune personne ne correspond.' : 'Aucune personne pour l’instant.' }), el('span', { text: d.canEdit && !d.people.length ? 'Ajoutez la première avec « Ajouter une personne ».' : '' })]));
     else {
-      var head = ['Nom', 'Statut', 'Accès', 'Équipe', 'Rôle dans le projet', 'Autres rôles'];
+      var head = ['Nom', 'Statut', 'Accès', 'Équipe', 'Rôle dans le projet', 'Livrables', 'Autres rôles'];
       if (d.canRates) head.push('Taux journalier (€)');
       if (d.canEdit) head.push('');
       host.appendChild(el('div', { class: 'table-wrap' }, [el('table', { id: 'res-table' }, [
@@ -790,7 +811,7 @@ var BOOT = <?!= boot ?>;
             el('td', {}, [p.name, el('small', { text: [p.job_function, p.resource_type === 'Externe' ? (p.supplier || p.organization) : p.organization].filter(Boolean).join(' · ') || ' ' })]),
             el('td', {}, [el('span', { class: 'badge' + (p.resource_type === 'Externe' ? ' ext' : ''), text: p.resource_type })]),
             el('td', {}, [accessBadge(p)]),
-            el('td', { text: p.team || '—' }), el('td', {}, [roleCell(p)]),
+            el('td', { text: p.team || '—' }), el('td', {}, [roleCell(p)]), el('td', { class: 'deliv' }, [deliverablesCell(p)]),
             el('td', {}, [others.length ? others.map(function (r) { return r.label + (r.scope ? ' (' + r.scope + ')' : ''); }).join(', ') : (p.unplaced ? null : '—'),
               p.unplaced ? el('a', { class: 'badge warn', href: (BOOT.baseUrl || '') + '?view=structure&project=' + state.projectId, title: 'Aucun rôle pour l’instant : la positionner dans l’organigramme', text: 'À positionner dans l’OBS' }) : null])
           ];

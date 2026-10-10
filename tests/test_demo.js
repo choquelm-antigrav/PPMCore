@@ -293,4 +293,18 @@ module.exports = function () {
     ok(/^Démo complète/.test(w.seedDemo_()), 'recréée en entier');
     ok(nacCount(w).items >= 70 && nacCount(w).projects === 4, JSON.stringify(nacCount(w)));
   });
+
+  test('Chaque projet de la démo a ses contributeurs : des membres affectés à ses workpackages, en plus des responsables (0.14.0)', () => {
+    const w = core(); w.DEMO_BUDGET_MS = 1e9; w.seedDemo_();
+    const roles = live(w, 'RoleAssignment'), projects = live(w, 'Project').filter((p) => /^NAC-/.test(p.code));
+    projects.forEach((p) => {
+      const wps = live(w, 'WorkPackage').filter((x) => x.project_id === p.id), wpIds = new Set(wps.map((x) => x.id));
+      const members = roles.filter((r) => r.role_code === 'MEMBER' && r.scope_type === 'workpackage' && wpIds.has(r.scope_id));
+      const top = wps.filter((x) => !x.parent_wp_id);
+      ok(members.length >= 2, p.code + ' : ' + members.length + ' contributeurs affectés à des workpackages');
+      ok(top.every((x) => { const kids = wps.filter((y) => y.parent_wp_id === x.id).map((y) => y.id).concat([x.id]); return roles.some((r) => r.scope_type === 'workpackage' && kids.indexOf(r.scope_id) >= 0 && (r.role_code === 'MEMBER' || r.role_code === 'RWP')); }), p.code + ' : chaque workpackage de premier niveau a au moins un responsable ou un membre');
+    });
+    const get = w.handleRequest({ action: 'ressources.get', params: { projectId: projects.find((p) => p.code === 'NAC-2').id }, apiVersion: w.PPM_API_VERSION }, 'admin@entreprise.com').data;
+    ok(get.people.some((x) => x.contributes > 0) && get.people.some((x) => x.deliverables > 0), 'la page Ressources de NAC-2 montre des livrables et des contributions');
+  });
 };

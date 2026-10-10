@@ -50,7 +50,7 @@
   function setSummary() {
     var d = state.data, sm = $('summary'), t = $('ztitle'), ctx = $('context');
     clear(ctx);
-    if (state.tab === 'wbs') $('wbs-add').hidden = !(d && d.canCreate);
+    if (state.tab === 'wbs') ['wbs-add', 'wbs-add-deliverable', 'wbs-add-milestone'].forEach(function (id) { $(id).hidden = !(d && d.canCreate); });
     else {
       var orgEdit = !!(d && d.canEditAll);
       $('org-person').hidden = !orgEdit;

@@ -273,7 +273,12 @@ var DEMO_ROLES = [
   ['Émilie Fabre', 'MEMBER', 'wp', 'NAC-1:1.2'], ['Arjun Mehta', 'MEMBER', 'wp', 'NAC-1:1.2'], ['Antoine Garnier', 'MEMBER', 'wp', 'NAC-1:1.3'], ['Marta Kowalski', 'MEMBER', 'wp', 'NAC-1:1.3'],
   ['Greta Hoffmann', 'MEMBER', 'wp', 'NAC-1:1.4'], ['James Walker', 'MEMBER', 'wp', 'NAC-1:1.4'], ['Priya Nair', 'MEMBER', 'wp', 'NAC-1:1.4'],
   ['Léa Marchand', 'MEMBER', 'wp', 'NAC-1:2.1'], ['Hugo Blanc', 'MEMBER', 'wp', 'NAC-1:2.1'], ['Carl Weber', 'MEMBER', 'wp', 'NAC-1:2.1'], ['Hana Iyer', 'MEMBER', 'wp', 'NAC-1:2.1'],
-  ['Lukas Schneider', 'MEMBER', 'wp', 'NAC-1:2.1'], ['Sven Larsen', 'MEMBER', 'wp', 'NAC-1:4.1']
+  ['Lukas Schneider', 'MEMBER', 'wp', 'NAC-1:2.1'], ['Sven Larsen', 'MEMBER', 'wp', 'NAC-1:4.1'],
+  // contributeurs des autres projets : des membres affectés aux workpackages, en plus de leurs responsables
+  ['Hana Iyer', 'MEMBER', 'wp', 'NAC-2:1.1'], ['Lukas Schneider', 'MEMBER', 'wp', 'NAC-2:1.1'], ['Lucie Perrin', 'MEMBER', 'wp', 'NAC-2:1.2'], ['Hana Iyer', 'MEMBER', 'wp', 'NAC-2:2'],
+  ['Lukas Schneider', 'MEMBER', 'wp', 'NAC-2:2'], ['Lucie Perrin', 'MEMBER', 'wp', 'NAC-2:3'], ['Greta Hoffmann', 'MEMBER', 'wp', 'NAC-2:3'],
+  ['Étienne Roche', 'MEMBER', 'wp', 'NAC-3:1'], ['Sandrine Lopez', 'MEMBER', 'wp', 'NAC-3:1'], ['Étienne Roche', 'MEMBER', 'wp', 'NAC-3:2'], ['Sandrine Lopez', 'MEMBER', 'wp', 'NAC-3:2'],
+  ['Rahul Sharma', 'MEMBER', 'wp', 'NAC-4:1'], ['Émilie Fabre', 'MEMBER', 'wp', 'NAC-4:1'], ['Camille Durand', 'MEMBER', 'wp', 'NAC-4:1']
 ];
 /** Membres au niveau du projet : [projet, personnes…] */
 var DEMO_MEMBERS = [
@@ -281,7 +286,8 @@ var DEMO_MEMBERS = [
     'Lukas Schneider', 'Greta Hoffmann', 'James Walker', 'Priya Nair', 'Yann Leroy', 'Mathieu Collin', 'Lucie Perrin', 'Sandrine Lopez', 'Olivier Faure', 'Dora Schmidt',
     'Carl Weber', 'Ravi Patel', 'Hana Iyer', 'Marta Kowalski', 'Étienne Roche', 'Sven Larsen'],
   ['NAC-2', 'Greta Hoffmann', 'James Walker', 'Priya Nair', 'Hana Iyer', 'Lukas Schneider', 'Lucie Perrin'],
-  ['NAC-3', 'Yann Leroy', 'Mathieu Collin', 'Étienne Roche', 'Sandrine Lopez']
+  ['NAC-3', 'Yann Leroy', 'Mathieu Collin', 'Étienne Roche', 'Sandrine Lopez'],
+  ['NAC-4', 'Inès Girard', 'Rahul Sharma', 'Émilie Fabre', 'Camille Durand']
 ];
 
 /** Risques : [projet, genre, titre, élément lié, probabilité, impact, responsable, stratégie, statut, jours avant l'échéance de traitement (négatif : dépassée), valeur financière] */

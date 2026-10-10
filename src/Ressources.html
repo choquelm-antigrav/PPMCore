@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.13.2">
+<meta name="ppm-version" content="0.14.0">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <?!= include('CommonForms') ?>
@@ -138,6 +138,17 @@ var BOOT = <?!= boot ?>;
     return el('span', { class: 'badge warn', text: 'Sans adresse', title: 'Sans adresse e-mail professionnelle, la personne figure dans les listes mais ne peut pas se connecter.' });
   }
 
+  /** Livrables et jalons dont la personne est responsable, et ce à quoi elle contribue sans en être responsable. */
+  function deliverablesCell(p) {
+    var own = (p.deliverables || 0) + (p.milestones || 0);
+    if (!own && !p.contributes) return el('span', { class: 'muted', text: '—' });
+    var detail = [];
+    if (p.deliverables) detail.push(p.deliverables + (p.deliverables > 1 ? ' livrables' : ' livrable'));
+    if (p.milestones) detail.push(p.milestones + (p.milestones > 1 ? ' jalons' : ' jalon'));
+    if (p.contributes) detail.push('contribue à ' + p.contributes);
+    return el('div', {}, [el('strong', { class: 'deliv-n', text: String(own) }), el('small', { text: detail.join(' · ') })]);
+  }
+
   function roleCell(p) {
     var d = state.data;
     if (!state.projectId) return el('span', { class: 'muted', text: '—' });
@@ -181,7 +192,7 @@ var BOOT = <?!= boot ?>;
     var host = $('people'); clear(host);
     if (!rows.length) host.appendChild(el('div', { class: 'empty' }, [el('strong', { text: d.people.length ? 'Aucune personne ne correspond.' : 'Aucune personne pour l’instant.' }), el('span', { text: d.canEdit && !d.people.length ? 'Ajoutez la première avec « Ajouter une personne ».' : '' })]));
     else {
-      var head = ['Nom', 'Statut', 'Accès', 'Équipe', 'Rôle dans le projet', 'Autres rôles'];
+      var head = ['Nom', 'Statut', 'Accès', 'Équipe', 'Rôle dans le projet', 'Livrables', 'Autres rôles'];
       if (d.canRates) head.push('Taux journalier (€)');
       if (d.canEdit) head.push('');
       host.appendChild(el('div', { class: 'table-wrap' }, [el('table', { id: 'res-table' }, [
@@ -192,7 +203,7 @@ var BOOT = <?!= boot ?>;
             el('td', {}, [p.name, el('small', { text: [p.job_function, p.resource_type === 'Externe' ? (p.supplier || p.organization) : p.organization].filter(Boolean).join(' · ') || ' ' })]),
             el('td', {}, [el('span', { class: 'badge' + (p.resource_type === 'Externe' ? ' ext' : ''), text: p.resource_type })]),
             el('td', {}, [accessBadge(p)]),
-            el('td', { text: p.team || '—' }), el('td', {}, [roleCell(p)]),
+            el('td', { text: p.team || '—' }), el('td', {}, [roleCell(p)]), el('td', { class: 'deliv' }, [deliverablesCell(p)]),
             el('td', {}, [others.length ? others.map(function (r) { return r.label + (r.scope ? ' (' + r.scope + ')' : ''); }).join(', ') : (p.unplaced ? null : '—'),
               p.unplaced ? el('a', { class: 'badge warn', href: (BOOT.baseUrl || '') + '?view=structure&project=' + state.projectId, title: 'Aucun rôle pour l’instant : la positionner dans l’organigramme', text: 'À positionner dans l’OBS' }) : null])
           ];

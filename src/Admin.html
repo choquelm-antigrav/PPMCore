@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.13.2">
+<meta name="ppm-version" content="0.14.0">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <style>
@@ -15,6 +15,10 @@
   .grp { display: grid; gap: 12px; margin: 0; padding: 0; border: 0; min-width: 0; }
   .grp h3 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
   .grp + .grp { padding-top: 16px; border-top: 1px solid var(--rule); }
+  /* réglages sur toute la largeur : les groupes de champs se disposent en colonnes, l'erreur et le bouton restent sur toute la largeur */
+  #panel-reglages .form { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px 32px; align-items: start; }
+  #panel-reglages .form > .grp + .grp { padding-top: 0; border-top: 0; }
+  #panel-reglages .form > .late, #panel-reglages .form > .row { grid-column: 1 / -1; }
   .form label.lbl { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
   .form input[type=text], .form input[type=password], .form input[type=number], .form textarea, .editor textarea, .inline input {
     padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; color: var(--ink); background: var(--surface); }
@@ -37,14 +41,24 @@
   <div class="title"><h1 id="title">Administration</h1></div>
 </header>
 
-<div class="zone" id="zone-reglages"><h2 class="sec">Réglages</h2></div>
-<section class="panel" id="panel-reglages" aria-label="Réglages"></section>
-<div class="zone" id="zone-sante"><h2 class="sec">Santé de l’installation</h2></div>
-<section class="panel" id="panel-sante" aria-label="Santé"></section>
-<div class="zone" id="zone-feries"><h2 class="sec">Jours fériés</h2></div>
-<section class="panel" id="panel-feries" aria-label="Jours fériés"></section>
-<div class="zone" id="zone-journaux"><h2 class="sec">Journaux</h2></div>
-<section class="panel" id="panel-journaux" aria-label="Journaux"></section>
+<main class="zones" style="--cell-min: 460px; --max-cols: 2">
+  <div class="cell wide" id="cell-reglages">
+    <div class="zone" id="zone-reglages"><h2 class="sec">Réglages</h2></div>
+    <section class="panel" id="panel-reglages" aria-label="Réglages"></section>
+  </div>
+  <div class="cell" id="cell-sante">
+    <div class="zone" id="zone-sante"><h2 class="sec">Santé de l’installation</h2></div>
+    <section class="panel" id="panel-sante" aria-label="Santé"></section>
+  </div>
+  <div class="cell" id="cell-feries">
+    <div class="zone" id="zone-feries"><h2 class="sec">Jours fériés</h2></div>
+    <section class="panel" id="panel-feries" aria-label="Jours fériés"></section>
+  </div>
+  <div class="cell wide" id="cell-journaux">
+    <div class="zone" id="zone-journaux"><h2 class="sec">Journaux</h2></div>
+    <section class="panel" id="panel-journaux" aria-label="Journaux"></section>
+  </div>
+</main>
 
 <div class="toast" id="toast" role="status" hidden></div>
 

@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.13.2">
+<meta name="ppm-version" content="0.14.0">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -253,6 +253,16 @@
   @media (max-width: 900px) { header { padding: 14px 12px 12px; } header .title h1 { font-size: 22px; } .zone { padding: 16px 12px 0; } }
   /* ---- composants communs aux pages (0.12.1) : une seule définition, reprise des pages ---- */
   .panel[hidden] { display: none; }
+  /* Pages en zones (Compte, Budget, Administration) : une grille qui se réagence selon la largeur, des cartes comme dans l'Overview, sans place vide.
+     --cell-min = largeur minimale d'une carte ; --max-cols = nombre maximal de colonnes (jamais de colonne vide sur un grand écran) ; .wide = une carte sur toute la largeur (gros tableaux) ; une carte dont le panneau est masqué disparaît. */
+  .zones { display: grid; grid-template-columns: repeat(auto-fit, minmax(max(min(100%, var(--cell-min, 460px)), calc((100% - (var(--max-cols, 4) - 1) * 20px) / var(--max-cols, 4))), 1fr)); gap: 20px; padding: 16px 24px 28px; align-items: start; }
+  .zones .cell { min-width: 0; background: var(--surface); border: 1px solid var(--rule); border-left: 4px solid var(--accent); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .zones .cell.wide { grid-column: 1 / -1; }
+  .zones .cell:has(> .panel[hidden]) { display: none; }
+  .zones .cell > .zone { padding: 16px 20px 0; }
+  .zones .cell > .panel { max-width: none; padding: 8px 20px 20px; }
+  .zones .form { max-width: none; }
+  @media (max-width: 700px) { .zones { padding: 12px; gap: 12px; } .zones .cell > .zone { padding: 12px 12px 0; } .zones .cell > .panel { padding: 8px 12px 14px; } }
   .muted { color: var(--muted); }
   .late { color: var(--red); font-weight: 500; }
   .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12.5px; background: var(--tint); color: var(--ink); white-space: nowrap; }

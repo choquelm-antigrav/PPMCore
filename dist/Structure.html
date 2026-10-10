@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.13.2">
+<meta name="ppm-version" content="0.14.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -252,6 +252,16 @@
   @media (max-width: 900px) { header { padding: 14px 12px 12px; } header .title h1 { font-size: 22px; } .zone { padding: 16px 12px 0; } }
   /* ---- composants communs aux pages (0.12.1) : une seule définition, reprise des pages ---- */
   .panel[hidden] { display: none; }
+  /* Pages en zones (Compte, Budget, Administration) : une grille qui se réagence selon la largeur, des cartes comme dans l'Overview, sans place vide.
+     --cell-min = largeur minimale d'une carte ; --max-cols = nombre maximal de colonnes (jamais de colonne vide sur un grand écran) ; .wide = une carte sur toute la largeur (gros tableaux) ; une carte dont le panneau est masqué disparaît. */
+  .zones { display: grid; grid-template-columns: repeat(auto-fit, minmax(max(min(100%, var(--cell-min, 460px)), calc((100% - (var(--max-cols, 4) - 1) * 20px) / var(--max-cols, 4))), 1fr)); gap: 20px; padding: 16px 24px 28px; align-items: start; }
+  .zones .cell { min-width: 0; background: var(--surface); border: 1px solid var(--rule); border-left: 4px solid var(--accent); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .zones .cell.wide { grid-column: 1 / -1; }
+  .zones .cell:has(> .panel[hidden]) { display: none; }
+  .zones .cell > .zone { padding: 16px 20px 0; }
+  .zones .cell > .panel { max-width: none; padding: 8px 20px 20px; }
+  .zones .form { max-width: none; }
+  @media (max-width: 700px) { .zones { padding: 12px; gap: 12px; } .zones .cell > .zone { padding: 12px 12px 0; } .zones .cell > .panel { padding: 8px 12px 14px; } }
   .muted { color: var(--muted); }
   .late { color: var(--red); font-weight: 500; }
   .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12.5px; background: var(--tint); color: var(--ink); white-space: nowrap; }
@@ -785,6 +795,8 @@
   </span>
   <div class="controls" style="margin-left:auto">
     <button type="button" class="btn" id="wbs-add-wbs" hidden>Ajouter un workpackage</button>
+    <button type="button" class="btn" id="wbs-add-deliverable-wbs" hidden>Ajouter un livrable</button>
+    <button type="button" class="btn" id="wbs-add-milestone-wbs" hidden>Ajouter un jalon</button>
     <button type="button" class="btn" id="options-btn-wbs" aria-expanded="false" aria-controls="options-wbs">Attributs affichés</button>
     <div class="seg" role="group" aria-label="Zoom">
       <button type="button" id="zoom-out-wbs" aria-label="Zoom arrière">−</button>
@@ -1377,7 +1389,7 @@ var BOOT = <?!= boot ?>;
   function setSummary() {
     var d = state.data, sm = $('summary'), t = $('ztitle'), ctx = $('context');
     clear(ctx);
-    if (state.tab === 'wbs') $('wbs-add').hidden = !(d && d.canCreate);
+    if (state.tab === 'wbs') ['wbs-add', 'wbs-add-deliverable', 'wbs-add-milestone'].forEach(function (id) { $(id).hidden = !(d && d.canCreate); });
     else {
       var orgEdit = !!(d && d.canEditAll);
       $('org-person').hidden = !orgEdit;
@@ -1632,7 +1644,7 @@ var BOOT = <?!= boot ?>;
   }
 
   function parentChoices(kind, n) {
-    var hasKids = kind === 'wp' && state.data.nodes.some(function (x) { return x.parent_ref === n.ref; });
+    var hasKids = kind === 'wp' && !!n.ref && state.data.nodes.some(function (x) { return x.parent_ref === n.ref; }); // un workpackage qu'on crée n'a pas encore d'enfants
     var out = [{ value: '', label: 'Projet (racine)' }];
     if (hasKids) return out;
     state.data.nodes.forEach(function (x) {
@@ -1672,6 +1684,7 @@ var BOOT = <?!= boot ?>;
       body.appendChild(row('Responsable', select('ed-owner', [{ value: '', label: 'Aucun' }].concat(people.map(function (p) {
         return { value: p.resource_id, label: p.name + (p.job_function ? ' — ' + p.job_function : '') };
       })), create ? '' : n.owner_id)));
+      if (create && spec.chooseParent) body.appendChild(row('Rattaché à', select('ed-parent', parentChoices(kind, {}), spec.defaultParent || '')));
       if (!create) {
         var choices = parentChoices(kind, n);
         if (choices.length > 1) body.appendChild(row('Rattaché à', select('ed-parent', choices, kind === 'wp' ? n.parent_ref : n.wp_ref)));
@@ -1700,7 +1713,7 @@ var BOOT = <?!= boot ?>;
     }
     var req;
     if (create) {
-      req = call('wbs.create', { projectId: state.scopeId, kind: kind, parentId: spec.parent && spec.parent.kind === 'wp' ? spec.parent.ref : '', values: values }, true);
+      req = call('wbs.create', { projectId: state.scopeId, kind: kind, parentId: f['ed-parent'] ? f['ed-parent'].value : (spec.parent && spec.parent.kind === 'wp' ? spec.parent.ref : ''), values: values }, true);
     } else {
       if (f['ed-parent'] && f['ed-parent'].value !== (kind === 'wp' ? n.parent_ref : n.wp_ref)) values[kind === 'wp' ? 'parent_wp_id' : 'wp_id'] = f['ed-parent'].value;
       req = call('wbs.update', { kind: kind === 'wp' ? 'wp' : 'item', id: n.ref, version: n.version, patch: values }, true);
@@ -1766,10 +1779,20 @@ var BOOT = <?!= boot ?>;
   $('ed-cancel').addEventListener('click', function () { closeDialog($('editor')); });
   $('confirm-cancel').addEventListener('click', function () { closeDialog($('confirm')); });
   $('confirm-ok').addEventListener('click', confirmDelete);
-  if (state.tab === 'wbs') $('wbs-add').addEventListener('click', function () {
-    var root = state.data && state.data.nodes.filter(function (x) { return x.kind === 'project'; })[0];
-    if (root) openEditor({ mode: 'create', kind: 'wp', parent: root });
-  });
+  // Les trois boutons d'ajout de la barre d'outils sont toujours là, sans rien sélectionner : le formulaire demande le parent (« Rattaché à »),
+  // proposé d'office quand un workpackage est sélectionné (livrable, jalon) ; un workpackage se crée à la racine sauf choix contraire.
+  if (state.tab === 'wbs') {
+    var addFromBar = function (kind) {
+      var root = state.data && state.data.nodes.filter(function (x) { return x.kind === 'project'; })[0];
+      if (!root) return;
+      var sel = state.selected && state.data.nodes.filter(function (x) { return x.id === state.selected; })[0];
+      var wp = kind !== 'wp' && sel && sel.kind === 'wp' ? sel : null;
+      openEditor({ mode: 'create', kind: kind, parent: root, chooseParent: true, defaultParent: wp ? wp.ref : '' });
+    };
+    $('wbs-add').addEventListener('click', function () { addFromBar('wp'); });
+    $('wbs-add-deliverable').addEventListener('click', function () { addFromBar('Livrable'); });
+    $('wbs-add-milestone').addEventListener('click', function () { addFromBar('Jalon'); });
+  }
 
   // ------------------------------------------------------------ 0.8.0 : dépendances, rôles, personnes, équipes
   var COUNTRY_LIST = [['FR', 'France'], ['DE', 'Allemagne'], ['UK', 'Royaume-Uni'], ['IN', 'Inde']];

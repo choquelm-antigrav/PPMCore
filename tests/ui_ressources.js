@@ -66,6 +66,11 @@ function openPage(user) {
   check(/Rôle dans le projet/.test(p.text('res-table')) && /Taux journalier/.test(p.text('res-table')), 'colonnes du rôle dans le projet et du taux');
   check(p.row(w.carla.id).querySelector('.role-select').value === 'CP' && p.row(w.mia.id).querySelector('.role-select').value === 'MEMBER' && p.row(w.remi.id).querySelector('.role-select').value === '', 'rôles de projet actuels : Carla chef de projet, Mia membre, Rémi aucun');
   check(/Responsable de workpackage \(1 Conception\)/.test(flat(p.row(w.remi.id).textContent)), 'les autres rôles (workpackage) sont rappelés');
+  // 0.14.0 : livrables et jalons de chaque personne
+  const deliv = (id) => flat(p.row(id).querySelector('td.deliv').textContent);
+  check(/Livrables/.test([...p.doc.querySelectorAll('#res-table th')].map((h) => h.textContent).join('|')), 'colonne « Livrables »');
+  check(deliv(w.remi.id) === '22 livrables' && deliv(w.carla.id) === '21 livrable · 1 jalon' && deliv(w.mia.id) === '—' && deliv(w.dora.id) === '—', 'responsable de : Rémi 2 livrables, Carla 1 livrable et 1 jalon, les autres « — » : ' + [w.remi, w.carla, w.mia].map((x) => deliv(x.id)).join(' ; '));
+  check(p.row(w.remi.id).querySelector('.deliv-n').textContent === '2' && p.row(w.carla.id).querySelector('.deliv-n').textContent === '2', 'le total (livrables et jalons) est mis en avant : 2 pour Rémi, 2 pour Carla');
   check(p.row(w.xavier.id).querySelector('.badge').textContent === 'Externe', 'les externes sont repérés');
   const access = (id) => [...p.row(id).querySelectorAll('.badge')].map((b) => b.textContent).find((t) => /connecter|domaine|adresse/i.test(t));
   check(access(w.carla.id) === 'Peut se connecter' && access(w.xavier.id) === 'Hors domaine', 'colonne Accès : adresse du domaine = peut se connecter, autre domaine = hors domaine');

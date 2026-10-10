@@ -119,6 +119,40 @@ function openPage(user) {
   check(rev.item_type === 'Jalon' && rev.planned_start === '2026-12-04' && rev.planned_finish === '2026-12-04' && rev.milestone_category === 'Client', 'jalon créé : date unique, catégorie Client');
   await p.until(() => p.nodes() === 12);
 
+  // ---------------------------------------------------------------- 0.14.0 : les trois boutons d'ajout sont toujours visibles, avec choix du parent
+  const q = openPage(CP);
+  await q.until(() => q.nodes() >= 12);
+  check(!q.$('wbs-add').hidden && !q.$('wbs-add-deliverable').hidden && !q.$('wbs-add-milestone').hidden, 'sans rien sélectionner : « workpackage », « livrable » et « jalon » sont dans la barre');
+  q.click(q.$('wbs-add-deliverable'));
+  await q.until(() => q.$('editor').open);
+  check(q.text('editor-title') === 'Nouveau livrable' && !!q.$('ed-parent') && q.$('ed-parent').value === '', 'livrable depuis la barre : liste « Rattaché à », par défaut la racine du projet');
+  const labels = [...q.$('ed-parent').options].map((o) => o.textContent);
+  check(labels[0] === 'Projet (racine)' && labels.some((l) => /Moules/.test(l)) && labels.some((l) => /Industrialisation/.test(l)), 'la liste propose le projet et tous les workpackages, sous-workpackages compris : ' + labels.join(' | '));
+  q.fill('ed-name', 'Gabarit moule'); q.fill('ed-parent', moules.id); q.fill('ed-start', '2026-11-03'); q.fill('ed-finish', '2026-11-10'); q.submit();
+  await q.until(() => c.repoList('PlanItem').some((x) => x.name === 'Gabarit moule'));
+  check(c.repoList('PlanItem').find((x) => x.name === 'Gabarit moule').wp_id === moules.id, 'livrable créé dans le workpackage choisi dans la liste, sans l’avoir sélectionné avant');
+  await q.until(() => !q.$('editor').open && /Créé : Gabarit moule/.test(q.text('toast')) && q.nodes() === 13); // la page a fini de se redessiner
+  q.click(q.$('wbs-add-milestone'));
+  await q.until(() => q.$('editor').open);
+  q.fill('ed-name', 'Jalon racine'); q.fill('ed-date', '2026-12-18'); q.submit();
+  await q.until(() => c.repoList('PlanItem').some((x) => x.name === 'Jalon racine'));
+  const racine = c.repoList('PlanItem').find((x) => x.name === 'Jalon racine');
+  check(racine.item_type === 'Jalon' && !racine.wp_id, 'jalon créé à la racine du projet quand on ne choisit aucun workpackage');
+  await q.until(() => !q.$('editor').open && /Créé : Jalon racine/.test(q.text('toast')) && q.nodes() === 14);
+  await q.pick('wp:' + ind.id, 'Industrialisation');
+  q.click(q.$('wbs-add-deliverable'));
+  await q.until(() => q.$('editor').open);
+  check(q.$('ed-parent').value === ind.id, 'avec un workpackage sélectionné, il est proposé d’office comme parent');
+  q.click(q.$('ed-cancel'));
+  q.click(q.$('wbs-add'));
+  await q.until(() => q.$('editor').open);
+  const wpLabels = [...q.$('ed-parent').options].map((o) => o.textContent);
+  check(q.$('ed-parent').value === '' && !wpLabels.some((l) => /Moules/.test(l)) && wpLabels.some((l) => /Industrialisation/.test(l)), 'workpackage : racine par défaut, et seuls les workpackages de premier niveau peuvent être parents : ' + wpLabels.join(' | '));
+  q.click(q.$('ed-cancel'));
+  const mm = openPage(MEMBER);
+  await mm.until(() => mm.nodes() >= 1);
+  check(mm.$('wbs-add').hidden && mm.$('wbs-add-deliverable').hidden && mm.$('wbs-add-milestone').hidden, 'un simple membre ne voit aucun des trois boutons');
+
   // ---------------------------------------------------------------- erreur : la boîte reste ouverte avec le message
   await p.pick('wp:' + w.w2.id, 'Essais');
   p.click(p.$('add-deliverable'));

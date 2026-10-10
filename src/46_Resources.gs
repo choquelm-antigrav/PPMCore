@@ -59,6 +59,19 @@ defineAction('ressources.get', function (p, ctx) {
       list.push({ key: key, code: a.role_code, label: ROLE_LABELS[a.role_code] || a.role_code, scope_type: a.scope_type, scope: scopeLabel_(data, a.scope_type, a.scope_id), rank: ROLE_RANK[a.role_code] });
     });
   }
+  // livrables et jalons de chaque personne : ceux dont elle est responsable (dans le projet choisi, sinon dans tous) ; et ceux des workpackages où elle
+  // a un rôle de responsable ou de membre actif sans en être responsable elle-même (« contribue à »)
+  var owned = {}, wpItems = {};
+  repoList('PlanItem', function (i) { return !project || i.project_id === project.id; }).forEach(function (i) {
+    if (!isBlank(i.owner_resource_id)) { var o = owned[i.owner_resource_id] = owned[i.owner_resource_id] || { d: 0, m: 0 }; if (i.item_type === 'Jalon') o.m++; else o.d++; }
+    if (!isBlank(i.wp_id)) (wpItems[i.wp_id] = wpItems[i.wp_id] || []).push(i);
+  });
+  var contrib = {};
+  repoList('RoleAssignment').forEach(function (a) {
+    if (a.scope_type !== 'workpackage' || (a.role_code !== 'MEMBER' && a.role_code !== 'RWP') || (!isBlank(a.end_date) && String(a.end_date) < today)) return;
+    var set = contrib[a.resource_id] = contrib[a.resource_id] || {};
+    (wpItems[a.scope_id] || []).forEach(function (i) { if (i.owner_resource_id !== a.resource_id) set[i.id] = true; });
+  });
   var editAll = canEditResources_(ctx);
   var people = resources.map(function (r) {
     var mine = (roles[r.id] || []).sort(function (a, b) { return a.rank - b.rank; });
@@ -66,6 +79,7 @@ defineAction('ressources.get', function (p, ctx) {
     return {
       resource_id: r.id, version: r.version, name: r.name, email: r.email || '', job_function: r.job_function || '', organization: r.organization || '',
       unplaced: !placed[r.id],
+      deliverables: (owned[r.id] || {}).d || 0, milestones: (owned[r.id] || {}).m || 0, contributes: Object.keys(contrib[r.id] || {}).length,
       access: isBlank(r.email) ? 'none' : (isAllowedEmail_(r.email) ? 'ok' : 'outside'),
       resource_type: r.resource_type, supplier: r.supplier || '', country: r.country || '', capacity: isBlank(r.capacity_days_month) ? '' : Number(r.capacity_days_month),
       team_id: r.team_id || '', team: teamById[r.team_id] ? teamById[r.team_id].name : '',

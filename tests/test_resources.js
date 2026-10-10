@@ -110,4 +110,27 @@ module.exports = function () {
     ok(/Aucun taux journalier pour « Yves »/.test(line({ deliverable_id: w.b.id, resource_id: y.id, planned_days: 3 }).error.message));
     eq(w.c.repoGet('Resource', w.xavier.id).daily_rate, 450);
   });
+
+  test('ressources.get : livrables et jalons de chaque personne (dont elle est responsable) et ceux auxquels elle contribue (0.14.0)', () => {
+    const w = world(), S = { actor: 'setup', source: 'setup' };
+    const get = (projectId) => w.call(CP, 'ressources.get', projectId === undefined ? {} : { projectId });
+    const n = (r, name) => { const x = row(r, name); return [x.deliverables, x.milestones, x.contributes]; };
+    let r = get(w.p1.id);
+    eq([n(r, 'Rémi'), n(r, 'Carla'), n(r, 'Mia'), n(r, 'Dora')], [[2, 0, 0], [1, 1, 0], [0, 0, 0], [0, 0, 0]], 'responsable de : Rémi 2 livrables ; Carla 1 livrable et 1 jalon ; personne d’autre');
+    // Mia devient membre du workpackage 1 : elle contribue à ses livrables dont elle n'est pas responsable (« Spécification »)
+    const roleMia = w.c.repoInsert('RoleAssignment', { resource_id: w.mia.id, role_code: 'MEMBER', scope_type: 'workpackage', scope_id: w.w1.id }, S);
+    r = get(w.p1.id);
+    eq(n(r, 'Mia'), [0, 0, 1], 'membre du workpackage 1 : contribue à 1 livrable (le seul qui s’y trouve directement)');
+    eq(n(r, 'Rémi'), [2, 0, 0], 'Rémi est RWP du workpackage 1 mais responsable de son seul livrable : il ne « contribue » pas à ce qui est à lui');
+    // un livrable de plus dans ce workpackage, confié à Carla : Mia et Rémi y contribuent
+    w.call(ADMIN, 'planitems.create', { values: { project_id: w.p1.id, name: 'Dossier', item_type: 'Livrable', planned_start: '2026-10-05', planned_finish: '2026-10-09', wp_id: w.w1.id, owner_resource_id: w.carla.id } });
+    r = get(w.p1.id);
+    eq([n(r, 'Mia'), n(r, 'Rémi'), n(r, 'Carla')], [[0, 0, 2], [2, 0, 1], [2, 1, 0]], 'Mia contribue à 2, Rémi à 1 ; Carla en possède maintenant 2 (et 1 jalon)');
+    // un rôle terminé ne compte plus
+    w.c.repoUpdate('RoleAssignment', roleMia.id, { end_date: '2026-10-01' }, null, S);
+    eq(n(get(w.p1.id), 'Mia'), [0, 0, 0], 'rôle terminé : plus de contribution');
+    // portée : un autre projet ne compte rien ; sans projet, tous les projets comptent
+    eq([n(get(w.p2.id), 'Rémi'), n(get(w.p2.id), 'Carla')], [[0, 0, 0], [0, 0, 0]], 'projet vide : aucun livrable');
+    eq(n(get(), 'Carla'), [2, 1, 0], 'sans projet choisi : tous les projets');
+  });
 };

@@ -40,7 +40,7 @@
   }
 
   function parentChoices(kind, n) {
-    var hasKids = kind === 'wp' && state.data.nodes.some(function (x) { return x.parent_ref === n.ref; });
+    var hasKids = kind === 'wp' && !!n.ref && state.data.nodes.some(function (x) { return x.parent_ref === n.ref; }); // un workpackage qu'on crée n'a pas encore d'enfants
     var out = [{ value: '', label: 'Projet (racine)' }];
     if (hasKids) return out;
     state.data.nodes.forEach(function (x) {
@@ -80,6 +80,7 @@
       body.appendChild(row('Responsable', select('ed-owner', [{ value: '', label: 'Aucun' }].concat(people.map(function (p) {
         return { value: p.resource_id, label: p.name + (p.job_function ? ' — ' + p.job_function : '') };
       })), create ? '' : n.owner_id)));
+      if (create && spec.chooseParent) body.appendChild(row('Rattaché à', select('ed-parent', parentChoices(kind, {}), spec.defaultParent || '')));
       if (!create) {
         var choices = parentChoices(kind, n);
         if (choices.length > 1) body.appendChild(row('Rattaché à', select('ed-parent', choices, kind === 'wp' ? n.parent_ref : n.wp_ref)));
@@ -108,7 +109,7 @@
     }
     var req;
     if (create) {
-      req = call('wbs.create', { projectId: state.scopeId, kind: kind, parentId: spec.parent && spec.parent.kind === 'wp' ? spec.parent.ref : '', values: values }, true);
+      req = call('wbs.create', { projectId: state.scopeId, kind: kind, parentId: f['ed-parent'] ? f['ed-parent'].value : (spec.parent && spec.parent.kind === 'wp' ? spec.parent.ref : ''), values: values }, true);
     } else {
       if (f['ed-parent'] && f['ed-parent'].value !== (kind === 'wp' ? n.parent_ref : n.wp_ref)) values[kind === 'wp' ? 'parent_wp_id' : 'wp_id'] = f['ed-parent'].value;
       req = call('wbs.update', { kind: kind === 'wp' ? 'wp' : 'item', id: n.ref, version: n.version, patch: values }, true);
@@ -174,7 +175,17 @@
   $('ed-cancel').addEventListener('click', function () { closeDialog($('editor')); });
   $('confirm-cancel').addEventListener('click', function () { closeDialog($('confirm')); });
   $('confirm-ok').addEventListener('click', confirmDelete);
-  if (state.tab === 'wbs') $('wbs-add').addEventListener('click', function () {
-    var root = state.data && state.data.nodes.filter(function (x) { return x.kind === 'project'; })[0];
-    if (root) openEditor({ mode: 'create', kind: 'wp', parent: root });
-  });
+  // Les trois boutons d'ajout de la barre d'outils sont toujours là, sans rien sélectionner : le formulaire demande le parent (« Rattaché à »),
+  // proposé d'office quand un workpackage est sélectionné (livrable, jalon) ; un workpackage se crée à la racine sauf choix contraire.
+  if (state.tab === 'wbs') {
+    var addFromBar = function (kind) {
+      var root = state.data && state.data.nodes.filter(function (x) { return x.kind === 'project'; })[0];
+      if (!root) return;
+      var sel = state.selected && state.data.nodes.filter(function (x) { return x.id === state.selected; })[0];
+      var wp = kind !== 'wp' && sel && sel.kind === 'wp' ? sel : null;
+      openEditor({ mode: 'create', kind: kind, parent: root, chooseParent: true, defaultParent: wp ? wp.ref : '' });
+    };
+    $('wbs-add').addEventListener('click', function () { addFromBar('wp'); });
+    $('wbs-add-deliverable').addEventListener('click', function () { addFromBar('Livrable'); });
+    $('wbs-add-milestone').addEventListener('click', function () { addFromBar('Jalon'); });
+  }

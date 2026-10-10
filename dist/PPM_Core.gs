@@ -1,5 +1,5 @@
 /**
- * PPM Core 0.13.2 — fichier unique à installer (fabriqué par tools/build.js, empreinte 6d1db5919fd4).
+ * PPM Core 0.14.0 — fichier unique à installer (fabriqué par tools/build.js, empreinte 8fb7fecba4c9).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
  * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs.
  */
@@ -44,7 +44,7 @@ function A8_VERIFIER_ECRITURE() { return verifierEcritureAvecJournal_(); }
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.13.2';
+var PPM_VERSION = '0.14.0';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -8786,6 +8786,19 @@ defineAction('ressources.get', function (p, ctx) {
       list.push({ key: key, code: a.role_code, label: ROLE_LABELS[a.role_code] || a.role_code, scope_type: a.scope_type, scope: scopeLabel_(data, a.scope_type, a.scope_id), rank: ROLE_RANK[a.role_code] });
     });
   }
+  // livrables et jalons de chaque personne : ceux dont elle est responsable (dans le projet choisi, sinon dans tous) ; et ceux des workpackages où elle
+  // a un rôle de responsable ou de membre actif sans en être responsable elle-même (« contribue à »)
+  var owned = {}, wpItems = {};
+  repoList('PlanItem', function (i) { return !project || i.project_id === project.id; }).forEach(function (i) {
+    if (!isBlank(i.owner_resource_id)) { var o = owned[i.owner_resource_id] = owned[i.owner_resource_id] || { d: 0, m: 0 }; if (i.item_type === 'Jalon') o.m++; else o.d++; }
+    if (!isBlank(i.wp_id)) (wpItems[i.wp_id] = wpItems[i.wp_id] || []).push(i);
+  });
+  var contrib = {};
+  repoList('RoleAssignment').forEach(function (a) {
+    if (a.scope_type !== 'workpackage' || (a.role_code !== 'MEMBER' && a.role_code !== 'RWP') || (!isBlank(a.end_date) && String(a.end_date) < today)) return;
+    var set = contrib[a.resource_id] = contrib[a.resource_id] || {};
+    (wpItems[a.scope_id] || []).forEach(function (i) { if (i.owner_resource_id !== a.resource_id) set[i.id] = true; });
+  });
   var editAll = canEditResources_(ctx);
   var people = resources.map(function (r) {
     var mine = (roles[r.id] || []).sort(function (a, b) { return a.rank - b.rank; });
@@ -8793,6 +8806,7 @@ defineAction('ressources.get', function (p, ctx) {
     return {
       resource_id: r.id, version: r.version, name: r.name, email: r.email || '', job_function: r.job_function || '', organization: r.organization || '',
       unplaced: !placed[r.id],
+      deliverables: (owned[r.id] || {}).d || 0, milestones: (owned[r.id] || {}).m || 0, contributes: Object.keys(contrib[r.id] || {}).length,
       access: isBlank(r.email) ? 'none' : (isAllowedEmail_(r.email) ? 'ok' : 'outside'),
       resource_type: r.resource_type, supplier: r.supplier || '', country: r.country || '', capacity: isBlank(r.capacity_days_month) ? '' : Number(r.capacity_days_month),
       team_id: r.team_id || '', team: teamById[r.team_id] ? teamById[r.team_id].name : '',
@@ -9729,7 +9743,12 @@ var DEMO_ROLES = [
   ['Émilie Fabre', 'MEMBER', 'wp', 'NAC-1:1.2'], ['Arjun Mehta', 'MEMBER', 'wp', 'NAC-1:1.2'], ['Antoine Garnier', 'MEMBER', 'wp', 'NAC-1:1.3'], ['Marta Kowalski', 'MEMBER', 'wp', 'NAC-1:1.3'],
   ['Greta Hoffmann', 'MEMBER', 'wp', 'NAC-1:1.4'], ['James Walker', 'MEMBER', 'wp', 'NAC-1:1.4'], ['Priya Nair', 'MEMBER', 'wp', 'NAC-1:1.4'],
   ['Léa Marchand', 'MEMBER', 'wp', 'NAC-1:2.1'], ['Hugo Blanc', 'MEMBER', 'wp', 'NAC-1:2.1'], ['Carl Weber', 'MEMBER', 'wp', 'NAC-1:2.1'], ['Hana Iyer', 'MEMBER', 'wp', 'NAC-1:2.1'],
-  ['Lukas Schneider', 'MEMBER', 'wp', 'NAC-1:2.1'], ['Sven Larsen', 'MEMBER', 'wp', 'NAC-1:4.1']
+  ['Lukas Schneider', 'MEMBER', 'wp', 'NAC-1:2.1'], ['Sven Larsen', 'MEMBER', 'wp', 'NAC-1:4.1'],
+  // contributeurs des autres projets : des membres affectés aux workpackages, en plus de leurs responsables
+  ['Hana Iyer', 'MEMBER', 'wp', 'NAC-2:1.1'], ['Lukas Schneider', 'MEMBER', 'wp', 'NAC-2:1.1'], ['Lucie Perrin', 'MEMBER', 'wp', 'NAC-2:1.2'], ['Hana Iyer', 'MEMBER', 'wp', 'NAC-2:2'],
+  ['Lukas Schneider', 'MEMBER', 'wp', 'NAC-2:2'], ['Lucie Perrin', 'MEMBER', 'wp', 'NAC-2:3'], ['Greta Hoffmann', 'MEMBER', 'wp', 'NAC-2:3'],
+  ['Étienne Roche', 'MEMBER', 'wp', 'NAC-3:1'], ['Sandrine Lopez', 'MEMBER', 'wp', 'NAC-3:1'], ['Étienne Roche', 'MEMBER', 'wp', 'NAC-3:2'], ['Sandrine Lopez', 'MEMBER', 'wp', 'NAC-3:2'],
+  ['Rahul Sharma', 'MEMBER', 'wp', 'NAC-4:1'], ['Émilie Fabre', 'MEMBER', 'wp', 'NAC-4:1'], ['Camille Durand', 'MEMBER', 'wp', 'NAC-4:1']
 ];
 /** Membres au niveau du projet : [projet, personnes…] */
 var DEMO_MEMBERS = [
@@ -9737,7 +9756,8 @@ var DEMO_MEMBERS = [
     'Lukas Schneider', 'Greta Hoffmann', 'James Walker', 'Priya Nair', 'Yann Leroy', 'Mathieu Collin', 'Lucie Perrin', 'Sandrine Lopez', 'Olivier Faure', 'Dora Schmidt',
     'Carl Weber', 'Ravi Patel', 'Hana Iyer', 'Marta Kowalski', 'Étienne Roche', 'Sven Larsen'],
   ['NAC-2', 'Greta Hoffmann', 'James Walker', 'Priya Nair', 'Hana Iyer', 'Lukas Schneider', 'Lucie Perrin'],
-  ['NAC-3', 'Yann Leroy', 'Mathieu Collin', 'Étienne Roche', 'Sandrine Lopez']
+  ['NAC-3', 'Yann Leroy', 'Mathieu Collin', 'Étienne Roche', 'Sandrine Lopez'],
+  ['NAC-4', 'Inès Girard', 'Rahul Sharma', 'Émilie Fabre', 'Camille Durand']
 ];
 
 /** Risques : [projet, genre, titre, élément lié, probabilité, impact, responsable, stratégie, statut, jours avant l'échéance de traitement (négatif : dépassée), valeur financière] */

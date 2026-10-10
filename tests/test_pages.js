@@ -64,4 +64,18 @@ module.exports = function () {
     });
     eq(require('../tools/build').build().out.filter((f) => /\.html$/.test(f)).sort(), pages.map((p) => p.file + '.html').sort(), 'la fabrication produit exactement les pages du registre');
   });
+
+  test('Compte, Budget et Administration : une grille de cartes qui se réagence, chaque panneau dans sa carte (0.14.0)', () => {
+    const style = read('Style.html');
+    ok(/\.zones \{ display: grid; grid-template-columns: repeat\(auto-fit, minmax\(max\(min\(100%, var\(--cell-min/.test(style) && /--max-cols/.test(style) && /\.zones \.cell\.wide \{ grid-column: 1 \/ -1; \}/.test(style) && /\.zones \.cell:has\(> \.panel\[hidden\]\)/.test(style), 'les règles de la grille sont dans la feuille de style commune');
+    ['Compte', 'Admin', 'Budget'].forEach((f) => {
+      const h = read(f + '.html'), panels = (h.match(/<section class="panel"/g) || []).length, cells = (h.match(/<div class="cell[ "]/g) || []).length;
+      ok(/<main class="zones" style="--cell-min: \d+px; --max-cols: \d+">/.test(h), f + ' : la grille avec sa largeur minimale de carte et son nombre maximal de colonnes');
+      ok(panels >= 3 && cells === panels, f + ' : ' + panels + ' panneaux, chacun dans sa carte (' + cells + ')');
+      ok(!/\.panel \{[^}]*max-width: (880|1100|1240)px/.test(h) || /\.zones \.cell > \.panel \{ max-width: none/.test(style), f + ' : la largeur plafonnée des panneaux est levée dans la grille');
+      ok(h.indexOf('<main class="zones"') < h.indexOf('id="panel-') && h.lastIndexOf('</main>') > h.lastIndexOf('<section class="panel"'), f + ' : tous les panneaux sont dans la grille');
+    });
+    ok(/<div class="cell wide" id="cell-reglages">/.test(read('Admin.html')) && /<div class="cell wide" id="cell-journaux">/.test(read('Admin.html')), 'Administration : réglages et journaux sur toute la largeur');
+    ok(/<div class="cell wide" id="cell-budget">/.test(read('Budget.html')) && /<div class="cell wide" id="cell-mine">/.test(read('Compte.html')), 'Budget par livrable et actions de réunion : tableaux sur toute la largeur');
+  });
 };

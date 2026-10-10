@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.13.2)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.14.0)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -192,6 +192,13 @@ Les tests chargent les fichiers `.gs` tels quels, avec des tables en mémoire à
 - **Reprise** : chaque étape est enregistrée dans la propriété `PPM_DEMO_STEP`. Si une étape échoue, le message dit laquelle, les précédentes sont conservées, et il suffit de relancer. **Limite** : il n'y a pas de fonction pour effacer la démo ; pour repartir de zéro, installer sur de nouveaux classeurs (les noms de la démo, retrouvés par leur plus récent homonyme, ne se mélangent pas à de vraies fiches).
 - **Aperçu** : `node tests/preview_demo.js 8124` sert toutes les pages sur la démo complète.
 - **Overview, repère « Personnes »** : il compte maintenant les membres du projet (il comptait les adresses joignables, ce qui est trompeur pour des personnes sans adresse). **Indicateur de coût** : un dépassement du budget externe sur un seul CPN le met en alerte, même si le total du projet reste sous son budget (les analyses se font par CPN).
+
+## Version A (0.14.0) : ajout toujours possible, livrables par personne, pages en grille
+
+- **WBS : trois boutons d'ajout toujours dans la barre** (« Ajouter un workpackage », « un livrable », « un jalon »), sans rien sélectionner d'abord. Le formulaire de création propose « Rattaché à » (le projet ou n'importe quel workpackage, sous-workpackages compris) ; si un workpackage est sélectionné, il est proposé d'office pour un livrable ou un jalon ; un workpackage se crée à la racine sauf choix contraire, et seuls les workpackages de premier niveau peuvent être parents. Réservés au pilotage du projet, comme avant. Les boutons du panneau de détail restent.
+- **Ressources : colonne « Livrables »** : pour chaque personne, le nombre de livrables et de jalons dont elle est responsable (dans le projet choisi, sinon dans tous), et le nombre de ceux auxquels elle **contribue** sans en être responsable (éléments des workpackages où elle a un rôle de responsable ou de membre encore actif). Le total est mis en avant (`ressources.get` : `deliverables`, `milestones`, `contributes`).
+- **Compte, Budget et Administration en grille responsive** (`.zones` / `.cell` dans `Style.html`) : chaque zone est une carte comme dans l'Overview ; les cartes se réagencent selon la largeur (`--cell-min` : largeur minimale d'une carte, `--max-cols` : nombre maximal de colonnes, pour ne jamais laisser de colonne vide sur un grand écran) ; les gros tableaux (`.wide`) prennent toute la largeur ; une carte dont le panneau est masqué disparaît. Administration : les réglages passent sur toute la largeur, leurs groupes de champs en colonnes. Budget : bilan et achats ne se placent côte à côte qu'à partir de 1 700 pixels environ, pour ne pas rogner les tableaux.
+- **Démo** : des contributeurs (membres affectés aux workpackages) pour NAC-2, NAC-3 et NAC-4, en plus de NAC-1.
 
 ## Textes protégés dans les feuilles, démo réparable (0.13.2)
 
