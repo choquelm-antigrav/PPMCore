@@ -245,11 +245,60 @@ function demoOrders_(d) {
     if (status === 'Terminée') values.closed_on = d.day(o[7] < 0 ? o[7] + 6 : -1);
     var links = [];
     for (var k = 8; k < o.length; k++) {
-      var code = o[1] === 'CPN-2501' ? 'NAC-2' : 'NAC-1';
+      var code = { 'CPN-2501': 'NAC-2', 'CPN-2601': 'NAC-3', 'CPN-2301': 'NAC-4' }[o[1]] || 'NAC-1';
       links.push({ deliverable_id: d.item(code, o[k][0]).id, amount: o[k][1] });
     }
     d.call('po.save', { values: values, links: links });
   });
+}
+
+/** Des réunions, des actions et une baseline pour NAC-2, NAC-3 et NAC-4, pour que la vue du programme ait de quoi comparer. */
+function demoMoreNews_(d) {
+  var f = function (n) { return demoDM_(d, n); };
+  var add = function (code, keywords, meetings) {
+    var p = d.project(code);
+    d.call('news.settings.set', { projectId: p.id, enabled: true, keywords: keywords });
+    meetings.forEach(function (m) { d.call('news.meeting.add', { projectId: p.id, title: m[1], held_on: d.day(-m[0]), participants: m[2], text: m[3] }); });
+    return p;
+  };
+  var answer = function (p, startsWith, decision) {
+    var a = repoList('NewsAction', function (x) { return x.project_id === p.id && x.text.indexOf(startsWith) === 0; })[0];
+    if (a) d.call('news.action.decide', { id: a.id, decision: decision });
+  };
+  var nac2 = add('NAC-2', 'NAC-2, systèmes embarqués', [
+    [10, 'Point intégration NAC-2', 'Priya Nair, Greta Hoffmann, James Walker',
+      ['Résumé', 'Le banc d’intégration est monté ; le câblage prend quelques jours de retard.', '', 'Décisions', '- Le câblage du prototype est prioritaire sur les tests unitaires.', '',
+        'Étapes suivantes', '- [James Walker] Terminer le câblage du prototype pour le ' + f(-2), '- [Priya Nair] Planifier les essais du banc pour le ' + f(9)].join('\n')],
+    [17, 'Revue calculateur', 'Greta Hoffmann, Sophie Martin',
+      ['Résumé', 'Le calculateur retenu est validé ; le prototype est en cours.', '', 'Décisions', '- Le calculateur choisi est confirmé.', '',
+        'Étapes suivantes', '- [Greta Hoffmann] Livrer la spécification logicielle pour le ' + f(6)].join('\n')]
+  ]);
+  answer(nac2, 'Terminer le câblage', 'accept'); answer(nac2, 'Livrer la spécification logicielle', 'accept');
+  d.call('news.digest.publish', { projectId: nac2.id, notify: false, text: [
+    'Décisions : le câblage du prototype est prioritaire (Point intégration NAC-2) ; le calculateur est confirmé (Revue calculateur).',
+    'Dates qui bougent : le câblage du prototype a quelques jours de retard (Point intégration NAC-2).',
+    'Risques : l’obsolescence du calculateur reste suivie (Revue calculateur).',
+    'Blocages : aucun.',
+    'Actions : James Walker — terminer le câblage du prototype — ' + f(-2) + ' ; Priya Nair — planifier les essais du banc — ' + f(9)
+  ].join('\n') });
+  var nac3 = add('NAC-3', 'NAC-3, industrialisation', [
+    [6, 'Lancement de l’étude d’industrialisation', 'Karim Haddad, Yann Leroy, Mathieu Collin',
+      ['Résumé', 'L’étude d’industrialisation démarre ; les cadences cibles restent à confirmer.', '', 'Décisions', '- L’étude de fabricabilité précède la consultation des fournisseurs.', '',
+        'Étapes suivantes', '- [Yann Leroy] Analyser la fabricabilité de la nacelle pour le ' + f(8), '- [Mathieu Collin] Collecter les cadences cibles pour le ' + f(-3)].join('\n')],
+    [20, 'Cadrage de l’industrialisation', 'Karim Haddad, Étienne Roche',
+      ['Cadrage du projet d’industrialisation.', 'Décision : le projet démarre en préparation, sans baseline avant la revue de faisabilité.',
+        'Action : réunir les besoins en moyens de production — Étienne Roche — ' + f(12)].join('\n')]
+  ]);
+  answer(nac3, 'Analyser la fabricabilité', 'accept');
+  var nac4 = add('NAC-4', 'NAC-4, essais en vol', [
+    [40, 'Débrief de la campagne d’essais en vol', 'Thomas Weber, Inès Girard',
+      ['Résumé', 'La campagne d’essais en vol est terminée ; les résultats sont conformes.', '', 'Décisions', '- Le rapport d’essais est validé.', '',
+        'Étapes suivantes', '- [Inès Girard] Archiver le rapport d’essais en vol pour le ' + f(-36)].join('\n')],
+    [48, 'Revue de clôture NAC-4', 'Thomas Weber, Marc Lefèvre',
+      ['Revue de clôture.', 'Décision : le projet est clos.', 'Action : transmettre le bilan de clôture au programme — Thomas Weber — ' + f(-45)].join('\n')]
+  ]);
+  answer(nac4, 'Archiver le rapport', 'done'); answer(nac4, 'transmettre le bilan', 'done');
+  d.call('baselines.create', { projectId: nac4.id, label: 'B0', justification: 'Planning validé avant la campagne d’essais en vol' });
 }
 
 function demoFindings_(d) {
@@ -273,6 +322,7 @@ var DEMO_STEPS = [
   { name: 'Commandes d’achat', run: function (d) { demoOrders_(d); } },
   { name: 'Actualités de NAC-1 : réunions', run: function (d) { demoNewsMeetings_(d); } },
   { name: 'Actualités : actions, synthèse du jour, réunions à trier', run: function (d) { demoNewsActions_(d); } },
+  { name: 'Actualités et suivi des autres projets', run: function (d) { demoMoreNews_(d); } },
   { name: 'Constats du moteur de règles', run: function (d) { demoFindings_(d); } }
 ];
 

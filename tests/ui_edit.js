@@ -233,6 +233,26 @@ function openPage(user) {
   const ids = new Set(tree.data.nodes.map((n) => n.id));
   check(tree.data.nodes.every((n) => !n.parent || ids.has(n.parent)), 'aucun élément orphelin dans l’arbre');
 
+  // ---------------------------------------------------------------- 0.14.1 : le WBS d'un programme, tous les projets côte à côte
+  const g = openPage(CP);
+  await g.until(() => g.nodes() >= 12);
+  g.$('picker').value = 'program:' + w.prog.id;
+  g.$('picker').dispatchEvent(new g.win.Event('change'));
+  await g.until(() => g.node('program:' + w.prog.id));
+  const wpCard = g.doc.querySelector('#canvas-wbs .node[data-id^="wp:"]');
+  check(g.node('program:' + w.prog.id) && g.node('project:' + w.p1.id) && g.node('project:' + w.p2.id) && !!wpCard, 'programme : la carte du programme, ses deux projets et leurs workpackages sont dessinés');
+  check(!g.doc.querySelector('#canvas-wbs .node[data-id^="item:"]'), 'sans les livrables : ils se lisent projet par projet');
+  check(/Programme/.test(g.text('ztitle')) && /2 projets, \d+ workpackages/.test(g.text('summary')), 'titre et résumé du programme : ' + g.text('summary'));
+  check(g.$('wbs-add').hidden && g.$('wbs-add-deliverable').hidden && g.$('wbs-add-milestone').hidden, 'vue programme : aucun bouton d’ajout (rien ne se crée depuis ici)');
+  const wpId = wpCard.getAttribute('data-id');
+  await g.pick(wpId, '');
+  check(!!g.$('open-project') && !g.$('edit-node') && !g.$('add-subwp') && /Workpackage/.test(g.text('details')), 'le détail d’un workpackage propose seulement « Ouvrir le WBS du projet »');
+  g.click(g.$('open-project'));
+  await g.until(() => g.doc.querySelector('#canvas-wbs .node[data-id^="item:"]'));
+  check(/^project:/.test(g.$('picker').value) && !g.$('wbs-add').hidden, 'le bouton ouvre le WBS du projet : livrables dessinés, boutons d’ajout revenus');
+  await g.until(() => g.doc.querySelector('#canvas-wbs .node.selected'));
+  check(!!g.doc.querySelector('#canvas-wbs .node.selected[data-id="' + wpId + '"]'), 'et le workpackage choisi y est sélectionné');
+
   console.log(failed ? '\n' + failed + ' échec(s).' : '\nÉdition du WBS : tout est conforme.');
   process.exit(failed ? 1 : 0);
 })();

@@ -173,6 +173,24 @@ function openPage(user) {
   await d.until(() => d.$('res-table'));
   check(!!d.doc.querySelector('.role-select') && !!d.doc.querySelector('.rate-input') && !d.$('person-add').hidden, 'le DPL attribue les rôles, fixe les taux et ajoute des personnes');
 
+  // ---------------------------------------------------------------- 0.14.1 : l'arbre des équipes est un organigramme (25 % de la largeur), la liste des ressources a 75 %
+  const team = (values) => w.call(CP, 'teams.create', { values });
+  const rootA = team({ name: 'Direction ouest', manager_resource_id: w.carla.id }), branchA = team({ name: 'Branche calcul', parent_team_id: rootA.id, manager_resource_id: w.remi.id });
+  const leafA = team({ name: 'Cellule fatigue', parent_team_id: branchA.id }), rootB = team({ name: 'Direction est' });
+  const org = openPage(CP);
+  await org.until(() => org.doc.querySelector('#teams-list li[data-team="' + leafA.id + '"]'));
+  const q = (sel) => org.doc.querySelector(sel);
+  check(!!q('#teams-list > li[data-team="' + rootA.id + '"] > ul > li[data-team="' + branchA.id + '"] > ul > li[data-team="' + leafA.id + '"]'), 'organigramme : la cellule est sous sa branche, elle-même sous sa direction (arbre imbriqué)');
+  check(q('li[data-team="' + rootA.id + '"]').getAttribute('data-depth') === '0' && q('li[data-team="' + leafA.id + '"]').getAttribute('data-depth') === '2', 'la profondeur de chaque équipe est portée par sa carte');
+  check(!q('li[data-team="' + leafA.id + '"] > ul') && !q('li[data-team="' + rootB.id + '"] > ul'), 'une équipe sans sous-équipe n’a pas de branche vide');
+  check(q('li[data-team="' + rootB.id + '"] > .team-card').classList.contains('noboss') && !q('li[data-team="' + rootA.id + '"] > .team-card').classList.contains('noboss'), 'une équipe sans responsable est signalée');
+  check(/Branche calcul/.test(flat(q('li[data-team="' + branchA.id + '"] > .team-card').textContent)) && /Rémi/.test(flat(q('li[data-team="' + branchA.id + '"] > .team-card').textContent)) && !!q('li[data-team="' + branchA.id + '"] > .team-card .team-sub'), 'la carte d’une équipe porte son nom, son responsable et ses actions');
+  org.click(q('li[data-team="' + branchA.id + '"] > .team-card .t-name'));
+  await org.until(() => q('li[data-team="' + branchA.id + '"] > .team-card.on'));
+  check(!!q('li[data-team="' + branchA.id + '"] > .team-card.on') && q('#team-filter').value === branchA.id, 'cliquer une équipe la met en évidence et filtre les personnes');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'Ressources.html'), 'utf8');
+  check(/grid-template-columns: minmax\(0, 3fr\) minmax\(0, 1fr\)/.test(css) && /\.teams ul > li::before/.test(css) && /\.teams ul > li:last-child::after/.test(css), 'mise en page 75 % pour la liste, 25 % pour les équipes, avec traits de liaison entre équipes');
+
   console.log(failed ? '\n' + failed + ' échec(s).' : '\nPage Ressources : tout est conforme.');
   process.exit(failed ? 1 : 0);
 })();

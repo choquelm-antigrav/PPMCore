@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.14.0">
+<meta name="ppm-version" content="0.14.1">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <?!= include('CommonForms') ?>
@@ -12,7 +12,7 @@
   main.with-details { grid-template-columns: minmax(0, 1fr) 340px; }
   .chart { min-width: 0; padding: 16px 24px 24px; }
   .canvas { overflow: auto; max-height: calc(100vh - 230px); min-height: 240px; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
-  .canvas svg { display: block; }
+  .canvas svg { display: block; margin: 0 auto; } /* centré dans la largeur de la page quand il est plus étroit ; plus large, il défile à partir de la gauche */
   .team-pick[hidden], .scope-pick[hidden], .mode[hidden] { display: none; }
 
   .unplaced { margin: 0 0 12px; padding: 10px 14px; background: var(--warn-bg); border-left: 4px solid var(--amber); border-radius: 4px; }
@@ -272,7 +272,7 @@ var BOOT = <?!= boot ?>;
   var ROLE_COLORS = { PL: '#3B6FE0', DPL: '#00A3E0', CP: '#1F8A85', RWP: '#B7791F', MEMBER: '#8A4F9E' };
   var ORG_PALETTE = ['#2F6DB5', '#1F8A85', '#B7791F', '#8A4F9E', '#4C8C2B', '#B4487A', '#00A3E0', '#8C5A3C', '#5B8FE0', '#A0522D'];
   var NEUTRAL = '#8FB3E3';
-  var KIND_COLORS = { project: '#1E4FB0', wp: '#3F7FE0', item: '#8CB6F0', milestone: '#00A3E0' };
+  var KIND_COLORS = { program: '#0B2A66', project: '#1E4FB0', wp: '#3F7FE0', item: '#8CB6F0', milestone: '#00A3E0' };
   var TYPE_COLORS = { Interne: '#2F6DB5', Externe: '#B7791F' };
   var CHAR_PX = 6.7, CHAR_PX_BOLD = 7.6; // largeur moyenne d'un caractère (12 px) et d'un titre gras (13 px)
 
@@ -309,7 +309,7 @@ var BOOT = <?!= boot ?>;
     var canvas = $('canvas');
     if (!state.layout) return;
     var avail = canvas.clientWidth || 900, fit = (avail - 8) / state.layout.width;
-    setZoom(fit >= 0.7 ? Math.min(1, fit) : 1);
+    setZoom(fit >= 0.5 ? Math.min(1, fit) : 1); // tout le schéma tient dans la largeur tant qu'il reste lisible (vue programme : tous les projets côte à côte)
     var r = state.layout.root;
     if (!r) return;
     if (state.tab === 'obs') {

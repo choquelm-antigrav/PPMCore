@@ -330,7 +330,10 @@ var DEMO_BUDGET = [
   ['NAC-2', 'Spécification calculateur', 'Greta Hoffmann', 'j', 12], ['NAC-2', 'Prototype calculateur', 'Greta Hoffmann', 'j', 25],
   ['NAC-2', 'Spécification capteurs', 'James Walker', 'j', 10], ['NAC-2', 'Qualification capteurs', 'James Walker', 'j', 22],
   ['NAC-2', 'Boucle de régulation', 'Greta Hoffmann', 'j', 30], ['NAC-2', 'Tests unitaires logiciels', 'Hana Iyer', 'f', 26000],
-  ['NAC-2', 'Banc d’intégration', 'Priya Nair', 'j', 28], ['NAC-2', 'Validation système', 'Priya Nair', 'j', 22]
+  ['NAC-2', 'Banc d’intégration', 'Priya Nair', 'j', 28], ['NAC-2', 'Validation système', 'Priya Nair', 'j', 22],
+  ['NAC-3', 'Analyse de fabricabilité', 'Yann Leroy', 'j', 14], ['NAC-3', 'Étude des cadences', 'Yann Leroy', 'j', 10], ['NAC-3', 'Spécification des moyens de production', 'Mathieu Collin', 'j', 16],
+  ['NAC-3', 'Consultation des fournisseurs', 'Dora Schmidt', 'f', 36000],
+  ['NAC-4', 'Plan d’essais en vol', 'Rahul Sharma', 'j', 8], ['NAC-4', 'Campagne d’essais en vol', 'Sven Larsen', 'f', 160000], ['NAC-4', 'Rapport d’essais en vol', 'Camille Durand', 'j', 9]
 ];
 
 /**
@@ -349,5 +352,7 @@ var DEMO_ORDERS = [
   ['CB-460391', 'CPN-2401', 'Marta Kowalski', 'Éprouvettes matériaux', 18000, 'Lancée', -55, -12, ['Essais d’éprouvettes matériaux', 18000]],
   ['CB-460502', 'CPN-2401', 'Sven Larsen', 'Démonstration de conformité', 45000, 'Lancée', -25, 120, ['Démonstration de conformité structure', 45000]],
   ['CB-470001', 'CPN-2501', 'Hana Iyer', 'Validation logicielle externalisée', 20000, 'Lancée', -30, 30, ['Tests unitaires logiciels', 20000]],
+  ['CB-470502', 'CPN-2601', 'Dora Schmidt', 'Consultation des fournisseurs de moyens', 30000, 'Lancée', -12, 40, ['Consultation des fournisseurs', 30000]],
+  ['CB-430118', 'CPN-2301', 'Sven Larsen', 'Campagne d’essais en vol', 120000, 'Terminée', -80, -35, ['Campagne d’essais en vol', 120000]],
   ['CB-499001', 'CPN-9999', 'Brigitte Stahl', 'PO d’un autre projet (hors de l’outil)', 5000, 'Lancée', -10, 15]
 ];

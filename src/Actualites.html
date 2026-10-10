@@ -3,9 +3,10 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.14.0">
+<meta name="ppm-version" content="0.14.1">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
+<?!= include('CommonProgram') ?>
 <style>
   .panel { padding: 8px 24px 32px; max-width: 1240px; }
   .zone[hidden] { display: none; }
@@ -46,6 +47,9 @@
     <select id="picker" aria-label="Projet"></select>
   </div>
 </header>
+
+<div class="zone" id="zone-program" hidden><h2 class="sec">Vue programme : les actualités de tous les projets</h2></div>
+<section class="panel" id="panel-program" aria-label="Vue programme" hidden></section>
 
 <div class="zone" id="zone-digest"><h2 class="sec">Synthèse du matin</h2></div>
 <section class="panel" id="panel-digest" aria-label="Synthèse du matin"></section>
@@ -358,7 +362,43 @@ var BOOT = <?!= boot ?>;
   }
 
   // ------------------------------------------------------------ démarrage
-  $('picker').addEventListener('change', function () { state.projectId = this.value; load(); });
+  // vue programme (PL et DPL) : un tableau par projet, les réunions récentes et les actions ouvertes de tous les projets
+  var pv = ppm.programView({
+    hide: ['digest', 'actions', 'feed', 'triage', 'add', 'settings'].reduce(function (a, z) { return a.concat(['zone-' + z, 'panel-' + z]); }, []),
+    zone: 'zone-program', panel: 'panel-program', action: 'news.program',
+    render: function (d, host) {
+      var open = function (row) { pv.leave(); state.projectId = row.project_id || row.id; $('picker').value = state.projectId; load(); };
+      host.appendChild(el('p', { class: 'program-note', text: 'Programme ' + d.program.code + ' — ' + d.program.name + '. Cliquez sur un projet pour son fil complet.' }));
+      var yes = function (b) { return b ? '✓' : '—'; };
+      host.appendChild(ppm.table([
+        { label: 'Projet', link: true, get: function (r) { return r.code + ' ' + r.name; } },
+        { label: 'Réunions (30 j)', num: true, get: function (r) { return String(r.meetings_30d); }, total: function (t) { return String(t.meetings_30d); } },
+        { label: 'Dernière réunion', get: function (r) { return r.last_meeting ? ppm.frDate(r.last_meeting) : '—'; } },
+        { label: 'Actions ouvertes', num: true, get: function (r) { return String(r.actions_open); }, total: function (t) { return String(t.actions_open); } },
+        { label: 'En retard', num: true, cls: function (r) { return r.actions_overdue ? 'bad' : ''; }, get: function (r) { return String(r.actions_overdue); }, total: function (t) { return String(t.actions_overdue); } },
+        { label: 'Contestées', num: true, cls: function (r) { return r.actions_contested ? 'warn' : ''; }, get: function (r) { return String(r.actions_contested); }, total: function (t) { return String(t.actions_contested); } },
+        { label: 'À classer', num: true, get: function (r) { return String(r.to_sort); }, total: function (t) { return String(t.to_sort); } },
+        { label: 'Synthèse du jour', get: function (r) { return yes(r.digest_today); } },
+        { label: 'Repères', get: function (r) { return r.news_on ? 'collecte active' : 'collecte non activée'; }, cls: function (r) { return r.news_on ? '' : 'warn'; } }
+      ], d.projects, { open: open, total: d.totals }));
+      host.appendChild(el('h3', { text: 'Réunions des 14 derniers jours' }));
+      host.appendChild(d.recent.length ? ppm.table([
+        { label: 'Date', get: function (m) { return ppm.frDate(m.held_on); } },
+        { label: 'Projet', get: function (m) { return m.project_code; } },
+        { label: 'Réunion', link: true, get: function (m) { return m.title; } }
+      ], d.recent.map(function (m) { return Object.assign({}, m, { id: m.project_id }); }), { open: open }) : el('p', { class: 'program-note', text: 'Aucune réunion publiée dans les 14 derniers jours.' }));
+      host.appendChild(el('h3', { text: 'Actions ouvertes, toutes équipes' }));
+      host.appendChild(d.actions.length ? ppm.table([
+        { label: 'Projet', link: true, get: function (a) { return a.project_code; } },
+        { label: 'Action', get: function (a) { return a.text; } },
+        { label: 'Responsable', get: function (a) { return a.owner || '—'; } },
+        { label: 'Échéance', cls: function (a) { return a.overdue ? 'bad' : ''; }, get: function (a) { return a.due_date ? ppm.frDate(a.due_date) + (a.overdue ? ' (en retard)' : '') : '—'; } },
+        { label: 'État', get: function (a) { return a.status; } }
+      ], d.actions.map(function (a) { return Object.assign({}, a, { id: a.project_id }); }), { open: open }) : el('p', { class: 'program-note', text: 'Aucune action ouverte.' }));
+    },
+    onEnter: function (d) { $('title').textContent = 'Actualités — Programme ' + d.program.code; $('context').textContent = ''; try { google.script.history.replace(null, { view: 'actualites', program: d.program.id }); } catch (e) { /* hors web app */ } }
+  });
+  $('picker').addEventListener('change', function () { if (pv.isProgram(this.value)) pv.enter(this.value); else { pv.leave(); state.projectId = this.value; load(); } });
   $('prompt-close').addEventListener('click', function () { closeDialog($('prompt-dialog')); });
   $('prompt-copy').addEventListener('click', copyPrompt);
   $('publish-cancel').addEventListener('click', function () { closeDialog($('publish-dialog')); });
@@ -371,6 +411,7 @@ var BOOT = <?!= boot ?>;
     var s = $('picker'); clear(s);
     var sortCode = function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); };
     cat.projects.slice().sort(sortCode).forEach(function (p) { s.appendChild(el('option', { value: p.id, text: p.code + ' ' + p.name + (p.status === 'Clos' ? ' (clos)' : '') })); });
+    pv.fillOptions(s, cat);
     state.projectId = BOOT.project || (cat.projects.filter(function (p) { return p.status !== 'Clos'; })[0] || cat.projects[0] || {}).id || '';
     s.value = state.projectId;
     return load();

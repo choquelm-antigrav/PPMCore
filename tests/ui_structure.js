@@ -238,8 +238,27 @@ function openPage(user, boot) {
   p4.click(p4.doc.querySelector('[data-mode="roles"]'));
   await p4.until(() => p4.doc.getElementById('ztitle').textContent.startsWith('Organisation — '));
   check(p4.doc.getElementById('ztitle').textContent === 'Organisation — PG — Programme A', 'organisation du programme : ' + p4.doc.getElementById('ztitle').textContent);
-  await p4.until(() => /Le WBS se lit projet par projet/.test(p4.doc.getElementById('canvas-wbs').textContent));
-  check(/Le WBS se lit projet par projet/.test(p4.doc.getElementById('canvas-wbs').textContent) && p4.doc.getElementById('picker').value === 'program:' + prog.id, 'périmètre programme : la zone du découpage demande de choisir un projet, sans rien changer d’office');
+  await p4.until(() => p4.doc.querySelectorAll('#canvas-wbs .node').length > 0);
+  check(p4.doc.getElementById('picker').value === 'program:' + prog.id && !!p4.doc.querySelector('#canvas-wbs .node[data-id^="program:"]') && !!p4.doc.querySelector('#canvas-wbs .node[data-id^="project:"]') && !/Le WBS se lit projet par projet/.test(p4.doc.getElementById('canvas-wbs').textContent), 'périmètre programme : la zone du découpage montre maintenant le programme, ses projets et leurs workpackages (0.14.1)');
+
+  // ---------------------------------------------------------------- 0.14.1 : les personnes d'une boîte de rôle en mosaïque
+  ['Bea', 'Cyril', 'Dina', 'Elio', 'Fanny', 'Gus', 'Hana', 'Ivan', 'Jade'].forEach((n) => role(res(n, { job_function: 'Ingénieur' }), 'MEMBER', 'project', p1.id));
+  const pm = openPage('alice@entreprise.com', { project: p1.id });
+  await pm.until(() => pm.nodes().length > 0);
+  pm.click(pm.doc.querySelector('[data-mode="roles"]')); // la page se souvient du dernier mode choisi : on revient aux rôles
+  await pm.until(() => pm.nodes().some((g) => /Membre/.test(g.textContent) && g.querySelectorAll('.person').length >= 8));
+  const roleCards = pm.nodes();
+  const members = roleCards.find((g) => /Membre/.test(g.textContent) && g.querySelectorAll('.person').length >= 8);
+  check(!!members, 'la boîte « Membre affecté » avec beaucoup de monde existe');
+  const cols = [...members.querySelectorAll('.person')].map((x) => +x.getAttribute('data-col')), rows = [...members.querySelectorAll('.person')].map((x) => +x.getAttribute('data-row'));
+  check(new Set(cols).size >= 3 && Math.max(...rows) <= Math.ceil(cols.length / 3), 'mosaïque : ' + cols.length + ' personnes sur ' + (Math.max(...cols) + 1) + ' colonnes et ' + (Math.max(...rows) + 1) + ' rangées, au lieu d’une pile de ' + cols.length);
+  check(pm.box(members).w >= 3 * 216 && pm.box(members).h < cols.length * 40, 'la boîte s’élargit pour ses colonnes (' + pm.box(members).w + ' px) et reste basse (' + pm.box(members).h + ' px)');
+  const inside = [...members.querySelectorAll('.person rect.person-bg')].every((r) => +r.getAttribute('x') >= 0 && +r.getAttribute('x') + +r.getAttribute('width') <= pm.box(members).w);
+  check(inside, 'chaque personne reste à l’intérieur de la boîte');
+  const small = roleCards.filter((g) => g.querySelectorAll('.person').length > 0 && g.querySelectorAll('.person').length <= 3);
+  check(small.length > 0 && small.every((g) => pm.box(g).w === 272 && [...g.querySelectorAll('.person')].every((x) => x.getAttribute('data-col') === '0')), 'jusqu’à trois personnes : une seule colonne, largeur inchangée');
+  check(pm.overlaps() === null, 'aucune carte ne se chevauche malgré les boîtes élargies');
+  check(/\.canvas svg \{ display: block; margin: 0 auto; \}/.test(fs.readFileSync(path.join(__dirname, '..', 'src', 'Structure.html'), 'utf8')), 'le schéma est centré dans la largeur de la page');
 
   console.log(failed ? '\n' + failed + ' échec(s) dans la page.' : '\nPage Structure : tout est conforme.');
   process.exit(failed ? 1 : 0);

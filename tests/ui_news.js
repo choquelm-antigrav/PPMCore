@@ -203,6 +203,25 @@ function openPage(user, file, view) {
   await wait(150);
   check(cz.$('zone-mine').hidden, 'Mon compte : pas de zone pour qui n’a aucune action');
 
+
+  const norm = (t) => String(t).replace(/[\u202f\u00a0]/g, ' ').replace(/\s+/g, ' ').trim();
+  const programOptions = (x) => [...x.$('picker').options].filter((o) => /^program:/.test(o.value));
+  const chooseProgram = (x) => { x.$('picker').value = 'program:' + w.prog.id; x.$('picker').dispatchEvent(new x.win.Event('change')); };
+  // ---------------------------------------------------------------- 0.14.1 : vue programme (Program Leader et Domain Program Leader)
+  const cpN = openPage(CP);
+  await cpN.until(() => cpN.$('picker').options.length >= 2);
+  check(programOptions(cpN).length === 0, 'un chef de projet n’a pas la vue programme dans la liste');
+  const dn = openPage('dora@entreprise.com');
+  await dn.until(() => programOptions(dn).length === 1);
+  await dn.until(() => !dn.$('panel-feed').hidden);
+  chooseProgram(dn);
+  await dn.until(() => dn.doc.querySelector('#panel-program table.consol'));
+  const rowsN = [...dn.doc.querySelectorAll('#panel-program tbody tr')];
+  check(rowsN.length >= 2 && /Actions ouvertes/.test(dn.text('panel-program')) && /Réunions des 14 derniers jours/.test(dn.text('panel-program')) && /Actions ouvertes, toutes équipes/.test(dn.text('panel-program')), 'actualités du programme : tableau des projets, réunions récentes, actions ouvertes');
+  check(dn.doc.body.classList.contains('in-program') && ['digest', 'actions', 'feed', 'triage', 'add', 'settings'].every((z) => [...dn.doc.querySelectorAll('style')].some((s) => s.textContent.includes('body.in-program #panel-' + z))) && /Actualités — Programme/.test(dn.text('title')), 'les zones du projet sont masquées en vue programme par une règle de la page');
+  dn.click(dn.doc.querySelector('#panel-program tbody tr button.proj-open'));
+  await dn.until(() => dn.$('panel-program').hidden && !dn.doc.body.classList.contains('in-program'));
+  check(/^[\w-]+$/.test(dn.$('picker').value) && !/^program:/.test(dn.$('picker').value) && dn.$('zone-program').hidden && !dn.$('panel-feed').hidden, 'un clic sur un projet ouvre son fil et referme la vue programme');
   console.log(failed ? '\n' + failed + ' échec(s).' : '\nPage Actualités : tout est conforme.');
   process.exit(failed ? 1 : 0);
 })();

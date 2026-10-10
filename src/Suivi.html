@@ -3,9 +3,10 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.14.0">
+<meta name="ppm-version" content="0.14.1">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
+<?!= include('CommonProgram') ?>
 <style>
   .panel { padding: 16px 24px 32px; }
   .bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 20px; margin: 0 0 16px; }
@@ -63,6 +64,9 @@
 <div class="status">
   <button type="button" class="icon-btn" id="reload" style="margin-left:auto" aria-label="Actualiser" title="Actualiser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
 </div>
+
+<div class="zone" id="zone-program" hidden><h2 class="sec">Vue programme : le suivi de tous les projets</h2></div>
+<section class="panel" id="panel-program" aria-label="Vue programme" hidden></section>
 
 <div class="zone" id="zone-ecarts"><h2 class="sec">Écarts à la baseline</h2></div>
 <section class="panel" id="panel-ecarts" aria-label="Écarts à la baseline"></section>
@@ -157,6 +161,7 @@ var BOOT = <?!= boot ?>;
     };
     cat.programs.slice().sort(sortCode).forEach(function (g) { group(g.code + ' ' + g.name, byProgram[g.id]); });
     group('Hors programme', byProgram['']);
+    pv.fillOptions(sel, cat);
     sel.value = state.projectId;
   }
   /** Plus d'onglets : toutes les zones s'affichent ; celle des changements est réservée à ceux qui peuvent les lire. */
@@ -508,7 +513,28 @@ var BOOT = <?!= boot ?>;
   }
 
   // ------------------------------------------------------------ événements
-  $('picker').addEventListener('change', function () { loadProject(this.value); });
+  // vue programme (PL et DPL) : baseline active, dérives, demandes et changements de chaque projet ; un clic ouvre le suivi du projet
+  var pv = ppm.programView({
+    hide: ['ecarts', 'changes', 'baselines', 'workspace'].reduce(function (a, z) { return a.concat(['zone-' + z, 'panel-' + z]); }, []),
+    zone: 'zone-program', panel: 'panel-program', action: 'suivi.program',
+    render: function (d, host) {
+      var open = function (row) { pv.leave(); loadProject(row.id); };
+      host.appendChild(el('p', { class: 'program-note', text: 'Programme ' + d.program.code + ' — ' + d.program.name + '. Les écarts sont ceux de la baseline active de chaque projet ; cliquez sur un projet pour le détail.' }));
+      var jours = function (n) { return n ? '+' + n + (n > 1 ? ' jours' : ' jour') : '—'; };
+      host.appendChild(ppm.table([
+        { label: 'Projet', link: true, get: function (r) { return r.code + ' ' + r.name; } },
+        { label: 'Baseline active', get: function (r) { return r.baseline || 'Aucune'; }, cls: function (r) { return r.baseline ? '' : 'warn'; }, total: function (t) { return t.without_baseline ? plural(t.without_baseline, 'projet sans baseline', 'projets sans baseline') : ''; } },
+        { label: 'Éléments comparés', num: true, get: function (r) { return r.baseline ? String(r.compared) : '—'; }, total: function (t) { return String(t.compared); } },
+        { label: 'En dérive', num: true, cls: function (r) { return r.slipped ? 'bad' : ''; }, get: function (r) { return r.baseline ? String(r.slipped) : '—'; }, total: function (t) { return String(t.slipped); } },
+        { label: 'Pire glissement', num: true, cls: function (r) { return r.max_slip ? 'bad' : ''; }, get: function (r) { return r.baseline ? jours(r.max_slip) : '—'; }, total: function (t) { return jours(t.max_slip); } },
+        { label: 'Fin du projet', get: function (r) { return r.baseline && r.end ? ppm.frDate(r.end) + (r.end_slip ? ' (' + jours(r.end_slip) + ')' : '') : '—'; }, cls: function (r) { return r.end_slip ? 'bad' : ''; } },
+        { label: 'Changements à valider', num: true, cls: function (r) { return r.pending_changes ? 'warn' : ''; }, get: function (r) { return r.baseline ? String(r.pending_changes) : '—'; }, total: function (t) { return String(t.pending_changes); } },
+        { label: 'Demandes de baseline', num: true, cls: function (r) { return r.requested ? 'warn' : ''; }, get: function (r) { return String(r.requested); }, total: function (t) { return String(t.requested); } }
+      ], d.projects, { open: open, total: d.totals }));
+    },
+    onEnter: function (d) { $('title').textContent = 'Suivi — Programme ' + d.program.code; $('context').textContent = ''; try { google.script.history.replace(null, { view: 'suivi', program: d.program.id }); } catch (e) { /* hors web app */ } }
+  });
+  $('picker').addEventListener('change', function () { if (pv.isProgram(this.value)) pv.enter(this.value); else { pv.leave(); loadProject(this.value); } });
   $('reload').addEventListener('click', function () { loadProject(state.projectId); });
   $('form-ok').addEventListener('click', submitForm);
   $('form-cancel').addEventListener('click', closeForm);

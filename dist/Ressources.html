@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.14.0">
+<meta name="ppm-version" content="0.14.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -449,7 +449,7 @@
 })(window);
 </script>
 <style>
-  main { padding: 16px 24px 28px; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
+  main { padding: 16px 24px 28px; display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 1fr); gap: 20px; align-items: start; }
   .box { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px; }
   .box h2.sec { margin: 0 0 12px; }
   .filters { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 0 0 12px; }
@@ -460,12 +460,24 @@
   td.num { text-align: right; white-space: nowrap; }
   select.inline, input.inline { padding: 4px 8px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--ink); max-width: 100%; }
   input.rate-input { width: 96px; text-align: right; }
-  .teams { list-style: none; margin: 0; padding: 0; }
-  .teams li { padding: 8px 0; border-bottom: 1px solid var(--rule); }
-  .teams li:last-child { border-bottom: 0; }
-  .teams .t-name { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--ink); cursor: pointer; text-align: left; }
+  /* organigramme des équipes : chaque équipe est une carte, reliée à son parent par un tronc et un coude */
+  #res-table th, #res-table td { padding-left: 8px; padding-right: 8px; } #res-table th { white-space: normal; }
+  #res-table .role-select { width: 170px; max-width: 100%; }
+  /* la colonne des boutons reste visible quand le tableau défile (75 % de la largeur : il peut déborder sur un petit écran) */
+  #res-table .sticky-r { position: sticky; right: 0; background: var(--surface); box-shadow: -8px 0 8px -8px rgba(0, 0, 0, .25); }
+  .stack { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; } /* statut et accès l'un sous l'autre : une colonne de moins */
+  .teams, .teams ul { list-style: none; margin: 0; padding: 0; }
+  .teams ul { margin-left: 12px; padding-left: 16px; }
+  .teams li { position: relative; padding: 8px 0 0; }
+  .teams ul > li::before { content: ''; position: absolute; left: -16px; top: 29px; width: 16px; border-top: 2px solid var(--rule-strong, #b9c3d3); }
+  .teams ul > li::after { content: ''; position: absolute; left: -16px; top: 0; bottom: 0; border-left: 2px solid var(--rule-strong, #b9c3d3); }
+  .teams ul > li:last-child::after { bottom: auto; height: 29px; }
+  .teams .team-card { background: var(--surface); border: 1px solid var(--rule); border-left: 4px solid var(--accent); border-radius: 6px; padding: 7px 10px; box-shadow: var(--shadow); }
+  .teams .team-card.on { background: var(--tint); border-color: var(--accent); }
+  .teams .team-card.noboss { border-left-color: var(--amber); }
+  .teams .t-name { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--ink); cursor: pointer; text-align: left; overflow-wrap: anywhere; }
   .teams .t-name[aria-pressed="true"] { color: var(--accent); }
-  .teams small { display: block; color: var(--muted); }
+  .teams small { display: block; color: var(--muted); overflow-wrap: anywhere; }
   .teams .t-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
   .teams .t-actions .btn { padding: 2px 8px; font-size: 12.5px; }
   .note { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
@@ -800,23 +812,22 @@ var BOOT = <?!= boot ?>;
     var host = $('people'); clear(host);
     if (!rows.length) host.appendChild(el('div', { class: 'empty' }, [el('strong', { text: d.people.length ? 'Aucune personne ne correspond.' : 'Aucune personne pour l’instant.' }), el('span', { text: d.canEdit && !d.people.length ? 'Ajoutez la première avec « Ajouter une personne ».' : '' })]));
     else {
-      var head = ['Nom', 'Statut', 'Accès', 'Équipe', 'Rôle dans le projet', 'Livrables', 'Autres rôles'];
+      var head = ['Nom', 'Statut et accès', 'Équipe', 'Rôle dans le projet', 'Livrables', 'Autres rôles'];
       if (d.canRates) head.push('Taux journalier (€)');
       if (d.canEdit) head.push('');
       host.appendChild(el('div', { class: 'table-wrap' }, [el('table', { id: 'res-table' }, [
-        el('thead', {}, [el('tr', {}, head.map(function (h, i) { return el('th', { scope: 'col', class: h.indexOf('Taux') === 0 ? 'num' : '', text: h }); }))]),
+        el('thead', {}, [el('tr', {}, head.map(function (h, i) { return el('th', { scope: 'col', class: (h.indexOf('Taux') === 0 ? 'num' : '') + (h === '' ? ' sticky-r' : ''), text: h }); }))]),
         el('tbody', {}, rows.map(function (p) {
           var others = p.roles.filter(function (r) { return !(r.scope_type === 'project' && (r.code === 'CP' || r.code === 'MEMBER')); });
           var cells = [
             el('td', {}, [p.name, el('small', { text: [p.job_function, p.resource_type === 'Externe' ? (p.supplier || p.organization) : p.organization].filter(Boolean).join(' · ') || ' ' })]),
-            el('td', {}, [el('span', { class: 'badge' + (p.resource_type === 'Externe' ? ' ext' : ''), text: p.resource_type })]),
-            el('td', {}, [accessBadge(p)]),
+            el('td', {}, [el('div', { class: 'stack' }, [el('span', { class: 'badge' + (p.resource_type === 'Externe' ? ' ext' : ''), text: p.resource_type }), accessBadge(p)])]),
             el('td', { text: p.team || '—' }), el('td', {}, [roleCell(p)]), el('td', { class: 'deliv' }, [deliverablesCell(p)]),
             el('td', {}, [others.length ? others.map(function (r) { return r.label + (r.scope ? ' (' + r.scope + ')' : ''); }).join(', ') : (p.unplaced ? null : '—'),
               p.unplaced ? el('a', { class: 'badge warn', href: (BOOT.baseUrl || '') + '?view=structure&project=' + state.projectId, title: 'Aucun rôle pour l’instant : la positionner dans l’organigramme', text: 'À positionner dans l’OBS' }) : null])
           ];
           if (d.canRates) cells.push(el('td', { class: 'num' }, [rateCell(p)]));
-          if (d.canEdit) cells.push(el('td', {}, [el('div', { class: 'actions-cell' }, [
+          if (d.canEdit) cells.push(el('td', { class: 'sticky-r' }, [el('div', { class: 'actions-cell' }, [
             el('button', { type: 'button', class: 'btn person-edit', 'data-id': p.resource_id, text: 'Modifier', onclick: function () { openPersonForm(p); } }),
             el('button', { type: 'button', class: 'btn person-remove', 'data-id': p.resource_id, text: 'Retirer', onclick: function () { removePerson(p); } })])]));
           return el('tr', { 'data-id': p.resource_id }, cells);
@@ -825,16 +836,22 @@ var BOOT = <?!= boot ?>;
     $('people-note').textContent = 'Pour qu’une personne intervienne : une fiche avec son adresse e-mail professionnelle, puis un rôle. ' + (d.canRates ? 'Le taux journalier de la fiche sert de base au budget, interne ou externe ; il est figé dans chaque ligne de budget à sa création. Seuls le chef de projet et le DPL le voient.' : '');
     var tl = $('teams-list'); clear(tl);
     if (!d.teams.length) tl.appendChild(el('li', {}, [el('span', { class: 'muted', text: 'Aucune équipe.' })]));
+    // arbre imbriqué : l'équipe de profondeur k est rangée sous la dernière équipe de profondeur k − 1 (l'ordre du serveur est celui de l'arborescence)
+    var stack = [];
     d.teams.forEach(function (t) {
-      var li = el('li', { 'data-team': t.id, style: 'padding-left:' + (t.depth * 14) + 'px' }, [
+      var card = el('div', { class: 'team-card' + (state.team === t.id ? ' on' : '') + (t.manager ? '' : ' noboss'), title: t.manager ? '' : 'Équipe sans responsable' }, [
         el('button', { type: 'button', class: 't-name', 'aria-pressed': String(state.team === t.id), text: t.name, onclick: function () { state.team = state.team === t.id ? '' : t.id; render(); } }),
         el('small', { text: plural(t.members, 'membre', 'membres') + (t.manager ? ' · ' + t.manager : '') + (t.cost_center ? ' · ' + t.cost_center : '') })]);
-      if (d.canEdit) li.appendChild(el('div', { class: 't-actions' }, [
+      if (d.canEdit) card.appendChild(el('div', { class: 't-actions' }, [
         el('button', { type: 'button', class: 'btn team-edit', text: 'Modifier', onclick: function () { openTeamForm(t, null); } }),
         el('button', { type: 'button', class: 'btn team-sub', text: 'Sous-équipe', onclick: function () { openTeamForm(null, t); } }),
         el('button', { type: 'button', class: 'btn team-del', text: 'Supprimer', onclick: function () { deleteTeam(t); } })]));
-      tl.appendChild(li);
+      var li = el('li', { 'data-team': t.id, 'data-depth': String(t.depth) }, [card]);
+      while (stack.length > t.depth) stack.pop();
+      (stack.length ? stack[stack.length - 1] : tl).appendChild(li);
+      var kids = el('ul', {}); li.appendChild(kids); stack.push(kids);
     });
+    Array.prototype.forEach.call(tl.querySelectorAll('ul:empty'), function (u) { u.parentNode.removeChild(u); });
     $('teams-note').textContent = d.canEdit ? 'Cliquez sur une équipe pour filtrer les personnes. Une équipe ne se supprime que vide.' : '';
     try { google.script.history.replace(null, { view: 'ressources', project: state.projectId }); } catch (e) { /* hors web app */ }
     var base = BOOT.baseUrl || '';

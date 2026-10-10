@@ -197,6 +197,33 @@ function openPage(user, startTab) {
   await n.until(() => /Accès réservé/.test(n.text('panel-bilan')));
   check(n.zones().length === 0, 'sans nomination dans l’équipe : rien d’accessible');
 
+
+  const norm = (t) => String(t).replace(/[\u202f\u00a0]/g, ' ').replace(/\s+/g, ' ').trim();
+  const programOptions = (x) => [...x.$('picker').options].filter((o) => /^program:/.test(o.value));
+  const chooseProgram = (x) => { x.$('picker').value = 'program:' + w.prog.id; x.$('picker').dispatchEvent(new x.win.Event('change')); };
+  // ---------------------------------------------------------------- 0.14.1 : vue programme (Program Leader et Domain Program Leader)
+  const cpPage = openPage(CP);
+  await cpPage.until(() => cpPage.$('picker').options.length >= 2);
+  check(programOptions(cpPage).length === 0, 'un chef de projet n’a pas la vue programme dans la liste');
+  const dp = openPage('dora@entreprise.com');
+  await dp.until(() => programOptions(dp).length === 1);
+  check(programOptions(dp)[0].textContent === 'Programme PG — tous les projets' || /Programme .* — tous les projets/.test(programOptions(dp)[0].textContent), 'le DPL a « Programme … — tous les projets » dans la liste : ' + programOptions(dp)[0].textContent);
+  await dp.until(() => !dp.$('panel-bilan').hidden);
+  chooseProgram(dp);
+  await dp.until(() => dp.doc.querySelector('#panel-program table.consol'));
+  const rowsB = [...dp.doc.querySelectorAll('#panel-program tbody tr')];
+  check(rowsB.length === 2 && /P1 Projet 1/.test(rowsB[0].textContent) && /P2 Projet vide/.test(rowsB[1].textContent) && /^Total/.test(norm(dp.doc.querySelector('#panel-program tfoot').textContent)), 'budget du programme : une ligne par projet et un total : ' + rowsB.length);
+  check(dp.doc.body.classList.contains('in-program') && ['cell-bilan', 'cell-po', 'cell-budget'].every((id) => [...dp.doc.querySelectorAll('style')].some((s) => s.textContent.includes('body.in-program #' + id))) && !dp.$('panel-program').hidden && /Budget — Programme/.test(dp.text('title')) && dp.$('cpn-edit').hidden, 'en vue programme, les cartes du projet sont masquées par une règle de la page (sans toucher à leur attribut) et le titre dit « Programme »');
+  const balance = c.handleRequest({ action: 'budget.balance', params: { projectId: w.p1.id }, apiVersion: '1.0' }, 'admin@entreprise.com').data.totals;
+  check(norm(rowsB[0].textContent).includes(norm(Math.round(balance.budget.total).toLocaleString('fr-FR') + ' €')), 'le montant d’un projet est celui de son bilan : ' + norm(rowsB[0].textContent).slice(0, 120));
+  dp.click(dp.doc.querySelector('#panel-program tbody tr button.proj-open'));
+  await dp.until(() => dp.$('panel-program').hidden && /^P1 /.test(dp.text('title')));
+  check(dp.$('picker').value === w.p1.id && /^P1 /.test(dp.text('title')) && !dp.doc.body.classList.contains('in-program') && !dp.$('panel-bilan').hidden, 'un clic sur un projet ouvre son budget et revient aux zones du projet');
+  chooseProgram(dp);
+  await dp.until(() => !dp.$('panel-program').hidden && dp.doc.querySelector('#panel-program table.consol'));
+  dp.$('picker').value = w.p2.id; dp.$('picker').dispatchEvent(new dp.win.Event('change'));
+  await dp.until(() => dp.$('panel-program').hidden);
+  check(dp.$('panel-program').hidden && dp.$('zone-program').hidden, 'revenir à un projet par la liste referme la vue programme');
   console.log(failed ? '\n' + failed + ' échec(s).' : '\nPage Budget : tout est conforme.');
   process.exit(failed ? 1 : 0);
 })();

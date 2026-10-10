@@ -5,7 +5,7 @@
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.14.0';
+var PPM_VERSION = '0.14.1';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -47,6 +47,7 @@ var ROLE_LABELS = {
  */
 var PERMISSIONS = {
   'program.create':   ['PL'],
+  'program.view':     ['PL', 'DPL'], // vues consolidées de tous les projets d'un programme (Actualités, Suivi, Budget)
   'project.create':   ['PL', 'DPL'],
   'wbs.edit':         ['PL', 'DPL', 'CP', 'RWP'],
   'progress.declare': ['DPL', 'CP', 'RWP', 'MEMBER'],

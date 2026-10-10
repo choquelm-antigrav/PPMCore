@@ -78,7 +78,7 @@ module.exports = function () {
     const by = Object.fromEntries(ov.projects.map((p) => [p.code, p.kpis]));
     eq([by['NAC-1'].time.level, by['NAC-1'].quality.level, by['NAC-1'].cost.level, by['NAC-1'].overall], ['alert', 'alert', 'alert', 'alert'], 'NAC-1 : délais, qualité et coût en alerte');
     eq([by['NAC-2'].time.level, by['NAC-2'].quality.level, by['NAC-2'].cost.level, by['NAC-2'].overall], ['ok', 'ok', 'ok', 'ok'], 'NAC-2 : sain');
-    eq([by['NAC-3'].cost.level, by['NAC-3'].overall], ['none', 'warn'], 'NAC-3 : budget non renseigné, points de vigilance');
+    eq([by['NAC-3'].cost.level, by['NAC-3'].overall], ['ok', 'warn'], 'NAC-3 : en préparation, avec un budget depuis la 0.14.1, et des points de vigilance');
     eq(by['NAC-4'].overall, 'ok', 'NAC-4 : clos');
     const p1 = c.repoList('Project').find((p) => p.code === 'NAC-1');
     ok(call(c, 'overview.get', { projectId: p1.id }).detail.people >= 30, 'repères : les membres du projet sont comptés, adresse ou non');
@@ -143,8 +143,8 @@ module.exports = function () {
     w.runRules = () => { throw new Error('panne simulée'); };
     let err;
     try { w.seedDemo_(); } catch (e) { err = e; }
-    ok(err && /étape 17\/17/.test(err.message) && /panne simulée/.test(err.message) && /relancez/.test(err.message), err && err.message);
-    eq(w.getProp(w.PROP.DEMO_STEP, ''), '16', 'les 16 premières étapes sont conservées');
+    ok(err && /étape 18\/18/.test(err.message) && /panne simulée/.test(err.message) && /relancez/.test(err.message), err && err.message);
+    eq(w.getProp(w.PROP.DEMO_STEP, ''), '17', 'les 17 premières étapes sont conservées');
     w.runRules = real;
     ok(/^Démo complète/.test(w.seedDemo_()), 'relancée, elle termine');
     eq(counts(w), counts(demo.c), 'sans doublon');
@@ -167,7 +167,7 @@ module.exports = function () {
     eq(c.newsValidateDigest_(g.digest.text).ok, true, 'et au format attendu : ' + c.newsValidateDigest_(g.digest.text).found.join(', '));
     eq(g.triage.length, 2, 'deux réunions à trier, dont NAC-1 est candidat');
     const n2 = call(c, 'news.get', { projectId: nac2.id });
-    eq([n2.meetings.length, n2.triage.length], [1, 2], 'NAC-2 a sa réunion et voit les mêmes réunions à trier');
+    eq([n2.meetings.length, n2.triage.length], [3, 2], 'NAC-2 a ses trois réunions (0.14.1) et voit les mêmes réunions à trier');
     ok(c.repoList('Resource').every((r) => !r.email || r.email === ME), 'personne n’a d’adresse e-mail : aucune action ne peut déclencher de mail à un tiers');
     eq(c.repoList('Meeting', (m) => m.status === 'À trier').length, 2);
   });

@@ -160,4 +160,25 @@ module.exports = function () {
     const mia = w.call(MEMBER, 'wbs.tree', { projectId: w.p1.id });
     eq([mia.canCreate, mia.nodes.some((n) => n.canEdit)], [false, false], 'un membre ne voit aucun bouton');
   });
+
+  test('WBS d’un programme (0.14.1) : programme → projets → workpackages, sans les livrables, en lecture seule', () => {
+    const w = lot2World();
+    const tree = w.call(CP, 'wbs.tree', { programId: w.prog.id });
+    eq([tree.scope, tree.program.code, tree.canCreate, tree.canCpn, tree.project], ['program', w.prog.code, false, false, null], 'vue programme : rien à créer depuis ici');
+    const kinds = tree.nodes.map((n) => n.kind);
+    ok(kinds[0] === 'program' && kinds.filter((k) => k === 'project').length === 2 && kinds.includes('wp') && !kinds.includes('item'), 'programme, ses deux projets, leurs workpackages, aucun livrable : ' + kinds.join(','));
+    const root = tree.nodes[0];
+    ok(tree.nodes.filter((n) => n.kind === 'project').every((n) => n.parent === root.id) && tree.nodes.filter((n) => n.kind === 'wp').every((n) => tree.nodes.some((m) => m.id === n.parent)), 'chaque projet sous le programme, chaque workpackage sous son parent');
+    ok(tree.nodes.filter((n) => n.kind !== 'program').every((n) => n.project_ref === w.p1.id || n.project_ref === w.p2.id), 'chaque carte garde son projet (pour ouvrir son WBS)');
+    eq([tree.stats.projects, tree.stats.wps, tree.stats.items], [2, 3, 4], 'statistiques : 2 projets, 3 workpackages, 4 livrables et jalons comptés mais non dessinés');
+    ok(root.start === '2026-10-05' && root.finish === '2026-11-09' && root.progress >= 0, 'la carte du programme résume les dates de ses projets : ' + root.start + ' → ' + root.finish);
+    const p1Wp = tree.nodes.find((n) => n.kind === 'wp' && n.code === '1');
+    ok(p1Wp && p1Wp.start === '2026-10-05' && p1Wp.owner === 'Rémi', 'un workpackage garde ses dates de synthèse et son responsable');
+    eq(w.call(MEMBER, 'wbs.tree', { programId: w.prog.id }).nodes.length, tree.nodes.length, 'lisible par un simple membre, comme l’organigramme du programme');
+    eq(w.raw(CP, 'wbs.tree', { programId: 'inconnu' }).error.code, 'NOT_FOUND', 'programme inconnu');
+    eq(w.raw(CP, 'wbs.tree', {}).error.code, 'VALIDATION', 'ni projet ni programme : paramètre obligatoire');
+    const none = w.call(CP, 'wbs.tree', { programId: 'none' });
+    eq([none.program.name, none.nodes.length], ['Projets hors programme', 1], 'les projets hors programme : ici aucun, seule la carte racine');
+    eq(w.call(CP, 'wbs.tree', { projectId: w.p1.id }).scope, undefined, 'la vue d’un projet reste inchangée');
+  });
 };

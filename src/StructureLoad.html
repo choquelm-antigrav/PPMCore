@@ -22,13 +22,8 @@
     syncControls();
     var req;
     if (state.tab === 'wbs') {
-      if (state.scopeType !== 'project') {
-        state.data = null;
-        var c = $('canvas'); clear(c);
-        c.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Le WBS se lit projet par projet.' }), el('span', { text: 'Choisissez un projet dans la liste « Périmètre ».' })]));
-        setSummary(); return Promise.resolve();
-      }
-      req = call('wbs.tree', { projectId: state.scopeId });
+      // un programme : tous ses projets et leurs workpackages côte à côte (les livrables se lisent projet par projet) ; un projet : son WBS complet
+      req = state.scopeType === 'program' ? call('wbs.tree', { programId: state.scopeId || 'none' }) : call('wbs.tree', { projectId: state.scopeId });
     } else if (state.mode === 'teams') {
       req = call('obs.teams', { rootTeamId: state.teamRoot });
     } else {
@@ -58,7 +53,11 @@
       $('org-team').hidden = !(orgEdit && d.mode === 'teams');
     }
     if (!d) { sm.textContent = ''; return; }
-    if (state.tab === 'wbs') {
+    if (state.tab === 'wbs' && d.scope === 'program') {
+      t.textContent = 'Découpage (WBS) — ' + (d.program.code ? d.program.code + ' ' : '') + d.program.name;
+      sm.textContent = plural(d.stats.projects, 'projet', 'projets') + ', ' + plural(d.stats.wps, 'workpackage', 'workpackages') + ' ; ' + plural(d.stats.items, 'livrable ou jalon', 'livrables et jalons') + ' à lire projet par projet.';
+      ctx.textContent = 'Tous les projets du programme côte à côte. Cliquez sur une carte pour son détail, puis sur « Ouvrir le WBS du projet » pour modifier.';
+    } else if (state.tab === 'wbs') {
       t.textContent = 'Découpage (WBS) — ' + d.project.code + ' ' + d.project.name;
       sm.textContent = plural(d.stats.wps, 'workpackage', 'workpackages') + ', ' + plural(d.stats.items, 'livrable ou jalon', 'livrables et jalons') + '.';
       ctx.textContent = d.project.program_name ? 'Programme ' + d.project.program_name + '. ' : '';

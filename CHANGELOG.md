@@ -1,5 +1,15 @@
 # Journal des versions
 
+## 0.14.1 — versions B et C : OBS en mosaïque, WBS du programme, équipes en organigramme, vues programme
+
+- **OBS** : personnes d'une boîte de rôle en mosaïque (1 à 4 colonnes), schéma centré, ajustement à la largeur plus tolérant.
+- **WBS du programme** : programme → projets → workpackages, lecture seule, avec « Ouvrir le WBS du projet ».
+- **Ressources** : liste 75 % / équipes 25 %, arbre des équipes en organigramme avec traits de liaison, « Statut et accès » regroupés, colonne des boutons épinglée.
+- **Vues programme** d'Actualités, de Suivi et de Budget pour les Program Leader et Domain Program Leader (droit `program.view`, `49_Program.gs`, `CommonProgram.html`) : tableau consolidé par projet avec totaux, repris des calculs de chaque projet.
+- **Démo** : actualités, budget, commandes et baseline pour NAC-2, NAC-3 et NAC-4 (étape « Actualités et suivi des autres projets »).
+- **En attente** : accélérer la démo (6 à 7 lancements d'A2 chez vous). Non commencé.
+- Tests : 243 serveur, plus douze essais de pages.
+
 ## 0.14.0 — version A : ajout toujours possible, livrables par personne, pages en grille
 
 - **WBS** : « Ajouter un workpackage », « un livrable » et « un jalon » toujours dans la barre ; le formulaire propose « Rattaché à » (projet ou workpackage, sous-workpackages compris), avec le workpackage sélectionné proposé d'office. Correction au passage : la liste des parents possibles d'un nouveau workpackage n'offrait que la racine.

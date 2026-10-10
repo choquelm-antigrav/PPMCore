@@ -91,6 +91,9 @@
   }
 
   var OBS_W = 272, WBS_W = 288, LINE = 16;
+  var MOSAIC_COL = 232; // largeur d'une colonne de personnes dans une boîte de rôle
+  /** Nombre de colonnes de la mosaïque d'une boîte de rôle selon son effectif : 1 jusqu'à 3 personnes, puis 2, 3 et 4 colonnes. */
+  function mosaicCols(n) { return n <= 3 ? 1 : n <= 8 ? 2 : n <= 15 ? 3 : 4; }
 
   /** Carte d'un rôle (vue par rôles) ou d'une équipe (vue par équipes). */
   function obsSpec(n) {
@@ -118,8 +121,15 @@
       if (has(attrs, 'scope')) s.head.push({ cls: 't-caption', text: n.scope_label });
       n.people.forEach(function (p) { s.blocks.push({ person: p, title: p.name, lines: personLines(p, attrs) }); });
     }
+    // les personnes d'une boîte de rôle se rangent en mosaïque (colonnes) au lieu d'une pile verticale ; les boîtes d'équipes restent en pile
+    s.blocks.forEach(function (b) { b.h = 26 + b.lines.length * LINE; });
+    s.cols = state.data.mode === 'teams' ? 1 : mosaicCols(s.blocks.length);
+    if (s.cols > 1) s.w = Math.max(OBS_W, s.cols * MOSAIC_COL + 8);
+    s.colW = s.cols > 1 ? MOSAIC_COL : s.w;
+    s.rowH = [];
+    s.blocks.forEach(function (b, i) { b.col = i % s.cols; b.row = Math.floor(i / s.cols); s.rowH[b.row] = Math.max(s.rowH[b.row] || 0, b.h); });
     var h = 10 + s.head.length * 18;
-    s.blocks.forEach(function (b) { b.h = 26 + b.lines.length * LINE; h += b.h; });
+    s.rowH.forEach(function (rh) { h += rh; });
     if (s.foot) h += 22;
     s.h = Math.max(h + 8, 44);
     return s;
@@ -127,7 +137,7 @@
 
   function wbsSpec(n, levelOf) {
     var attrs = prefs().attrs;
-    var kindLabel = n.kind === 'project' ? 'Projet' : n.kind === 'wp' ? (levelOf[n.id] > 1 ? 'Sous-workpackage' : 'Workpackage') : n.item_type;
+    var kindLabel = n.kind === 'program' ? 'Programme' : n.kind === 'project' ? 'Projet' : n.kind === 'wp' ? (n.parent_ref ? 'Sous-workpackage' : 'Workpackage') : n.item_type;
     var title = (has(attrs, 'wbs_code') && n.code ? n.code + ' ' : '') + n.name;
     var lines = [];
     var add = function (t, muted) { lines.push({ text: t, muted: !!muted }); };
@@ -165,20 +175,21 @@
       g.appendChild(textNode(h.cls, 12, y, h.text, s.w - 24, h.text));
       y += i === 0 ? 18 : 18;
     });
-    y = 10 + s.head.length * 18;
+    var y0 = 10 + s.head.length * 18, rowTop = [], acc = 0;
+    s.rowH.forEach(function (rh, i) { rowTop[i] = acc; acc += rh; });
     s.blocks.forEach(function (b) {
-      var pg = sv('g', { class: 'person', tabindex: '0', role: 'button', 'data-person': b.person.resource_id,
+      var bx = b.col * s.colW, y = y0 + rowTop[b.row];
+      var pg = sv('g', { class: 'person', tabindex: '0', role: 'button', 'data-person': b.person.resource_id, 'data-col': b.col, 'data-row': b.row,
         'aria-label': b.person.name + (b.person.job_function ? ', ' + b.person.job_function : '') });
-      pg.appendChild(sv('rect', { class: 'person-bg', x: 4, y: y, width: s.w - 8, height: b.h, rx: 3 }));
-      pg.appendChild(sv('rect', { x: 8, y: y + 4, width: 4, height: b.h - 8, rx: 2, fill: personColor(b.person, s.node) }));
-      pg.appendChild(textNode('t-title', 20, y + 18, b.title, s.w - 32, b.title));
+      pg.appendChild(sv('rect', { class: 'person-bg', x: bx + 4, y: y, width: s.colW - 8, height: s.rowH[b.row], rx: 3 }));
+      pg.appendChild(sv('rect', { x: bx + 8, y: y + 4, width: 4, height: s.rowH[b.row] - 8, rx: 2, fill: personColor(b.person, s.node) }));
+      pg.appendChild(textNode('t-title', bx + 20, y + 18, b.title, s.colW - 32, b.title));
       b.lines.forEach(function (l, i) {
-        pg.appendChild(textNode(l.muted ? 't-muted' : 't-line', 20, y + 18 + LINE * (i + 1), l.text, s.w - 32, l.text));
+        pg.appendChild(textNode(l.muted ? 't-muted' : 't-line', bx + 20, y + 18 + LINE * (i + 1), l.text, s.colW - 32, l.text));
       });
       g.appendChild(pg);
-      y += b.h;
     });
-    if (s.foot) g.appendChild(textNode('t-muted', 12, y + 16, s.foot, s.w - 24, s.foot));
+    if (s.foot) g.appendChild(textNode('t-muted', 12, y0 + acc + 16, s.foot, s.w - 24, s.foot));
     return g;
   }
 

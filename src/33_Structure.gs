@@ -401,6 +401,50 @@ function buildWbsTree(data, projectId, today, ctx) {
   };
 }
 
+/**
+ * WBS d'un programme (0.14.1) : programme → projets → workpackages → sous-workpackages. Les livrables et jalons ne sont pas dessinés (le détail se lit
+ * projet par projet) mais comptent dans les valeurs de synthèse de chaque carte. Chaque carte garde le projet auquel elle appartient (project_ref),
+ * pour ouvrir son WBS. programId 'none' : les projets hors programme.
+ */
+function buildWbsProgramTree_(data, programId, today, ctx) {
+  var none = isBlank(programId) || programId === 'none';
+  var program = none ? null : indexBy_(data.programs)[programId];
+  if (!none && !program) throw new PpmError('NOT_FOUND', 'Programme introuvable : ' + programId);
+  var resById = indexBy_(data.resources);
+  var projects = data.projects.filter(function (p) { return none ? isBlank(p.program_id) : p.program_id === programId; })
+    .sort(function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); });
+  var rootId = 'program:' + (none ? 'none' : program.id);
+  var nodes = [], wps = 0, items = 0, late = false, start = null, finish = null, wsum = 0, wn = 0;
+  projects.forEach(function (p) {
+    var t = buildWbsTree(data, p.id, today, ctx);
+    wps += t.stats.wps; items += t.stats.items;
+    t.nodes.forEach(function (n) {
+      if (n.kind === 'item') return;
+      var copy = Object.assign({}, n, { project_ref: p.id });
+      if (n.kind === 'project') {
+        copy.parent = rootId;
+        if (n.late) late = true;
+        if (n.start && (!start || n.start < start)) start = n.start;
+        if (n.finish && (!finish || n.finish > finish)) finish = n.finish;
+        wsum += (Number(n.progress) || 0) * Math.max(1, t.stats.items); wn += Math.max(1, t.stats.items);
+      }
+      nodes.push(copy);
+    });
+  });
+  var leader = program && !isBlank(program.leader_resource_id) ? resById[program.leader_resource_id] : null;
+  nodes.unshift({
+    id: rootId, parent: '', kind: 'program', name: none ? 'Projets hors programme' : program.name, code: none ? '' : program.code, status: '', charge_code: '',
+    ref: none ? 'none' : program.id, canEdit: false, cpn: '', cpn_label: '', owner: leader ? leader.name : '', owner_org: leader ? leader.organization || '' : '',
+    owner_function: leader ? leader.job_function || '' : '', start: start, finish: finish, progress: wn ? Math.round(wsum / wn) : 0, critical: false, float: null, late: late
+  });
+  return {
+    today: today, scope: 'program', project: null,
+    program: { id: none ? '' : program.id, code: none ? '' : program.code, name: none ? 'Projets hors programme' : program.name },
+    nodes: nodes, canCreate: false, canCpn: false,
+    stats: { projects: projects.length, wps: wps, items: items, depth: 2 }
+  };
+}
+
 // ---------------------------------------------------------------- actions de l'API
 
 function loadObsData_() {
@@ -465,6 +509,7 @@ defineAction('obs.teams', function (p, ctx) {
 });
 
 defineAction('wbs.tree', function (p, ctx) {
+  if (isBlank(p.projectId) && !isBlank(p.programId)) return buildWbsProgramTree_(loadWbsData_(), p.programId, todayStr(), ctx);
   return buildWbsTree(loadWbsData_(), requireParam(p, 'projectId'), todayStr(), ctx);
 });
 

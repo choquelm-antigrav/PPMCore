@@ -386,10 +386,13 @@ function buildObs(data, scopeType, scopeId, today) {
 
 // ---------------------------------------------------------------- actions de l'API
 
-defineAction('planning.catalog', function () {
+defineAction('planning.catalog', function (p, ctx) {
   var projects = repoList('Project');
+  var programs = repoList('Program');
   return {
-    programs: repoList('Program').map(function (p) { return { id: p.id, code: p.code, name: p.name, status: p.status || '' }; }),
+    programs: programs.map(function (p) { return { id: p.id, code: p.code, name: p.name, status: p.status || '' }; }),
+    // programmes dont la personne peut voir la vue consolidée (PL, DPL ; l'administrateur les voit tous) : les pages Actualités, Suivi et Budget ajoutent alors « Programme … »
+    program_view: (ctx ? programs.filter(function (g) { return can(ctx, 'program.view', { type: 'program', id: g.id }); }) : []).map(function (g) { return g.id; }),
     projects: projects.map(function (p) {
       return { id: p.id, code: p.code, name: p.name, status: p.status || '', program_id: p.program_id || '' };
     })

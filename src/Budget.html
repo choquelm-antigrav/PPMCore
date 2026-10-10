@@ -3,10 +3,11 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.14.0">
+<meta name="ppm-version" content="0.14.1">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <?!= include('CommonForms') ?>
+<?!= include('CommonProgram') ?>
 <style>
   .box { margin: 0 0 20px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); }
   .panel { padding: 8px 24px 32px; max-width: 1240px; }
@@ -41,6 +42,10 @@
 </header>
 
 <main class="zones" style="--cell-min: 820px; --max-cols: 2">
+  <div class="cell wide" id="cell-program">
+    <div class="zone" id="zone-program" hidden><h2 class="sec">Vue programme : budget et achats de tous les projets</h2></div>
+    <section class="panel" id="panel-program" aria-label="Vue programme" hidden></section>
+  </div>
   <div class="cell" id="cell-bilan">
     <div class="zone" id="zone-bilan" hidden><h2 class="sec">Bilan par CPN</h2></div>
     <section class="panel" id="panel-bilan" aria-label="Bilan par CPN" hidden></section>
@@ -469,7 +474,30 @@ var BOOT = <?!= boot ?>;
   }
 
   // ------------------------------------------------------------ événements et démarrage
-  $('picker').addEventListener('change', function () { loadProject(this.value); });
+  // vue programme (PL et DPL) : une ligne par projet, reprise de leur bilan ; un clic sur un projet ouvre son budget
+  var pv = ppm.programView({
+    hide: ['cell-bilan', 'cell-po', 'cell-budget'], zone: 'zone-program', panel: 'panel-program', action: 'budget.program',
+    render: function (d, host) {
+      host.appendChild(el('p', { class: 'program-note', text: 'Programme ' + d.program.code + ' — ' + d.program.name + '. Montants repris du bilan de chaque projet ; cliquez sur un projet pour le détail.' }));
+      var open = function (row) { pv.leave(); loadProject(row.id); };
+      var cols = [
+        { label: 'Projet', link: true, get: function (r) { return r.code + ' ' + r.name; } },
+        { label: 'CPN', get: function (r) { return r.cpn || '—'; } },
+        { label: 'Budget', num: true, get: function (r) { return r.restricted ? '—' : ppm.eur(r.budget_total); }, total: function (t) { return ppm.eur(t.budget_total); } },
+        { label: 'dont interne', num: true, get: function (r) { return r.restricted ? '—' : ppm.eur(r.budget_internal); }, total: function (t) { return ppm.eur(t.budget_internal); } },
+        { label: 'dont externe', num: true, get: function (r) { return r.restricted ? '—' : ppm.eur(r.budget_external); }, total: function (t) { return ppm.eur(t.budget_external); } },
+        { label: 'Engagé (PO)', num: true, get: function (r) { return r.restricted ? '—' : ppm.eur(r.po_committed); }, total: function (t) { return ppm.eur(t.po_committed); } },
+        { label: 'Reçu', num: true, get: function (r) { return r.restricted ? '—' : ppm.eur(r.po_received); }, total: function (t) { return ppm.eur(t.po_received); } },
+        { label: 'PO à faire', num: true, get: function (r) { return r.restricted ? '—' : ppm.eur(r.po_planned); }, total: function (t) { return ppm.eur(t.po_planned); } },
+        { label: 'Reste externe', num: true, cls: function (r) { return r.overrun ? 'bad' : ''; }, get: function (r) { return r.restricted ? '—' : ppm.eur(r.remaining_external); }, total: function (t) { return ppm.eur(t.remaining_external); } },
+        { label: 'Situation', get: function (r) { return r.restricted ? 'Accès restreint' : r.overrun ? 'Dépassement' : r.status === 'Clos' ? 'Clos' : 'Dans le budget'; }, cls: function (r) { return r.overrun ? 'bad' : r.restricted ? 'warn' : 'ok'; },
+          total: function (t) { return t.overruns ? plural(t.overruns, 'dépassement', 'dépassements') : ''; } }
+      ];
+      host.appendChild(ppm.table(cols, d.projects, { open: open, total: d.totals }));
+    },
+    onEnter: function (d) { $('title').textContent = 'Budget — Programme ' + d.program.code; $('cpn-chip').hidden = true; $('cpn-edit').hidden = true; try { google.script.history.replace(null, { view: 'budget', program: d.program.id }); } catch (e) { /* hors web app */ } }
+  });
+  $('picker').addEventListener('change', function () { if (pv.isProgram(this.value)) pv.enter(this.value); else { pv.leave(); loadProject(this.value); } });
   $('cpn-edit').addEventListener('click', editCpn);
   $('gf-form').addEventListener('submit', function (e) { e.preventDefault(); submitForm(); });
   $('gf-cancel').addEventListener('click', function () { closeDialog($('genform')); });
@@ -483,6 +511,7 @@ var BOOT = <?!= boot ?>;
     var sel = $('picker'); clear(sel);
     var sortCode = function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); };
     cat.projects.slice().sort(sortCode).forEach(function (p) { sel.appendChild(el('option', { value: p.id, text: p.code + ' ' + p.name + (p.status === 'Clos' ? ' (clos)' : '') })); });
+    pv.fillOptions(sel, cat);
     var first = BOOT.project || (cat.projects.filter(function (p) { return p.status !== 'Clos'; })[0] || cat.projects[0] || {}).id;
     if (!first) { empty($('panel-bilan'), 'Aucun projet pour l’instant.', 'Créez un projet, puis revenez ici.'); return; }
     return loadProject(first);

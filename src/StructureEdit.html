@@ -21,6 +21,15 @@
     if (/^editor/.test(d.id)) clear($('editor-body'));
   }
 
+  /** Vue programme : on ne modifie pas d'ici ; un bouton ouvre le WBS du projet de la carte (et y sélectionne le workpackage). */
+  function openProjectActions(n) {
+    var box = el('div', { class: 'links', id: 'wbs-actions' });
+    box.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'open-project', text: 'Ouvrir le WBS du projet', onclick: function () {
+      state.scopeType = 'project'; state.scopeId = n.project_ref || n.ref; state.pendingSelect = n.kind === 'project' ? '' : n.id; load();
+    } }));
+    return box;
+  }
+
   /** Boutons du panneau de détail : seulement ceux que le serveur autorise pour cette carte. */
   function wbsActions(n) {
     var box = el('div', { class: 'links', id: 'wbs-actions' });

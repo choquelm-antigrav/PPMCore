@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.14.0">
+<meta name="ppm-version" content="0.14.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -453,7 +453,7 @@
   main.with-details { grid-template-columns: minmax(0, 1fr) 340px; }
   .chart { min-width: 0; padding: 16px 24px 24px; }
   .canvas { overflow: auto; max-height: calc(100vh - 230px); min-height: 240px; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
-  .canvas svg { display: block; }
+  .canvas svg { display: block; margin: 0 auto; } /* centré dans la largeur de la page quand il est plus étroit ; plus large, il défile à partir de la gauche */
   .team-pick[hidden], .scope-pick[hidden], .mode[hidden] { display: none; }
 
   .unplaced { margin: 0 0 12px; padding: 10px 14px; background: var(--warn-bg); border-left: 4px solid var(--amber); border-radius: 4px; }
@@ -880,7 +880,7 @@ var BOOT = <?!= boot ?>;
   var ROLE_COLORS = { PL: '#3B6FE0', DPL: '#00A3E0', CP: '#1F8A85', RWP: '#B7791F', MEMBER: '#8A4F9E' };
   var ORG_PALETTE = ['#2F6DB5', '#1F8A85', '#B7791F', '#8A4F9E', '#4C8C2B', '#B4487A', '#00A3E0', '#8C5A3C', '#5B8FE0', '#A0522D'];
   var NEUTRAL = '#8FB3E3';
-  var KIND_COLORS = { project: '#1E4FB0', wp: '#3F7FE0', item: '#8CB6F0', milestone: '#00A3E0' };
+  var KIND_COLORS = { program: '#0B2A66', project: '#1E4FB0', wp: '#3F7FE0', item: '#8CB6F0', milestone: '#00A3E0' };
   var TYPE_COLORS = { Interne: '#2F6DB5', Externe: '#B7791F' };
   var CHAR_PX = 6.7, CHAR_PX_BOLD = 7.6; // largeur moyenne d'un caractère (12 px) et d'un titre gras (13 px)
 
@@ -1137,6 +1137,9 @@ var BOOT = <?!= boot ?>;
   }
 
   var OBS_W = 272, WBS_W = 288, LINE = 16;
+  var MOSAIC_COL = 232; // largeur d'une colonne de personnes dans une boîte de rôle
+  /** Nombre de colonnes de la mosaïque d'une boîte de rôle selon son effectif : 1 jusqu'à 3 personnes, puis 2, 3 et 4 colonnes. */
+  function mosaicCols(n) { return n <= 3 ? 1 : n <= 8 ? 2 : n <= 15 ? 3 : 4; }
 
   /** Carte d'un rôle (vue par rôles) ou d'une équipe (vue par équipes). */
   function obsSpec(n) {
@@ -1164,8 +1167,15 @@ var BOOT = <?!= boot ?>;
       if (has(attrs, 'scope')) s.head.push({ cls: 't-caption', text: n.scope_label });
       n.people.forEach(function (p) { s.blocks.push({ person: p, title: p.name, lines: personLines(p, attrs) }); });
     }
+    // les personnes d'une boîte de rôle se rangent en mosaïque (colonnes) au lieu d'une pile verticale ; les boîtes d'équipes restent en pile
+    s.blocks.forEach(function (b) { b.h = 26 + b.lines.length * LINE; });
+    s.cols = state.data.mode === 'teams' ? 1 : mosaicCols(s.blocks.length);
+    if (s.cols > 1) s.w = Math.max(OBS_W, s.cols * MOSAIC_COL + 8);
+    s.colW = s.cols > 1 ? MOSAIC_COL : s.w;
+    s.rowH = [];
+    s.blocks.forEach(function (b, i) { b.col = i % s.cols; b.row = Math.floor(i / s.cols); s.rowH[b.row] = Math.max(s.rowH[b.row] || 0, b.h); });
     var h = 10 + s.head.length * 18;
-    s.blocks.forEach(function (b) { b.h = 26 + b.lines.length * LINE; h += b.h; });
+    s.rowH.forEach(function (rh) { h += rh; });
     if (s.foot) h += 22;
     s.h = Math.max(h + 8, 44);
     return s;
@@ -1173,7 +1183,7 @@ var BOOT = <?!= boot ?>;
 
   function wbsSpec(n, levelOf) {
     var attrs = prefs().attrs;
-    var kindLabel = n.kind === 'project' ? 'Projet' : n.kind === 'wp' ? (levelOf[n.id] > 1 ? 'Sous-workpackage' : 'Workpackage') : n.item_type;
+    var kindLabel = n.kind === 'program' ? 'Programme' : n.kind === 'project' ? 'Projet' : n.kind === 'wp' ? (n.parent_ref ? 'Sous-workpackage' : 'Workpackage') : n.item_type;
     var title = (has(attrs, 'wbs_code') && n.code ? n.code + ' ' : '') + n.name;
     var lines = [];
     var add = function (t, muted) { lines.push({ text: t, muted: !!muted }); };
@@ -1211,20 +1221,21 @@ var BOOT = <?!= boot ?>;
       g.appendChild(textNode(h.cls, 12, y, h.text, s.w - 24, h.text));
       y += i === 0 ? 18 : 18;
     });
-    y = 10 + s.head.length * 18;
+    var y0 = 10 + s.head.length * 18, rowTop = [], acc = 0;
+    s.rowH.forEach(function (rh, i) { rowTop[i] = acc; acc += rh; });
     s.blocks.forEach(function (b) {
-      var pg = sv('g', { class: 'person', tabindex: '0', role: 'button', 'data-person': b.person.resource_id,
+      var bx = b.col * s.colW, y = y0 + rowTop[b.row];
+      var pg = sv('g', { class: 'person', tabindex: '0', role: 'button', 'data-person': b.person.resource_id, 'data-col': b.col, 'data-row': b.row,
         'aria-label': b.person.name + (b.person.job_function ? ', ' + b.person.job_function : '') });
-      pg.appendChild(sv('rect', { class: 'person-bg', x: 4, y: y, width: s.w - 8, height: b.h, rx: 3 }));
-      pg.appendChild(sv('rect', { x: 8, y: y + 4, width: 4, height: b.h - 8, rx: 2, fill: personColor(b.person, s.node) }));
-      pg.appendChild(textNode('t-title', 20, y + 18, b.title, s.w - 32, b.title));
+      pg.appendChild(sv('rect', { class: 'person-bg', x: bx + 4, y: y, width: s.colW - 8, height: s.rowH[b.row], rx: 3 }));
+      pg.appendChild(sv('rect', { x: bx + 8, y: y + 4, width: 4, height: s.rowH[b.row] - 8, rx: 2, fill: personColor(b.person, s.node) }));
+      pg.appendChild(textNode('t-title', bx + 20, y + 18, b.title, s.colW - 32, b.title));
       b.lines.forEach(function (l, i) {
-        pg.appendChild(textNode(l.muted ? 't-muted' : 't-line', 20, y + 18 + LINE * (i + 1), l.text, s.w - 32, l.text));
+        pg.appendChild(textNode(l.muted ? 't-muted' : 't-line', bx + 20, y + 18 + LINE * (i + 1), l.text, s.colW - 32, l.text));
       });
       g.appendChild(pg);
-      y += b.h;
     });
-    if (s.foot) g.appendChild(textNode('t-muted', 12, y + 16, s.foot, s.w - 24, s.foot));
+    if (s.foot) g.appendChild(textNode('t-muted', 12, y0 + acc + 16, s.foot, s.w - 24, s.foot));
     return g;
   }
 
@@ -1361,13 +1372,8 @@ var BOOT = <?!= boot ?>;
     syncControls();
     var req;
     if (state.tab === 'wbs') {
-      if (state.scopeType !== 'project') {
-        state.data = null;
-        var c = $('canvas'); clear(c);
-        c.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Le WBS se lit projet par projet.' }), el('span', { text: 'Choisissez un projet dans la liste « Périmètre ».' })]));
-        setSummary(); return Promise.resolve();
-      }
-      req = call('wbs.tree', { projectId: state.scopeId });
+      // un programme : tous ses projets et leurs workpackages côte à côte (les livrables se lisent projet par projet) ; un projet : son WBS complet
+      req = state.scopeType === 'program' ? call('wbs.tree', { programId: state.scopeId || 'none' }) : call('wbs.tree', { projectId: state.scopeId });
     } else if (state.mode === 'teams') {
       req = call('obs.teams', { rootTeamId: state.teamRoot });
     } else {
@@ -1397,7 +1403,11 @@ var BOOT = <?!= boot ?>;
       $('org-team').hidden = !(orgEdit && d.mode === 'teams');
     }
     if (!d) { sm.textContent = ''; return; }
-    if (state.tab === 'wbs') {
+    if (state.tab === 'wbs' && d.scope === 'program') {
+      t.textContent = 'Découpage (WBS) — ' + (d.program.code ? d.program.code + ' ' : '') + d.program.name;
+      sm.textContent = plural(d.stats.projects, 'projet', 'projets') + ', ' + plural(d.stats.wps, 'workpackage', 'workpackages') + ' ; ' + plural(d.stats.items, 'livrable ou jalon', 'livrables et jalons') + ' à lire projet par projet.';
+      ctx.textContent = 'Tous les projets du programme côte à côte. Cliquez sur une carte pour son détail, puis sur « Ouvrir le WBS du projet » pour modifier.';
+    } else if (state.tab === 'wbs') {
       t.textContent = 'Découpage (WBS) — ' + d.project.code + ' ' + d.project.name;
       sm.textContent = plural(d.stats.wps, 'workpackage', 'workpackages') + ', ' + plural(d.stats.items, 'livrable ou jalon', 'livrables et jalons') + '.';
       ctx.textContent = d.project.program_name ? 'Programme ' + d.project.program_name + '. ' : '';
@@ -1576,7 +1586,7 @@ var BOOT = <?!= boot ?>;
     markSelected(id);
     var nodes = [];
     if (state.tab === 'wbs') {
-      var kind = n.kind === 'project' ? 'Projet' : n.kind === 'wp' ? 'Workpackage' : n.item_type;
+      var kind = n.kind === 'program' ? 'Programme' : n.kind === 'project' ? 'Projet' : n.kind === 'wp' ? (n.parent_ref ? 'Sous-workpackage' : 'Workpackage') : n.item_type;
       nodes.push(el('h2', { text: (n.code ? n.code + ' ' : '') + n.name }), el('p', { class: 'kind', text: kind }));
       var flt = n.float === null || n.float === undefined ? '' : (n.float < 0 ? 'Décale un successeur de ' + plural(-n.float, 'jour ouvré', 'jours ouvrés') : n.float === 0 ? 'Aucune : chemin critique' : plural(n.float, 'jour ouvré', 'jours ouvrés'));
       nodes.push(facts([
@@ -1586,7 +1596,8 @@ var BOOT = <?!= boot ?>;
         ['Statut', n.status], ['Imputation', n.charge_code], ['Marge', flt]
       ]));
       if (n.late) nodes.push(el('p', { class: 'flag alert', text: 'Au moins un élément est en retard sur sa date de fin prévue.' }));
-      if (n.canEdit) nodes.push(wbsActions(n));
+      if (state.data.scope === 'program') { if (n.kind !== 'program') nodes.push(openProjectActions(n)); }
+      else if (n.canEdit) nodes.push(wbsActions(n));
       if (n.kind === 'item') nodes.push(depsBlock(n));
     } else if (state.data.mode === 'teams') {
       nodes.push(el('h2', { text: n.name }), el('p', { class: 'kind', text: 'Équipe hiérarchique' }));
@@ -1623,6 +1634,15 @@ var BOOT = <?!= boot ?>;
     if (d.close) d.close(); else d.removeAttribute('open');
     if (/^genform/.test(d.id)) clear($('gf-body'));
     if (/^editor/.test(d.id)) clear($('editor-body'));
+  }
+
+  /** Vue programme : on ne modifie pas d'ici ; un bouton ouvre le WBS du projet de la carte (et y sélectionne le workpackage). */
+  function openProjectActions(n) {
+    var box = el('div', { class: 'links', id: 'wbs-actions' });
+    box.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'open-project', text: 'Ouvrir le WBS du projet', onclick: function () {
+      state.scopeType = 'project'; state.scopeId = n.project_ref || n.ref; state.pendingSelect = n.kind === 'project' ? '' : n.id; load();
+    } }));
+    return box;
   }
 
   /** Boutons du panneau de détail : seulement ceux que le serveur autorise pour cette carte. */
@@ -2060,7 +2080,7 @@ var BOOT = <?!= boot ?>;
     var canvas = $('canvas');
     if (!state.layout) return;
     var avail = canvas.clientWidth || 900, fit = (avail - 8) / state.layout.width;
-    setZoom(fit >= 0.7 ? Math.min(1, fit) : 1);
+    setZoom(fit >= 0.5 ? Math.min(1, fit) : 1); // tout le schéma tient dans la largeur tant qu'il reste lisible (vue programme : tous les projets côte à côte)
     var r = state.layout.root;
     if (!r) return;
     if (state.tab === 'obs') {

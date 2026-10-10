@@ -1,7 +1,7 @@
 /**
- * PPM Core 0.14.0 — fichier unique à installer (fabriqué par tools/build.js, empreinte 8fb7fecba4c9).
+ * PPM Core 0.14.1 — fichier unique à installer (fabriqué par tools/build.js, empreinte 01992455c86f).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
- * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs.
+ * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs.
  */
 
 // ======================================================================
@@ -44,7 +44,7 @@ function A8_VERIFIER_ECRITURE() { return verifierEcritureAvecJournal_(); }
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.14.0';
+var PPM_VERSION = '0.14.1';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -86,6 +86,7 @@ var ROLE_LABELS = {
  */
 var PERMISSIONS = {
   'program.create':   ['PL'],
+  'program.view':     ['PL', 'DPL'], // vues consolidées de tous les projets d'un programme (Actualités, Suivi, Budget)
   'project.create':   ['PL', 'DPL'],
   'wbs.edit':         ['PL', 'DPL', 'CP', 'RWP'],
   'progress.declare': ['DPL', 'CP', 'RWP', 'MEMBER'],
@@ -237,10 +238,10 @@ var PPM_PAGES = [
   { view: 'structure',  file: 'Structure',  title: 'PPM — OBS/WBS',         eyebrow: 'OBS/WBS · Organisation et découpage',   tabs: [''], nav: 'bar',  share: true, shared: ['CommonForms'],
     parts: ['StructureState', 'StructureDraw', 'StructureLoad', 'StructureDetail', 'StructureEdit', 'StructureOrg'] },
   { view: 'ressources', file: 'Ressources', title: 'PPM — Ressources',      eyebrow: 'Ressources · Équipes et rôles',         tabs: [''], nav: 'bar',  share: true, shared: ['CommonForms'], parts: [] },
-  { view: 'suivi',      file: 'Suivi',      title: 'PPM — Suivi',           eyebrow: 'Suivi · Baselines',                     tabs: [''], nav: 'bar',  share: true, shared: [], parts: [] },
-  { view: 'actualites', file: 'Actualites', title: 'PPM — Actualités',      eyebrow: 'Actualités · Réunions et actions',      tabs: [''], nav: 'bar',  share: true, shared: [], parts: [] },
+  { view: 'suivi',      file: 'Suivi',      title: 'PPM — Suivi',           eyebrow: 'Suivi · Baselines',                     tabs: [''], nav: 'bar',  share: true, shared: ['CommonProgram'], parts: [] },
+  { view: 'actualites', file: 'Actualites', title: 'PPM — Actualités',      eyebrow: 'Actualités · Réunions et actions',      tabs: [''], nav: 'bar',  share: true, shared: ['CommonProgram'], parts: [] },
   { view: 'copilote',   file: 'Copilote',   title: 'PPM — Copilote',        eyebrow: 'Copilote · Votre clé Gemini',                    tabs: [''], nav: 'bar', share: true, shared: [], parts: [] },
-  { view: 'budget',     file: 'Budget',     title: 'PPM — Budget',          eyebrow: 'Budget · CPN et achats',                tabs: [''], nav: 'bar',  share: true, shared: ['CommonForms'], parts: [] },
+  { view: 'budget',     file: 'Budget',     title: 'PPM — Budget',          eyebrow: 'Budget · CPN et achats',                tabs: [''], nav: 'bar',  share: true, shared: ['CommonForms', 'CommonProgram'], parts: [] },
   { view: 'compte',     file: 'Compte',     title: 'PPM — Mon compte',      eyebrow: 'Mon compte',                            tabs: [''], nav: 'icon', share: false, shared: [], parts: [] },
   { view: 'admin',      file: 'Admin',      title: 'PPM — Administration',  eyebrow: 'Administration',                        tabs: [''], nav: 'icon', share: false, shared: [], parts: [] }
 ];
@@ -3616,10 +3617,13 @@ function buildObs(data, scopeType, scopeId, today) {
 
 // ---------------------------------------------------------------- actions de l'API
 
-defineAction('planning.catalog', function () {
+defineAction('planning.catalog', function (p, ctx) {
   var projects = repoList('Project');
+  var programs = repoList('Program');
   return {
-    programs: repoList('Program').map(function (p) { return { id: p.id, code: p.code, name: p.name, status: p.status || '' }; }),
+    programs: programs.map(function (p) { return { id: p.id, code: p.code, name: p.name, status: p.status || '' }; }),
+    // programmes dont la personne peut voir la vue consolidée (PL, DPL ; l'administrateur les voit tous) : les pages Actualités, Suivi et Budget ajoutent alors « Programme … »
+    program_view: (ctx ? programs.filter(function (g) { return can(ctx, 'program.view', { type: 'program', id: g.id }); }) : []).map(function (g) { return g.id; }),
     projects: projects.map(function (p) {
       return { id: p.id, code: p.code, name: p.name, status: p.status || '', program_id: p.program_id || '' };
     })
@@ -4097,6 +4101,50 @@ function buildWbsTree(data, projectId, today, ctx) {
   };
 }
 
+/**
+ * WBS d'un programme (0.14.1) : programme → projets → workpackages → sous-workpackages. Les livrables et jalons ne sont pas dessinés (le détail se lit
+ * projet par projet) mais comptent dans les valeurs de synthèse de chaque carte. Chaque carte garde le projet auquel elle appartient (project_ref),
+ * pour ouvrir son WBS. programId 'none' : les projets hors programme.
+ */
+function buildWbsProgramTree_(data, programId, today, ctx) {
+  var none = isBlank(programId) || programId === 'none';
+  var program = none ? null : indexBy_(data.programs)[programId];
+  if (!none && !program) throw new PpmError('NOT_FOUND', 'Programme introuvable : ' + programId);
+  var resById = indexBy_(data.resources);
+  var projects = data.projects.filter(function (p) { return none ? isBlank(p.program_id) : p.program_id === programId; })
+    .sort(function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); });
+  var rootId = 'program:' + (none ? 'none' : program.id);
+  var nodes = [], wps = 0, items = 0, late = false, start = null, finish = null, wsum = 0, wn = 0;
+  projects.forEach(function (p) {
+    var t = buildWbsTree(data, p.id, today, ctx);
+    wps += t.stats.wps; items += t.stats.items;
+    t.nodes.forEach(function (n) {
+      if (n.kind === 'item') return;
+      var copy = Object.assign({}, n, { project_ref: p.id });
+      if (n.kind === 'project') {
+        copy.parent = rootId;
+        if (n.late) late = true;
+        if (n.start && (!start || n.start < start)) start = n.start;
+        if (n.finish && (!finish || n.finish > finish)) finish = n.finish;
+        wsum += (Number(n.progress) || 0) * Math.max(1, t.stats.items); wn += Math.max(1, t.stats.items);
+      }
+      nodes.push(copy);
+    });
+  });
+  var leader = program && !isBlank(program.leader_resource_id) ? resById[program.leader_resource_id] : null;
+  nodes.unshift({
+    id: rootId, parent: '', kind: 'program', name: none ? 'Projets hors programme' : program.name, code: none ? '' : program.code, status: '', charge_code: '',
+    ref: none ? 'none' : program.id, canEdit: false, cpn: '', cpn_label: '', owner: leader ? leader.name : '', owner_org: leader ? leader.organization || '' : '',
+    owner_function: leader ? leader.job_function || '' : '', start: start, finish: finish, progress: wn ? Math.round(wsum / wn) : 0, critical: false, float: null, late: late
+  });
+  return {
+    today: today, scope: 'program', project: null,
+    program: { id: none ? '' : program.id, code: none ? '' : program.code, name: none ? 'Projets hors programme' : program.name },
+    nodes: nodes, canCreate: false, canCpn: false,
+    stats: { projects: projects.length, wps: wps, items: items, depth: 2 }
+  };
+}
+
 // ---------------------------------------------------------------- actions de l'API
 
 function loadObsData_() {
@@ -4161,6 +4209,7 @@ defineAction('obs.teams', function (p, ctx) {
 });
 
 defineAction('wbs.tree', function (p, ctx) {
+  if (isBlank(p.projectId) && !isBlank(p.programId)) return buildWbsProgramTree_(loadWbsData_(), p.programId, todayStr(), ctx);
   return buildWbsTree(loadWbsData_(), requireParam(p, 'projectId'), todayStr(), ctx);
 });
 
@@ -9129,11 +9178,60 @@ function demoOrders_(d) {
     if (status === 'Terminée') values.closed_on = d.day(o[7] < 0 ? o[7] + 6 : -1);
     var links = [];
     for (var k = 8; k < o.length; k++) {
-      var code = o[1] === 'CPN-2501' ? 'NAC-2' : 'NAC-1';
+      var code = { 'CPN-2501': 'NAC-2', 'CPN-2601': 'NAC-3', 'CPN-2301': 'NAC-4' }[o[1]] || 'NAC-1';
       links.push({ deliverable_id: d.item(code, o[k][0]).id, amount: o[k][1] });
     }
     d.call('po.save', { values: values, links: links });
   });
+}
+
+/** Des réunions, des actions et une baseline pour NAC-2, NAC-3 et NAC-4, pour que la vue du programme ait de quoi comparer. */
+function demoMoreNews_(d) {
+  var f = function (n) { return demoDM_(d, n); };
+  var add = function (code, keywords, meetings) {
+    var p = d.project(code);
+    d.call('news.settings.set', { projectId: p.id, enabled: true, keywords: keywords });
+    meetings.forEach(function (m) { d.call('news.meeting.add', { projectId: p.id, title: m[1], held_on: d.day(-m[0]), participants: m[2], text: m[3] }); });
+    return p;
+  };
+  var answer = function (p, startsWith, decision) {
+    var a = repoList('NewsAction', function (x) { return x.project_id === p.id && x.text.indexOf(startsWith) === 0; })[0];
+    if (a) d.call('news.action.decide', { id: a.id, decision: decision });
+  };
+  var nac2 = add('NAC-2', 'NAC-2, systèmes embarqués', [
+    [10, 'Point intégration NAC-2', 'Priya Nair, Greta Hoffmann, James Walker',
+      ['Résumé', 'Le banc d’intégration est monté ; le câblage prend quelques jours de retard.', '', 'Décisions', '- Le câblage du prototype est prioritaire sur les tests unitaires.', '',
+        'Étapes suivantes', '- [James Walker] Terminer le câblage du prototype pour le ' + f(-2), '- [Priya Nair] Planifier les essais du banc pour le ' + f(9)].join('\n')],
+    [17, 'Revue calculateur', 'Greta Hoffmann, Sophie Martin',
+      ['Résumé', 'Le calculateur retenu est validé ; le prototype est en cours.', '', 'Décisions', '- Le calculateur choisi est confirmé.', '',
+        'Étapes suivantes', '- [Greta Hoffmann] Livrer la spécification logicielle pour le ' + f(6)].join('\n')]
+  ]);
+  answer(nac2, 'Terminer le câblage', 'accept'); answer(nac2, 'Livrer la spécification logicielle', 'accept');
+  d.call('news.digest.publish', { projectId: nac2.id, notify: false, text: [
+    'Décisions : le câblage du prototype est prioritaire (Point intégration NAC-2) ; le calculateur est confirmé (Revue calculateur).',
+    'Dates qui bougent : le câblage du prototype a quelques jours de retard (Point intégration NAC-2).',
+    'Risques : l’obsolescence du calculateur reste suivie (Revue calculateur).',
+    'Blocages : aucun.',
+    'Actions : James Walker — terminer le câblage du prototype — ' + f(-2) + ' ; Priya Nair — planifier les essais du banc — ' + f(9)
+  ].join('\n') });
+  var nac3 = add('NAC-3', 'NAC-3, industrialisation', [
+    [6, 'Lancement de l’étude d’industrialisation', 'Karim Haddad, Yann Leroy, Mathieu Collin',
+      ['Résumé', 'L’étude d’industrialisation démarre ; les cadences cibles restent à confirmer.', '', 'Décisions', '- L’étude de fabricabilité précède la consultation des fournisseurs.', '',
+        'Étapes suivantes', '- [Yann Leroy] Analyser la fabricabilité de la nacelle pour le ' + f(8), '- [Mathieu Collin] Collecter les cadences cibles pour le ' + f(-3)].join('\n')],
+    [20, 'Cadrage de l’industrialisation', 'Karim Haddad, Étienne Roche',
+      ['Cadrage du projet d’industrialisation.', 'Décision : le projet démarre en préparation, sans baseline avant la revue de faisabilité.',
+        'Action : réunir les besoins en moyens de production — Étienne Roche — ' + f(12)].join('\n')]
+  ]);
+  answer(nac3, 'Analyser la fabricabilité', 'accept');
+  var nac4 = add('NAC-4', 'NAC-4, essais en vol', [
+    [40, 'Débrief de la campagne d’essais en vol', 'Thomas Weber, Inès Girard',
+      ['Résumé', 'La campagne d’essais en vol est terminée ; les résultats sont conformes.', '', 'Décisions', '- Le rapport d’essais est validé.', '',
+        'Étapes suivantes', '- [Inès Girard] Archiver le rapport d’essais en vol pour le ' + f(-36)].join('\n')],
+    [48, 'Revue de clôture NAC-4', 'Thomas Weber, Marc Lefèvre',
+      ['Revue de clôture.', 'Décision : le projet est clos.', 'Action : transmettre le bilan de clôture au programme — Thomas Weber — ' + f(-45)].join('\n')]
+  ]);
+  answer(nac4, 'Archiver le rapport', 'done'); answer(nac4, 'transmettre le bilan', 'done');
+  d.call('baselines.create', { projectId: nac4.id, label: 'B0', justification: 'Planning validé avant la campagne d’essais en vol' });
 }
 
 function demoFindings_(d) {
@@ -9157,6 +9255,7 @@ var DEMO_STEPS = [
   { name: 'Commandes d’achat', run: function (d) { demoOrders_(d); } },
   { name: 'Actualités de NAC-1 : réunions', run: function (d) { demoNewsMeetings_(d); } },
   { name: 'Actualités : actions, synthèse du jour, réunions à trier', run: function (d) { demoNewsActions_(d); } },
+  { name: 'Actualités et suivi des autres projets', run: function (d) { demoMoreNews_(d); } },
   { name: 'Constats du moteur de règles', run: function (d) { demoFindings_(d); } }
 ];
 
@@ -9800,7 +9899,10 @@ var DEMO_BUDGET = [
   ['NAC-2', 'Spécification calculateur', 'Greta Hoffmann', 'j', 12], ['NAC-2', 'Prototype calculateur', 'Greta Hoffmann', 'j', 25],
   ['NAC-2', 'Spécification capteurs', 'James Walker', 'j', 10], ['NAC-2', 'Qualification capteurs', 'James Walker', 'j', 22],
   ['NAC-2', 'Boucle de régulation', 'Greta Hoffmann', 'j', 30], ['NAC-2', 'Tests unitaires logiciels', 'Hana Iyer', 'f', 26000],
-  ['NAC-2', 'Banc d’intégration', 'Priya Nair', 'j', 28], ['NAC-2', 'Validation système', 'Priya Nair', 'j', 22]
+  ['NAC-2', 'Banc d’intégration', 'Priya Nair', 'j', 28], ['NAC-2', 'Validation système', 'Priya Nair', 'j', 22],
+  ['NAC-3', 'Analyse de fabricabilité', 'Yann Leroy', 'j', 14], ['NAC-3', 'Étude des cadences', 'Yann Leroy', 'j', 10], ['NAC-3', 'Spécification des moyens de production', 'Mathieu Collin', 'j', 16],
+  ['NAC-3', 'Consultation des fournisseurs', 'Dora Schmidt', 'f', 36000],
+  ['NAC-4', 'Plan d’essais en vol', 'Rahul Sharma', 'j', 8], ['NAC-4', 'Campagne d’essais en vol', 'Sven Larsen', 'f', 160000], ['NAC-4', 'Rapport d’essais en vol', 'Camille Durand', 'j', 9]
 ];
 
 /**
@@ -9819,6 +9921,8 @@ var DEMO_ORDERS = [
   ['CB-460391', 'CPN-2401', 'Marta Kowalski', 'Éprouvettes matériaux', 18000, 'Lancée', -55, -12, ['Essais d’éprouvettes matériaux', 18000]],
   ['CB-460502', 'CPN-2401', 'Sven Larsen', 'Démonstration de conformité', 45000, 'Lancée', -25, 120, ['Démonstration de conformité structure', 45000]],
   ['CB-470001', 'CPN-2501', 'Hana Iyer', 'Validation logicielle externalisée', 20000, 'Lancée', -30, 30, ['Tests unitaires logiciels', 20000]],
+  ['CB-470502', 'CPN-2601', 'Dora Schmidt', 'Consultation des fournisseurs de moyens', 30000, 'Lancée', -12, 40, ['Consultation des fournisseurs', 30000]],
+  ['CB-430118', 'CPN-2301', 'Sven Larsen', 'Campagne d’essais en vol', 120000, 'Terminée', -80, -35, ['Campagne d’essais en vol', 120000]],
   ['CB-499001', 'CPN-9999', 'Brigitte Stahl', 'PO d’un autre projet (hors de l’outil)', 5000, 'Lancée', -10, 15]
 ];
 
@@ -10602,3 +10706,103 @@ function newsCollectRun() {
   console.log('[actualités] ' + msg);
   return msg;
 }
+
+// ======================================================================
+// 49_Program.gs
+// ======================================================================
+
+/**
+ * PPM Core — 0.14.1 : vues programme consolidées des pages Actualités, Suivi et Budget.
+ *
+ * Réservées à ceux qui ont le droit « program.view » sur le programme (Program Leader, Domain Program Leader ; l'administrateur aussi). Chaque action reprend
+ * les calculs existants projet par projet (news.get, baselines.diff, changes.feed, budget.balance) et en rend une ligne par projet, plus les totaux :
+ * on ne recalcule rien, donc la vue du programme ne peut pas contredire celle d'un projet.
+ */
+
+function programScope_(p, ctx) {
+  var program = mustGet('Program', requireParam(p, 'programId'));
+  requireCan(ctx, 'program.view', { type: 'program', id: program.id });
+  var projects = repoList('Project', function (x) { return x.program_id === program.id; })
+    .sort(function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); });
+  return { program: { id: program.id, code: program.code, name: program.name }, projects: projects };
+}
+
+function programRow_(pr) { return { id: pr.id, code: pr.code, name: pr.name, status: pr.status || '' }; }
+
+function programSum_(rows, keys) {
+  var t = {};
+  keys.forEach(function (k) { t[k] = rows.reduce(function (s, r) { return s + (Number(r[k]) || 0); }, 0); });
+  return t;
+}
+
+defineAction('news.program', function (p, ctx) {
+  var sc = programScope_(p, ctx), today = todayStr(), since30 = addCalendarDays(today, -30), since14 = addCalendarDays(today, -14);
+  var names = {}; repoList('Resource').forEach(function (r) { names[r.id] = r.name; });
+  var meetings = repoList('Meeting'), actions = repoList('NewsAction'), digests = repoList('NewsDigest');
+  var codeOf = {}; sc.projects.forEach(function (pr) { codeOf[pr.id] = pr.code; });
+  var rows = sc.projects.map(function (pr) {
+    var published = meetings.filter(function (m) { return m.project_id === pr.id && m.status === 'Publiée'; });
+    var open = actions.filter(function (a) { return a.project_id === pr.id && NEWS_OPEN.indexOf(a.status) >= 0; });
+    var dates = published.map(function (m) { return String(m.held_on); }).sort();
+    var digest = digests.filter(function (d) { return d.project_id === pr.id; }).map(function (d) { return String(d.digest_date); }).sort().pop() || '';
+    return Object.assign(programRow_(pr), {
+      news_on: pr.news_on === true || String(pr.news_on).toLowerCase() === 'true',
+      meetings_30d: published.filter(function (m) { return String(m.held_on) >= since30; }).length,
+      last_meeting: dates.length ? dates[dates.length - 1] : '',
+      actions_open: open.length,
+      actions_overdue: open.filter(function (a) { return !isBlank(a.due_date) && String(a.due_date) < today; }).length,
+      actions_contested: open.filter(function (a) { return a.status === 'Contestée'; }).length,
+      to_sort: meetings.filter(function (m) { return m.status === 'À trier' && String(m.candidates || '').split(',').indexOf(pr.id) >= 0; }).length,
+      digest_date: digest, digest_today: digest === today
+    });
+  });
+  var recent = meetings.filter(function (m) { return codeOf[m.project_id] && m.status === 'Publiée' && String(m.held_on) >= since14; })
+    .sort(function (a, b) { return String(b.held_on).localeCompare(String(a.held_on)) || String(a.title).localeCompare(String(b.title)); }).slice(0, 12)
+    .map(function (m) { return { id: m.id, project_id: m.project_id, project_code: codeOf[m.project_id], title: m.title, held_on: m.held_on }; });
+  var open = actions.filter(function (a) { return codeOf[a.project_id] && NEWS_OPEN.indexOf(a.status) >= 0; })
+    .sort(function (a, b) { return (isBlank(a.due_date) ? '9999' : String(a.due_date)).localeCompare(isBlank(b.due_date) ? '9999' : String(b.due_date)); }).slice(0, 25)
+    .map(function (a) {
+      return { id: a.id, project_id: a.project_id, project_code: codeOf[a.project_id], text: a.text, status: a.status, due_date: a.due_date || '',
+        owner: names[a.owner_resource_id] || a.owner_label || '', overdue: !isBlank(a.due_date) && String(a.due_date) < today };
+    });
+  var untriaged = meetings.filter(function (m) { return m.status === 'À trier'; }).length;
+  return { today: today, program: sc.program, projects: rows, recent: recent, actions: open, totals: Object.assign(programSum_(rows, ['meetings_30d', 'actions_open', 'actions_overdue', 'actions_contested']), { to_sort: untriaged }) };
+});
+
+defineAction('suivi.program', function (p, ctx) {
+  var sc = programScope_(p, ctx);
+  var baselines = repoList('Baseline');
+  var rows = sc.projects.map(function (pr) {
+    var mine = baselines.filter(function (b) { return b.project_id === pr.id; });
+    var base = mine.filter(function (b) { return b.id === pr.active_baseline_id; })[0] || null;
+    var row = Object.assign(programRow_(pr), {
+      baseline: base ? base.label : '', baselines: mine.length, requested: mine.filter(function (b) { return b.status === 'Demandée'; }).length,
+      compared: 0, slipped: 0, max_slip: 0, end_slip: 0, end: '', pending_changes: 0
+    });
+    if (base) {
+      var d = API_ACTIONS['baselines.diff']({ projectId: pr.id }, ctx).totals;
+      row.compared = d.compared; row.slipped = d.slipped; row.max_slip = d.max_slip; row.end_slip = d.end_slip; row.end = d.end || '';
+      try { row.pending_changes = API_ACTIONS['changes.feed']({ projectId: pr.id }, ctx).pending; } catch (e) { row.pending_changes = 0; }
+    }
+    return row;
+  });
+  return { today: todayStr(), program: sc.program, projects: rows,
+    totals: Object.assign(programSum_(rows, ['baselines', 'requested', 'compared', 'slipped', 'pending_changes']), { without_baseline: rows.filter(function (r) { return !r.baseline; }).length, max_slip: rows.reduce(function (m, r) { return Math.max(m, r.max_slip); }, 0) }) };
+});
+
+defineAction('budget.program', function (p, ctx) {
+  var sc = programScope_(p, ctx);
+  var rows = sc.projects.map(function (pr) {
+    var row = Object.assign(programRow_(pr), { cpn: pr.cpn || '', restricted: false, budget_total: 0, budget_internal: 0, budget_external: 0, po_planned: 0, po_committed: 0, po_received: 0, po_closed: 0, po_count: 0, remaining_external: 0, overrun: false });
+    try {
+      var b = API_ACTIONS['budget.balance']({ projectId: pr.id }, ctx).totals;
+      row.budget_total = b.budget.total; row.budget_internal = b.budget.internal; row.budget_external = b.budget.external;
+      row.po_planned = b.po.planned; row.po_committed = b.po.committed; row.po_received = b.po.received; row.po_closed = b.po.closed; row.po_count = b.po.count;
+      row.remaining_external = b.remaining_external; row.overrun = !!b.overrun;
+    } catch (e) { row.restricted = true; }
+    return row;
+  });
+  return { today: todayStr(), program: sc.program, projects: rows,
+    totals: Object.assign(programSum_(rows, ['budget_total', 'budget_internal', 'budget_external', 'po_planned', 'po_committed', 'po_received', 'po_closed', 'po_count', 'remaining_external']),
+      { overruns: rows.filter(function (r) { return r.overrun; }).length, restricted: rows.filter(function (r) { return r.restricted; }).length }) };
+});

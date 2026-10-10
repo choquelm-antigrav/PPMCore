@@ -229,6 +229,26 @@ function openPage(file, user, boot, extraScript) {
   await q.until(() => q.calls.includes('baselines.list'));
   check(true, 'Actualiser interroge bien le serveur (les données préparées ne servent qu’une fois)');
 
+
+  const norm = (t) => String(t).replace(/[\u202f\u00a0]/g, ' ').replace(/\s+/g, ' ').trim();
+  const programOptions = (x) => [...x.$('picker').options].filter((o) => /^program:/.test(o.value));
+  const chooseProgram = (x) => { x.$('picker').value = 'program:' + w.prog.id; x.$('picker').dispatchEvent(new x.win.Event('change')); };
+  // ---------------------------------------------------------------- 0.14.1 : vue programme (Program Leader et Domain Program Leader)
+  const cpS = openPage('Suivi.html', CP);
+  await cpS.until(() => cpS.doc.getElementById('picker').options.length >= 2);
+  check(programOptions({ $: (id) => cpS.doc.getElementById(id) }).length === 0, 'un chef de projet n’a pas la vue programme dans la liste');
+  const ds = openPage('Suivi.html', 'dora@entreprise.com');
+  const dsx = { $: (id) => ds.doc.getElementById(id), win: ds.win };
+  await ds.until(() => programOptions(dsx).length === 1);
+  await ds.until(() => !ds.doc.getElementById('panel-ecarts').hidden);
+  chooseProgram(dsx);
+  await ds.until(() => ds.doc.querySelector('#panel-program table.consol'));
+  const rowsS = [...ds.doc.querySelectorAll('#panel-program tbody tr')];
+  check(rowsS.length === 2 && /Baseline active/.test(norm(ds.doc.querySelector('#panel-program thead').textContent)) && rowsS.every((r) => /Aucune|B\d/.test(r.textContent)) && /Aucune/.test(rowsS[1].textContent), 'suivi du programme : une ligne par projet, la baseline active ou « Aucune » : ' + rowsS.map((r) => norm(r.textContent).slice(0, 30)).join(' | '));
+  check(ds.doc.body.classList.contains('in-program') && ['ecarts', 'changes', 'baselines', 'workspace'].every((z) => [...ds.doc.querySelectorAll('style')].some((s) => s.textContent.includes('body.in-program #panel-' + z))) && /Suivi — Programme/.test(ds.doc.getElementById('title').textContent), 'les zones du projet sont masquées en vue programme par une règle de la page');
+  ds.click(ds.doc.querySelector('#panel-program tbody tr button.proj-open'));
+  await ds.until(() => ds.doc.getElementById('panel-program').hidden && !ds.doc.body.classList.contains('in-program'));
+  check(ds.doc.getElementById('picker').value === w.p1.id && !ds.doc.getElementById('panel-ecarts').hidden, 'un clic sur un projet ouvre son suivi et referme la vue programme');
   console.log(failed ? '\n' + failed + ' échec(s).' : '\nPages Suivi et Gantt (baseline) : tout est conforme.');
   process.exit(failed ? 1 : 0);
 })();

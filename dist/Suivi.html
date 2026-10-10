@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.14.0">
+<meta name="ppm-version" content="0.14.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -357,6 +357,106 @@
 })(window);
 </script>
 <style>
+  .consol-wrap { overflow-x: auto; }
+  table.consol { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.consol th { text-align: left; font-size: 12px; letter-spacing: .6px; text-transform: uppercase; color: var(--brand-2); padding: 8px 10px; border-bottom: 2px solid var(--rule); white-space: nowrap; }
+  table.consol td { padding: 8px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  table.consol .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  table.consol tfoot td { font-weight: 700; border-top: 2px solid var(--rule); border-bottom: 0; background: var(--tint); }
+  table.consol small { display: block; color: var(--muted); font-weight: 400; }
+  table.consol .bad { color: var(--red); font-weight: 600; }
+  table.consol .ok { color: var(--green); font-weight: 600; }
+  table.consol .warn { color: var(--amber-ink, #8a5a00); font-weight: 600; }
+  .linklike { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--accent); cursor: pointer; text-align: left; text-decoration: underline; text-underline-offset: 2px; }
+  .program-note { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+</style>
+<script>
+/**
+ * PPM — vues programme consolidées (0.14.1), pour les pages Actualités, Suivi et Budget : un tableau de consolidation et le basculement entre la vue d'un
+ * projet et celle du programme. Inclus par ces seules pages (champ « shared » du registre).
+ */
+(function (root) {
+  'use strict';
+  var ppm = root.ppm, el = ppm.el, clear = ppm.clear, call = ppm.call;
+
+  /** 12 345 € (arrondi à l'euro, espaces insécables de la locale française). */
+  ppm.eur = function (n) { return Math.round(Number(n) || 0).toLocaleString('fr-FR') + ' €'; };
+
+  /**
+   * Tableau de consolidation. cols : [{ label, get(row) → texte ou nœud, num, link, cls(row) }] ; rows ; opts : { open(row), total }.
+   * Une colonne « link » rend un bouton qui ouvre le projet de la ligne ; opts.total est une ligne de total (mêmes colonnes, get(total)).
+   */
+  ppm.table = function (cols, rows, opts) {
+    opts = opts || {};
+    var cell = function (c, row, tag) {
+      var v = c.get(row), content;
+      if (c.link && opts.open && tag === 'td' && row.id) content = el('button', { type: 'button', class: 'linklike proj-open', 'data-project': row.id, text: v, onclick: function () { opts.open(row); } });
+      else content = v;
+      var cls = (c.num ? 'num' : '') + (c.cls && tag === 'td' && c.cls(row) ? ' ' + c.cls(row) : '');
+      return el(tag, { class: cls.trim() }, content === null || content === undefined ? [''] : [content]);
+    };
+    var table = el('table', { class: 'consol' }, [
+      el('thead', {}, [el('tr', {}, cols.map(function (c) { return el('th', { scope: 'col', class: c.num ? 'num' : '', text: c.label }); }))]),
+      el('tbody', {}, rows.map(function (r) { return el('tr', { 'data-project': r.id || '' }, cols.map(function (c) { return cell(c, r, 'td'); })); }))
+    ]);
+    if (opts.total) table.appendChild(el('tfoot', {}, [el('tr', {}, cols.map(function (c, i) { return el('td', { class: c.num ? 'num' : '' }, [i === 0 ? 'Total' : (c.total ? c.total(opts.total) : '')]); }))]));
+    return el('div', { class: 'consol-wrap' }, [table]);
+  };
+
+  /**
+   * Bascule entre la vue d'un projet et celle de son programme.
+   * cfg : action (ex. 'budget.program'), hide (ids des zones, panneaux ou cartes du projet à masquer en vue programme), zone et panel (ids de la zone du programme),
+   *       render(d, host) (remplit le panneau), onEnter(d), onLeave().
+   * Le masquage passe par une classe de la page (in-program) et une règle de style, jamais par l'attribut « hidden » : la page continue de gérer le sien (une réponse
+   * tardive d'un projet ne peut pas réafficher ses zones en pleine vue programme).
+   */
+  ppm.programView = function (cfg) {
+    var $ = function (id) { return document.getElementById(id); };
+    var state = { on: false, programId: '', ticket: 0 };
+    var rule = document.createElement('style');
+    rule.textContent = 'body.in-program ' + cfg.hide.map(function (id) { return '#' + id; }).join(', body.in-program ') + ' { display: none !important; }';
+    document.head.appendChild(rule);
+    var setShown = function (id, shown) { var n = $(id); if (n) n.hidden = !shown; };
+    return {
+      /** Ajoute à la liste « Programme X — tous les projets » pour chaque programme que la personne peut consolider. */
+      fillOptions: function (sel, cat) {
+        var ids = cat.program_view || [];
+        if (!ids.length) return;
+        var og = el('optgroup', { label: 'Vue programme' });
+        cat.programs.filter(function (g) { return ids.indexOf(g.id) >= 0; }).forEach(function (g) {
+          og.appendChild(el('option', { value: 'program:' + g.id, text: 'Programme ' + g.code + ' — tous les projets' }));
+        });
+        sel.insertBefore(og, sel.firstChild);
+      },
+      isProgram: function (value) { return String(value).indexOf('program:') === 0; },
+      active: function () { return state.on; },
+      programId: function () { return state.programId; },
+      enter: function (value) {
+        var id = String(value).replace('program:', ''), ticket = ++state.ticket;
+        document.body.classList.add('in-program');
+        state.on = true; state.programId = id;
+        setShown(cfg.zone, true); setShown(cfg.panel, true);
+        var host = $(cfg.panel); clear(host); host.appendChild(el('p', { class: 'program-note', text: 'Chargement…' }));
+        return call(cfg.action, { programId: id }).then(function (d) {
+          if (ticket !== state.ticket || !state.on) return;
+          clear(host); cfg.render(d, host); if (cfg.onEnter) cfg.onEnter(d);
+        }).catch(function (e) {
+          if (ticket !== state.ticket) return;
+          clear(host); host.appendChild(el('p', { class: 'error', id: 'program-error', text: ppmErrorText(e) }));
+        });
+      },
+      leave: function () {
+        if (!state.on) return;
+        state.on = false; state.ticket++;
+        document.body.classList.remove('in-program');
+        setShown(cfg.zone, false); setShown(cfg.panel, false);
+        if (cfg.onLeave) cfg.onLeave();
+      }
+    };
+  };
+})(window);
+</script>
+<style>
   .panel { padding: 16px 24px 32px; }
   .bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 20px; margin: 0 0 16px; }
   .bar label.field { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
@@ -581,6 +681,9 @@
   <button type="button" class="icon-btn" id="reload" style="margin-left:auto" aria-label="Actualiser" title="Actualiser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
 </div>
 
+<div class="zone" id="zone-program" hidden><h2 class="sec">Vue programme : le suivi de tous les projets</h2></div>
+<section class="panel" id="panel-program" aria-label="Vue programme" hidden></section>
+
 <div class="zone" id="zone-ecarts"><h2 class="sec">Écarts à la baseline</h2></div>
 <section class="panel" id="panel-ecarts" aria-label="Écarts à la baseline"></section>
 <div class="zone" id="zone-changes"><h2 class="sec" id="tab-changes">Changements à valider</h2></div>
@@ -674,6 +777,7 @@ var BOOT = <?!= boot ?>;
     };
     cat.programs.slice().sort(sortCode).forEach(function (g) { group(g.code + ' ' + g.name, byProgram[g.id]); });
     group('Hors programme', byProgram['']);
+    pv.fillOptions(sel, cat);
     sel.value = state.projectId;
   }
   /** Plus d'onglets : toutes les zones s'affichent ; celle des changements est réservée à ceux qui peuvent les lire. */
@@ -1025,7 +1129,28 @@ var BOOT = <?!= boot ?>;
   }
 
   // ------------------------------------------------------------ événements
-  $('picker').addEventListener('change', function () { loadProject(this.value); });
+  // vue programme (PL et DPL) : baseline active, dérives, demandes et changements de chaque projet ; un clic ouvre le suivi du projet
+  var pv = ppm.programView({
+    hide: ['ecarts', 'changes', 'baselines', 'workspace'].reduce(function (a, z) { return a.concat(['zone-' + z, 'panel-' + z]); }, []),
+    zone: 'zone-program', panel: 'panel-program', action: 'suivi.program',
+    render: function (d, host) {
+      var open = function (row) { pv.leave(); loadProject(row.id); };
+      host.appendChild(el('p', { class: 'program-note', text: 'Programme ' + d.program.code + ' — ' + d.program.name + '. Les écarts sont ceux de la baseline active de chaque projet ; cliquez sur un projet pour le détail.' }));
+      var jours = function (n) { return n ? '+' + n + (n > 1 ? ' jours' : ' jour') : '—'; };
+      host.appendChild(ppm.table([
+        { label: 'Projet', link: true, get: function (r) { return r.code + ' ' + r.name; } },
+        { label: 'Baseline active', get: function (r) { return r.baseline || 'Aucune'; }, cls: function (r) { return r.baseline ? '' : 'warn'; }, total: function (t) { return t.without_baseline ? plural(t.without_baseline, 'projet sans baseline', 'projets sans baseline') : ''; } },
+        { label: 'Éléments comparés', num: true, get: function (r) { return r.baseline ? String(r.compared) : '—'; }, total: function (t) { return String(t.compared); } },
+        { label: 'En dérive', num: true, cls: function (r) { return r.slipped ? 'bad' : ''; }, get: function (r) { return r.baseline ? String(r.slipped) : '—'; }, total: function (t) { return String(t.slipped); } },
+        { label: 'Pire glissement', num: true, cls: function (r) { return r.max_slip ? 'bad' : ''; }, get: function (r) { return r.baseline ? jours(r.max_slip) : '—'; }, total: function (t) { return jours(t.max_slip); } },
+        { label: 'Fin du projet', get: function (r) { return r.baseline && r.end ? ppm.frDate(r.end) + (r.end_slip ? ' (' + jours(r.end_slip) + ')' : '') : '—'; }, cls: function (r) { return r.end_slip ? 'bad' : ''; } },
+        { label: 'Changements à valider', num: true, cls: function (r) { return r.pending_changes ? 'warn' : ''; }, get: function (r) { return r.baseline ? String(r.pending_changes) : '—'; }, total: function (t) { return String(t.pending_changes); } },
+        { label: 'Demandes de baseline', num: true, cls: function (r) { return r.requested ? 'warn' : ''; }, get: function (r) { return String(r.requested); }, total: function (t) { return String(t.requested); } }
+      ], d.projects, { open: open, total: d.totals }));
+    },
+    onEnter: function (d) { $('title').textContent = 'Suivi — Programme ' + d.program.code; $('context').textContent = ''; try { google.script.history.replace(null, { view: 'suivi', program: d.program.id }); } catch (e) { /* hors web app */ } }
+  });
+  $('picker').addEventListener('change', function () { if (pv.isProgram(this.value)) pv.enter(this.value); else { pv.leave(); loadProject(this.value); } });
   $('reload').addEventListener('click', function () { loadProject(state.projectId); });
   $('form-ok').addEventListener('click', submitForm);
   $('form-cancel').addEventListener('click', closeForm);

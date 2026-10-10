@@ -123,7 +123,7 @@
     markSelected(id);
     var nodes = [];
     if (state.tab === 'wbs') {
-      var kind = n.kind === 'project' ? 'Projet' : n.kind === 'wp' ? 'Workpackage' : n.item_type;
+      var kind = n.kind === 'program' ? 'Programme' : n.kind === 'project' ? 'Projet' : n.kind === 'wp' ? (n.parent_ref ? 'Sous-workpackage' : 'Workpackage') : n.item_type;
       nodes.push(el('h2', { text: (n.code ? n.code + ' ' : '') + n.name }), el('p', { class: 'kind', text: kind }));
       var flt = n.float === null || n.float === undefined ? '' : (n.float < 0 ? 'Décale un successeur de ' + plural(-n.float, 'jour ouvré', 'jours ouvrés') : n.float === 0 ? 'Aucune : chemin critique' : plural(n.float, 'jour ouvré', 'jours ouvrés'));
       nodes.push(facts([
@@ -133,7 +133,8 @@
         ['Statut', n.status], ['Imputation', n.charge_code], ['Marge', flt]
       ]));
       if (n.late) nodes.push(el('p', { class: 'flag alert', text: 'Au moins un élément est en retard sur sa date de fin prévue.' }));
-      if (n.canEdit) nodes.push(wbsActions(n));
+      if (state.data.scope === 'program') { if (n.kind !== 'program') nodes.push(openProjectActions(n)); }
+      else if (n.canEdit) nodes.push(wbsActions(n));
       if (n.kind === 'item') nodes.push(depsBlock(n));
     } else if (state.data.mode === 'teams') {
       nodes.push(el('h2', { text: n.name }), el('p', { class: 'kind', text: 'Équipe hiérarchique' }));
