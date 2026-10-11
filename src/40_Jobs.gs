@@ -15,6 +15,7 @@ var JOB_ACTX = { actor: 'ppm-core', source: 'core' };
 
 /** À exécuter une fois après setupPpm() : traitement nocturne (2 h) et récapitulatif du matin (7 h). */
 function installTriggers() {
+  deleteTriggers_('warmCache');
   deleteTriggers_('nightlyRun');
   deleteTriggers_('continueNightly');
   deleteTriggers_('sendDigests');
@@ -23,7 +24,60 @@ function installTriggers() {
   ScriptApp.newTrigger('sendDigests').timeBased().atHour(7).everyDays(1).create();
   ScriptApp.newTrigger('newsCollectRun').timeBased().atHour(1).everyDays(1).create();
   ScriptApp.newTrigger('newsCollectRun').timeBased().atHour(13).everyDays(1).create();
-  return 'Déclencheurs installés : collecte des réunions à 1 h et à 13 h, traitement nocturne à 2 h, récapitulatif à 7 h (fuseau du script).';
+  ScriptApp.newTrigger('warmCache').timeBased().everyMinutes(5).create();
+  return 'Déclencheurs installés : collecte des réunions à 1 h et à 13 h, traitement nocturne à 2 h, récapitulatif à 7 h (fuseau du script), cache gardé plein toutes les 5 minutes en semaine de 6 h à 21 h.';
+}
+
+// ---------------------------------------------------------------- cache gardé plein (facultatif)
+
+/** Tables relues par le déclencheur : celles de toutes les pages, hors journaux volumineux (leur lecture reste à la demande). */
+function warmTables_() {
+  var seen = {}, out = [];
+  Object.keys(PAGE_TABLES).forEach(function (v) {
+    PAGE_TABLES[v].forEach(function (n) { if (!seen[n] && n !== 'ChangeEvent' && n !== 'AiLog') { seen[n] = true; out.push(n); } });
+  });
+  return out;
+}
+
+/** En semaine, de 6 h à 21 h (fuseau du script) : la nuit et le week-end, personne n'attend une page. */
+function warmHours_(date) {
+  var d = date || new Date(), hour, dow;
+  if (typeof Utilities !== 'undefined' && typeof Session !== 'undefined' && Session.getScriptTimeZone) {
+    var tz = Session.getScriptTimeZone();
+    hour = Number(Utilities.formatDate(d, tz, 'H')); dow = Number(Utilities.formatDate(d, tz, 'u')); // 1 = lundi … 7 = dimanche
+  } else { hour = d.getHours(); dow = d.getDay() === 0 ? 7 : d.getDay(); }
+  return dow <= 5 && hour >= 6 && hour < 21;
+}
+
+/**
+ * Relit les tables courantes dans les feuilles et les range dans le cache sous une NOUVELLE génération, en un seul appel d'écriture : la page suivante, même la première
+ * après une pause, trouve un cache plein. Une lecture déjà en cours n'est pas perturbée (elle garde la génération qu'elle a lue).
+ */
+function refreshCache_() {
+  resetExecution_();
+  var cache = scriptCache_();
+  if (!cache) return 'Pas de cache disponible.';
+  var names = warmTables_(), t0 = nowMs();
+  names.forEach(function (n) {
+    var table = TABLE_PROVIDER ? TABLE_PROVIDER(n) : sheetTable_(n);
+    _genSeen[n] = '';
+    cachePutRows_(cache, n, JSON.stringify(table.readAll()));
+  });
+  flushCache_();
+  return names.length + ' tables rangées dans le cache en ' + (nowMs() - t0) + ' ms.';
+}
+
+/** Déclencheur facultatif (A5_INSTALLER_DECLENCHEURS) : ne lève jamais d'erreur, pour ne pas déclencher les courriels d'échec de Google. */
+function warmCache() {
+  try {
+    if (!warmHours_()) return 'Hors des heures de travail : rien à faire.';
+    var r = refreshCache_();
+    console.log('PPM warmCache : ' + r);
+    return r;
+  } catch (e) {
+    console.error('PPM warmCache : ' + (e && e.message ? e.message : e));
+    return 'Échec : ' + (e && e.message ? e.message : e);
+  }
 }
 
 function deleteTriggers_(handler) {

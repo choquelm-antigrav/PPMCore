@@ -102,6 +102,10 @@ module.exports = function () {
     eq(keys('gantt'), ['planning.catalog|{}', 'gantt.project|{"projectId":"' + id + '"}']);
     eq(keys('structure'), ['planning.catalog|{}', 'views.config|{}', 'wbs.tree|{"projectId":"' + id + '"}', 'obs.tree|{"scopeId":"' + id + '","scopeType":"project"}'], 'plus d’onglets : l’organisation et le découpage se chargent ensemble');
     eq(keys('suivi'), ['planning.catalog|{}', 'baselines.list|{"projectId":"' + id + '"}', 'changes.feed|{"limit":1,"projectId":"' + id + '"}', 'changes.feed|{"all":false,"projectId":"' + id + '"}', 'baselines.diff|{"projectId":"' + id + '"}', 'workspace.status|{"projectId":"' + id + '"}'], 'plus d’onglets : toutes les zones de Suivi sont préparées avec la page');
+    const ov = keys('overview', { project: id });
+    eq(ov, ['overview.get|{"projectId":"' + id + '"}', 'news.summary|{"projectId":"' + id + '"}'], 'Overview : la carte Actualités du projet affiché part avec la page, sans aller-retour de plus (0.14.2)');
+    const ov0 = keys('overview', {});
+    ok(ov0.length === 2 && /^news\.summary\|\{"projectId":"[0-9a-f-]{36}"\}$/.test(ov0[1]), 'sans projet demandé, le préchargement suit le projet que l’Overview choisit : ' + ov0[1]);
     eq(keys('copilote'), ['copilot.key.status|{}'], 'la page Copilote ne précharge que l’état de la clé de la personne');
     eq(keys('gantt', { program: w.prog.id }).pop(), 'gantt.program|{"programId":"' + w.prog.id + '"}');
     eq(w.c.stableJson_({ b: [2, { d: 1, c: null }], a: 'x' }), '{"a":"x","b":[2,{"c":null,"d":1}]}');

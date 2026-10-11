@@ -7,6 +7,7 @@
 
 /** Appel depuis la page (google.script.run) : mêmes contrôles que l'API JSON. */
 function uiCall(action, params, requestId) {
+  resetExecution_(); // début d'une exécution : on n'a encore rien lu (ni l'identité de l'utilisateur)
   return handleRequest({ action: action, params: params || {}, apiVersion: PPM_API_VERSION, requestId: requestId || null },
     currentUserEmail_());
 }
@@ -36,9 +37,13 @@ function preloadFor_(view, boot, email) {
     pre[action + '|' + stableJson_(params)] = res;
     return res;
   };
-  if (view === 'compte') { put('account.get', {}); return pre; }
+  if (view === 'compte') { put('account.get', {}); put('news.mine', {}); return pre; }
   if (view === 'copilote') { put('copilot.key.status', {}); return pre; } // la page ne parle que de la clé de la personne : ni catalogue ni projet
-  if (view === 'overview') { put('overview.get', { projectId: boot.project || '' }); return pre; }
+  if (view === 'overview') { // la carte « Actualités » du projet affiché part avec la page, au lieu d'un aller-retour de plus
+    var ov = put('overview.get', { projectId: boot.project || '' });
+    if (ov.ok && ov.data.selected) put('news.summary', { projectId: ov.data.selected });
+    return pre;
+  }
   if (view === 'admin') { if (boot.isAdmin) { put('admin.get', {}); put('admin.health', {}); put('admin.holidays', {}); put('admin.logs', {}); } return pre; }
   if (view === 'budget') {
     var bcat = put('planning.catalog', {});
@@ -98,9 +103,28 @@ function cleanId_(v) {
   return String(v || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
 }
 
+/**
+ * Tables que le premier écran de chaque page lit, demandées au cache en un seul appel dès le début (ni plus : une page ne tire pas du cache des tables qu'elle n'emploie
+ * pas, ce qui pèse vite plusieurs centaines de Ko avec des données réelles ; ni moins : une table oubliée se lit à part, deux appels de plus). tests/test_speed.js vérifie que
+ * chaque liste est exactement l'ensemble des tables lues à l'ouverture ; la même liste sert au déclencheur qui garde le cache plein.
+ */
+var PAGE_TABLES = {
+  overview: ['Baseline', 'BaselineItem', 'BudgetLine', 'Dependency', 'HolidaySet', 'Insight', 'Meeting', 'NewsAction', 'NewsDigest', 'PlanItem', 'Program', 'Project', 'PurchaseOrder', 'PurchaseOrderLink', 'Resource', 'RiskOpportunity', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  gantt: ['Baseline', 'BaselineItem', 'BudgetLine', 'Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  structure: ['Dependency', 'HierarchicalTeam', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  ressources: ['HierarchicalTeam', 'PlanItem', 'Program', 'Project', 'RateCard', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  suivi: ['Baseline', 'BaselineItem', 'BudgetLine', 'BudgetPhasing', 'ChangeEvent', 'Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  actualites: ['Meeting', 'NewsAction', 'NewsDigest', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  budget: ['BudgetLine', 'BudgetPhasing', 'PlanItem', 'Program', 'Project', 'PurchaseOrder', 'PurchaseOrderLink', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  compte: ['HierarchicalTeam', 'Meeting', 'NewsAction', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  admin: ['AiLog', 'BudgetLine', 'ChangeEvent', 'Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  copilote: ['Resource', 'RoleAssignment', 'UserSetting']
+};
+
 function renderPage_(e) {
   resetExecution_();
   var view = e.parameter.view;
+  prefetchTables_(PAGE_TABLES[view] || HOT_TABLES); // avant tout : les préférences, l'identité et les droits lisent déjà ces tables
   if (view === 'copilote' && !copilotEnabled_()) view = 'overview'; // copilote en suspens : on arrive sur l'Overview
   if (!PAGES[view]) {
     return HtmlService.createHtmlOutput('<p>Vue inconnue.</p>').setTitle('PPM');
@@ -131,6 +155,7 @@ function renderPage_(e) {
   } catch (err) {
     boot.preload = {}; // la page refera ses appels elle-même
   }
+  flushCache_(); // tables lues dans Sheets : rangées dans le cache en un appel, avant de servir la page
   boot.serverMs = Date.now() - t0;
   t.boot = safeJsonForScript(boot);
   return t.evaluate()
@@ -141,9 +166,14 @@ function renderPage_(e) {
 /** URL de la web app, pour les liens entre pages. Vide hors Apps Script (tests). */
 function webAppUrl_() {
   var saved = getProp(PROP.WEBAPP_URL, '');
+  // adresse vérifiée il y a moins d'une heure : pas d'appel au service ScriptApp (≈ 0,1 s) à chaque page
+  if (/\/exec$/.test(saved) && Date.now() - (Number(getProp(PROP.WEBAPP_URL_AT, '0')) || 0) < 3600000) return saved;
   try {
     var url = typeof ScriptApp !== 'undefined' ? String(ScriptApp.getService().getUrl() || '') : '';
-    if (url && /\/exec$/.test(url) && url !== saved) setProp(PROP.WEBAPP_URL, url);
+    if (url && /\/exec$/.test(url)) {
+      if (url !== saved) setProp(PROP.WEBAPP_URL, url);
+      setProp(PROP.WEBAPP_URL_AT, Date.now());
+    }
     return url || saved;
   } catch (err) {
     return saved;

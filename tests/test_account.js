@@ -191,7 +191,7 @@ module.exports = function () {
   test('Préchargement : Mon compte et Administration reçoivent leurs données avec la page', () => {
     const w = lot2World();
     const boot = (tab, isAdmin) => ({ project: '', program: '', tab, mode: '', isAdmin });
-    eq(Object.keys(w.c.preloadFor_('compte', boot('fiche', false), CP)), ['account.get|{}']);
+    eq(Object.keys(w.c.preloadFor_('compte', boot('fiche', false), CP)), ['account.get|{}', 'news.mine|{}'], 'Mon compte : sa fiche et ses actions de réunion partent avec la page (0.14.2)');
     eq(Object.keys(w.c.preloadFor_('admin', boot('reglages', true), ADMIN)), ['admin.get|{}', 'admin.health|{}', 'admin.holidays|{}', 'admin.logs|{}']);
     eq(Object.keys(w.c.preloadFor_('admin', boot('reglages', false), CP)), [], 'rien pour un non-administrateur');
     eq([w.c.PAGES.compte, w.c.PAGES.admin, w.c.PAGE_TABS.compte, w.c.PAGE_TABS.admin], ['Compte', 'Admin', [''], ['']], 'plus d’onglets : rubriques en zones');

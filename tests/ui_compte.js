@@ -66,6 +66,16 @@ function openPage(file, user, boot) {
   check(rows.length === 1 && /Responsable de workpackage/.test(rows[0]) && /1 Conception/.test(rows[0]), 'rôle et périmètre en lecture seule : ' + rows.join('|'));
   check(!p.doc.querySelector('#roles-table input, #roles-table button'), 'aucun contrôle de modification sur les rôles');
   check(p.doc.getElementById('edit-function') && !p.doc.getElementById('edit-name'), 'seuls fonction et organisation sont modifiables');
+  // 0.14.2 : les suggestions de fonction et d'organisation (jusqu'à 500 personnes) ne se chargent que si l'on touche à ces champs, une seule fois
+  const listCalls = () => p.calls.filter((a) => a === 'resources.list').length;
+  check(listCalls() === 0 && p.doc.querySelectorAll('#dl-functions option').length === 0, 'à l’ouverture : aucune liste de personnes demandée, aucune suggestion chargée (un aller-retour et 500 lignes de moins)');
+  p.doc.getElementById('edit-function').dispatchEvent(new p.win.Event('focus'));
+  await p.until(() => p.doc.querySelectorAll('#dl-functions option').length > 0);
+  const distinct = (k) => new Set(c.repoList('Resource').map((r) => r[k]).filter(Boolean)).size;
+  check(listCalls() === 1 && p.doc.querySelectorAll('#dl-functions option').length === distinct('job_function') && p.doc.querySelectorAll('#dl-orgs option').length === distinct('organization'), 'au premier contact avec la fonction : la liste est demandée une fois, et les suggestions sont exactement les fonctions (' + distinct('job_function') + ') et organisations (' + distinct('organization') + ') connues');
+  p.doc.getElementById('edit-org').dispatchEvent(new p.win.Event('focus')); p.doc.getElementById('edit-function').dispatchEvent(new p.win.Event('focus'));
+  await new Promise((r) => setTimeout(r, 120));
+  check(listCalls() === 1, 'les contacts suivants, avec la fonction ou l’organisation, ne redemandent rien');
   p.doc.getElementById('edit-function').value = 'Ingénieur calcul';
   p.doc.getElementById('edit-org').value = '  Bureau   d’études ';
   p.submit(p.doc.querySelector('form.form'));

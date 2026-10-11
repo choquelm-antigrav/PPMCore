@@ -1,4 +1,4 @@
-# Premiers pas : installer et essayer PPM (version 0.14.1)
+# Premiers pas : installer et essayer PPM (version 0.14.2)
 
 Environ 15 minutes. Pas besoin d'AppSheet pour ces essais. Tout ce qu'il faut est dans le dossier `dist` de l'archive : **12 fichiers**.
 
@@ -21,7 +21,7 @@ En haut de l'éditeur, choisir **A1_INSTALLER_PPM** (la première de la liste de
 
 Le journal d'exécution doit finir par « Installation conforme ». Le domaine et l'administrateur sont déduits de votre compte.
 
-Pour avoir des données d'essai : exécuter aussi **A2_SEED_DEMO** (la deuxième de la liste) : un programme complet, quatre projets dont un complexe (planning en retard, baselines, budget, commandes d'achat, risques) et 38 personnes avec leurs taux. Cela prend plusieurs minutes : **relancez-la jusqu'à voir « Démo complète »** ; elle reprend là où elle s'est arrêtée. Si le journal répond « La démo existe déjà (programme NAC) », une démo est déjà dans le classeur : rien n'est recréé ni remplacé. **Si vous aviez essayé une version antérieure à la 0.11.0**, son ancienne démo (programme DEMO, projet PILOTE) est encore là : exécutez d'abord **A6_EFFACER_DEMO** (la sixième de la liste) ; le premier lancement dit seulement ce qui serait supprimé, relancez-la dans les 10 minutes pour confirmer, puis lancez A2_SEED_DEMO. Personne d'autre que vous n'a d'adresse : rien n'est envoyé.
+Pour avoir des données d'essai : exécuter aussi **A2_SEED_DEMO** (la deuxième de la liste) : un programme et un projet complexe, NAC-1 (planning en retard, baselines, budget, commandes d'achat, risques, réunions) et 38 personnes avec leurs taux. Cela prend plusieurs minutes : **relancez-la jusqu'à voir « Démo complète »** ; elle reprend là où elle s'est arrêtée. Si le journal répond « La démo existe déjà (programme NAC) », une démo est déjà dans le classeur : rien n'est recréé ni remplacé. **Si vous aviez essayé une version antérieure à la 0.11.0**, son ancienne démo (programme DEMO, projet PILOTE) est encore là : exécutez d'abord **A6_EFFACER_DEMO** (la sixième de la liste) ; le premier lancement dit seulement ce qui serait supprimé, relancez-la dans les 10 minutes pour confirmer, puis lancez A2_SEED_DEMO. Personne d'autre que vous n'a d'adresse : rien n'est envoyé.
 
 ## 4. Publier
 
@@ -87,6 +87,10 @@ En cas de doute, exécutez `A4_DIAGNOSTIC_ACCES` dans l'éditeur (Exécuter, pui
 - **Réautoriser l'outil** : la version 0.12.0 demande en plus l'accès aux Google Docs. Après avoir copié les fichiers, exécuter `A1_INSTALLER_PPM` et accepter la nouvelle autorisation.
 - **Collecte automatique** : exécuter `A5_INSTALLER_DECLENCHEURS` pour poser les deux déclencheurs (1 h et 13 h). Elle lit **l'agenda du compte qui les a posés**, pas celui des autres membres.
 - **Sans collecte, rien n'est perdu** : la saisie manuelle d'un compte rendu et la synthèse du matin fonctionnent seules.
+
+## Pages plus réactives : le déclencheur facultatif `warmCache` (0.14.2)
+
+Après la mise à jour, exécutez **`A5_INSTALLER_DECLENCHEURS`** pour poser un déclencheur qui garde les données prêtes en mémoire toutes les 5 minutes, en semaine de 6 h à 21 h : la première page après une pause s'ouvre alors aussi vite que les suivantes. Il consomme de l'ordre d'un quart d'heure par jour de votre quota de déclencheurs. Sans lui, tout fonctionne, simplement avec une première page plus lente après 6 minutes d'inactivité. `A7` mesure le temps d'ouverture de chaque page : lancez-le avant et après.
 
 ## Si la démo est vide ou s'arrête (0.13.2)
 

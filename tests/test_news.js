@@ -319,7 +319,7 @@ module.exports = function () {
     c.ScriptApp = {
       getProjectTriggers: () => made.filter((t) => !t.gone).map((t) => ({ getHandlerFunction: () => t.fn, _t: t })),
       deleteTrigger: (t) => { t._t.gone = true; deleted.push(t._t.fn); },
-      newTrigger: (fn) => { const t = { fn, hour: null }; made.push(t); const b = { timeBased: () => b, atHour: (h) => { t.hour = h; return b; }, everyDays: () => b, after: () => b, create: () => t }; return b; }
+      newTrigger: (fn) => { const t = { fn, hour: null }; made.push(t); const b = { timeBased: () => b, atHour: (h) => { t.hour = h; return b; }, everyDays: () => b, everyMinutes: (n) => { t.every = n; return b; }, after: () => b, create: () => t }; return b; }
     };
     const msg = c.installTriggers();
     eq(made.filter((t) => t.fn === 'newsCollectRun').map((t) => t.hour).sort((a, b) => a - b), [1, 13]);

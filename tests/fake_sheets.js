@@ -38,13 +38,16 @@ function makeFakeSheets() {
     constructor(name) { this.name = name; this.cells = new Map(); this.fmt = new Map(); this.maxRows = 1000; this.maxCols = 26; this.stats = { reads: 0, writes: 0 }; }
     key(r, c) { return r + ',' + c; }
     getName() { return this.name; }
-    getLastRow() { let m = 0; this.cells.forEach((v, k) => { if (v !== '' && v !== null) m = Math.max(m, +k.split(',')[0]); }); return m; }
-    getLastColumn() { let m = 0; this.cells.forEach((v, k) => { if (v !== '' && v !== null) m = Math.max(m, +k.split(',')[1]); }); return m; }
+    lastRow_() { let m = 0; this.cells.forEach((v, k) => { if (v !== '' && v !== null) m = Math.max(m, +k.split(',')[0]); }); return m; }
+    lastCol_() { let m = 0; this.cells.forEach((v, k) => { if (v !== '' && v !== null) m = Math.max(m, +k.split(',')[1]); }); return m; }
+    getLastRow() { return this.lastRow_(); }
+    getLastColumn() { return this.lastCol_(); }
     getMaxRows() { return this.maxRows; }
     getMaxColumns() { return this.maxCols; }
     insertColumnsAfter(after, n) { this.maxCols += n; }
     setFrozenRows() {}
     getRange(r, c, nr, nc) { return new Range(this, r, c, nr || 1, nc || 1); }
+    getDataRange() { return this.getRange(1, 1, Math.max(this.lastRow_(), 1), Math.max(this.lastCol_(), 1)); } // un seul appel dans Google
     appendRow(values) { const r = this.getLastRow() + 1; this.getRange(r, 1, 1, values.length).setValues([values]); }
   }
 

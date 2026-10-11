@@ -1,5 +1,14 @@
 # Journal des versions
 
+## 0.14.2 — démo réduite à NAC-1, pages plus rapides
+
+- **Démo réduite à NAC-1** (15 étapes au lieu de 18 ; plus de réunions « à trier »), avec un livrable sans responsable et un sans date pour garder toutes les familles de constats. Vue programme à un seul projet.
+- **Ouverture des pages** : à cache vide 12 à 48 appels aux services Google au lieu de 71 à 188 (Administration 126) ; à cache plein 5 au lieu de 14 à 26. Lecture d'une table en un appel, cache lu et écrit en groupe, tables d'une page demandées d'avance, `repoGet` sans lecture ligne par ligne, identité et adresse de l'application mémorisées, Overview et Compte préchargent leurs cartes d'actualités (plus d'aller-retour après l'ouverture). Nombres d'appels exacts ; temps réel non mesuré ici.
+- **Trois pistes à faible risque** : chaque page ne tire du cache que ses tables (−82 % pour Copilote, −64 % Ressources, −61 % Actualités, −60 % Compte, −53 % Structure, −51 % Budget) ; Compte charge ses suggestions à la demande ; déclencheur facultatif `warmCache` (toutes les 5 minutes, en semaine de 6 h à 21 h) posé par A5, cache de 6 minutes.
+- **`A7`** mesure le temps réel d'ouverture de chaque page (première ouverture → cache plein) et signale l'absence de `warmCache`.
+- **Tests** : `test_speed.js` (budget d'appels, lecture en un appel, écriture groupée, table périmée jamais rangée, mémoïsation) ; les optimisations ont été retirées une à une pour vérifier que les tests les voient.
+- Tests : 256 serveur, plus douze essais de pages.
+
 ## 0.14.1 — versions B et C : OBS en mosaïque, WBS du programme, équipes en organigramme, vues programme
 
 - **OBS** : personnes d'une boîte de rôle en mosaïque (1 à 4 colonnes), schéma centré, ajustement à la largeur plus tolérant.

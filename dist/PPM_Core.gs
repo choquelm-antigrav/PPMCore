@@ -1,5 +1,5 @@
 /**
- * PPM Core 0.14.1 — fichier unique à installer (fabriqué par tools/build.js, empreinte 01992455c86f).
+ * PPM Core 0.14.2 — fichier unique à installer (fabriqué par tools/build.js, empreinte 12de8b6c7def).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
  * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs.
  */
@@ -44,7 +44,7 @@ function A8_VERIFIER_ECRITURE() { return verifierEcritureAvecJournal_(); }
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.14.1';
+var PPM_VERSION = '0.14.2';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -132,6 +132,7 @@ var PROP = {
   LAST_NIGHTLY: 'PPM_LAST_NIGHTLY',
   LAST_DIGEST: 'PPM_LAST_DIGEST',
   COPILOT: 'PPM_COPILOT',
+  WEBAPP_URL_AT: 'PPM_WEBAPP_URL_AT', // dernière vérification de l'adresse de la web app (ms) : pas d'appel à ScriptApp à chaque page
   DEMO_STEP: 'PPM_DEMO_STEP',
   DEMO_CLEAN: 'PPM_DEMO_CLEAN', // horodatage de la demande de suppression de l'ancienne démo (confirmation par un second lancement)
   NEWS_LAST: 'PPM_NEWS_LAST', // fin de la dernière collecte des réunions (ISO)
@@ -1565,14 +1566,16 @@ function getTable(name) {
 //   - mémoire de l'exécution : une table n'est lue qu'une fois par requête ;
 //   - cache du script (CacheService), partagé entre requêtes : la table y est rangée par morceaux, sous un
 //     numéro de génération. Toute écriture par le Core change la génération (la table sera relue) ;
-//     une saisie AppSheet fait de même via onRowChanged. Par sécurité, rien n'y reste plus de 5 minutes.
+//     une saisie AppSheet fait de même via onRowChanged. Par sécurité, rien n'y reste plus de 6 minutes (5 minutes si le déclencheur warmCache est posé : il relit alors les feuilles).
 // Les lectures ponctuelles (findRow, readRow) vont toujours dans Sheets.
 
 var CACHE_PROVIDER = null;      // tests : faux cache { get, getAll, put, putAll }
-var CACHE_TTL_S = 300;
+var CACHE_TTL_S = 360;          // 6 minutes : le déclencheur facultatif warmCache le renouvelle toutes les 5, sans trou entre deux
 var CACHE_CHUNK = 90000;        // un élément du cache est limité à 100 Ko
 var CACHE_MAX_CHUNKS = 20;      // au-delà (~1,8 Mo), la table n'est pas mise en cache
 var _rowsMemo = {};
+var _genSeen = {};      // numéro de génération déjà lu dans le cache pendant cette exécution (« » = absent) : on ne le relit pas
+var _pendingPuts = {};  // tables lues dans Sheets, à ranger dans le cache en UN appel en fin de requête (flushCache_)
 
 function scriptCache_() {
   if (CACHE_PROVIDER) return CACHE_PROVIDER;
@@ -1583,7 +1586,10 @@ function scriptCache_() {
 /** Début d'une exécution (requête, page, déclencheur) : on oublie ce qui a été lu par la précédente. */
 function resetExecution_() {
   _rowsMemo = {};
+  _genSeen = {};
+  _pendingPuts = {};
   _propsMemo = null;
+  _emailMemo = null;
 }
 
 function cachedTable_(name, base) {
@@ -1635,7 +1641,8 @@ function chunkKeys_(name, gen, n) {
 
 function cacheGetRows_(cache, name) {
   try {
-    var g = parseGen_(cache.get('gen:' + name));
+    if (_genSeen[name] === undefined) _genSeen[name] = cache.get('gen:' + name) || '';
+    var g = parseGen_(_genSeen[name]);
     if (!g || !(g.n > 0)) return null;
     var keys = chunkKeys_(name, g.gen, g.n);
     var parts = cache.getAll(keys);
@@ -1650,16 +1657,37 @@ function cacheGetRows_(cache, name) {
   }
 }
 
+/** Met la table lue dans Sheets en attente de rangement dans le cache : flushCache_() range toutes les tables d'une requête en un seul appel (et non deux par table). */
 function cachePutRows_(cache, name, json) {
+  var n = Math.max(1, Math.ceil(json.length / CACHE_CHUNK));
+  if (n > CACHE_MAX_CHUNKS) return;
+  var g = parseGen_(_genSeen[name]);
+  var gen = g ? g.gen : newGen_();
+  var values = {};
+  chunkKeys_(name, gen, n).forEach(function (k, i) { values[k] = json.slice(i * CACHE_CHUNK, (i + 1) * CACHE_CHUNK); });
+  values['gen:' + name] = gen + '|' + n;
+  _pendingPuts[name] = values;
+  _genSeen[name] = gen + '|' + n;
+}
+
+/** Range dans le cache les tables lues dans Sheets pendant cette requête, en un appel par tranche de 90 éléments (jamais plus d'un appel pour une page). */
+function flushCache_() {
+  var names = Object.keys(_pendingPuts);
+  if (!names.length) return;
+  var pending = _pendingPuts; _pendingPuts = {};
+  var cache = scriptCache_();
+  if (!cache) return;
   try {
-    var n = Math.max(1, Math.ceil(json.length / CACHE_CHUNK));
-    if (n > CACHE_MAX_CHUNKS) return;
-    var g = parseGen_(cache.get('gen:' + name));
-    var gen = g ? g.gen : newGen_();
-    var values = {};
-    chunkKeys_(name, gen, n).forEach(function (k, i) { values[k] = json.slice(i * CACHE_CHUNK, (i + 1) * CACHE_CHUNK); });
-    cache.putAll(values, CACHE_TTL_S);
-    cache.put('gen:' + name, gen + '|' + n, CACHE_TTL_S);
+    var batch = {}, count = 0, size = 0;
+    var send = function () { if (count) { cache.putAll(batch, CACHE_TTL_S); batch = {}; count = 0; size = 0; } };
+    names.forEach(function (n) {
+      Object.keys(pending[n]).forEach(function (k) {
+        var v = pending[n][k];
+        if (count >= 90 || size + v.length > 800000) send();
+        batch[k] = v; count++; size += v.length;
+      });
+    });
+    send();
   } catch (e) {
     /* le cache est une optimisation : une panne ne doit jamais bloquer une lecture */
   }
@@ -1668,9 +1696,12 @@ function cachePutRows_(cache, name, json) {
 /** Après une écriture : la table sera relue dans Sheets, par cette exécution comme par les suivantes. */
 function invalidateTable_(name) {
   delete _rowsMemo[name];
+  delete _pendingPuts[name]; // une lecture en attente de rangement serait périmée
   var cache = scriptCache_();
   if (!cache) return;
-  try { cache.put('gen:' + name, newGen_() + '|-1', CACHE_TTL_S); } catch (e) { /* voir cachePutRows_ */ }
+  var marker = newGen_() + '|-1';
+  _genSeen[name] = marker;
+  try { cache.put('gen:' + name, marker, CACHE_TTL_S); } catch (e) { /* le cache est une optimisation */ }
 }
 
 /** Invalide toutes les tables (réconciliation nocturne, restauration, installation). */
@@ -1686,11 +1717,12 @@ function prefetchTables_(names) {
   var cache = scriptCache_();
   if (!cache) return;
   try {
-    var todo = names.filter(function (n) { return _rowsMemo[n] === undefined && SCHEMA[n]; });
+    var todo = names.filter(function (n) { return _rowsMemo[n] === undefined && _genSeen[n] === undefined && SCHEMA[n]; }); // une table déjà regardée dans cette exécution n'est pas redemandée
     if (!todo.length) return;
     var gens = cache.getAll(todo.map(function (n) { return 'gen:' + n; }));
     var want = {}, keys = [];
     todo.forEach(function (n) {
+      _genSeen[n] = gens['gen:' + n] || ''; // même absente : cacheGetRows_ ne la relira pas
       var g = parseGen_(gens['gen:' + n]);
       if (!g || !(g.n > 0)) return;
       want[n] = chunkKeys_(n, g.gen, g.n);
@@ -1716,6 +1748,9 @@ function prefetchTables_(names) {
 var HOT_TABLES = ['Program', 'Project', 'WorkPackage', 'PlanItem', 'Dependency', 'Resource', 'RoleAssignment',
   'HierarchicalTeam', 'HolidaySet', 'UserSetting', 'Baseline', 'Insight', 'MilestoneRequirement', 'RiskOpportunity',
   'Role', 'BudgetLine', 'BaselineItem'];
+
+var HOT_SET = {};
+HOT_TABLES.forEach(function (n) { HOT_SET[n] = true; });
 
 function bookId_(book) {
   var id = getProp(book === 'data' ? PROP.DATA_ID : PROP.HISTORY_ID, '');
@@ -1755,8 +1790,11 @@ function sheetTable_(name) {
 
 /** La table d'un schéma sur une feuille donnée (A8_VERIFIER_ECRITURE l'emploie sur une feuille temporaire). */
 function sheetTableOn_(name, sh) {
-  var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
-  var isText = headers.map(function (h) { return !sheetParsedCol_(h); });
+  // En-têtes lus à la demande : readAll() les tire de la lecture complète en UN appel (getDataRange) au lieu de quatre ; une écriture ou une lecture
+  // ponctuelle faite avant les lit à part (deux appels), sans relire toute la table (une table d'historique peut avoir des milliers de lignes).
+  var headers = null, isText = null;
+  function setHeaders(row) { headers = row.map(String); isText = headers.map(function (h) { return !sheetParsedCol_(h); }); }
+  function need() { if (!headers) setHeaders(sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]); }
 
   function toObj(row) {
     var o = {};
@@ -1778,8 +1816,13 @@ function sheetTableOn_(name, sh) {
 
   return {
     name: name,
-    headers: function () { return headers.slice(); },
+    headers: function () { need(); return headers.slice(); },
     readAll: function () {
+      if (!headers) { // première opération sur cette table : un seul appel donne les en-têtes et toutes les lignes
+        var all = sh.getDataRange().getValues();
+        setHeaders(all[0]);
+        return all.slice(1).map(toObj);
+      }
       var n = dataRows();
       if (n === 0) return [];
       return sh.getRange(2, 1, n, headers.length).getValues().map(toObj);
@@ -1789,14 +1832,16 @@ function sheetTableOn_(name, sh) {
       var cell = sh.getRange(2, 1, dataRows(), 1).createTextFinder(String(id)).matchEntireCell(true).findNext();
       return cell ? cell.getRow() : -1;
     },
-    readRow: function (r) { return toObj(sh.getRange(r, 1, 1, headers.length).getValues()[0]); },
-    writeRow: function (r, obj) { sh.getRange(r, 1, 1, headers.length).setValues([toRow(obj)]); },
+    readRow: function (r) { need(); return toObj(sh.getRange(r, 1, 1, headers.length).getValues()[0]); },
+    writeRow: function (r, obj) { need(); sh.getRange(r, 1, 1, headers.length).setValues([toRow(obj)]); },
     appendRows: function (objs) {
       if (!objs.length) return;
+      need();
       sh.getRange(sh.getLastRow() + 1, 1, objs.length, headers.length).setValues(objs.map(toRow));
     },
     /** Réécrit plusieurs lignes ; les lignes consécutives partent en une seule écriture. */
     updateRows: function (list) {
+      need();
       var sorted = list.slice().sort(function (a, b) { return a.row - b.row; });
       var i = 0;
       while (i < sorted.length) {
@@ -1808,6 +1853,7 @@ function sheetTableOn_(name, sh) {
       }
     },
     replaceAll: function (objs) {
+      need();
       var n = dataRows();
       if (n > 0) sh.getRange(2, 1, n, headers.length).clearContent();
       if (objs.length) sh.getRange(2, 1, objs.length, headers.length).setValues(objs.map(toRow));
@@ -1831,6 +1877,8 @@ function withLock(fn) {
 // ---------------------------------------------------------------- lecture
 
 function repoGet(table, id) {
+  // une table courante (HOT_TABLES) est lue une fois en entier (et rangée dans le cache), pas ligne par ligne dans Sheets
+  if (!isBlank(id) && _rowsMemo[table] === undefined && HOT_SET[table]) getTable(table).readAll();
   if (_rowsMemo[table] !== undefined && !isBlank(id)) {
     var hit = JSON.parse(_rowsMemo[table]).filter(function (r) { return String(r.id) === String(id); })[0];
     if (hit) return hit;
@@ -2575,8 +2623,9 @@ function liveSmokeTest_(opts) {
     var h = {}; ScriptApp.getProjectTriggers().forEach(function (t) { h[t.getHandlerFunction()] = (h[t.getHandlerFunction()] || 0) + 1; });
     var miss = [];
     if (!h.nightlyRun) miss.push('nightlyRun'); if (!h.sendDigests) miss.push('sendDigests'); if ((h.newsCollectRun || 0) < 2) miss.push('newsCollectRun (1 h et 13 h)');
+    if (!h.warmCache) miss.push('warmCache (facultatif : garde le cache plein, pages plus rapides après une pause)');
     if (miss.length) return { warn: 'à poser : ' + miss.join(', ') + ' — exécuter A5_INSTALLER_DECLENCHEURS' };
-    return 'nightlyRun ' + h.nightlyRun + ', sendDigests ' + h.sendDigests + ', newsCollectRun ' + h.newsCollectRun;
+    return 'nightlyRun ' + h.nightlyRun + ', sendDigests ' + h.sendDigests + ', newsCollectRun ' + h.newsCollectRun + ', warmCache ' + h.warmCache;
   });
   step('Agenda : lecture réelle de l’agenda principal (service avancé Calendar)', function () {
     if (!has('Calendar') || !Calendar.Events) return { warn: 'service avancé Calendar non activé : la collecte des réunions et les rappels sont impossibles' };
@@ -2589,6 +2638,20 @@ function liveSmokeTest_(opts) {
     var r = aiFetch_(GEMINI_BASE + '/models?pageSize=1', { method: 'get' }); // sans clé : Google doit répondre « clé manquante », ce qui prouve le droit et le réseau
     expect(r && r.code > 0 && r.code < 500, 'Google a répondu ' + (r && r.code));
     return 'Google répond (' + r.code + ', normal sans clé)';
+  });
+  step('Ouverture des pages : temps serveur, première ouverture puis cache plein (0.14.2)', function () {
+    if (typeof HtmlService === 'undefined') return { warn: 'non vérifiable ici' };
+    var project = proj ? proj.id : '', out = [], slow = [];
+    PPM_PAGES.forEach(function (pg) {
+      if (pg.view === 'copilote' && !copilotEnabled_()) return;
+      var t1 = nowMs(); renderPage_({ parameter: { view: pg.view, project: project } });
+      var first = nowMs() - t1, t2 = nowMs(); renderPage_({ parameter: { view: pg.view, project: project } });
+      var warm = nowMs() - t2;
+      out.push(pg.view + ' ' + first + ' → ' + warm + ' ms');
+      if (warm > 2500) slow.push(pg.view + ' ' + warm + ' ms');
+    });
+    if (slow.length) return { warn: 'lent avec le cache plein : ' + slow.join(', ') + ' — ' + out.join(' ; ') };
+    return out.join(' ; ');
   });
   step('Démo : contenu des projets NAC (si elle a été créée)', function () {
     if (!repoList('Program', function (p) { return p.code === 'NAC'; }).length) return 'aucune démo NAC dans ce classeur';
@@ -2736,6 +2799,7 @@ function doPost(e) {
   } catch (err) {
     return jsonOut_({ ok: false, error: { code: 'VALIDATION', message: 'Corps JSON invalide.' } });
   }
+  resetExecution_();
   return jsonOut_(handleRequest(body, currentUserEmail_()));
 }
 
@@ -2748,8 +2812,10 @@ function jsonOut_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
+var _emailMemo = null;
 function currentUserEmail_() {
-  return String(Session.getActiveUser().getEmail() || '').toLowerCase();
+  if (_emailMemo === null) _emailMemo = String(Session.getActiveUser().getEmail() || '').toLowerCase(); // un appel par exécution, pas quatre
+  return _emailMemo;
 }
 
 function handleRequest(body, actorEmail, opts) {
@@ -2770,7 +2836,7 @@ function handleRequest(body, actorEmail, opts) {
       var cached = idempotencyGet_(cacheKey);
       if (cached) return cached;
     }
-    prefetchTables_(HOT_TABLES);
+    if (!(opts && opts.keepMemo)) prefetchTables_(HOT_TABLES); // une page a déjà demandé exactement ses tables (renderPage_)
     var t0 = Date.now();
     var ctx = buildContext(email, body.addonId);
     var result = handler(body.params || {}, ctx);
@@ -2785,6 +2851,8 @@ function handleRequest(body, actorEmail, opts) {
     }
     console.error(err && err.stack ? err.stack : err);
     return { ok: false, error: { code: 'INTERNAL', message: 'Erreur interne.', details: null } };
+  } finally {
+    if (!(opts && opts.keepMemo)) flushCache_(); // les tables lues dans Sheets partent au cache en un appel
   }
 }
 
@@ -3077,6 +3145,7 @@ defineAction('insights.list', function (p) {
 
 /** Appel depuis la page (google.script.run) : mêmes contrôles que l'API JSON. */
 function uiCall(action, params, requestId) {
+  resetExecution_(); // début d'une exécution : on n'a encore rien lu (ni l'identité de l'utilisateur)
   return handleRequest({ action: action, params: params || {}, apiVersion: PPM_API_VERSION, requestId: requestId || null },
     currentUserEmail_());
 }
@@ -3106,9 +3175,13 @@ function preloadFor_(view, boot, email) {
     pre[action + '|' + stableJson_(params)] = res;
     return res;
   };
-  if (view === 'compte') { put('account.get', {}); return pre; }
+  if (view === 'compte') { put('account.get', {}); put('news.mine', {}); return pre; }
   if (view === 'copilote') { put('copilot.key.status', {}); return pre; } // la page ne parle que de la clé de la personne : ni catalogue ni projet
-  if (view === 'overview') { put('overview.get', { projectId: boot.project || '' }); return pre; }
+  if (view === 'overview') { // la carte « Actualités » du projet affiché part avec la page, au lieu d'un aller-retour de plus
+    var ov = put('overview.get', { projectId: boot.project || '' });
+    if (ov.ok && ov.data.selected) put('news.summary', { projectId: ov.data.selected });
+    return pre;
+  }
   if (view === 'admin') { if (boot.isAdmin) { put('admin.get', {}); put('admin.health', {}); put('admin.holidays', {}); put('admin.logs', {}); } return pre; }
   if (view === 'budget') {
     var bcat = put('planning.catalog', {});
@@ -3168,9 +3241,28 @@ function cleanId_(v) {
   return String(v || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
 }
 
+/**
+ * Tables que le premier écran de chaque page lit, demandées au cache en un seul appel dès le début (ni plus : une page ne tire pas du cache des tables qu'elle n'emploie
+ * pas, ce qui pèse vite plusieurs centaines de Ko avec des données réelles ; ni moins : une table oubliée se lit à part, deux appels de plus). tests/test_speed.js vérifie que
+ * chaque liste est exactement l'ensemble des tables lues à l'ouverture ; la même liste sert au déclencheur qui garde le cache plein.
+ */
+var PAGE_TABLES = {
+  overview: ['Baseline', 'BaselineItem', 'BudgetLine', 'Dependency', 'HolidaySet', 'Insight', 'Meeting', 'NewsAction', 'NewsDigest', 'PlanItem', 'Program', 'Project', 'PurchaseOrder', 'PurchaseOrderLink', 'Resource', 'RiskOpportunity', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  gantt: ['Baseline', 'BaselineItem', 'BudgetLine', 'Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  structure: ['Dependency', 'HierarchicalTeam', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  ressources: ['HierarchicalTeam', 'PlanItem', 'Program', 'Project', 'RateCard', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  suivi: ['Baseline', 'BaselineItem', 'BudgetLine', 'BudgetPhasing', 'ChangeEvent', 'Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  actualites: ['Meeting', 'NewsAction', 'NewsDigest', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  budget: ['BudgetLine', 'BudgetPhasing', 'PlanItem', 'Program', 'Project', 'PurchaseOrder', 'PurchaseOrderLink', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  compte: ['HierarchicalTeam', 'Meeting', 'NewsAction', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  admin: ['AiLog', 'BudgetLine', 'ChangeEvent', 'Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  copilote: ['Resource', 'RoleAssignment', 'UserSetting']
+};
+
 function renderPage_(e) {
   resetExecution_();
   var view = e.parameter.view;
+  prefetchTables_(PAGE_TABLES[view] || HOT_TABLES); // avant tout : les préférences, l'identité et les droits lisent déjà ces tables
   if (view === 'copilote' && !copilotEnabled_()) view = 'overview'; // copilote en suspens : on arrive sur l'Overview
   if (!PAGES[view]) {
     return HtmlService.createHtmlOutput('<p>Vue inconnue.</p>').setTitle('PPM');
@@ -3201,6 +3293,7 @@ function renderPage_(e) {
   } catch (err) {
     boot.preload = {}; // la page refera ses appels elle-même
   }
+  flushCache_(); // tables lues dans Sheets : rangées dans le cache en un appel, avant de servir la page
   boot.serverMs = Date.now() - t0;
   t.boot = safeJsonForScript(boot);
   return t.evaluate()
@@ -3211,9 +3304,14 @@ function renderPage_(e) {
 /** URL de la web app, pour les liens entre pages. Vide hors Apps Script (tests). */
 function webAppUrl_() {
   var saved = getProp(PROP.WEBAPP_URL, '');
+  // adresse vérifiée il y a moins d'une heure : pas d'appel au service ScriptApp (≈ 0,1 s) à chaque page
+  if (/\/exec$/.test(saved) && Date.now() - (Number(getProp(PROP.WEBAPP_URL_AT, '0')) || 0) < 3600000) return saved;
   try {
     var url = typeof ScriptApp !== 'undefined' ? String(ScriptApp.getService().getUrl() || '') : '';
-    if (url && /\/exec$/.test(url) && url !== saved) setProp(PROP.WEBAPP_URL, url);
+    if (url && /\/exec$/.test(url)) {
+      if (url !== saved) setProp(PROP.WEBAPP_URL, url);
+      setProp(PROP.WEBAPP_URL_AT, Date.now());
+    }
     return url || saved;
   } catch (err) {
     return saved;
@@ -6956,6 +7054,7 @@ var JOB_ACTX = { actor: 'ppm-core', source: 'core' };
 
 /** À exécuter une fois après setupPpm() : traitement nocturne (2 h) et récapitulatif du matin (7 h). */
 function installTriggers() {
+  deleteTriggers_('warmCache');
   deleteTriggers_('nightlyRun');
   deleteTriggers_('continueNightly');
   deleteTriggers_('sendDigests');
@@ -6964,7 +7063,60 @@ function installTriggers() {
   ScriptApp.newTrigger('sendDigests').timeBased().atHour(7).everyDays(1).create();
   ScriptApp.newTrigger('newsCollectRun').timeBased().atHour(1).everyDays(1).create();
   ScriptApp.newTrigger('newsCollectRun').timeBased().atHour(13).everyDays(1).create();
-  return 'Déclencheurs installés : collecte des réunions à 1 h et à 13 h, traitement nocturne à 2 h, récapitulatif à 7 h (fuseau du script).';
+  ScriptApp.newTrigger('warmCache').timeBased().everyMinutes(5).create();
+  return 'Déclencheurs installés : collecte des réunions à 1 h et à 13 h, traitement nocturne à 2 h, récapitulatif à 7 h (fuseau du script), cache gardé plein toutes les 5 minutes en semaine de 6 h à 21 h.';
+}
+
+// ---------------------------------------------------------------- cache gardé plein (facultatif)
+
+/** Tables relues par le déclencheur : celles de toutes les pages, hors journaux volumineux (leur lecture reste à la demande). */
+function warmTables_() {
+  var seen = {}, out = [];
+  Object.keys(PAGE_TABLES).forEach(function (v) {
+    PAGE_TABLES[v].forEach(function (n) { if (!seen[n] && n !== 'ChangeEvent' && n !== 'AiLog') { seen[n] = true; out.push(n); } });
+  });
+  return out;
+}
+
+/** En semaine, de 6 h à 21 h (fuseau du script) : la nuit et le week-end, personne n'attend une page. */
+function warmHours_(date) {
+  var d = date || new Date(), hour, dow;
+  if (typeof Utilities !== 'undefined' && typeof Session !== 'undefined' && Session.getScriptTimeZone) {
+    var tz = Session.getScriptTimeZone();
+    hour = Number(Utilities.formatDate(d, tz, 'H')); dow = Number(Utilities.formatDate(d, tz, 'u')); // 1 = lundi … 7 = dimanche
+  } else { hour = d.getHours(); dow = d.getDay() === 0 ? 7 : d.getDay(); }
+  return dow <= 5 && hour >= 6 && hour < 21;
+}
+
+/**
+ * Relit les tables courantes dans les feuilles et les range dans le cache sous une NOUVELLE génération, en un seul appel d'écriture : la page suivante, même la première
+ * après une pause, trouve un cache plein. Une lecture déjà en cours n'est pas perturbée (elle garde la génération qu'elle a lue).
+ */
+function refreshCache_() {
+  resetExecution_();
+  var cache = scriptCache_();
+  if (!cache) return 'Pas de cache disponible.';
+  var names = warmTables_(), t0 = nowMs();
+  names.forEach(function (n) {
+    var table = TABLE_PROVIDER ? TABLE_PROVIDER(n) : sheetTable_(n);
+    _genSeen[n] = '';
+    cachePutRows_(cache, n, JSON.stringify(table.readAll()));
+  });
+  flushCache_();
+  return names.length + ' tables rangées dans le cache en ' + (nowMs() - t0) + ' ms.';
+}
+
+/** Déclencheur facultatif (A5_INSTALLER_DECLENCHEURS) : ne lève jamais d'erreur, pour ne pas déclencher les courriels d'échec de Google. */
+function warmCache() {
+  try {
+    if (!warmHours_()) return 'Hors des heures de travail : rien à faire.';
+    var r = refreshCache_();
+    console.log('PPM warmCache : ' + r);
+    return r;
+  } catch (e) {
+    console.error('PPM warmCache : ' + (e && e.message ? e.message : e));
+    return 'Échec : ' + (e && e.message ? e.message : e);
+  }
 }
 
 function deleteTriggers_(handler) {
@@ -8934,13 +9086,11 @@ defineAction('people.setRate', function (p, ctx) {
 /**
  * PPM Core — 0.11.0 : démo complète (A2_SEED_DEMO).
  *
- * Un programme « NAC » et quatre projets aux situations contrastées :
+ * Un programme « NAC » et un projet complet :
  *   NAC-1  Nacelle moteur A      projet complexe : 4 workpackages, 15 sous-workpackages, une quarantaine de livrables, 8 jalons,
  *                                un réseau de dépendances, des retards, des dépendances non respectées, trois baselines (B0 archivée,
- *                                B1 active, une demande en attente), du budget, 3 CPN, des commandes d'achat (GR en retard, dépassement), des risques ;
- *   NAC-2  Systèmes embarqués    projet sain : dans les temps, budget et achats maîtrisés ;
- *   NAC-3  Industrialisation     en préparation : presque rien n'est renseigné ;
- *   NAC-4  Essais en vol         clos.
+ *                                B1 active, une demande en attente), du budget, 3 CPN, des commandes d'achat (GR en retard, dépassement), des risques,
+ *                                un fil d'actualités (réunions de l'agenda et saisies, actions à tous les états, synthèse du jour).
  * Autour : 11 équipes en arbre, 38 personnes plus vous (internes et externes, quatre pays) avec leur taux journalier, des rôles à tous les niveaux
  * (programme, projet, workpackage), trois personnes sans aucun rôle (à positionner dans l'OBS).
  *
@@ -9091,9 +9241,7 @@ function demoDeps_(d) {
 
 /** B0 figée au lancement ; puis le planning évolue (retards, ajouts, retrait, changement de responsable) ; B1 ; nouvelles dérives ; une demande en attente. */
 function demoBaselines_(d) {
-  var p1 = d.project('NAC-1').id, p2 = d.project('NAC-2').id;
-  d.call('baselines.create', { projectId: p2, label: 'B0', justification: 'Planning validé en revue de conception système' });
-  demoShift_(d, 'NAC-2', 'Câblage prototype', 0, 3);
+  var p1 = d.project('NAC-1').id;
   d.call('baselines.create', { projectId: p1, label: 'B0', justification: 'Planning validé en revue de lancement' });
   // évolutions après B0
   demoShift_(d, 'NAC-1', 'Essais d’éprouvettes matériaux', 0, 18);
@@ -9178,60 +9326,10 @@ function demoOrders_(d) {
     if (status === 'Terminée') values.closed_on = d.day(o[7] < 0 ? o[7] + 6 : -1);
     var links = [];
     for (var k = 8; k < o.length; k++) {
-      var code = { 'CPN-2501': 'NAC-2', 'CPN-2601': 'NAC-3', 'CPN-2301': 'NAC-4' }[o[1]] || 'NAC-1';
-      links.push({ deliverable_id: d.item(code, o[k][0]).id, amount: o[k][1] });
+      links.push({ deliverable_id: d.item('NAC-1', o[k][0]).id, amount: o[k][1] });
     }
     d.call('po.save', { values: values, links: links });
   });
-}
-
-/** Des réunions, des actions et une baseline pour NAC-2, NAC-3 et NAC-4, pour que la vue du programme ait de quoi comparer. */
-function demoMoreNews_(d) {
-  var f = function (n) { return demoDM_(d, n); };
-  var add = function (code, keywords, meetings) {
-    var p = d.project(code);
-    d.call('news.settings.set', { projectId: p.id, enabled: true, keywords: keywords });
-    meetings.forEach(function (m) { d.call('news.meeting.add', { projectId: p.id, title: m[1], held_on: d.day(-m[0]), participants: m[2], text: m[3] }); });
-    return p;
-  };
-  var answer = function (p, startsWith, decision) {
-    var a = repoList('NewsAction', function (x) { return x.project_id === p.id && x.text.indexOf(startsWith) === 0; })[0];
-    if (a) d.call('news.action.decide', { id: a.id, decision: decision });
-  };
-  var nac2 = add('NAC-2', 'NAC-2, systèmes embarqués', [
-    [10, 'Point intégration NAC-2', 'Priya Nair, Greta Hoffmann, James Walker',
-      ['Résumé', 'Le banc d’intégration est monté ; le câblage prend quelques jours de retard.', '', 'Décisions', '- Le câblage du prototype est prioritaire sur les tests unitaires.', '',
-        'Étapes suivantes', '- [James Walker] Terminer le câblage du prototype pour le ' + f(-2), '- [Priya Nair] Planifier les essais du banc pour le ' + f(9)].join('\n')],
-    [17, 'Revue calculateur', 'Greta Hoffmann, Sophie Martin',
-      ['Résumé', 'Le calculateur retenu est validé ; le prototype est en cours.', '', 'Décisions', '- Le calculateur choisi est confirmé.', '',
-        'Étapes suivantes', '- [Greta Hoffmann] Livrer la spécification logicielle pour le ' + f(6)].join('\n')]
-  ]);
-  answer(nac2, 'Terminer le câblage', 'accept'); answer(nac2, 'Livrer la spécification logicielle', 'accept');
-  d.call('news.digest.publish', { projectId: nac2.id, notify: false, text: [
-    'Décisions : le câblage du prototype est prioritaire (Point intégration NAC-2) ; le calculateur est confirmé (Revue calculateur).',
-    'Dates qui bougent : le câblage du prototype a quelques jours de retard (Point intégration NAC-2).',
-    'Risques : l’obsolescence du calculateur reste suivie (Revue calculateur).',
-    'Blocages : aucun.',
-    'Actions : James Walker — terminer le câblage du prototype — ' + f(-2) + ' ; Priya Nair — planifier les essais du banc — ' + f(9)
-  ].join('\n') });
-  var nac3 = add('NAC-3', 'NAC-3, industrialisation', [
-    [6, 'Lancement de l’étude d’industrialisation', 'Karim Haddad, Yann Leroy, Mathieu Collin',
-      ['Résumé', 'L’étude d’industrialisation démarre ; les cadences cibles restent à confirmer.', '', 'Décisions', '- L’étude de fabricabilité précède la consultation des fournisseurs.', '',
-        'Étapes suivantes', '- [Yann Leroy] Analyser la fabricabilité de la nacelle pour le ' + f(8), '- [Mathieu Collin] Collecter les cadences cibles pour le ' + f(-3)].join('\n')],
-    [20, 'Cadrage de l’industrialisation', 'Karim Haddad, Étienne Roche',
-      ['Cadrage du projet d’industrialisation.', 'Décision : le projet démarre en préparation, sans baseline avant la revue de faisabilité.',
-        'Action : réunir les besoins en moyens de production — Étienne Roche — ' + f(12)].join('\n')]
-  ]);
-  answer(nac3, 'Analyser la fabricabilité', 'accept');
-  var nac4 = add('NAC-4', 'NAC-4, essais en vol', [
-    [40, 'Débrief de la campagne d’essais en vol', 'Thomas Weber, Inès Girard',
-      ['Résumé', 'La campagne d’essais en vol est terminée ; les résultats sont conformes.', '', 'Décisions', '- Le rapport d’essais est validé.', '',
-        'Étapes suivantes', '- [Inès Girard] Archiver le rapport d’essais en vol pour le ' + f(-36)].join('\n')],
-    [48, 'Revue de clôture NAC-4', 'Thomas Weber, Marc Lefèvre',
-      ['Revue de clôture.', 'Décision : le projet est clos.', 'Action : transmettre le bilan de clôture au programme — Thomas Weber — ' + f(-45)].join('\n')]
-  ]);
-  answer(nac4, 'Archiver le rapport', 'done'); answer(nac4, 'transmettre le bilan', 'done');
-  d.call('baselines.create', { projectId: nac4.id, label: 'B0', justification: 'Planning validé avant la campagne d’essais en vol' });
 }
 
 function demoFindings_(d) {
@@ -9242,20 +9340,17 @@ var DEMO_STEPS = [
   { name: 'Équipes et personnes (taux journaliers)', run: function (d) { demoPeople_(d); } },
   { name: 'Programme et projets', run: function (d) { demoProjects_(d); } },
   { name: 'Rôles de l’organigramme', run: function (d) { demoRoles_(d); } },
-  { name: 'Découpage et planning du projet NAC-1', run: function (d) { demoPlan_(d, ['NAC-1']); } },
-  { name: 'Découpage et planning des autres projets', run: function (d) { demoPlan_(d, ['NAC-2', 'NAC-3', 'NAC-4']); } },
+  { name: 'Découpage et planning de NAC-1', run: function (d) { demoPlan_(d, ['NAC-1']); } },
   { name: 'Rôles sur les workpackages', run: function (d) { demoWpRoles_(d); } },
   { name: 'Dépendances', run: function (d) { demoDeps_(d); } },
   { name: 'Baselines et évolutions du planning', run: function (d) { demoBaselines_(d); } },
   { name: 'Avancement de NAC-1', run: function (d) { demoProgress_(d, ['NAC-1']); } },
-  { name: 'Avancement des autres projets', run: function (d) { demoProgress_(d, ['NAC-2', 'NAC-4']); } },
   { name: 'Risques et opportunités', run: function (d) { demoRisks_(d); } },
   { name: 'Budget de NAC-1 (1/2)', run: function (d) { demoBudget_(d, 0, 20); } },
-  { name: 'Budget de NAC-1 (2/2) et de NAC-2', run: function (d) { demoBudget_(d, 20, 60); } },
+  { name: 'Budget de NAC-1 (2/2)', run: function (d) { demoBudget_(d, 20, 60); } },
   { name: 'Commandes d’achat', run: function (d) { demoOrders_(d); } },
   { name: 'Actualités de NAC-1 : réunions', run: function (d) { demoNewsMeetings_(d); } },
   { name: 'Actualités : actions, synthèse du jour, réunions à trier', run: function (d) { demoNewsActions_(d); } },
-  { name: 'Actualités et suivi des autres projets', run: function (d) { demoMoreNews_(d); } },
   { name: 'Constats du moteur de règles', run: function (d) { demoFindings_(d); } }
 ];
 
@@ -9272,8 +9367,8 @@ function demoVerify_() {
   var deps = repoList('Dependency', function (d) { return iid[d.predecessor_id]; }).length, lines = repoList('BudgetLine', function (b) { return iid[b.deliverable_id]; }).length;
   var meetings = repoList('Meeting', function (m) { return ids[m.project_id]; }).length;
   var empty = projects.filter(function (p) { return !items.some(function (i) { return i.project_id === p.id; }); }).map(function (p) { return p.code; });
-  var text = projects.length + ' projets, ' + wps.length + ' workpackages, ' + items.length + ' livrables et jalons, ' + deps + ' dépendances, ' + lines + ' lignes de budget, ' + meetings + ' réunions';
-  var ok = projects.length === 4 && items.length >= 60 && wps.length >= 20 && deps > 0 && lines > 0 && meetings > 0 && !empty.length;
+  var text = projects.length + (projects.length > 1 ? ' projets, ' : ' projet, ') + wps.length + ' workpackages, ' + items.length + ' livrables et jalons, ' + deps + ' dépendances, ' + lines + ' lignes de budget, ' + meetings + ' réunions';
+  var ok = projects.length === 1 && items.length >= 40 && wps.length >= 15 && deps > 0 && lines > 0 && meetings > 0 && !empty.length;
   return { ok: ok, text: ok ? text : text + (empty.length ? ' ; projets sans aucun livrable : ' + empty.join(', ') : '') };
 }
 
@@ -9300,7 +9395,7 @@ function seedDemo_() {
   if (at >= DEMO_STEPS.length) {
     deleteProp(PROP.DEMO_STEP);
     var v = demoVerify_();
-    msg = v.ok ? 'Démo complète : programme NAC, 4 projets, ' + DEMO_PEOPLE.length + ' personnes, ' + DEMO_TEAMS.length + ' équipes. Relu dans la base : ' + v.text + '. Ouvrez la page Overview.' + oldDemoNote_()
+    msg = v.ok ? 'Démo complète : programme NAC, 1 projet, ' + DEMO_PEOPLE.length + ' personnes, ' + DEMO_TEAMS.length + ' équipes. Relu dans la base : ' + v.text + '. Ouvrez la page Overview.' + oldDemoNote_()
       : 'DÉMO INCOMPLÈTE malgré toutes les étapes : ' + v.text + '. Exécutez A6_EFFACER_DEMO (deux fois) puis A2_SEED_DEMO, et envoyez-moi le journal.';
   } else {
     msg = 'Démo en cours : étape ' + at + ' sur ' + DEMO_STEPS.length + ' terminée (' + ran.join(' ; ') + '). Relancez A2_SEED_DEMO pour continuer. ⚠ TANT QUE VOUS NE VOYEZ PAS « Démo complète », LA DÉMO EST INCOMPLÈTE (pas de planning, de budget ni d’actualités).';
@@ -9365,8 +9460,8 @@ function demoNewsMeetings_(d) {
   });
 }
 
-function demoNewsActions_(d) {
-  var nac1 = d.project('NAC-1'), nac2 = d.project('NAC-2');
+function demoNewsActions_(d) { // (il n'y a plus de réunions à trier : elles demandaient au moins deux projets candidats)
+  var nac1 = d.project('NAC-1');
   var byTitle = function (t) { return repoList('Meeting', function (m) { return m.title === t && m.project_id === nac1.id; })[0]; };
   var actionOf = function (title, startsWith) {
     var m = byTitle(title);
@@ -9395,18 +9490,6 @@ function demoNewsActions_(d) {
     'Blocages : le dossier aérodynamique de la PDR n’est pas finalisé ; le créneau de soufflerie reste à confirmer.',
     'Actions : Thomas Weber — confirmer la campagne d’essais statiques — ' + demoDM_(d, 8) + ' — Campagne d’essais statiques ; Hélène Roux — livrer la note de calcul de fatigue — ' + demoDM_(d, 6) + ' — Note de calcul de fatigue ; Paul Girard — finaliser le rapport aérodynamique — ' + demoDM_(d, 3) + ' — Rapport aérodynamique préliminaire.'
   ].join('\n') });
-  // un second projet avec quelques réunions
-  d.call('news.settings.set', { projectId: nac2.id, enabled: true, keywords: 'NAC-2, systèmes embarqués' });
-  d.call('news.meeting.add', { projectId: nac2.id, title: 'Revue d’avancement NAC-2', held_on: d.day(-3), participants: 'Sophie Martin, Karim Haddad',
-    text: 'Résumé\nLes systèmes embarqués sont dans le plan.\n\nDécisions\n- La phase d’intégration démarre comme prévu.\n\nÉtapes suivantes\n- [Sophie Martin] Préparer le dossier d’intégration pour le ' + demoDM_(d, 9) });
-  // deux réunions qui pouvaient aller dans plusieurs projets : à trier
-  var cand = nac1.id + ',' + nac2.id;
-  [['Point transverse systèmes embarqués', 'Alignement des interfaces entre les deux projets.', ['Aligner l’interface capteurs'], 2],
-   ['Revue des interfaces nacelle', 'Revue des interfaces mécaniques et électriques.', ['Mettre à jour le document d’interfaces'], 4]].forEach(function (x, i) {
-    var mt = repoInsert('Meeting', { project_id: '', source: 'Agenda', event_id: 'demo-triage-' + (i + 1), held_on: d.day(-x[3]), title: x[0], participants: 'Sophie Martin, Anaïs Moreau', doc_url: '',
-      summary: x[1], decisions: '', status: 'À trier', candidates: cand, dedupe_key: 'ev:demo-triage-' + (i + 1), added_by: 'collecteur' }, d.a);
-    x[2].forEach(function (t) { repoInsert('NewsAction', { meeting_id: mt.id, project_id: '', owner_resource_id: '', owner_label: 'Sophie Martin', text: t, due_date: '', item_id: '', status: 'Proposée' }, d.a); });
-  });
 }
 
 // ======================================================================
@@ -9633,10 +9716,7 @@ var DEMO_PEOPLE = [
 
 /** [code, nom, statut, chef de projet, début (jours ouvrés), fin visée (jours ouvrés), CPN, désignation du CPN] */
 var DEMO_PROJECTS = [
-  ['NAC-1', 'Nacelle moteur A', 'Actif', 'Anaïs Moreau', 0, 165, 'CPN-2401', 'Nacelle A — conception et certification'],
-  ['NAC-2', 'Systèmes embarqués', 'Actif', 'Sophie Martin', 10, 150, 'CPN-2501', 'Systèmes embarqués de nacelle'],
-  ['NAC-3', 'Industrialisation moteur', 'Préparation', 'Karim Haddad', 62, 230, 'CPN-2601', 'Industrialisation de la nacelle'],
-  ['NAC-4', 'Essais en vol', 'Clos', 'Thomas Weber', 0, 55, 'CPN-2301', 'Campagne d’essais en vol']
+  ['NAC-1', 'Nacelle moteur A', 'Actif', 'Anaïs Moreau', 0, 165, 'CPN-2401', 'Nacelle A — conception et certification']
 ];
 
 /** [projet, code WBS, nom, responsable, code d'imputation, CPN, désignation du CPN] ; un CPN n'existe que sur un workpackage de premier niveau (sous-projet) */
@@ -9656,15 +9736,7 @@ var DEMO_WPS = [
   ['NAC-1', '3.3', 'Moyens de contrôle', 'Mathieu Collin', 'N1-330'],
   ['NAC-1', '4', 'Pilotage et certification', 'Lucie Perrin', 'N1-400'],
   ['NAC-1', '4.1', 'Dossier de certification', 'Olivier Faure', 'N1-410'],
-  ['NAC-1', '4.2', 'Gestion de projet et risques', 'Lucie Perrin', 'N1-420'],
-  ['NAC-2', '1', 'Architecture', 'Sophie Martin', 'N2-100'],
-  ['NAC-2', '1.1', 'Calculateurs', 'Greta Hoffmann', 'N2-110'],
-  ['NAC-2', '1.2', 'Capteurs et actionneurs', 'James Walker', 'N2-120'],
-  ['NAC-2', '2', 'Logiciel', 'Greta Hoffmann', 'N2-200'],
-  ['NAC-2', '3', 'Intégration et validation', 'Priya Nair', 'N2-300'],
-  ['NAC-3', '1', 'Étude d’industrialisation', 'Yann Leroy', 'N3-100'],
-  ['NAC-3', '2', 'Moyens de production', 'Mathieu Collin', 'N3-200'],
-  ['NAC-4', '1', 'Campagne d’essais en vol', 'Inès Girard', 'N4-100']
+  ['NAC-1', '4.2', 'Gestion de projet et risques', 'Lucie Perrin', 'N1-420']
 ];
 
 /**
@@ -9718,34 +9790,9 @@ var DEMO_ITEMS = [
   ['NAC-1', '', 'Dossier de certification soumis', 162, 0, 'Olivier Faure', 0, { type: 'Jalon', category: 'Client' }],
   ['NAC-1', '', 'Choix des matériaux validé', 50, 0, 'Nadia Benali', 100, { type: 'Jalon', category: 'Interne' }],
   ['NAC-1', '', 'Revue de fin de projet', 164, 0, 'Anaïs Moreau', 0, { type: 'Jalon', category: 'Revue' }],
-
-  ['NAC-2', '1.1', 'Spécification calculateur', 10, 15, 'Greta Hoffmann', 100],
-  ['NAC-2', '1.1', 'Choix du calculateur', 25, 10, 'Sophie Martin', 100],
-  ['NAC-2', '1.1', 'Prototype calculateur', 35, 25, 'Greta Hoffmann', 100],
-  ['NAC-2', '1.2', 'Spécification capteurs', 12, 12, 'James Walker', 100],
-  ['NAC-2', '1.2', 'Qualification capteurs', 30, 25, 'James Walker', 100],
-  ['NAC-2', '1.2', 'Câblage prototype', 55, 20, 'James Walker', 20],
-  ['NAC-2', '2', 'Architecture logicielle', 20, 15, 'Greta Hoffmann', 100],
-  ['NAC-2', '2', 'Boucle de régulation', 35, 30, 'Greta Hoffmann', 80],
-  ['NAC-2', '2', 'Tests unitaires logiciels', 55, 25, 'Priya Nair', 25],
-  ['NAC-2', '3', 'Plan d’intégration', 30, 15, 'Priya Nair', 100],
-  ['NAC-2', '3', 'Banc d’intégration', 50, 30, 'Priya Nair', 35],
-  ['NAC-2', '3', 'Validation système', 85, 25, 'Priya Nair', 0],
-  ['NAC-2', '', 'Revue de conception système', 40, 0, 'Sophie Martin', 100, { type: 'Jalon', category: 'Revue' }],
-  ['NAC-2', '', 'Fin d’intégration', 100, 0, 'Priya Nair', 0, { type: 'Jalon', category: 'Interne' }],
-  ['NAC-2', '', 'Revue de validation', 115, 0, 'Sophie Martin', 0, { type: 'Jalon', category: 'Client' }],
-
-  ['NAC-3', '1', 'Analyse de fabricabilité', 65, 20, 'Yann Leroy', 0],
-  ['NAC-3', '1', 'Étude des cadences', 86, 15, 'Karim Haddad', 0],
-  ['NAC-3', '2', 'Spécification des moyens de production', 85, 20, 'Mathieu Collin', 0],
-  ['NAC-3', '2', 'Consultation des fournisseurs', 105, 25, 'Mathieu Collin', 0],
-  ['NAC-3', '2', 'Étude de sourcing', 0, 0, '', 0, { nodate: true }],
-  ['NAC-3', '', 'Revue de faisabilité', 132, 0, 'Karim Haddad', 0, { type: 'Jalon', category: 'Revue' }],
-
-  ['NAC-4', '1', 'Plan d’essais en vol', 0, 10, 'Inès Girard', 100],
-  ['NAC-4', '1', 'Campagne d’essais en vol', 10, 30, 'Inès Girard', 100],
-  ['NAC-4', '1', 'Rapport d’essais en vol', 40, 10, 'Inès Girard', 100],
-  ['NAC-4', '', 'Revue de clôture', 52, 0, 'Thomas Weber', 100, { type: 'Jalon', category: 'Revue' }]
+  // un livrable sans responsable et un sans date : de quoi montrer les constats « sans responsable » et « sans date » (NAC-1 est le seul projet de la démo)
+  ['NAC-1', '4.1', 'Plan de maintenance de la nacelle', 30, 10, '', 0],
+  ['NAC-1', '4.1', 'Manuel d’exploitation de la nacelle', 0, 10, 'Lucie Perrin', 0, { nodate: true }]
 ];
 
 /** Dépendances : [projet, prédécesseur, successeur, type, décalage en jours ouvrés] */
@@ -9793,24 +9840,7 @@ var DEMO_DEPS = [
   ['NAC-1', 'Rapport d’essais statiques', 'Fin des essais statiques', 'FS', 0],
   ['NAC-1', 'Dossier de qualification', 'Revue de qualification', 'FS', 0],
   ['NAC-1', 'Dossier de certification complet', 'Dossier de certification soumis', 'FS', 0],
-  ['NAC-1', 'Dossier de certification soumis', 'Revue de fin de projet', 'FS', 0],
-  ['NAC-2', 'Spécification calculateur', 'Choix du calculateur', 'FS', 0],
-  ['NAC-2', 'Choix du calculateur', 'Prototype calculateur', 'FS', 0],
-  ['NAC-2', 'Spécification capteurs', 'Qualification capteurs', 'FS', 0],
-  ['NAC-2', 'Qualification capteurs', 'Câblage prototype', 'FS', 0],
-  ['NAC-2', 'Architecture logicielle', 'Boucle de régulation', 'FS', 0],
-  ['NAC-2', 'Boucle de régulation', 'Tests unitaires logiciels', 'SS', 15],
-  ['NAC-2', 'Plan d’intégration', 'Banc d’intégration', 'FS', 0],
-  ['NAC-2', 'Prototype calculateur', 'Banc d’intégration', 'SS', 10],
-  ['NAC-2', 'Banc d’intégration', 'Validation système', 'FS', 0],
-  ['NAC-2', 'Spécification calculateur', 'Revue de conception système', 'FS', 0],
-  ['NAC-2', 'Validation système', 'Revue de validation', 'FS', 0],
-  ['NAC-3', 'Analyse de fabricabilité', 'Étude des cadences', 'FS', 0],
-  ['NAC-3', 'Spécification des moyens de production', 'Consultation des fournisseurs', 'FS', 0],
-  ['NAC-3', 'Consultation des fournisseurs', 'Revue de faisabilité', 'FS', 0],
-  ['NAC-4', 'Plan d’essais en vol', 'Campagne d’essais en vol', 'FS', 0],
-  ['NAC-4', 'Campagne d’essais en vol', 'Rapport d’essais en vol', 'FS', 0],
-  ['NAC-4', 'Rapport d’essais en vol', 'Revue de clôture', 'FS', 0]
+  ['NAC-1', 'Dossier de certification soumis', 'Revue de fin de projet', 'FS', 0]
 ];
 
 /** Livrables exigés par un jalon : [projet, jalon, livrables…] */
@@ -9823,40 +9853,52 @@ var DEMO_REQUIREMENTS = [
   ['NAC-1', 'Fin des essais statiques', 'Rapport d’essais statiques'],
   ['NAC-1', 'Revue de qualification', 'Dossier de qualification', 'Rapport soufflerie'],
   ['NAC-1', 'Dossier de certification soumis', 'Dossier de certification complet'],
-  ['NAC-1', 'Revue de fin de projet', 'Dossier de qualification', 'Dossier de certification complet'],
-  ['NAC-2', 'Revue de conception système', 'Spécification calculateur', 'Choix du calculateur'],
-  ['NAC-2', 'Revue de validation', 'Validation système']
+  ['NAC-1', 'Revue de fin de projet', 'Dossier de qualification', 'Dossier de certification complet']
 ];
 
 /** Rôles : [personne, rôle, niveau (program / project / wp), repère] ; repère : 'NAC', un code de projet, ou « projet:code WBS » */
 var DEMO_ROLES = [
-  ['Marc Lefèvre', 'DPL', 'program', 'NAC'], ['Sophie Martin', 'DPL', 'program', 'NAC'],
-  ['Anaïs Moreau', 'CP', 'project', 'NAC-1'], ['Sophie Martin', 'CP', 'project', 'NAC-2'], ['Karim Haddad', 'CP', 'project', 'NAC-3'], ['Thomas Weber', 'CP', 'project', 'NAC-4'],
-  ['Marc Lefèvre', 'RWP', 'wp', 'NAC-1:1'], ['Hélène Roux', 'RWP', 'wp', 'NAC-1:1.1'], ['Paul Girard', 'RWP', 'wp', 'NAC-1:1.2'], ['Nadia Benali', 'RWP', 'wp', 'NAC-1:1.3'],
-  ['Sophie Martin', 'RWP', 'wp', 'NAC-1:1.4'], ['Thomas Weber', 'RWP', 'wp', 'NAC-1:2'], ['Thomas Weber', 'RWP', 'wp', 'NAC-1:2.1'], ['Ravi Patel', 'RWP', 'wp', 'NAC-1:2.2'],
-  ['Dora Schmidt', 'RWP', 'wp', 'NAC-1:2.3'], ['Karim Haddad', 'RWP', 'wp', 'NAC-1:3'], ['Étienne Roche', 'RWP', 'wp', 'NAC-1:3.1'], ['Yann Leroy', 'RWP', 'wp', 'NAC-1:3.2'],
-  ['Mathieu Collin', 'RWP', 'wp', 'NAC-1:3.3'], ['Lucie Perrin', 'RWP', 'wp', 'NAC-1:4'], ['Olivier Faure', 'RWP', 'wp', 'NAC-1:4.1'], ['Lucie Perrin', 'RWP', 'wp', 'NAC-1:4.2'],
-  ['Sophie Martin', 'RWP', 'wp', 'NAC-2:1'], ['Greta Hoffmann', 'RWP', 'wp', 'NAC-2:1.1'], ['James Walker', 'RWP', 'wp', 'NAC-2:1.2'], ['Greta Hoffmann', 'RWP', 'wp', 'NAC-2:2'],
-  ['Priya Nair', 'RWP', 'wp', 'NAC-2:3'], ['Yann Leroy', 'RWP', 'wp', 'NAC-3:1'], ['Mathieu Collin', 'RWP', 'wp', 'NAC-3:2'], ['Inès Girard', 'RWP', 'wp', 'NAC-4:1'],
-  ['Camille Durand', 'MEMBER', 'wp', 'NAC-1:1.1'], ['Julien Petit', 'MEMBER', 'wp', 'NAC-1:1.1'], ['Rahul Sharma', 'MEMBER', 'wp', 'NAC-1:1.1'],
-  ['Émilie Fabre', 'MEMBER', 'wp', 'NAC-1:1.2'], ['Arjun Mehta', 'MEMBER', 'wp', 'NAC-1:1.2'], ['Antoine Garnier', 'MEMBER', 'wp', 'NAC-1:1.3'], ['Marta Kowalski', 'MEMBER', 'wp', 'NAC-1:1.3'],
-  ['Greta Hoffmann', 'MEMBER', 'wp', 'NAC-1:1.4'], ['James Walker', 'MEMBER', 'wp', 'NAC-1:1.4'], ['Priya Nair', 'MEMBER', 'wp', 'NAC-1:1.4'],
-  ['Léa Marchand', 'MEMBER', 'wp', 'NAC-1:2.1'], ['Hugo Blanc', 'MEMBER', 'wp', 'NAC-1:2.1'], ['Carl Weber', 'MEMBER', 'wp', 'NAC-1:2.1'], ['Hana Iyer', 'MEMBER', 'wp', 'NAC-1:2.1'],
-  ['Lukas Schneider', 'MEMBER', 'wp', 'NAC-1:2.1'], ['Sven Larsen', 'MEMBER', 'wp', 'NAC-1:4.1'],
-  // contributeurs des autres projets : des membres affectés aux workpackages, en plus de leurs responsables
-  ['Hana Iyer', 'MEMBER', 'wp', 'NAC-2:1.1'], ['Lukas Schneider', 'MEMBER', 'wp', 'NAC-2:1.1'], ['Lucie Perrin', 'MEMBER', 'wp', 'NAC-2:1.2'], ['Hana Iyer', 'MEMBER', 'wp', 'NAC-2:2'],
-  ['Lukas Schneider', 'MEMBER', 'wp', 'NAC-2:2'], ['Lucie Perrin', 'MEMBER', 'wp', 'NAC-2:3'], ['Greta Hoffmann', 'MEMBER', 'wp', 'NAC-2:3'],
-  ['Étienne Roche', 'MEMBER', 'wp', 'NAC-3:1'], ['Sandrine Lopez', 'MEMBER', 'wp', 'NAC-3:1'], ['Étienne Roche', 'MEMBER', 'wp', 'NAC-3:2'], ['Sandrine Lopez', 'MEMBER', 'wp', 'NAC-3:2'],
-  ['Rahul Sharma', 'MEMBER', 'wp', 'NAC-4:1'], ['Émilie Fabre', 'MEMBER', 'wp', 'NAC-4:1'], ['Camille Durand', 'MEMBER', 'wp', 'NAC-4:1']
+  ['Marc Lefèvre', 'DPL', 'program', 'NAC'],
+  ['Sophie Martin', 'DPL', 'program', 'NAC'],
+  ['Anaïs Moreau', 'CP', 'project', 'NAC-1'],
+  ['Marc Lefèvre', 'RWP', 'wp', 'NAC-1:1'],
+  ['Hélène Roux', 'RWP', 'wp', 'NAC-1:1.1'],
+  ['Paul Girard', 'RWP', 'wp', 'NAC-1:1.2'],
+  ['Nadia Benali', 'RWP', 'wp', 'NAC-1:1.3'],
+  ['Sophie Martin', 'RWP', 'wp', 'NAC-1:1.4'],
+  ['Thomas Weber', 'RWP', 'wp', 'NAC-1:2'],
+  ['Thomas Weber', 'RWP', 'wp', 'NAC-1:2.1'],
+  ['Ravi Patel', 'RWP', 'wp', 'NAC-1:2.2'],
+  ['Dora Schmidt', 'RWP', 'wp', 'NAC-1:2.3'],
+  ['Karim Haddad', 'RWP', 'wp', 'NAC-1:3'],
+  ['Étienne Roche', 'RWP', 'wp', 'NAC-1:3.1'],
+  ['Yann Leroy', 'RWP', 'wp', 'NAC-1:3.2'],
+  ['Mathieu Collin', 'RWP', 'wp', 'NAC-1:3.3'],
+  ['Lucie Perrin', 'RWP', 'wp', 'NAC-1:4'],
+  ['Olivier Faure', 'RWP', 'wp', 'NAC-1:4.1'],
+  ['Lucie Perrin', 'RWP', 'wp', 'NAC-1:4.2'],
+  ['Camille Durand', 'MEMBER', 'wp', 'NAC-1:1.1'],
+  ['Julien Petit', 'MEMBER', 'wp', 'NAC-1:1.1'],
+  ['Rahul Sharma', 'MEMBER', 'wp', 'NAC-1:1.1'],
+  ['Émilie Fabre', 'MEMBER', 'wp', 'NAC-1:1.2'],
+  ['Arjun Mehta', 'MEMBER', 'wp', 'NAC-1:1.2'],
+  ['Antoine Garnier', 'MEMBER', 'wp', 'NAC-1:1.3'],
+  ['Marta Kowalski', 'MEMBER', 'wp', 'NAC-1:1.3'],
+  ['Greta Hoffmann', 'MEMBER', 'wp', 'NAC-1:1.4'],
+  ['James Walker', 'MEMBER', 'wp', 'NAC-1:1.4'],
+  ['Priya Nair', 'MEMBER', 'wp', 'NAC-1:1.4'],
+  ['Léa Marchand', 'MEMBER', 'wp', 'NAC-1:2.1'],
+  ['Hugo Blanc', 'MEMBER', 'wp', 'NAC-1:2.1'],
+  ['Carl Weber', 'MEMBER', 'wp', 'NAC-1:2.1'],
+  ['Hana Iyer', 'MEMBER', 'wp', 'NAC-1:2.1'],
+  ['Lukas Schneider', 'MEMBER', 'wp', 'NAC-1:2.1'],
+  ['Sven Larsen', 'MEMBER', 'wp', 'NAC-1:4.1']
 ];
 /** Membres au niveau du projet : [projet, personnes…] */
 var DEMO_MEMBERS = [
   ['NAC-1', 'Claire Dubois', 'Chloé Bernard', 'Camille Durand', 'Julien Petit', 'Rahul Sharma', 'Émilie Fabre', 'Arjun Mehta', 'Antoine Garnier', 'Léa Marchand', 'Hugo Blanc', 'Inès Girard',
     'Lukas Schneider', 'Greta Hoffmann', 'James Walker', 'Priya Nair', 'Yann Leroy', 'Mathieu Collin', 'Lucie Perrin', 'Sandrine Lopez', 'Olivier Faure', 'Dora Schmidt',
-    'Carl Weber', 'Ravi Patel', 'Hana Iyer', 'Marta Kowalski', 'Étienne Roche', 'Sven Larsen'],
-  ['NAC-2', 'Greta Hoffmann', 'James Walker', 'Priya Nair', 'Hana Iyer', 'Lukas Schneider', 'Lucie Perrin'],
-  ['NAC-3', 'Yann Leroy', 'Mathieu Collin', 'Étienne Roche', 'Sandrine Lopez'],
-  ['NAC-4', 'Inès Girard', 'Rahul Sharma', 'Émilie Fabre', 'Camille Durand']
+    'Carl Weber', 'Ravi Patel', 'Hana Iyer', 'Marta Kowalski', 'Étienne Roche', 'Sven Larsen']
 ];
 
 /** Risques : [projet, genre, titre, élément lié, probabilité, impact, responsable, stratégie, statut, jours avant l'échéance de traitement (négatif : dépassée), valeur financière] */
@@ -9869,40 +9911,50 @@ var DEMO_RISKS = [
   ['NAC-1', 'Risque', 'Non-conformité à la certification', 'Démonstration de conformité structure', 2, 5, 'Olivier Faure', 'Éviter', 'En traitement', 45, 300000],
   ['NAC-1', 'Risque', 'Départ d’un expert logiciel embarqué', 'Logiciel de régulation thermique', 2, 3, 'Sophie Martin', 'Réduire', 'Ouvert', 60, 0],
   ['NAC-1', 'Opportunité', 'Réutilisation du maillage CFD d’un projet voisin', 'Optimisation de la lèvre d’entrée d’air', 3, 3, 'Paul Girard', 'Exploiter', 'Ouvert', 30, 25000],
-  ['NAC-1', 'Risque', 'Choix du fournisseur de câblage', '', 2, 2, 'Sophie Martin', 'Accepter', 'Clos', 0, 0],
-  ['NAC-2', 'Risque', 'Obsolescence du calculateur', 'Prototype calculateur', 2, 3, 'Greta Hoffmann', 'Réduire', 'Ouvert', 50, 30000],
-  ['NAC-2', 'Opportunité', 'Mutualisation du banc d’intégration', 'Banc d’intégration', 3, 2, 'Priya Nair', 'Partager', 'Ouvert', 40, 15000]
+  ['NAC-1', 'Risque', 'Choix du fournisseur de câblage', '', 2, 2, 'Sophie Martin', 'Accepter', 'Clos', 0, 0]
 ];
 
 /** Budget : [projet, livrable, personne, 'j' (jours × taux de la fiche) ou 'f' (forfait), valeur] */
 var DEMO_BUDGET = [
-  ['NAC-1', 'Spécification structure nacelle', 'Chloé Bernard', 'j', 20], ['NAC-1', 'Modèle éléments finis primaire', 'Camille Durand', 'j', 30],
-  ['NAC-1', 'Modèle éléments finis primaire', 'Rahul Sharma', 'j', 25], ['NAC-1', 'Note de calcul statique primaire', 'Julien Petit', 'j', 40],
-  ['NAC-1', 'Note de calcul de fatigue', 'Rahul Sharma', 'j', 22], ['NAC-1', 'Plans de définition structure', 'Chloé Bernard', 'j', 35],
-  ['NAC-1', 'Maillage CFD nacelle', 'Émilie Fabre', 'j', 15], ['NAC-1', 'Calcul CFD point de dimensionnement', 'Arjun Mehta', 'j', 35],
-  ['NAC-1', 'Rapport aérodynamique préliminaire', 'Paul Girard', 'j', 12], ['NAC-1', 'Optimisation de la lèvre d’entrée d’air', 'Émilie Fabre', 'j', 25],
-  ['NAC-1', 'Étude de bruit nacelle', 'Émilie Fabre', 'j', 10], ['NAC-1', 'Sélection des matériaux composites', 'Nadia Benali', 'j', 18],
-  ['NAC-1', 'Essais d’éprouvettes matériaux', 'Marta Kowalski', 'j', 25], ['NAC-1', 'Qualification des procédés de drapage', 'Antoine Garnier', 'j', 30],
-  ['NAC-1', 'Architecture système antigivrage', 'Sophie Martin', 'j', 15], ['NAC-1', 'Logiciel de régulation thermique', 'Greta Hoffmann', 'j', 45],
-  ['NAC-1', 'Intégration capteurs et câblage', 'James Walker', 'j', 25], ['NAC-1', 'Banc de validation logicielle', 'Priya Nair', 'j', 20],
-  ['NAC-1', 'Plan d’essais statiques', 'Thomas Weber', 'j', 10], ['NAC-1', 'Préparation du banc statique', 'Léa Marchand', 'j', 20],
-  ['NAC-1', 'Préparation du banc statique', 'Hugo Blanc', 'j', 18], ['NAC-1', 'Campagne d’essais statiques', 'Carl Weber', 'f', 60000],
-  ['NAC-1', 'Rapport d’essais statiques', 'Carl Weber', 'f', 18000], ['NAC-1', 'Maquette soufflerie', 'Ravi Patel', 'f', 85000],
-  ['NAC-1', 'Campagne soufflerie', 'Ravi Patel', 'j', 20], ['NAC-1', 'Rapport soufflerie', 'Ravi Patel', 'j', 8],
-  ['NAC-1', 'Programme de qualification', 'Dora Schmidt', 'j', 15], ['NAC-1', 'Dossier de qualification', 'Dora Schmidt', 'f', 30000],
-  ['NAC-1', 'Cahier des charges outillages', 'Étienne Roche', 'j', 12], ['NAC-1', 'Conception des moules', 'Étienne Roche', 'j', 30],
-  ['NAC-1', 'Réception des moules', 'Étienne Roche', 'f', 120000], ['NAC-1', 'Gamme de drapage', 'Yann Leroy', 'j', 20],
-  ['NAC-1', 'Gamme d’assemblage', 'Mathieu Collin', 'j', 22], ['NAC-1', 'Plan de certification', 'Sven Larsen', 'j', 15],
-  ['NAC-1', 'Démonstration de conformité structure', 'Sven Larsen', 'f', 45000], ['NAC-1', 'Dossier de certification complet', 'Olivier Faure', 'j', 30],
-  ['NAC-1', 'Plan de management du projet', 'Anaïs Moreau', 'j', 8], ['NAC-1', 'Registre des risques initial', 'Lucie Perrin', 'j', 6],
-  ['NAC-1', 'Planning de référence', 'Lucie Perrin', 'j', 8],
-  ['NAC-2', 'Spécification calculateur', 'Greta Hoffmann', 'j', 12], ['NAC-2', 'Prototype calculateur', 'Greta Hoffmann', 'j', 25],
-  ['NAC-2', 'Spécification capteurs', 'James Walker', 'j', 10], ['NAC-2', 'Qualification capteurs', 'James Walker', 'j', 22],
-  ['NAC-2', 'Boucle de régulation', 'Greta Hoffmann', 'j', 30], ['NAC-2', 'Tests unitaires logiciels', 'Hana Iyer', 'f', 26000],
-  ['NAC-2', 'Banc d’intégration', 'Priya Nair', 'j', 28], ['NAC-2', 'Validation système', 'Priya Nair', 'j', 22],
-  ['NAC-3', 'Analyse de fabricabilité', 'Yann Leroy', 'j', 14], ['NAC-3', 'Étude des cadences', 'Yann Leroy', 'j', 10], ['NAC-3', 'Spécification des moyens de production', 'Mathieu Collin', 'j', 16],
-  ['NAC-3', 'Consultation des fournisseurs', 'Dora Schmidt', 'f', 36000],
-  ['NAC-4', 'Plan d’essais en vol', 'Rahul Sharma', 'j', 8], ['NAC-4', 'Campagne d’essais en vol', 'Sven Larsen', 'f', 160000], ['NAC-4', 'Rapport d’essais en vol', 'Camille Durand', 'j', 9]
+  ['NAC-1', 'Spécification structure nacelle', 'Chloé Bernard', 'j', 20],
+  ['NAC-1', 'Modèle éléments finis primaire', 'Camille Durand', 'j', 30],
+  ['NAC-1', 'Modèle éléments finis primaire', 'Rahul Sharma', 'j', 25],
+  ['NAC-1', 'Note de calcul statique primaire', 'Julien Petit', 'j', 40],
+  ['NAC-1', 'Note de calcul de fatigue', 'Rahul Sharma', 'j', 22],
+  ['NAC-1', 'Plans de définition structure', 'Chloé Bernard', 'j', 35],
+  ['NAC-1', 'Maillage CFD nacelle', 'Émilie Fabre', 'j', 15],
+  ['NAC-1', 'Calcul CFD point de dimensionnement', 'Arjun Mehta', 'j', 35],
+  ['NAC-1', 'Rapport aérodynamique préliminaire', 'Paul Girard', 'j', 12],
+  ['NAC-1', 'Optimisation de la lèvre d’entrée d’air', 'Émilie Fabre', 'j', 25],
+  ['NAC-1', 'Étude de bruit nacelle', 'Émilie Fabre', 'j', 10],
+  ['NAC-1', 'Sélection des matériaux composites', 'Nadia Benali', 'j', 18],
+  ['NAC-1', 'Essais d’éprouvettes matériaux', 'Marta Kowalski', 'j', 25],
+  ['NAC-1', 'Qualification des procédés de drapage', 'Antoine Garnier', 'j', 30],
+  ['NAC-1', 'Architecture système antigivrage', 'Sophie Martin', 'j', 15],
+  ['NAC-1', 'Logiciel de régulation thermique', 'Greta Hoffmann', 'j', 45],
+  ['NAC-1', 'Intégration capteurs et câblage', 'James Walker', 'j', 25],
+  ['NAC-1', 'Banc de validation logicielle', 'Priya Nair', 'j', 20],
+  ['NAC-1', 'Plan d’essais statiques', 'Thomas Weber', 'j', 10],
+  ['NAC-1', 'Préparation du banc statique', 'Léa Marchand', 'j', 20],
+  ['NAC-1', 'Préparation du banc statique', 'Hugo Blanc', 'j', 18],
+  ['NAC-1', 'Campagne d’essais statiques', 'Carl Weber', 'f', 60000],
+  ['NAC-1', 'Rapport d’essais statiques', 'Carl Weber', 'f', 18000],
+  ['NAC-1', 'Maquette soufflerie', 'Ravi Patel', 'f', 85000],
+  ['NAC-1', 'Campagne soufflerie', 'Ravi Patel', 'j', 20],
+  ['NAC-1', 'Rapport soufflerie', 'Ravi Patel', 'j', 8],
+  ['NAC-1', 'Programme de qualification', 'Dora Schmidt', 'j', 15],
+  ['NAC-1', 'Dossier de qualification', 'Dora Schmidt', 'f', 30000],
+  ['NAC-1', 'Cahier des charges outillages', 'Étienne Roche', 'j', 12],
+  ['NAC-1', 'Conception des moules', 'Étienne Roche', 'j', 30],
+  ['NAC-1', 'Réception des moules', 'Étienne Roche', 'f', 120000],
+  ['NAC-1', 'Gamme de drapage', 'Yann Leroy', 'j', 20],
+  ['NAC-1', 'Gamme d’assemblage', 'Mathieu Collin', 'j', 22],
+  ['NAC-1', 'Plan de certification', 'Sven Larsen', 'j', 15],
+  ['NAC-1', 'Démonstration de conformité structure', 'Sven Larsen', 'f', 45000],
+  ['NAC-1', 'Dossier de certification complet', 'Olivier Faure', 'j', 30],
+  ['NAC-1', 'Plan de management du projet', 'Anaïs Moreau', 'j', 8],
+  ['NAC-1', 'Registre des risques initial', 'Lucie Perrin', 'j', 6],
+  ['NAC-1', 'Planning de référence', 'Lucie Perrin', 'j', 8]
 ];
 
 /**
@@ -9920,9 +9972,6 @@ var DEMO_ORDERS = [
   ['CB-460245', 'CPN-2403', 'Étienne Roche', 'Réception des moules', 135000, 'Lancée', -20, 40, ['Réception des moules', 135000]],
   ['CB-460391', 'CPN-2401', 'Marta Kowalski', 'Éprouvettes matériaux', 18000, 'Lancée', -55, -12, ['Essais d’éprouvettes matériaux', 18000]],
   ['CB-460502', 'CPN-2401', 'Sven Larsen', 'Démonstration de conformité', 45000, 'Lancée', -25, 120, ['Démonstration de conformité structure', 45000]],
-  ['CB-470001', 'CPN-2501', 'Hana Iyer', 'Validation logicielle externalisée', 20000, 'Lancée', -30, 30, ['Tests unitaires logiciels', 20000]],
-  ['CB-470502', 'CPN-2601', 'Dora Schmidt', 'Consultation des fournisseurs de moyens', 30000, 'Lancée', -12, 40, ['Consultation des fournisseurs', 30000]],
-  ['CB-430118', 'CPN-2301', 'Sven Larsen', 'Campagne d’essais en vol', 120000, 'Terminée', -80, -35, ['Campagne d’essais en vol', 120000]],
   ['CB-499001', 'CPN-9999', 'Brigitte Stahl', 'PO d’un autre projet (hors de l’outil)', 5000, 'Lancée', -10, 15]
 ];
 

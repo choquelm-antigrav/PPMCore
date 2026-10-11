@@ -28,14 +28,16 @@ function getTable(name) {
 //   - mémoire de l'exécution : une table n'est lue qu'une fois par requête ;
 //   - cache du script (CacheService), partagé entre requêtes : la table y est rangée par morceaux, sous un
 //     numéro de génération. Toute écriture par le Core change la génération (la table sera relue) ;
-//     une saisie AppSheet fait de même via onRowChanged. Par sécurité, rien n'y reste plus de 5 minutes.
+//     une saisie AppSheet fait de même via onRowChanged. Par sécurité, rien n'y reste plus de 6 minutes (5 minutes si le déclencheur warmCache est posé : il relit alors les feuilles).
 // Les lectures ponctuelles (findRow, readRow) vont toujours dans Sheets.
 
 var CACHE_PROVIDER = null;      // tests : faux cache { get, getAll, put, putAll }
-var CACHE_TTL_S = 300;
+var CACHE_TTL_S = 360;          // 6 minutes : le déclencheur facultatif warmCache le renouvelle toutes les 5, sans trou entre deux
 var CACHE_CHUNK = 90000;        // un élément du cache est limité à 100 Ko
 var CACHE_MAX_CHUNKS = 20;      // au-delà (~1,8 Mo), la table n'est pas mise en cache
 var _rowsMemo = {};
+var _genSeen = {};      // numéro de génération déjà lu dans le cache pendant cette exécution (« » = absent) : on ne le relit pas
+var _pendingPuts = {};  // tables lues dans Sheets, à ranger dans le cache en UN appel en fin de requête (flushCache_)
 
 function scriptCache_() {
   if (CACHE_PROVIDER) return CACHE_PROVIDER;
@@ -46,7 +48,10 @@ function scriptCache_() {
 /** Début d'une exécution (requête, page, déclencheur) : on oublie ce qui a été lu par la précédente. */
 function resetExecution_() {
   _rowsMemo = {};
+  _genSeen = {};
+  _pendingPuts = {};
   _propsMemo = null;
+  _emailMemo = null;
 }
 
 function cachedTable_(name, base) {
@@ -98,7 +103,8 @@ function chunkKeys_(name, gen, n) {
 
 function cacheGetRows_(cache, name) {
   try {
-    var g = parseGen_(cache.get('gen:' + name));
+    if (_genSeen[name] === undefined) _genSeen[name] = cache.get('gen:' + name) || '';
+    var g = parseGen_(_genSeen[name]);
     if (!g || !(g.n > 0)) return null;
     var keys = chunkKeys_(name, g.gen, g.n);
     var parts = cache.getAll(keys);
@@ -113,16 +119,37 @@ function cacheGetRows_(cache, name) {
   }
 }
 
+/** Met la table lue dans Sheets en attente de rangement dans le cache : flushCache_() range toutes les tables d'une requête en un seul appel (et non deux par table). */
 function cachePutRows_(cache, name, json) {
+  var n = Math.max(1, Math.ceil(json.length / CACHE_CHUNK));
+  if (n > CACHE_MAX_CHUNKS) return;
+  var g = parseGen_(_genSeen[name]);
+  var gen = g ? g.gen : newGen_();
+  var values = {};
+  chunkKeys_(name, gen, n).forEach(function (k, i) { values[k] = json.slice(i * CACHE_CHUNK, (i + 1) * CACHE_CHUNK); });
+  values['gen:' + name] = gen + '|' + n;
+  _pendingPuts[name] = values;
+  _genSeen[name] = gen + '|' + n;
+}
+
+/** Range dans le cache les tables lues dans Sheets pendant cette requête, en un appel par tranche de 90 éléments (jamais plus d'un appel pour une page). */
+function flushCache_() {
+  var names = Object.keys(_pendingPuts);
+  if (!names.length) return;
+  var pending = _pendingPuts; _pendingPuts = {};
+  var cache = scriptCache_();
+  if (!cache) return;
   try {
-    var n = Math.max(1, Math.ceil(json.length / CACHE_CHUNK));
-    if (n > CACHE_MAX_CHUNKS) return;
-    var g = parseGen_(cache.get('gen:' + name));
-    var gen = g ? g.gen : newGen_();
-    var values = {};
-    chunkKeys_(name, gen, n).forEach(function (k, i) { values[k] = json.slice(i * CACHE_CHUNK, (i + 1) * CACHE_CHUNK); });
-    cache.putAll(values, CACHE_TTL_S);
-    cache.put('gen:' + name, gen + '|' + n, CACHE_TTL_S);
+    var batch = {}, count = 0, size = 0;
+    var send = function () { if (count) { cache.putAll(batch, CACHE_TTL_S); batch = {}; count = 0; size = 0; } };
+    names.forEach(function (n) {
+      Object.keys(pending[n]).forEach(function (k) {
+        var v = pending[n][k];
+        if (count >= 90 || size + v.length > 800000) send();
+        batch[k] = v; count++; size += v.length;
+      });
+    });
+    send();
   } catch (e) {
     /* le cache est une optimisation : une panne ne doit jamais bloquer une lecture */
   }
@@ -131,9 +158,12 @@ function cachePutRows_(cache, name, json) {
 /** Après une écriture : la table sera relue dans Sheets, par cette exécution comme par les suivantes. */
 function invalidateTable_(name) {
   delete _rowsMemo[name];
+  delete _pendingPuts[name]; // une lecture en attente de rangement serait périmée
   var cache = scriptCache_();
   if (!cache) return;
-  try { cache.put('gen:' + name, newGen_() + '|-1', CACHE_TTL_S); } catch (e) { /* voir cachePutRows_ */ }
+  var marker = newGen_() + '|-1';
+  _genSeen[name] = marker;
+  try { cache.put('gen:' + name, marker, CACHE_TTL_S); } catch (e) { /* le cache est une optimisation */ }
 }
 
 /** Invalide toutes les tables (réconciliation nocturne, restauration, installation). */
@@ -149,11 +179,12 @@ function prefetchTables_(names) {
   var cache = scriptCache_();
   if (!cache) return;
   try {
-    var todo = names.filter(function (n) { return _rowsMemo[n] === undefined && SCHEMA[n]; });
+    var todo = names.filter(function (n) { return _rowsMemo[n] === undefined && _genSeen[n] === undefined && SCHEMA[n]; }); // une table déjà regardée dans cette exécution n'est pas redemandée
     if (!todo.length) return;
     var gens = cache.getAll(todo.map(function (n) { return 'gen:' + n; }));
     var want = {}, keys = [];
     todo.forEach(function (n) {
+      _genSeen[n] = gens['gen:' + n] || ''; // même absente : cacheGetRows_ ne la relira pas
       var g = parseGen_(gens['gen:' + n]);
       if (!g || !(g.n > 0)) return;
       want[n] = chunkKeys_(n, g.gen, g.n);
@@ -179,6 +210,9 @@ function prefetchTables_(names) {
 var HOT_TABLES = ['Program', 'Project', 'WorkPackage', 'PlanItem', 'Dependency', 'Resource', 'RoleAssignment',
   'HierarchicalTeam', 'HolidaySet', 'UserSetting', 'Baseline', 'Insight', 'MilestoneRequirement', 'RiskOpportunity',
   'Role', 'BudgetLine', 'BaselineItem'];
+
+var HOT_SET = {};
+HOT_TABLES.forEach(function (n) { HOT_SET[n] = true; });
 
 function bookId_(book) {
   var id = getProp(book === 'data' ? PROP.DATA_ID : PROP.HISTORY_ID, '');
@@ -218,8 +252,11 @@ function sheetTable_(name) {
 
 /** La table d'un schéma sur une feuille donnée (A8_VERIFIER_ECRITURE l'emploie sur une feuille temporaire). */
 function sheetTableOn_(name, sh) {
-  var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
-  var isText = headers.map(function (h) { return !sheetParsedCol_(h); });
+  // En-têtes lus à la demande : readAll() les tire de la lecture complète en UN appel (getDataRange) au lieu de quatre ; une écriture ou une lecture
+  // ponctuelle faite avant les lit à part (deux appels), sans relire toute la table (une table d'historique peut avoir des milliers de lignes).
+  var headers = null, isText = null;
+  function setHeaders(row) { headers = row.map(String); isText = headers.map(function (h) { return !sheetParsedCol_(h); }); }
+  function need() { if (!headers) setHeaders(sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]); }
 
   function toObj(row) {
     var o = {};
@@ -241,8 +278,13 @@ function sheetTableOn_(name, sh) {
 
   return {
     name: name,
-    headers: function () { return headers.slice(); },
+    headers: function () { need(); return headers.slice(); },
     readAll: function () {
+      if (!headers) { // première opération sur cette table : un seul appel donne les en-têtes et toutes les lignes
+        var all = sh.getDataRange().getValues();
+        setHeaders(all[0]);
+        return all.slice(1).map(toObj);
+      }
       var n = dataRows();
       if (n === 0) return [];
       return sh.getRange(2, 1, n, headers.length).getValues().map(toObj);
@@ -252,14 +294,16 @@ function sheetTableOn_(name, sh) {
       var cell = sh.getRange(2, 1, dataRows(), 1).createTextFinder(String(id)).matchEntireCell(true).findNext();
       return cell ? cell.getRow() : -1;
     },
-    readRow: function (r) { return toObj(sh.getRange(r, 1, 1, headers.length).getValues()[0]); },
-    writeRow: function (r, obj) { sh.getRange(r, 1, 1, headers.length).setValues([toRow(obj)]); },
+    readRow: function (r) { need(); return toObj(sh.getRange(r, 1, 1, headers.length).getValues()[0]); },
+    writeRow: function (r, obj) { need(); sh.getRange(r, 1, 1, headers.length).setValues([toRow(obj)]); },
     appendRows: function (objs) {
       if (!objs.length) return;
+      need();
       sh.getRange(sh.getLastRow() + 1, 1, objs.length, headers.length).setValues(objs.map(toRow));
     },
     /** Réécrit plusieurs lignes ; les lignes consécutives partent en une seule écriture. */
     updateRows: function (list) {
+      need();
       var sorted = list.slice().sort(function (a, b) { return a.row - b.row; });
       var i = 0;
       while (i < sorted.length) {
@@ -271,6 +315,7 @@ function sheetTableOn_(name, sh) {
       }
     },
     replaceAll: function (objs) {
+      need();
       var n = dataRows();
       if (n > 0) sh.getRange(2, 1, n, headers.length).clearContent();
       if (objs.length) sh.getRange(2, 1, objs.length, headers.length).setValues(objs.map(toRow));
@@ -294,6 +339,8 @@ function withLock(fn) {
 // ---------------------------------------------------------------- lecture
 
 function repoGet(table, id) {
+  // une table courante (HOT_TABLES) est lue une fois en entier (et rangée dans le cache), pas ligne par ligne dans Sheets
+  if (!isBlank(id) && _rowsMemo[table] === undefined && HOT_SET[table]) getTable(table).readAll();
   if (_rowsMemo[table] !== undefined && !isBlank(id)) {
     var hit = JSON.parse(_rowsMemo[table]).filter(function (r) { return String(r.id) === String(id); })[0];
     if (hit) return hit;

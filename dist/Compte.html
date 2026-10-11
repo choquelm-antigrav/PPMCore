@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.14.1">
+<meta name="ppm-version" content="0.14.2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -608,10 +608,17 @@ var BOOT = <?!= boot ?>;
     var fn = el('input', { type: 'text', id: 'edit-function', maxlength: '80', list: 'dl-functions', value: p.job_function });
     var org = el('input', { type: 'text', id: 'edit-org', maxlength: '80', list: 'dl-orgs', value: p.organization });
     var dlF = el('datalist', { id: 'dl-functions' }), dlO = el('datalist', { id: 'dl-orgs' });
-    ensureSuggestions().then(function (s) {
-      s.functions.forEach(function (v) { dlF.appendChild(el('option', { value: v })); });
-      s.organizations.forEach(function (v) { dlO.appendChild(el('option', { value: v })); });
-    });
+    // les suggestions (jusqu'à 500 personnes lues et transférées) ne se chargent que si l'on touche à la fonction ou à l'organisation, une seule fois
+    var suggestionsAsked = false;
+    var loadSuggestions = function () {
+      if (suggestionsAsked) return;
+      suggestionsAsked = true;
+      ensureSuggestions().then(function (s) {
+        s.functions.forEach(function (v) { dlF.appendChild(el('option', { value: v })); });
+        s.organizations.forEach(function (v) { dlO.appendChild(el('option', { value: v })); });
+      });
+    };
+    fn.addEventListener('focus', loadSuggestions); org.addEventListener('focus', loadSuggestions);
     var save = el('button', { type: 'submit', class: 'btn primary', id: 'save-person', text: 'Enregistrer' });
     var form = el('form', { class: 'form', onsubmit: function (e) {
       e.preventDefault();

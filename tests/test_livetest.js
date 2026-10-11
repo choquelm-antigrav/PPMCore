@@ -101,17 +101,30 @@ module.exports = function () {
     // démo complète : relue dans la base
     const full = installed(lot2World()); as(full, ADMIN); full.c.DEMO_BUDGET_MS = 1e9;
     const done = full.c.seedDemo_();
-    ok(/^Démo complète/.test(done) && /Relu dans la base : 4 projets, \d+ workpackages, \d+ livrables et jalons, \d+ dépendances, \d+ lignes de budget, \d+ réunions/.test(done), done);
+    ok(/^Démo complète/.test(done) && /Relu dans la base : 1 projet, \d+ workpackages, \d+ livrables et jalons, \d+ dépendances, \d+ lignes de budget, \d+ réunions/.test(done), done);
     const r2 = row(full);
-    ok(r2.status === 'OK' && /^4 projets/.test(r2.detail), 'A7 : ' + r2.detail);
+    ok(r2.status === 'OK' && /^1 projet/.test(r2.detail), 'A7 : ' + r2.detail);
     // une démo « terminée » dont les livrables ont disparu : jamais « complète »
     full.c.repoList('PlanItem').forEach((i) => full.c.repoSoftDelete('PlanItem', i.id, null, { actor: ADMIN, source: 'test' }));
     const v = full.c.demoVerify_();
-    ok(!v.ok && /projets sans aucun livrable : NAC-1, NAC-2, NAC-3, NAC-4/.test(v.text), 'la relecture voit des projets sans livrable : ' + v.text);
+    ok(!v.ok && /projets sans aucun livrable : NAC-1/.test(v.text), 'la relecture voit des projets sans livrable : ' + v.text);
     const r3 = row(full);
     ok(r3.status === 'ATTENTION' && /démo incomplète/.test(r3.detail) && /A6_EFFACER_DEMO/.test(r3.detail), 'A7 : ' + r3.detail);
     // et A2, si la relecture échoue après toutes les étapes
     const bad = installed(lot2World()); as(bad, ADMIN); bad.c.DEMO_BUDGET_MS = 1e9; bad.c.demoVerify_ = () => ({ ok: false, text: '0 livrable' });
     ok(/^DÉMO INCOMPLÈTE malgré toutes les étapes : 0 livrable\. Exécutez A6_EFFACER_DEMO/.test(bad.c.seedDemo_()), 'A2 refuse de dire « Démo complète » quand la base dit le contraire');
+  });
+
+  test('A7 : le temps d’ouverture de chaque page est mesuré (première ouverture, puis cache plein) et une page lente est signalée', () => {
+    const w = installed(lot2World()); as(w, ADMIN);
+    const row = () => w.c.liveSmokeTest_().rows.find((r) => r.name.indexOf('Ouverture des pages') === 0);
+    eq([row().status, row().detail], ['ATTENTION', 'non vérifiable ici'], 'hors Apps Script : attention, pas d’échec');
+    w.c.HtmlService = { createTemplateFromFile: () => ({ evaluate: () => { const o = { setTitle: () => o, addMetaTag: () => o }; return o; } }), createHtmlOutput: () => ({ setTitle: () => ({}) }) };
+    const fast = row();
+    ok(fast.status === 'OK' && /overview \d+ → \d+ ms/.test(fast.detail) && /budget \d+ → \d+ ms/.test(fast.detail) && /admin \d+ → \d+ ms/.test(fast.detail), 'une ligne par page : ' + fast.detail);
+    ok(w.c.PPM_PAGES.filter((p) => p.view !== 'copilote' || w.c.copilotEnabled_()).every((p) => fast.detail.indexOf(p.view + ' ') >= 0), 'toutes les pages ouvertes au copilote près, qui n’est mesuré que s’il est activé');
+    let t = 0; w.c.nowMs = () => (t += 700); // chaque mesure paraît durer 700 ms : 3 000 ms entre deux relevés d'une page
+    const slow = row();
+    ok(slow.status === 'ATTENTION' && /lent avec le cache plein : overview/.test(slow.detail), 'une page lente est signalée : ' + slow.detail.slice(0, 120));
   });
 };

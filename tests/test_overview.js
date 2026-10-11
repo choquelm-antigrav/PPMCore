@@ -139,7 +139,8 @@ module.exports = function () {
 
   test('Préchargement de l’Overview ; accueil par défaut', () => {
     const w = lot2World();
-    eq(Object.keys(w.c.preloadFor_('overview', { project: '', program: '', tab: '', mode: '', isAdmin: false }, CP)), ['overview.get|{"projectId":""}']);
+    const keys = Object.keys(w.c.preloadFor_('overview', { project: '', program: '', tab: '', mode: '', isAdmin: false }, CP));
+    eq([keys[0], keys.length, /^news\.summary\|\{"projectId":"[0-9a-f-]{36}"\}$/.test(keys[1])], ['overview.get|{"projectId":""}', 2, true], 'l’Overview précharge sa synthèse et la carte Actualités du projet qu’elle affiche (0.14.2)');
     eq([w.c.PAGES.overview, w.c.loadPrefs_(CP).ui.home], ['Overview', 'overview']);
     eq(w.call(CP, 'ui.set', { home: 'budget' }).home, 'budget');
   });

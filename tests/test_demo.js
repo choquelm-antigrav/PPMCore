@@ -44,14 +44,14 @@ module.exports = function () {
     ok(/La démo existe déjà/.test(c.seedDemo_()), 'relancée, elle ne recrée rien');
   });
 
-  test('Contenu : un programme, quatre projets, un projet complexe, des ressources avec leurs taux', () => {
-    eq([c.repoList('Program').length, c.repoList('Project').map((p) => p.code + ':' + p.status).sort()], [1, ['NAC-1:Actif', 'NAC-2:Actif', 'NAC-3:Préparation', 'NAC-4:Clos']]);
+  test('Contenu : un programme, un projet complexe (NAC-1), des ressources avec leurs taux', () => {
+    eq([c.repoList('Program').length, c.repoList('Project').map((p) => p.code + ':' + p.status).sort()], [1, ['NAC-1:Actif']]);
     const p1 = c.repoList('Project').find((p) => p.code === 'NAC-1');
     const wps = c.repoList('WorkPackage', (w) => w.project_id === p1.id), items = c.repoList('PlanItem', (i) => i.project_id === p1.id);
     ok(wps.filter((w) => !w.parent_wp_id).length === 4 && wps.filter((w) => w.parent_wp_id).length >= 12, 'WBS : 4 workpackages et plus de 12 sous-workpackages (' + wps.length + ')');
     ok(items.filter((i) => i.item_type === 'Livrable').length >= 35 && items.filter((i) => i.item_type === 'Jalon').length >= 8, 'plus de 35 livrables et 8 jalons : ' + items.length);
     eq([...new Set(wps.filter((w) => w.cpn).map((w) => w.cpn))].sort(), ['CPN-2402', 'CPN-2403'], 'deux sous-projets avec leur CPN, en plus de celui du projet (' + p1.cpn + ')');
-    ok(c.repoList('Dependency').length >= 55 && ['FS', 'SS', 'FF'].every((t) => c.repoList('Dependency').some((d) => d.dep_type === t)) && c.repoList('Dependency').some((d) => Number(d.lag_days) < 0), 'un réseau de dépendances de plusieurs types, avec décalages');
+    ok(c.repoList('Dependency').length >= 40 && ['FS', 'SS', 'FF'].every((t) => c.repoList('Dependency').some((d) => d.dep_type === t)) && c.repoList('Dependency').some((d) => Number(d.lag_days) < 0), 'un réseau de dépendances de plusieurs types, avec décalages');
     const people = c.repoList('Resource');
     ok(people.length === 39 && people.filter((r) => r.resource_type === 'Externe').length === 8, '38 personnes plus le compte qui lance la démo, dont 8 externes');
     ok(people.filter((r) => Number(r.daily_rate) > 0).length === 38, 'tout le panel a un taux journalier');
@@ -66,29 +66,26 @@ module.exports = function () {
     const roles = c.repoList('RoleAssignment');
     ['PL', 'DPL', 'CP', 'RWP', 'MEMBER'].forEach((r) => ok(roles.some((a) => a.role_code === r), 'rôle ' + r));
     ['program', 'project', 'workpackage'].forEach((t) => ok(roles.some((a) => a.scope_type === t), 'périmètre ' + t));
-    ok(roles.length >= 80, roles.length + ' affectations');
+    ok(roles.length >= 55, roles.length + ' affectations');
     const p1 = c.repoList('Project').find((p) => p.code === 'NAC-1');
     const tree = call(c, 'obs.tree', { scopeType: 'project', scopeId: p1.id });
     ok(tree.nodes.length >= 20, 'organigramme de ' + tree.nodes.length + ' cartes');
     eq(tree.unplaced.people.map((p) => p.name).sort(), ['Brigitte Stahl', 'Julie Fontaine', 'Omar Diallo'], 'personnes sans rôle : à positionner');
   });
 
-  test('Quatre projets, quatre situations : en alerte, sain, en préparation, clos', () => {
+  test('Le projet de la démo est en alerte sur les délais, la qualité et le coût', () => {
     const ov = call(c, 'overview.get', {});
     const by = Object.fromEntries(ov.projects.map((p) => [p.code, p.kpis]));
+    eq(Object.keys(by), ['NAC-1'], 'un seul projet dans la démo');
     eq([by['NAC-1'].time.level, by['NAC-1'].quality.level, by['NAC-1'].cost.level, by['NAC-1'].overall], ['alert', 'alert', 'alert', 'alert'], 'NAC-1 : délais, qualité et coût en alerte');
-    eq([by['NAC-2'].time.level, by['NAC-2'].quality.level, by['NAC-2'].cost.level, by['NAC-2'].overall], ['ok', 'ok', 'ok', 'ok'], 'NAC-2 : sain');
-    eq([by['NAC-3'].cost.level, by['NAC-3'].overall], ['ok', 'warn'], 'NAC-3 : en préparation, avec un budget depuis la 0.14.1, et des points de vigilance');
-    eq(by['NAC-4'].overall, 'ok', 'NAC-4 : clos');
     const p1 = c.repoList('Project').find((p) => p.code === 'NAC-1');
     ok(call(c, 'overview.get', { projectId: p1.id }).detail.people >= 30, 'repères : les membres du projet sont comptés, adresse ou non');
     ok(ov.projects.filter((p) => p.code === 'NAC-1')[0].kpis.time.facts.some((f) => /après la fin visée/.test(f)), 'la fin du plan dépasse la fin visée');
   });
 
   test('Retards, baselines et dérives : de quoi exercer tout l’écran Suivi', () => {
-    const p1 = c.repoList('Project').find((p) => p.code === 'NAC-1'), p2 = c.repoList('Project').find((p) => p.code === 'NAC-2');
+    const p1 = c.repoList('Project').find((p) => p.code === 'NAC-1');
     eq(c.repoList('Baseline', (b) => b.project_id === p1.id).map((b) => b.label + ':' + b.status).sort(), ['B0:Archivée', 'B1:Active', 'B2:Demandée'], 'NAC-1 : B0 archivée, B1 active, une demande en attente');
-    eq(c.repoList('Baseline', (b) => b.project_id === p2.id).map((b) => b.label + ':' + b.status), ['B0:Active']);
     const diff = call(c, 'baselines.diff', { projectId: p1.id, base: c.repoList('Baseline').find((b) => b.project_id === p1.id && b.label === 'B0').id, to: 'current' });
     ok(diff && JSON.stringify(diff).length > 500, 'les écarts B0 → aujourd’hui sont lisibles');
     const feed = call(c, 'changes.feed', { projectId: p1.id, all: true });
@@ -109,7 +106,7 @@ module.exports = function () {
     eq(bal.cpns.filter((g) => g.overrun).map((g) => g.cpn), ['CPN-2403'], 'dépassement sur le CPN des outillages');
     ok(bal.cpns.every((g) => g.budget.external > 0 && g.budget.internal > 0 && g.po.committed > 0), 'budget interne et externe, engagements : sur chaque CPN');
     const lines = c.repoList('BudgetLine');
-    ok(lines.length >= 45 && lines.some((l) => l.cost_type === 'Forfait') && lines.some((l) => l.cost_type === 'TJM' && isTrue(l.is_external)) && lines.some((l) => l.cost_type === 'TJM' && !isTrue(l.is_external)), lines.length + ' lignes : forfaits, externes en jours, internes en jours');
+    ok(lines.length >= 35 && lines.some((l) => l.cost_type === 'Forfait') && lines.some((l) => l.cost_type === 'TJM' && isTrue(l.is_external)) && lines.some((l) => l.cost_type === 'TJM' && !isTrue(l.is_external)), lines.length + ' lignes : forfaits, externes en jours, internes en jours');
     const po = call(c, 'po.list', { projectId: p1.id });
     eq([...new Set(po.orders.map((o) => o.status))].sort(), ['GR', 'Lancée', 'Terminée', 'À faire'], 'les quatre statuts de PO');
     eq(po.orders.filter((o) => o.gr_flag === 'late').length, 2, 'deux GR en retard');
@@ -143,15 +140,15 @@ module.exports = function () {
     w.runRules = () => { throw new Error('panne simulée'); };
     let err;
     try { w.seedDemo_(); } catch (e) { err = e; }
-    ok(err && /étape 18\/18/.test(err.message) && /panne simulée/.test(err.message) && /relancez/.test(err.message), err && err.message);
-    eq(w.getProp(w.PROP.DEMO_STEP, ''), '17', 'les 17 premières étapes sont conservées');
+    ok(err && /étape 15\/15/.test(err.message) && /panne simulée/.test(err.message) && /relancez/.test(err.message), err && err.message);
+    eq(w.getProp(w.PROP.DEMO_STEP, ''), '14', 'les 14 premières étapes sont conservées');
     w.runRules = real;
     ok(/^Démo complète/.test(w.seedDemo_()), 'relancée, elle termine');
     eq(counts(w), counts(demo.c), 'sans doublon');
   });
 
-  test('Démo : le fil d’actualités de NAC-1 (réunions de l’agenda et saisies, actions à tous les états, synthèse du jour, réunions à trier)', () => {
-    const nac1 = c.repoList('Project').find((p) => p.code === 'NAC-1'), nac2 = c.repoList('Project').find((p) => p.code === 'NAC-2');
+  test('Démo : le fil d’actualités de NAC-1 (réunions de l’agenda et saisies, actions à tous les états, synthèse du jour)', () => {
+    const nac1 = c.repoList('Project').find((p) => p.code === 'NAC-1');
     const g = call(c, 'news.get', { projectId: nac1.id });
     eq([g.project.news_on, g.project.keywords], [true, 'NAC-1, nacelle'], 'la collecte est activée sur NAC-1');
     eq(g.meetings.length, 8, 'huit réunions des deux dernières semaines');
@@ -165,11 +162,9 @@ module.exports = function () {
     ok(all.every((a) => !a.due_date || a.due_date >= c.addCalendarDays(c.todayStr(), -20)), 'des échéances plausibles : proches d’aujourd’hui');
     eq(g.digest.date, c.todayStr(), 'une synthèse publiée aujourd’hui');
     eq(c.newsValidateDigest_(g.digest.text).ok, true, 'et au format attendu : ' + c.newsValidateDigest_(g.digest.text).found.join(', '));
-    eq(g.triage.length, 2, 'deux réunions à trier, dont NAC-1 est candidat');
-    const n2 = call(c, 'news.get', { projectId: nac2.id });
-    eq([n2.meetings.length, n2.triage.length], [3, 2], 'NAC-2 a ses trois réunions (0.14.1) et voit les mêmes réunions à trier');
+    eq(g.triage.length, 0, 'plus de réunion à trier : il faut au moins deux projets candidats, la démo n’en a qu’un');
     ok(c.repoList('Resource').every((r) => !r.email || r.email === ME), 'personne n’a d’adresse e-mail : aucune action ne peut déclencher de mail à un tiers');
-    eq(c.repoList('Meeting', (m) => m.status === 'À trier').length, 2);
+    eq(c.repoList('Meeting', (m) => m.status === 'À trier').length, 0);
   });
 
   // ---------------------------------------------------------------- remplacer l'ancienne démo (A6_EFFACER_DEMO)
@@ -268,7 +263,7 @@ module.exports = function () {
     const msg = w.seedDemo_();
     ok(/^Démo complète/.test(msg) && /l’ancienne démo \(programme DEMO\) est toujours là/.test(msg) && /A6_EFFACER_DEMO/.test(msg), msg);
     const first = nacOnly(w);
-    ok(first.projects === 4 && first.items >= 70 && first.meetings >= 8 && first.teams >= 11, JSON.stringify(first));
+    ok(first.projects === 1 && first.items >= 45 && first.meetings >= 8 && first.teams >= 11, JSON.stringify(first));
     w.A6_EFFACER_DEMO();
     const done = w.A6_EFFACER_DEMO();
     ok(/^Démo supprimée/.test(done) && /équipes/.test(done) && /réunions/.test(done), done);
@@ -285,13 +280,13 @@ module.exports = function () {
     const w = core(); w.DEMO_BUDGET_MS = 0; // une seule étape par lancement
     let step = ''; for (let i = 0; i < 3; i++) { const m = w.seedDemo_(); step = w.getProp(w.PROP.DEMO_STEP, ''); ok(/^Démo en cours/.test(m) && /Relancez A2_SEED_DEMO/.test(m), 'lancement ' + (i + 1) + ' : ' + m.slice(0, 60)); }
     eq(step, '3', 'arrêtée après trois étapes, comme dans votre journal');
-    eq([live(w, 'Project').length, live(w, 'PlanItem').length], [4, 0], 'les projets existent, aucun livrable : exactement ce que montrait votre Overview');
+    eq([live(w, 'Project').length, live(w, 'PlanItem').length], [1, 0], 'les projets existent, aucun livrable : exactement ce que montrait votre Overview');
     w.A6_EFFACER_DEMO(); const done = w.A6_EFFACER_DEMO();
     ok(/^Démo supprimée/.test(done), done);
     eq([live(w, 'Project').length, live(w, 'Resource').filter((r) => !r.email).length, w.getProp(w.PROP.DEMO_STEP, '')], [0, 0, ''], 'démo effacée, reprise remise à zéro');
     w.DEMO_BUDGET_MS = 1e9;
     ok(/^Démo complète/.test(w.seedDemo_()), 'recréée en entier');
-    ok(nacCount(w).items >= 70 && nacCount(w).projects === 4, JSON.stringify(nacCount(w)));
+    ok(nacCount(w).items >= 45 && nacCount(w).projects === 1, JSON.stringify(nacCount(w)));
   });
 
   test('Chaque projet de la démo a ses contributeurs : des membres affectés à ses workpackages, en plus des responsables (0.14.0)', () => {
@@ -304,7 +299,7 @@ module.exports = function () {
       ok(members.length >= 2, p.code + ' : ' + members.length + ' contributeurs affectés à des workpackages');
       ok(top.every((x) => { const kids = wps.filter((y) => y.parent_wp_id === x.id).map((y) => y.id).concat([x.id]); return roles.some((r) => r.scope_type === 'workpackage' && kids.indexOf(r.scope_id) >= 0 && (r.role_code === 'MEMBER' || r.role_code === 'RWP')); }), p.code + ' : chaque workpackage de premier niveau a au moins un responsable ou un membre');
     });
-    const get = w.handleRequest({ action: 'ressources.get', params: { projectId: projects.find((p) => p.code === 'NAC-2').id }, apiVersion: w.PPM_API_VERSION }, 'admin@entreprise.com').data;
-    ok(get.people.some((x) => x.contributes > 0) && get.people.some((x) => x.deliverables > 0), 'la page Ressources de NAC-2 montre des livrables et des contributions');
+    const get = w.handleRequest({ action: 'ressources.get', params: { projectId: projects.find((p) => p.code === 'NAC-1').id }, apiVersion: w.PPM_API_VERSION }, 'admin@entreprise.com').data;
+    ok(get.people.some((x) => x.contributes > 0) && get.people.some((x) => x.deliverables > 0), 'la page Ressources de NAC-1 montre des livrables et des contributions');
   });
 };

@@ -81,7 +81,7 @@ module.exports = function () {
     });
     eq(differing, [], 'tables différentes entre la mémoire et la couche réelle');
     const wps = sheets.repoList('WorkPackage'), items = sheets.repoList('PlanItem');
-    ok(wps.length >= 20 && wps.every((w) => typeof w.wbs_code === 'string') && items.length >= 70, wps.length + ' workpackages, ' + items.length + ' livrables et jalons, codes en texte');
+    ok(wps.length >= 15 && wps.every((w) => typeof w.wbs_code === 'string') && items.length >= 45, wps.length + ' workpackages, ' + items.length + ' livrables et jalons, codes en texte');
     ok(['1', '1.1', '2.2'].every((code) => wps.some((w) => w.wbs_code === code)), 'les codes « 1 », « 1.1 » et « 2.2 » existent en texte');
   });
 

@@ -20,6 +20,7 @@ function doPost(e) {
   } catch (err) {
     return jsonOut_({ ok: false, error: { code: 'VALIDATION', message: 'Corps JSON invalide.' } });
   }
+  resetExecution_();
   return jsonOut_(handleRequest(body, currentUserEmail_()));
 }
 
@@ -32,8 +33,10 @@ function jsonOut_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
+var _emailMemo = null;
 function currentUserEmail_() {
-  return String(Session.getActiveUser().getEmail() || '').toLowerCase();
+  if (_emailMemo === null) _emailMemo = String(Session.getActiveUser().getEmail() || '').toLowerCase(); // un appel par exécution, pas quatre
+  return _emailMemo;
 }
 
 function handleRequest(body, actorEmail, opts) {
@@ -54,7 +57,7 @@ function handleRequest(body, actorEmail, opts) {
       var cached = idempotencyGet_(cacheKey);
       if (cached) return cached;
     }
-    prefetchTables_(HOT_TABLES);
+    if (!(opts && opts.keepMemo)) prefetchTables_(HOT_TABLES); // une page a déjà demandé exactement ses tables (renderPage_)
     var t0 = Date.now();
     var ctx = buildContext(email, body.addonId);
     var result = handler(body.params || {}, ctx);
@@ -69,6 +72,8 @@ function handleRequest(body, actorEmail, opts) {
     }
     console.error(err && err.stack ? err.stack : err);
     return { ok: false, error: { code: 'INTERNAL', message: 'Erreur interne.', details: null } };
+  } finally {
+    if (!(opts && opts.keepMemo)) flushCache_(); // les tables lues dans Sheets partent au cache en un appel
   }
 }
 

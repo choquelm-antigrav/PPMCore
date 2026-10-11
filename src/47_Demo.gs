@@ -1,13 +1,11 @@
 /**
  * PPM Core — 0.11.0 : démo complète (A2_SEED_DEMO).
  *
- * Un programme « NAC » et quatre projets aux situations contrastées :
+ * Un programme « NAC » et un projet complet :
  *   NAC-1  Nacelle moteur A      projet complexe : 4 workpackages, 15 sous-workpackages, une quarantaine de livrables, 8 jalons,
  *                                un réseau de dépendances, des retards, des dépendances non respectées, trois baselines (B0 archivée,
- *                                B1 active, une demande en attente), du budget, 3 CPN, des commandes d'achat (GR en retard, dépassement), des risques ;
- *   NAC-2  Systèmes embarqués    projet sain : dans les temps, budget et achats maîtrisés ;
- *   NAC-3  Industrialisation     en préparation : presque rien n'est renseigné ;
- *   NAC-4  Essais en vol         clos.
+ *                                B1 active, une demande en attente), du budget, 3 CPN, des commandes d'achat (GR en retard, dépassement), des risques,
+ *                                un fil d'actualités (réunions de l'agenda et saisies, actions à tous les états, synthèse du jour).
  * Autour : 11 équipes en arbre, 38 personnes plus vous (internes et externes, quatre pays) avec leur taux journalier, des rôles à tous les niveaux
  * (programme, projet, workpackage), trois personnes sans aucun rôle (à positionner dans l'OBS).
  *
@@ -158,9 +156,7 @@ function demoDeps_(d) {
 
 /** B0 figée au lancement ; puis le planning évolue (retards, ajouts, retrait, changement de responsable) ; B1 ; nouvelles dérives ; une demande en attente. */
 function demoBaselines_(d) {
-  var p1 = d.project('NAC-1').id, p2 = d.project('NAC-2').id;
-  d.call('baselines.create', { projectId: p2, label: 'B0', justification: 'Planning validé en revue de conception système' });
-  demoShift_(d, 'NAC-2', 'Câblage prototype', 0, 3);
+  var p1 = d.project('NAC-1').id;
   d.call('baselines.create', { projectId: p1, label: 'B0', justification: 'Planning validé en revue de lancement' });
   // évolutions après B0
   demoShift_(d, 'NAC-1', 'Essais d’éprouvettes matériaux', 0, 18);
@@ -245,60 +241,10 @@ function demoOrders_(d) {
     if (status === 'Terminée') values.closed_on = d.day(o[7] < 0 ? o[7] + 6 : -1);
     var links = [];
     for (var k = 8; k < o.length; k++) {
-      var code = { 'CPN-2501': 'NAC-2', 'CPN-2601': 'NAC-3', 'CPN-2301': 'NAC-4' }[o[1]] || 'NAC-1';
-      links.push({ deliverable_id: d.item(code, o[k][0]).id, amount: o[k][1] });
+      links.push({ deliverable_id: d.item('NAC-1', o[k][0]).id, amount: o[k][1] });
     }
     d.call('po.save', { values: values, links: links });
   });
-}
-
-/** Des réunions, des actions et une baseline pour NAC-2, NAC-3 et NAC-4, pour que la vue du programme ait de quoi comparer. */
-function demoMoreNews_(d) {
-  var f = function (n) { return demoDM_(d, n); };
-  var add = function (code, keywords, meetings) {
-    var p = d.project(code);
-    d.call('news.settings.set', { projectId: p.id, enabled: true, keywords: keywords });
-    meetings.forEach(function (m) { d.call('news.meeting.add', { projectId: p.id, title: m[1], held_on: d.day(-m[0]), participants: m[2], text: m[3] }); });
-    return p;
-  };
-  var answer = function (p, startsWith, decision) {
-    var a = repoList('NewsAction', function (x) { return x.project_id === p.id && x.text.indexOf(startsWith) === 0; })[0];
-    if (a) d.call('news.action.decide', { id: a.id, decision: decision });
-  };
-  var nac2 = add('NAC-2', 'NAC-2, systèmes embarqués', [
-    [10, 'Point intégration NAC-2', 'Priya Nair, Greta Hoffmann, James Walker',
-      ['Résumé', 'Le banc d’intégration est monté ; le câblage prend quelques jours de retard.', '', 'Décisions', '- Le câblage du prototype est prioritaire sur les tests unitaires.', '',
-        'Étapes suivantes', '- [James Walker] Terminer le câblage du prototype pour le ' + f(-2), '- [Priya Nair] Planifier les essais du banc pour le ' + f(9)].join('\n')],
-    [17, 'Revue calculateur', 'Greta Hoffmann, Sophie Martin',
-      ['Résumé', 'Le calculateur retenu est validé ; le prototype est en cours.', '', 'Décisions', '- Le calculateur choisi est confirmé.', '',
-        'Étapes suivantes', '- [Greta Hoffmann] Livrer la spécification logicielle pour le ' + f(6)].join('\n')]
-  ]);
-  answer(nac2, 'Terminer le câblage', 'accept'); answer(nac2, 'Livrer la spécification logicielle', 'accept');
-  d.call('news.digest.publish', { projectId: nac2.id, notify: false, text: [
-    'Décisions : le câblage du prototype est prioritaire (Point intégration NAC-2) ; le calculateur est confirmé (Revue calculateur).',
-    'Dates qui bougent : le câblage du prototype a quelques jours de retard (Point intégration NAC-2).',
-    'Risques : l’obsolescence du calculateur reste suivie (Revue calculateur).',
-    'Blocages : aucun.',
-    'Actions : James Walker — terminer le câblage du prototype — ' + f(-2) + ' ; Priya Nair — planifier les essais du banc — ' + f(9)
-  ].join('\n') });
-  var nac3 = add('NAC-3', 'NAC-3, industrialisation', [
-    [6, 'Lancement de l’étude d’industrialisation', 'Karim Haddad, Yann Leroy, Mathieu Collin',
-      ['Résumé', 'L’étude d’industrialisation démarre ; les cadences cibles restent à confirmer.', '', 'Décisions', '- L’étude de fabricabilité précède la consultation des fournisseurs.', '',
-        'Étapes suivantes', '- [Yann Leroy] Analyser la fabricabilité de la nacelle pour le ' + f(8), '- [Mathieu Collin] Collecter les cadences cibles pour le ' + f(-3)].join('\n')],
-    [20, 'Cadrage de l’industrialisation', 'Karim Haddad, Étienne Roche',
-      ['Cadrage du projet d’industrialisation.', 'Décision : le projet démarre en préparation, sans baseline avant la revue de faisabilité.',
-        'Action : réunir les besoins en moyens de production — Étienne Roche — ' + f(12)].join('\n')]
-  ]);
-  answer(nac3, 'Analyser la fabricabilité', 'accept');
-  var nac4 = add('NAC-4', 'NAC-4, essais en vol', [
-    [40, 'Débrief de la campagne d’essais en vol', 'Thomas Weber, Inès Girard',
-      ['Résumé', 'La campagne d’essais en vol est terminée ; les résultats sont conformes.', '', 'Décisions', '- Le rapport d’essais est validé.', '',
-        'Étapes suivantes', '- [Inès Girard] Archiver le rapport d’essais en vol pour le ' + f(-36)].join('\n')],
-    [48, 'Revue de clôture NAC-4', 'Thomas Weber, Marc Lefèvre',
-      ['Revue de clôture.', 'Décision : le projet est clos.', 'Action : transmettre le bilan de clôture au programme — Thomas Weber — ' + f(-45)].join('\n')]
-  ]);
-  answer(nac4, 'Archiver le rapport', 'done'); answer(nac4, 'transmettre le bilan', 'done');
-  d.call('baselines.create', { projectId: nac4.id, label: 'B0', justification: 'Planning validé avant la campagne d’essais en vol' });
 }
 
 function demoFindings_(d) {
@@ -309,20 +255,17 @@ var DEMO_STEPS = [
   { name: 'Équipes et personnes (taux journaliers)', run: function (d) { demoPeople_(d); } },
   { name: 'Programme et projets', run: function (d) { demoProjects_(d); } },
   { name: 'Rôles de l’organigramme', run: function (d) { demoRoles_(d); } },
-  { name: 'Découpage et planning du projet NAC-1', run: function (d) { demoPlan_(d, ['NAC-1']); } },
-  { name: 'Découpage et planning des autres projets', run: function (d) { demoPlan_(d, ['NAC-2', 'NAC-3', 'NAC-4']); } },
+  { name: 'Découpage et planning de NAC-1', run: function (d) { demoPlan_(d, ['NAC-1']); } },
   { name: 'Rôles sur les workpackages', run: function (d) { demoWpRoles_(d); } },
   { name: 'Dépendances', run: function (d) { demoDeps_(d); } },
   { name: 'Baselines et évolutions du planning', run: function (d) { demoBaselines_(d); } },
   { name: 'Avancement de NAC-1', run: function (d) { demoProgress_(d, ['NAC-1']); } },
-  { name: 'Avancement des autres projets', run: function (d) { demoProgress_(d, ['NAC-2', 'NAC-4']); } },
   { name: 'Risques et opportunités', run: function (d) { demoRisks_(d); } },
   { name: 'Budget de NAC-1 (1/2)', run: function (d) { demoBudget_(d, 0, 20); } },
-  { name: 'Budget de NAC-1 (2/2) et de NAC-2', run: function (d) { demoBudget_(d, 20, 60); } },
+  { name: 'Budget de NAC-1 (2/2)', run: function (d) { demoBudget_(d, 20, 60); } },
   { name: 'Commandes d’achat', run: function (d) { demoOrders_(d); } },
   { name: 'Actualités de NAC-1 : réunions', run: function (d) { demoNewsMeetings_(d); } },
   { name: 'Actualités : actions, synthèse du jour, réunions à trier', run: function (d) { demoNewsActions_(d); } },
-  { name: 'Actualités et suivi des autres projets', run: function (d) { demoMoreNews_(d); } },
   { name: 'Constats du moteur de règles', run: function (d) { demoFindings_(d); } }
 ];
 
@@ -339,8 +282,8 @@ function demoVerify_() {
   var deps = repoList('Dependency', function (d) { return iid[d.predecessor_id]; }).length, lines = repoList('BudgetLine', function (b) { return iid[b.deliverable_id]; }).length;
   var meetings = repoList('Meeting', function (m) { return ids[m.project_id]; }).length;
   var empty = projects.filter(function (p) { return !items.some(function (i) { return i.project_id === p.id; }); }).map(function (p) { return p.code; });
-  var text = projects.length + ' projets, ' + wps.length + ' workpackages, ' + items.length + ' livrables et jalons, ' + deps + ' dépendances, ' + lines + ' lignes de budget, ' + meetings + ' réunions';
-  var ok = projects.length === 4 && items.length >= 60 && wps.length >= 20 && deps > 0 && lines > 0 && meetings > 0 && !empty.length;
+  var text = projects.length + (projects.length > 1 ? ' projets, ' : ' projet, ') + wps.length + ' workpackages, ' + items.length + ' livrables et jalons, ' + deps + ' dépendances, ' + lines + ' lignes de budget, ' + meetings + ' réunions';
+  var ok = projects.length === 1 && items.length >= 40 && wps.length >= 15 && deps > 0 && lines > 0 && meetings > 0 && !empty.length;
   return { ok: ok, text: ok ? text : text + (empty.length ? ' ; projets sans aucun livrable : ' + empty.join(', ') : '') };
 }
 
@@ -367,7 +310,7 @@ function seedDemo_() {
   if (at >= DEMO_STEPS.length) {
     deleteProp(PROP.DEMO_STEP);
     var v = demoVerify_();
-    msg = v.ok ? 'Démo complète : programme NAC, 4 projets, ' + DEMO_PEOPLE.length + ' personnes, ' + DEMO_TEAMS.length + ' équipes. Relu dans la base : ' + v.text + '. Ouvrez la page Overview.' + oldDemoNote_()
+    msg = v.ok ? 'Démo complète : programme NAC, 1 projet, ' + DEMO_PEOPLE.length + ' personnes, ' + DEMO_TEAMS.length + ' équipes. Relu dans la base : ' + v.text + '. Ouvrez la page Overview.' + oldDemoNote_()
       : 'DÉMO INCOMPLÈTE malgré toutes les étapes : ' + v.text + '. Exécutez A6_EFFACER_DEMO (deux fois) puis A2_SEED_DEMO, et envoyez-moi le journal.';
   } else {
     msg = 'Démo en cours : étape ' + at + ' sur ' + DEMO_STEPS.length + ' terminée (' + ran.join(' ; ') + '). Relancez A2_SEED_DEMO pour continuer. ⚠ TANT QUE VOUS NE VOYEZ PAS « Démo complète », LA DÉMO EST INCOMPLÈTE (pas de planning, de budget ni d’actualités).';
@@ -432,8 +375,8 @@ function demoNewsMeetings_(d) {
   });
 }
 
-function demoNewsActions_(d) {
-  var nac1 = d.project('NAC-1'), nac2 = d.project('NAC-2');
+function demoNewsActions_(d) { // (il n'y a plus de réunions à trier : elles demandaient au moins deux projets candidats)
+  var nac1 = d.project('NAC-1');
   var byTitle = function (t) { return repoList('Meeting', function (m) { return m.title === t && m.project_id === nac1.id; })[0]; };
   var actionOf = function (title, startsWith) {
     var m = byTitle(title);
@@ -462,16 +405,4 @@ function demoNewsActions_(d) {
     'Blocages : le dossier aérodynamique de la PDR n’est pas finalisé ; le créneau de soufflerie reste à confirmer.',
     'Actions : Thomas Weber — confirmer la campagne d’essais statiques — ' + demoDM_(d, 8) + ' — Campagne d’essais statiques ; Hélène Roux — livrer la note de calcul de fatigue — ' + demoDM_(d, 6) + ' — Note de calcul de fatigue ; Paul Girard — finaliser le rapport aérodynamique — ' + demoDM_(d, 3) + ' — Rapport aérodynamique préliminaire.'
   ].join('\n') });
-  // un second projet avec quelques réunions
-  d.call('news.settings.set', { projectId: nac2.id, enabled: true, keywords: 'NAC-2, systèmes embarqués' });
-  d.call('news.meeting.add', { projectId: nac2.id, title: 'Revue d’avancement NAC-2', held_on: d.day(-3), participants: 'Sophie Martin, Karim Haddad',
-    text: 'Résumé\nLes systèmes embarqués sont dans le plan.\n\nDécisions\n- La phase d’intégration démarre comme prévu.\n\nÉtapes suivantes\n- [Sophie Martin] Préparer le dossier d’intégration pour le ' + demoDM_(d, 9) });
-  // deux réunions qui pouvaient aller dans plusieurs projets : à trier
-  var cand = nac1.id + ',' + nac2.id;
-  [['Point transverse systèmes embarqués', 'Alignement des interfaces entre les deux projets.', ['Aligner l’interface capteurs'], 2],
-   ['Revue des interfaces nacelle', 'Revue des interfaces mécaniques et électriques.', ['Mettre à jour le document d’interfaces'], 4]].forEach(function (x, i) {
-    var mt = repoInsert('Meeting', { project_id: '', source: 'Agenda', event_id: 'demo-triage-' + (i + 1), held_on: d.day(-x[3]), title: x[0], participants: 'Sophie Martin, Anaïs Moreau', doc_url: '',
-      summary: x[1], decisions: '', status: 'À trier', candidates: cand, dedupe_key: 'ev:demo-triage-' + (i + 1), added_by: 'collecteur' }, d.a);
-    x[2].forEach(function (t) { repoInsert('NewsAction', { meeting_id: mt.id, project_id: '', owner_resource_id: '', owner_label: 'Sophie Martin', text: t, due_date: '', item_id: '', status: 'Proposée' }, d.a); });
-  });
 }

@@ -94,8 +94,9 @@ function liveSmokeTest_(opts) {
     var h = {}; ScriptApp.getProjectTriggers().forEach(function (t) { h[t.getHandlerFunction()] = (h[t.getHandlerFunction()] || 0) + 1; });
     var miss = [];
     if (!h.nightlyRun) miss.push('nightlyRun'); if (!h.sendDigests) miss.push('sendDigests'); if ((h.newsCollectRun || 0) < 2) miss.push('newsCollectRun (1 h et 13 h)');
+    if (!h.warmCache) miss.push('warmCache (facultatif : garde le cache plein, pages plus rapides après une pause)');
     if (miss.length) return { warn: 'à poser : ' + miss.join(', ') + ' — exécuter A5_INSTALLER_DECLENCHEURS' };
-    return 'nightlyRun ' + h.nightlyRun + ', sendDigests ' + h.sendDigests + ', newsCollectRun ' + h.newsCollectRun;
+    return 'nightlyRun ' + h.nightlyRun + ', sendDigests ' + h.sendDigests + ', newsCollectRun ' + h.newsCollectRun + ', warmCache ' + h.warmCache;
   });
   step('Agenda : lecture réelle de l’agenda principal (service avancé Calendar)', function () {
     if (!has('Calendar') || !Calendar.Events) return { warn: 'service avancé Calendar non activé : la collecte des réunions et les rappels sont impossibles' };
@@ -108,6 +109,20 @@ function liveSmokeTest_(opts) {
     var r = aiFetch_(GEMINI_BASE + '/models?pageSize=1', { method: 'get' }); // sans clé : Google doit répondre « clé manquante », ce qui prouve le droit et le réseau
     expect(r && r.code > 0 && r.code < 500, 'Google a répondu ' + (r && r.code));
     return 'Google répond (' + r.code + ', normal sans clé)';
+  });
+  step('Ouverture des pages : temps serveur, première ouverture puis cache plein (0.14.2)', function () {
+    if (typeof HtmlService === 'undefined') return { warn: 'non vérifiable ici' };
+    var project = proj ? proj.id : '', out = [], slow = [];
+    PPM_PAGES.forEach(function (pg) {
+      if (pg.view === 'copilote' && !copilotEnabled_()) return;
+      var t1 = nowMs(); renderPage_({ parameter: { view: pg.view, project: project } });
+      var first = nowMs() - t1, t2 = nowMs(); renderPage_({ parameter: { view: pg.view, project: project } });
+      var warm = nowMs() - t2;
+      out.push(pg.view + ' ' + first + ' → ' + warm + ' ms');
+      if (warm > 2500) slow.push(pg.view + ' ' + warm + ' ms');
+    });
+    if (slow.length) return { warn: 'lent avec le cache plein : ' + slow.join(', ') + ' — ' + out.join(' ; ') };
+    return out.join(' ; ');
   });
   step('Démo : contenu des projets NAC (si elle a été créée)', function () {
     if (!repoList('Program', function (p) { return p.code === 'NAC'; }).length) return 'aucune démo NAC dans ce classeur';

@@ -64,10 +64,7 @@ var DEMO_PEOPLE = [
 
 /** [code, nom, statut, chef de projet, début (jours ouvrés), fin visée (jours ouvrés), CPN, désignation du CPN] */
 var DEMO_PROJECTS = [
-  ['NAC-1', 'Nacelle moteur A', 'Actif', 'Anaïs Moreau', 0, 165, 'CPN-2401', 'Nacelle A — conception et certification'],
-  ['NAC-2', 'Systèmes embarqués', 'Actif', 'Sophie Martin', 10, 150, 'CPN-2501', 'Systèmes embarqués de nacelle'],
-  ['NAC-3', 'Industrialisation moteur', 'Préparation', 'Karim Haddad', 62, 230, 'CPN-2601', 'Industrialisation de la nacelle'],
-  ['NAC-4', 'Essais en vol', 'Clos', 'Thomas Weber', 0, 55, 'CPN-2301', 'Campagne d’essais en vol']
+  ['NAC-1', 'Nacelle moteur A', 'Actif', 'Anaïs Moreau', 0, 165, 'CPN-2401', 'Nacelle A — conception et certification']
 ];
 
 /** [projet, code WBS, nom, responsable, code d'imputation, CPN, désignation du CPN] ; un CPN n'existe que sur un workpackage de premier niveau (sous-projet) */
@@ -87,15 +84,7 @@ var DEMO_WPS = [
   ['NAC-1', '3.3', 'Moyens de contrôle', 'Mathieu Collin', 'N1-330'],
   ['NAC-1', '4', 'Pilotage et certification', 'Lucie Perrin', 'N1-400'],
   ['NAC-1', '4.1', 'Dossier de certification', 'Olivier Faure', 'N1-410'],
-  ['NAC-1', '4.2', 'Gestion de projet et risques', 'Lucie Perrin', 'N1-420'],
-  ['NAC-2', '1', 'Architecture', 'Sophie Martin', 'N2-100'],
-  ['NAC-2', '1.1', 'Calculateurs', 'Greta Hoffmann', 'N2-110'],
-  ['NAC-2', '1.2', 'Capteurs et actionneurs', 'James Walker', 'N2-120'],
-  ['NAC-2', '2', 'Logiciel', 'Greta Hoffmann', 'N2-200'],
-  ['NAC-2', '3', 'Intégration et validation', 'Priya Nair', 'N2-300'],
-  ['NAC-3', '1', 'Étude d’industrialisation', 'Yann Leroy', 'N3-100'],
-  ['NAC-3', '2', 'Moyens de production', 'Mathieu Collin', 'N3-200'],
-  ['NAC-4', '1', 'Campagne d’essais en vol', 'Inès Girard', 'N4-100']
+  ['NAC-1', '4.2', 'Gestion de projet et risques', 'Lucie Perrin', 'N1-420']
 ];
 
 /**
@@ -149,34 +138,9 @@ var DEMO_ITEMS = [
   ['NAC-1', '', 'Dossier de certification soumis', 162, 0, 'Olivier Faure', 0, { type: 'Jalon', category: 'Client' }],
   ['NAC-1', '', 'Choix des matériaux validé', 50, 0, 'Nadia Benali', 100, { type: 'Jalon', category: 'Interne' }],
   ['NAC-1', '', 'Revue de fin de projet', 164, 0, 'Anaïs Moreau', 0, { type: 'Jalon', category: 'Revue' }],
-
-  ['NAC-2', '1.1', 'Spécification calculateur', 10, 15, 'Greta Hoffmann', 100],
-  ['NAC-2', '1.1', 'Choix du calculateur', 25, 10, 'Sophie Martin', 100],
-  ['NAC-2', '1.1', 'Prototype calculateur', 35, 25, 'Greta Hoffmann', 100],
-  ['NAC-2', '1.2', 'Spécification capteurs', 12, 12, 'James Walker', 100],
-  ['NAC-2', '1.2', 'Qualification capteurs', 30, 25, 'James Walker', 100],
-  ['NAC-2', '1.2', 'Câblage prototype', 55, 20, 'James Walker', 20],
-  ['NAC-2', '2', 'Architecture logicielle', 20, 15, 'Greta Hoffmann', 100],
-  ['NAC-2', '2', 'Boucle de régulation', 35, 30, 'Greta Hoffmann', 80],
-  ['NAC-2', '2', 'Tests unitaires logiciels', 55, 25, 'Priya Nair', 25],
-  ['NAC-2', '3', 'Plan d’intégration', 30, 15, 'Priya Nair', 100],
-  ['NAC-2', '3', 'Banc d’intégration', 50, 30, 'Priya Nair', 35],
-  ['NAC-2', '3', 'Validation système', 85, 25, 'Priya Nair', 0],
-  ['NAC-2', '', 'Revue de conception système', 40, 0, 'Sophie Martin', 100, { type: 'Jalon', category: 'Revue' }],
-  ['NAC-2', '', 'Fin d’intégration', 100, 0, 'Priya Nair', 0, { type: 'Jalon', category: 'Interne' }],
-  ['NAC-2', '', 'Revue de validation', 115, 0, 'Sophie Martin', 0, { type: 'Jalon', category: 'Client' }],
-
-  ['NAC-3', '1', 'Analyse de fabricabilité', 65, 20, 'Yann Leroy', 0],
-  ['NAC-3', '1', 'Étude des cadences', 86, 15, 'Karim Haddad', 0],
-  ['NAC-3', '2', 'Spécification des moyens de production', 85, 20, 'Mathieu Collin', 0],
-  ['NAC-3', '2', 'Consultation des fournisseurs', 105, 25, 'Mathieu Collin', 0],
-  ['NAC-3', '2', 'Étude de sourcing', 0, 0, '', 0, { nodate: true }],
-  ['NAC-3', '', 'Revue de faisabilité', 132, 0, 'Karim Haddad', 0, { type: 'Jalon', category: 'Revue' }],
-
-  ['NAC-4', '1', 'Plan d’essais en vol', 0, 10, 'Inès Girard', 100],
-  ['NAC-4', '1', 'Campagne d’essais en vol', 10, 30, 'Inès Girard', 100],
-  ['NAC-4', '1', 'Rapport d’essais en vol', 40, 10, 'Inès Girard', 100],
-  ['NAC-4', '', 'Revue de clôture', 52, 0, 'Thomas Weber', 100, { type: 'Jalon', category: 'Revue' }]
+  // un livrable sans responsable et un sans date : de quoi montrer les constats « sans responsable » et « sans date » (NAC-1 est le seul projet de la démo)
+  ['NAC-1', '4.1', 'Plan de maintenance de la nacelle', 30, 10, '', 0],
+  ['NAC-1', '4.1', 'Manuel d’exploitation de la nacelle', 0, 10, 'Lucie Perrin', 0, { nodate: true }]
 ];
 
 /** Dépendances : [projet, prédécesseur, successeur, type, décalage en jours ouvrés] */
@@ -224,24 +188,7 @@ var DEMO_DEPS = [
   ['NAC-1', 'Rapport d’essais statiques', 'Fin des essais statiques', 'FS', 0],
   ['NAC-1', 'Dossier de qualification', 'Revue de qualification', 'FS', 0],
   ['NAC-1', 'Dossier de certification complet', 'Dossier de certification soumis', 'FS', 0],
-  ['NAC-1', 'Dossier de certification soumis', 'Revue de fin de projet', 'FS', 0],
-  ['NAC-2', 'Spécification calculateur', 'Choix du calculateur', 'FS', 0],
-  ['NAC-2', 'Choix du calculateur', 'Prototype calculateur', 'FS', 0],
-  ['NAC-2', 'Spécification capteurs', 'Qualification capteurs', 'FS', 0],
-  ['NAC-2', 'Qualification capteurs', 'Câblage prototype', 'FS', 0],
-  ['NAC-2', 'Architecture logicielle', 'Boucle de régulation', 'FS', 0],
-  ['NAC-2', 'Boucle de régulation', 'Tests unitaires logiciels', 'SS', 15],
-  ['NAC-2', 'Plan d’intégration', 'Banc d’intégration', 'FS', 0],
-  ['NAC-2', 'Prototype calculateur', 'Banc d’intégration', 'SS', 10],
-  ['NAC-2', 'Banc d’intégration', 'Validation système', 'FS', 0],
-  ['NAC-2', 'Spécification calculateur', 'Revue de conception système', 'FS', 0],
-  ['NAC-2', 'Validation système', 'Revue de validation', 'FS', 0],
-  ['NAC-3', 'Analyse de fabricabilité', 'Étude des cadences', 'FS', 0],
-  ['NAC-3', 'Spécification des moyens de production', 'Consultation des fournisseurs', 'FS', 0],
-  ['NAC-3', 'Consultation des fournisseurs', 'Revue de faisabilité', 'FS', 0],
-  ['NAC-4', 'Plan d’essais en vol', 'Campagne d’essais en vol', 'FS', 0],
-  ['NAC-4', 'Campagne d’essais en vol', 'Rapport d’essais en vol', 'FS', 0],
-  ['NAC-4', 'Rapport d’essais en vol', 'Revue de clôture', 'FS', 0]
+  ['NAC-1', 'Dossier de certification soumis', 'Revue de fin de projet', 'FS', 0]
 ];
 
 /** Livrables exigés par un jalon : [projet, jalon, livrables…] */
@@ -254,40 +201,52 @@ var DEMO_REQUIREMENTS = [
   ['NAC-1', 'Fin des essais statiques', 'Rapport d’essais statiques'],
   ['NAC-1', 'Revue de qualification', 'Dossier de qualification', 'Rapport soufflerie'],
   ['NAC-1', 'Dossier de certification soumis', 'Dossier de certification complet'],
-  ['NAC-1', 'Revue de fin de projet', 'Dossier de qualification', 'Dossier de certification complet'],
-  ['NAC-2', 'Revue de conception système', 'Spécification calculateur', 'Choix du calculateur'],
-  ['NAC-2', 'Revue de validation', 'Validation système']
+  ['NAC-1', 'Revue de fin de projet', 'Dossier de qualification', 'Dossier de certification complet']
 ];
 
 /** Rôles : [personne, rôle, niveau (program / project / wp), repère] ; repère : 'NAC', un code de projet, ou « projet:code WBS » */
 var DEMO_ROLES = [
-  ['Marc Lefèvre', 'DPL', 'program', 'NAC'], ['Sophie Martin', 'DPL', 'program', 'NAC'],
-  ['Anaïs Moreau', 'CP', 'project', 'NAC-1'], ['Sophie Martin', 'CP', 'project', 'NAC-2'], ['Karim Haddad', 'CP', 'project', 'NAC-3'], ['Thomas Weber', 'CP', 'project', 'NAC-4'],
-  ['Marc Lefèvre', 'RWP', 'wp', 'NAC-1:1'], ['Hélène Roux', 'RWP', 'wp', 'NAC-1:1.1'], ['Paul Girard', 'RWP', 'wp', 'NAC-1:1.2'], ['Nadia Benali', 'RWP', 'wp', 'NAC-1:1.3'],
-  ['Sophie Martin', 'RWP', 'wp', 'NAC-1:1.4'], ['Thomas Weber', 'RWP', 'wp', 'NAC-1:2'], ['Thomas Weber', 'RWP', 'wp', 'NAC-1:2.1'], ['Ravi Patel', 'RWP', 'wp', 'NAC-1:2.2'],
-  ['Dora Schmidt', 'RWP', 'wp', 'NAC-1:2.3'], ['Karim Haddad', 'RWP', 'wp', 'NAC-1:3'], ['Étienne Roche', 'RWP', 'wp', 'NAC-1:3.1'], ['Yann Leroy', 'RWP', 'wp', 'NAC-1:3.2'],
-  ['Mathieu Collin', 'RWP', 'wp', 'NAC-1:3.3'], ['Lucie Perrin', 'RWP', 'wp', 'NAC-1:4'], ['Olivier Faure', 'RWP', 'wp', 'NAC-1:4.1'], ['Lucie Perrin', 'RWP', 'wp', 'NAC-1:4.2'],
-  ['Sophie Martin', 'RWP', 'wp', 'NAC-2:1'], ['Greta Hoffmann', 'RWP', 'wp', 'NAC-2:1.1'], ['James Walker', 'RWP', 'wp', 'NAC-2:1.2'], ['Greta Hoffmann', 'RWP', 'wp', 'NAC-2:2'],
-  ['Priya Nair', 'RWP', 'wp', 'NAC-2:3'], ['Yann Leroy', 'RWP', 'wp', 'NAC-3:1'], ['Mathieu Collin', 'RWP', 'wp', 'NAC-3:2'], ['Inès Girard', 'RWP', 'wp', 'NAC-4:1'],
-  ['Camille Durand', 'MEMBER', 'wp', 'NAC-1:1.1'], ['Julien Petit', 'MEMBER', 'wp', 'NAC-1:1.1'], ['Rahul Sharma', 'MEMBER', 'wp', 'NAC-1:1.1'],
-  ['Émilie Fabre', 'MEMBER', 'wp', 'NAC-1:1.2'], ['Arjun Mehta', 'MEMBER', 'wp', 'NAC-1:1.2'], ['Antoine Garnier', 'MEMBER', 'wp', 'NAC-1:1.3'], ['Marta Kowalski', 'MEMBER', 'wp', 'NAC-1:1.3'],
-  ['Greta Hoffmann', 'MEMBER', 'wp', 'NAC-1:1.4'], ['James Walker', 'MEMBER', 'wp', 'NAC-1:1.4'], ['Priya Nair', 'MEMBER', 'wp', 'NAC-1:1.4'],
-  ['Léa Marchand', 'MEMBER', 'wp', 'NAC-1:2.1'], ['Hugo Blanc', 'MEMBER', 'wp', 'NAC-1:2.1'], ['Carl Weber', 'MEMBER', 'wp', 'NAC-1:2.1'], ['Hana Iyer', 'MEMBER', 'wp', 'NAC-1:2.1'],
-  ['Lukas Schneider', 'MEMBER', 'wp', 'NAC-1:2.1'], ['Sven Larsen', 'MEMBER', 'wp', 'NAC-1:4.1'],
-  // contributeurs des autres projets : des membres affectés aux workpackages, en plus de leurs responsables
-  ['Hana Iyer', 'MEMBER', 'wp', 'NAC-2:1.1'], ['Lukas Schneider', 'MEMBER', 'wp', 'NAC-2:1.1'], ['Lucie Perrin', 'MEMBER', 'wp', 'NAC-2:1.2'], ['Hana Iyer', 'MEMBER', 'wp', 'NAC-2:2'],
-  ['Lukas Schneider', 'MEMBER', 'wp', 'NAC-2:2'], ['Lucie Perrin', 'MEMBER', 'wp', 'NAC-2:3'], ['Greta Hoffmann', 'MEMBER', 'wp', 'NAC-2:3'],
-  ['Étienne Roche', 'MEMBER', 'wp', 'NAC-3:1'], ['Sandrine Lopez', 'MEMBER', 'wp', 'NAC-3:1'], ['Étienne Roche', 'MEMBER', 'wp', 'NAC-3:2'], ['Sandrine Lopez', 'MEMBER', 'wp', 'NAC-3:2'],
-  ['Rahul Sharma', 'MEMBER', 'wp', 'NAC-4:1'], ['Émilie Fabre', 'MEMBER', 'wp', 'NAC-4:1'], ['Camille Durand', 'MEMBER', 'wp', 'NAC-4:1']
+  ['Marc Lefèvre', 'DPL', 'program', 'NAC'],
+  ['Sophie Martin', 'DPL', 'program', 'NAC'],
+  ['Anaïs Moreau', 'CP', 'project', 'NAC-1'],
+  ['Marc Lefèvre', 'RWP', 'wp', 'NAC-1:1'],
+  ['Hélène Roux', 'RWP', 'wp', 'NAC-1:1.1'],
+  ['Paul Girard', 'RWP', 'wp', 'NAC-1:1.2'],
+  ['Nadia Benali', 'RWP', 'wp', 'NAC-1:1.3'],
+  ['Sophie Martin', 'RWP', 'wp', 'NAC-1:1.4'],
+  ['Thomas Weber', 'RWP', 'wp', 'NAC-1:2'],
+  ['Thomas Weber', 'RWP', 'wp', 'NAC-1:2.1'],
+  ['Ravi Patel', 'RWP', 'wp', 'NAC-1:2.2'],
+  ['Dora Schmidt', 'RWP', 'wp', 'NAC-1:2.3'],
+  ['Karim Haddad', 'RWP', 'wp', 'NAC-1:3'],
+  ['Étienne Roche', 'RWP', 'wp', 'NAC-1:3.1'],
+  ['Yann Leroy', 'RWP', 'wp', 'NAC-1:3.2'],
+  ['Mathieu Collin', 'RWP', 'wp', 'NAC-1:3.3'],
+  ['Lucie Perrin', 'RWP', 'wp', 'NAC-1:4'],
+  ['Olivier Faure', 'RWP', 'wp', 'NAC-1:4.1'],
+  ['Lucie Perrin', 'RWP', 'wp', 'NAC-1:4.2'],
+  ['Camille Durand', 'MEMBER', 'wp', 'NAC-1:1.1'],
+  ['Julien Petit', 'MEMBER', 'wp', 'NAC-1:1.1'],
+  ['Rahul Sharma', 'MEMBER', 'wp', 'NAC-1:1.1'],
+  ['Émilie Fabre', 'MEMBER', 'wp', 'NAC-1:1.2'],
+  ['Arjun Mehta', 'MEMBER', 'wp', 'NAC-1:1.2'],
+  ['Antoine Garnier', 'MEMBER', 'wp', 'NAC-1:1.3'],
+  ['Marta Kowalski', 'MEMBER', 'wp', 'NAC-1:1.3'],
+  ['Greta Hoffmann', 'MEMBER', 'wp', 'NAC-1:1.4'],
+  ['James Walker', 'MEMBER', 'wp', 'NAC-1:1.4'],
+  ['Priya Nair', 'MEMBER', 'wp', 'NAC-1:1.4'],
+  ['Léa Marchand', 'MEMBER', 'wp', 'NAC-1:2.1'],
+  ['Hugo Blanc', 'MEMBER', 'wp', 'NAC-1:2.1'],
+  ['Carl Weber', 'MEMBER', 'wp', 'NAC-1:2.1'],
+  ['Hana Iyer', 'MEMBER', 'wp', 'NAC-1:2.1'],
+  ['Lukas Schneider', 'MEMBER', 'wp', 'NAC-1:2.1'],
+  ['Sven Larsen', 'MEMBER', 'wp', 'NAC-1:4.1']
 ];
 /** Membres au niveau du projet : [projet, personnes…] */
 var DEMO_MEMBERS = [
   ['NAC-1', 'Claire Dubois', 'Chloé Bernard', 'Camille Durand', 'Julien Petit', 'Rahul Sharma', 'Émilie Fabre', 'Arjun Mehta', 'Antoine Garnier', 'Léa Marchand', 'Hugo Blanc', 'Inès Girard',
     'Lukas Schneider', 'Greta Hoffmann', 'James Walker', 'Priya Nair', 'Yann Leroy', 'Mathieu Collin', 'Lucie Perrin', 'Sandrine Lopez', 'Olivier Faure', 'Dora Schmidt',
-    'Carl Weber', 'Ravi Patel', 'Hana Iyer', 'Marta Kowalski', 'Étienne Roche', 'Sven Larsen'],
-  ['NAC-2', 'Greta Hoffmann', 'James Walker', 'Priya Nair', 'Hana Iyer', 'Lukas Schneider', 'Lucie Perrin'],
-  ['NAC-3', 'Yann Leroy', 'Mathieu Collin', 'Étienne Roche', 'Sandrine Lopez'],
-  ['NAC-4', 'Inès Girard', 'Rahul Sharma', 'Émilie Fabre', 'Camille Durand']
+    'Carl Weber', 'Ravi Patel', 'Hana Iyer', 'Marta Kowalski', 'Étienne Roche', 'Sven Larsen']
 ];
 
 /** Risques : [projet, genre, titre, élément lié, probabilité, impact, responsable, stratégie, statut, jours avant l'échéance de traitement (négatif : dépassée), valeur financière] */
@@ -300,40 +259,50 @@ var DEMO_RISKS = [
   ['NAC-1', 'Risque', 'Non-conformité à la certification', 'Démonstration de conformité structure', 2, 5, 'Olivier Faure', 'Éviter', 'En traitement', 45, 300000],
   ['NAC-1', 'Risque', 'Départ d’un expert logiciel embarqué', 'Logiciel de régulation thermique', 2, 3, 'Sophie Martin', 'Réduire', 'Ouvert', 60, 0],
   ['NAC-1', 'Opportunité', 'Réutilisation du maillage CFD d’un projet voisin', 'Optimisation de la lèvre d’entrée d’air', 3, 3, 'Paul Girard', 'Exploiter', 'Ouvert', 30, 25000],
-  ['NAC-1', 'Risque', 'Choix du fournisseur de câblage', '', 2, 2, 'Sophie Martin', 'Accepter', 'Clos', 0, 0],
-  ['NAC-2', 'Risque', 'Obsolescence du calculateur', 'Prototype calculateur', 2, 3, 'Greta Hoffmann', 'Réduire', 'Ouvert', 50, 30000],
-  ['NAC-2', 'Opportunité', 'Mutualisation du banc d’intégration', 'Banc d’intégration', 3, 2, 'Priya Nair', 'Partager', 'Ouvert', 40, 15000]
+  ['NAC-1', 'Risque', 'Choix du fournisseur de câblage', '', 2, 2, 'Sophie Martin', 'Accepter', 'Clos', 0, 0]
 ];
 
 /** Budget : [projet, livrable, personne, 'j' (jours × taux de la fiche) ou 'f' (forfait), valeur] */
 var DEMO_BUDGET = [
-  ['NAC-1', 'Spécification structure nacelle', 'Chloé Bernard', 'j', 20], ['NAC-1', 'Modèle éléments finis primaire', 'Camille Durand', 'j', 30],
-  ['NAC-1', 'Modèle éléments finis primaire', 'Rahul Sharma', 'j', 25], ['NAC-1', 'Note de calcul statique primaire', 'Julien Petit', 'j', 40],
-  ['NAC-1', 'Note de calcul de fatigue', 'Rahul Sharma', 'j', 22], ['NAC-1', 'Plans de définition structure', 'Chloé Bernard', 'j', 35],
-  ['NAC-1', 'Maillage CFD nacelle', 'Émilie Fabre', 'j', 15], ['NAC-1', 'Calcul CFD point de dimensionnement', 'Arjun Mehta', 'j', 35],
-  ['NAC-1', 'Rapport aérodynamique préliminaire', 'Paul Girard', 'j', 12], ['NAC-1', 'Optimisation de la lèvre d’entrée d’air', 'Émilie Fabre', 'j', 25],
-  ['NAC-1', 'Étude de bruit nacelle', 'Émilie Fabre', 'j', 10], ['NAC-1', 'Sélection des matériaux composites', 'Nadia Benali', 'j', 18],
-  ['NAC-1', 'Essais d’éprouvettes matériaux', 'Marta Kowalski', 'j', 25], ['NAC-1', 'Qualification des procédés de drapage', 'Antoine Garnier', 'j', 30],
-  ['NAC-1', 'Architecture système antigivrage', 'Sophie Martin', 'j', 15], ['NAC-1', 'Logiciel de régulation thermique', 'Greta Hoffmann', 'j', 45],
-  ['NAC-1', 'Intégration capteurs et câblage', 'James Walker', 'j', 25], ['NAC-1', 'Banc de validation logicielle', 'Priya Nair', 'j', 20],
-  ['NAC-1', 'Plan d’essais statiques', 'Thomas Weber', 'j', 10], ['NAC-1', 'Préparation du banc statique', 'Léa Marchand', 'j', 20],
-  ['NAC-1', 'Préparation du banc statique', 'Hugo Blanc', 'j', 18], ['NAC-1', 'Campagne d’essais statiques', 'Carl Weber', 'f', 60000],
-  ['NAC-1', 'Rapport d’essais statiques', 'Carl Weber', 'f', 18000], ['NAC-1', 'Maquette soufflerie', 'Ravi Patel', 'f', 85000],
-  ['NAC-1', 'Campagne soufflerie', 'Ravi Patel', 'j', 20], ['NAC-1', 'Rapport soufflerie', 'Ravi Patel', 'j', 8],
-  ['NAC-1', 'Programme de qualification', 'Dora Schmidt', 'j', 15], ['NAC-1', 'Dossier de qualification', 'Dora Schmidt', 'f', 30000],
-  ['NAC-1', 'Cahier des charges outillages', 'Étienne Roche', 'j', 12], ['NAC-1', 'Conception des moules', 'Étienne Roche', 'j', 30],
-  ['NAC-1', 'Réception des moules', 'Étienne Roche', 'f', 120000], ['NAC-1', 'Gamme de drapage', 'Yann Leroy', 'j', 20],
-  ['NAC-1', 'Gamme d’assemblage', 'Mathieu Collin', 'j', 22], ['NAC-1', 'Plan de certification', 'Sven Larsen', 'j', 15],
-  ['NAC-1', 'Démonstration de conformité structure', 'Sven Larsen', 'f', 45000], ['NAC-1', 'Dossier de certification complet', 'Olivier Faure', 'j', 30],
-  ['NAC-1', 'Plan de management du projet', 'Anaïs Moreau', 'j', 8], ['NAC-1', 'Registre des risques initial', 'Lucie Perrin', 'j', 6],
-  ['NAC-1', 'Planning de référence', 'Lucie Perrin', 'j', 8],
-  ['NAC-2', 'Spécification calculateur', 'Greta Hoffmann', 'j', 12], ['NAC-2', 'Prototype calculateur', 'Greta Hoffmann', 'j', 25],
-  ['NAC-2', 'Spécification capteurs', 'James Walker', 'j', 10], ['NAC-2', 'Qualification capteurs', 'James Walker', 'j', 22],
-  ['NAC-2', 'Boucle de régulation', 'Greta Hoffmann', 'j', 30], ['NAC-2', 'Tests unitaires logiciels', 'Hana Iyer', 'f', 26000],
-  ['NAC-2', 'Banc d’intégration', 'Priya Nair', 'j', 28], ['NAC-2', 'Validation système', 'Priya Nair', 'j', 22],
-  ['NAC-3', 'Analyse de fabricabilité', 'Yann Leroy', 'j', 14], ['NAC-3', 'Étude des cadences', 'Yann Leroy', 'j', 10], ['NAC-3', 'Spécification des moyens de production', 'Mathieu Collin', 'j', 16],
-  ['NAC-3', 'Consultation des fournisseurs', 'Dora Schmidt', 'f', 36000],
-  ['NAC-4', 'Plan d’essais en vol', 'Rahul Sharma', 'j', 8], ['NAC-4', 'Campagne d’essais en vol', 'Sven Larsen', 'f', 160000], ['NAC-4', 'Rapport d’essais en vol', 'Camille Durand', 'j', 9]
+  ['NAC-1', 'Spécification structure nacelle', 'Chloé Bernard', 'j', 20],
+  ['NAC-1', 'Modèle éléments finis primaire', 'Camille Durand', 'j', 30],
+  ['NAC-1', 'Modèle éléments finis primaire', 'Rahul Sharma', 'j', 25],
+  ['NAC-1', 'Note de calcul statique primaire', 'Julien Petit', 'j', 40],
+  ['NAC-1', 'Note de calcul de fatigue', 'Rahul Sharma', 'j', 22],
+  ['NAC-1', 'Plans de définition structure', 'Chloé Bernard', 'j', 35],
+  ['NAC-1', 'Maillage CFD nacelle', 'Émilie Fabre', 'j', 15],
+  ['NAC-1', 'Calcul CFD point de dimensionnement', 'Arjun Mehta', 'j', 35],
+  ['NAC-1', 'Rapport aérodynamique préliminaire', 'Paul Girard', 'j', 12],
+  ['NAC-1', 'Optimisation de la lèvre d’entrée d’air', 'Émilie Fabre', 'j', 25],
+  ['NAC-1', 'Étude de bruit nacelle', 'Émilie Fabre', 'j', 10],
+  ['NAC-1', 'Sélection des matériaux composites', 'Nadia Benali', 'j', 18],
+  ['NAC-1', 'Essais d’éprouvettes matériaux', 'Marta Kowalski', 'j', 25],
+  ['NAC-1', 'Qualification des procédés de drapage', 'Antoine Garnier', 'j', 30],
+  ['NAC-1', 'Architecture système antigivrage', 'Sophie Martin', 'j', 15],
+  ['NAC-1', 'Logiciel de régulation thermique', 'Greta Hoffmann', 'j', 45],
+  ['NAC-1', 'Intégration capteurs et câblage', 'James Walker', 'j', 25],
+  ['NAC-1', 'Banc de validation logicielle', 'Priya Nair', 'j', 20],
+  ['NAC-1', 'Plan d’essais statiques', 'Thomas Weber', 'j', 10],
+  ['NAC-1', 'Préparation du banc statique', 'Léa Marchand', 'j', 20],
+  ['NAC-1', 'Préparation du banc statique', 'Hugo Blanc', 'j', 18],
+  ['NAC-1', 'Campagne d’essais statiques', 'Carl Weber', 'f', 60000],
+  ['NAC-1', 'Rapport d’essais statiques', 'Carl Weber', 'f', 18000],
+  ['NAC-1', 'Maquette soufflerie', 'Ravi Patel', 'f', 85000],
+  ['NAC-1', 'Campagne soufflerie', 'Ravi Patel', 'j', 20],
+  ['NAC-1', 'Rapport soufflerie', 'Ravi Patel', 'j', 8],
+  ['NAC-1', 'Programme de qualification', 'Dora Schmidt', 'j', 15],
+  ['NAC-1', 'Dossier de qualification', 'Dora Schmidt', 'f', 30000],
+  ['NAC-1', 'Cahier des charges outillages', 'Étienne Roche', 'j', 12],
+  ['NAC-1', 'Conception des moules', 'Étienne Roche', 'j', 30],
+  ['NAC-1', 'Réception des moules', 'Étienne Roche', 'f', 120000],
+  ['NAC-1', 'Gamme de drapage', 'Yann Leroy', 'j', 20],
+  ['NAC-1', 'Gamme d’assemblage', 'Mathieu Collin', 'j', 22],
+  ['NAC-1', 'Plan de certification', 'Sven Larsen', 'j', 15],
+  ['NAC-1', 'Démonstration de conformité structure', 'Sven Larsen', 'f', 45000],
+  ['NAC-1', 'Dossier de certification complet', 'Olivier Faure', 'j', 30],
+  ['NAC-1', 'Plan de management du projet', 'Anaïs Moreau', 'j', 8],
+  ['NAC-1', 'Registre des risques initial', 'Lucie Perrin', 'j', 6],
+  ['NAC-1', 'Planning de référence', 'Lucie Perrin', 'j', 8]
 ];
 
 /**
@@ -351,8 +320,5 @@ var DEMO_ORDERS = [
   ['CB-460245', 'CPN-2403', 'Étienne Roche', 'Réception des moules', 135000, 'Lancée', -20, 40, ['Réception des moules', 135000]],
   ['CB-460391', 'CPN-2401', 'Marta Kowalski', 'Éprouvettes matériaux', 18000, 'Lancée', -55, -12, ['Essais d’éprouvettes matériaux', 18000]],
   ['CB-460502', 'CPN-2401', 'Sven Larsen', 'Démonstration de conformité', 45000, 'Lancée', -25, 120, ['Démonstration de conformité structure', 45000]],
-  ['CB-470001', 'CPN-2501', 'Hana Iyer', 'Validation logicielle externalisée', 20000, 'Lancée', -30, 30, ['Tests unitaires logiciels', 20000]],
-  ['CB-470502', 'CPN-2601', 'Dora Schmidt', 'Consultation des fournisseurs de moyens', 30000, 'Lancée', -12, 40, ['Consultation des fournisseurs', 30000]],
-  ['CB-430118', 'CPN-2301', 'Sven Larsen', 'Campagne d’essais en vol', 120000, 'Terminée', -80, -35, ['Campagne d’essais en vol', 120000]],
   ['CB-499001', 'CPN-9999', 'Brigitte Stahl', 'PO d’un autre projet (hors de l’outil)', 5000, 'Lancée', -10, 15]
 ];
