@@ -78,6 +78,7 @@ c.setProp(c.PROP.AI_MODE, process.env.AI_MODE || 'off');
 c.runRules();
 c.backupBooks_ = () => {};
 c.setProp(c.PROP.DATA_ID, 'donnees'); c.setProp(c.PROP.HISTORY_ID, 'historique');
+c.SHEET_DRIVE = { addEditor() {}, removeEditor() {} }; // aperçu : le partage du classeur Données réussit sans toucher à Drive
 c.TRIGGER_LIST = () => ['nightlyRun', 'sendDigests'];
 c.nightlyRun();
 call('admin@entreprise.com', 'admin.set', { values: { ai_quota: 40, logo_url: 'https://exemple.test/logo.svg' } });

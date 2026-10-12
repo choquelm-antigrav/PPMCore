@@ -11,6 +11,7 @@ const path = require('path');
 const { freshCore, fakeWorkspace } = require('./harness');
 
 const c = freshCore();
+c.SHEET_DRIVE = { addEditor() {}, removeEditor() {} }; // aperçu : le partage du classeur Données réussit sans toucher à Drive
 const A = 'admin@entreprise.com';
 const S = { actor: 'setup', source: 'setup' };
 const call = (email, action, params) => { const r = c.handleRequest({ action, params, apiVersion: '1.0' }, email); if (!r.ok) throw new Error(action + ' : ' + JSON.stringify(r.error)); return r.data; };

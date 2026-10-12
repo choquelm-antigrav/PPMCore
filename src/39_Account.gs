@@ -47,7 +47,8 @@ defineAction('account.get', function (p, ctx) {
     person: res ? personCard_(res, teams, ctx, false) : null,
     roles: roles,
     settings: Object.assign({ notify_frequency: (row && row.notify_frequency) || 'Quotidien', calendar_invites: !!(row && isTrue(row.calendar_invites)) }, reminderSettingsView_(row)),
-    ui: loadPrefs_(ctx.email).ui
+    ui: loadPrefs_(ctx.email).ui,
+    sheet: sheetCardFor_(ctx) // lien du classeur Données, accordé à l'ouverture si la personne l'a en droit
   };
 });
 
@@ -61,7 +62,8 @@ function adminView_() {
     reminder_on: reminderDefaults_().on, reminder_days: reminderDefaults_().days,
     appsheet_url: getProp(PROP.APPSHEET_URL, ''), logo_url: getProp(PROP.LOGO_URL, ''),
     projects_folder_id: getProp(PROP.PROJECTS_FOLDER, ''),
-    backup_folder_id: getProp(PROP.BACKUP_FOLDER, ''), webapp_url: getProp(PROP.WEBAPP_URL, '')
+    backup_folder_id: getProp(PROP.BACKUP_FOLDER, ''), webapp_url: getProp(PROP.WEBAPP_URL, ''),
+    sheet_share: sheetShareOn_(), sheet_url: dataSheetUrl_(), sheet_granted: sheetGranted_().length
   };
 }
 
@@ -118,6 +120,7 @@ function validateAdminSettings_(v, cur, actor) {
     change('admins', PROP.ADMINS, cur.admins.join(','), list.join(','));
   }
 
+  if (v.sheet_share !== undefined) change('sheet_share', PROP.SHEET_SHARE, cur.sheet_share ? 'oui' : 'non', v.sheet_share ? 'oui' : 'non');
   if (v.copilot_enabled !== undefined) change('copilot', PROP.COPILOT, cur.copilot_enabled ? 'oui' : 'non', v.copilot_enabled ? 'oui' : 'non');
   var mode = v.ai_mode !== undefined ? String(v.ai_mode) : cur.ai_mode;
   var model = v.ai_model !== undefined ? String(v.ai_model).trim() : cur.ai_model;
@@ -176,6 +179,7 @@ defineAction('admin.set', function (p, ctx) {
   requireAdmin_(ctx);
   var r = validateAdminSettings_(p.values, adminView_(), ctx.email);
   applyAdminSettings_(r);
+  var shareOff = r.props[PROP.SHEET_SHARE] === 'non' ? sheetRevokeAll_() : null; // partage coupé : les accès que l'outil avait accordés sont retirés
   var at = nowIso();
   repoAppendHistory('ChangeEvent', r.audit.map(function (a) {
     return { id: newId(), at: at, table_name: 'Réglages', entity_id: 'PPM', project_id: '', field: a.field, old_value: a.old, new_value: a.new,
@@ -183,6 +187,7 @@ defineAction('admin.set', function (p, ctx) {
   }));
   var out = adminView_();
   out.changed = r.audit.map(function (a) { return a.field; });
+  if (shareOff) out.sheet_revoked = shareOff;
   return out;
 });
 

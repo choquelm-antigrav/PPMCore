@@ -88,6 +88,10 @@ En cas de doute, exécutez `A4_DIAGNOSTIC_ACCES` dans l'éditeur (Exécuter, pui
 - **Collecte automatique** : exécuter `A5_INSTALLER_DECLENCHEURS` pour poser les deux déclencheurs (1 h et 13 h). Elle lit **l'agenda du compte qui les a posés**, pas celui des autres membres.
 - **Sans collecte, rien n'est perdu** : la saisie manuelle d'un compte rendu et la synthèse du matin fonctionnent seules.
 
+## Le classeur de données, ouvert aux personnes invitées (0.14.2)
+
+Toute personne invitée dans la page **Ressources** (fiche avec une adresse de votre domaine) peut ouvrir et **modifier** le classeur Google Sheets qui contient les données : son lien est la première carte de **Mon compte** (les administrateurs le voient aussi dans Administration → Réglages, où se trouvent l'interrupteur et le bouton « Partager maintenant »). **Attention : modifier le classeur directement contourne les règles de l'outil** (droits, historique, contrôle de version) ; ne touchez pas aux colonnes id et version, ni aux dates de création, et supprimez les lignes depuis l'outil. Google envoie un courriel de partage à chaque personne.
+
 ## Pages plus réactives : le déclencheur facultatif `warmCache` (0.14.2)
 
 Après la mise à jour, exécutez **`A5_INSTALLER_DECLENCHEURS`** pour poser un déclencheur qui garde les données prêtes en mémoire toutes les 5 minutes, en semaine de 6 h à 21 h : la première page après une pause s'ouvre alors aussi vite que les suivantes. Il consomme de l'ordre d'un quart d'heure par jour de votre quota de déclencheurs. Sans lui, tout fonctionne, simplement avec une première page plus lente après 6 minutes d'inactivité. `A7` mesure le temps d'ouverture de chaque page : lancez-le avant et après.

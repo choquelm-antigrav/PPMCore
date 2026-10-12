@@ -634,6 +634,8 @@ var BOOT = <?!= boot ?>;
     var quota = el('input', { type: 'number', id: 'f-quota', min: '1', max: '500', step: '1', value: String(c.ai_quota) });
     var key = el('input', { type: 'password', id: 'f-key', autocomplete: 'new-password', placeholder: c.gemini_key_set ? '•••• clé enregistrée (laisser vide pour la garder)' : 'coller la clé ici' });
     var clearKey = el('input', { type: 'checkbox', id: 'f-clear-key' });
+    var sheetOn = el('input', { type: 'checkbox', id: 'f-sheet-share' });
+    sheetOn.checked = !!c.sheet_share;
     var copilotOn = el('input', { type: 'checkbox', id: 'f-copilot' });
     copilotOn.checked = !!c.copilot_enabled;
     var remOn = el('input', { type: 'checkbox', id: 'f-reminder-on' });
@@ -651,7 +653,7 @@ var BOOT = <?!= boot ?>;
       var values = {
         admins: admins.value.split(/[\s,;]+/).filter(Boolean), ai_mode: mode.value, ai_model: model.value, ai_quota: Number(quota.value),
         appsheet_url: appsheet.value, logo_url: logo.value, projects_folder_id: folder.value,
-        reminder_on: remOn.checked, reminder_days: Number(remDays.value), copilot_enabled: copilotOn.checked
+        reminder_on: remOn.checked, reminder_days: Number(remDays.value), copilot_enabled: copilotOn.checked, sheet_share: sheetOn.checked
       };
       if (domainsInput.value.trim() !== initialDomains.trim()) values.domains = domainsInput.value;
       if (key.value.trim()) values.gemini_key = key.value.trim();
@@ -668,6 +670,17 @@ var BOOT = <?!= boot ?>;
       });
     } }, [
       el('p', { class: 'late', id: 'cfg-error', role: 'alert', hidden: 'hidden' }),
+      el('section', { class: 'grp' }, [el('h3', { text: 'Classeur de données (Google Sheets)' }),
+        c.sheet_url ? el('p', {}, [el('a', { id: 'sheet-link', href: c.sheet_url, target: '_blank', rel: 'noopener noreferrer', text: 'Ouvrir le classeur Google Sheets ↗' })]) : el('p', { class: 'note', id: 'sheet-missing', text: 'Classeur introuvable : exécutez A1_INSTALLER_PPM.' }),
+        el('label', { class: 'opt' }, [sheetOn, el('span', { text: 'Partager le classeur, en modification, avec toutes les personnes invitées' })]),
+        el('p', { class: 'note', id: 'sheet-note', text: 'Chaque personne ayant une fiche avec une adresse du domaine reçoit l’accès (un courriel de partage de Google lui est envoyé) et voit le lien dans « Mon compte ». Modifier le classeur directement contourne les règles de l’outil : droits, historique, contrôle de version. Décocher retire les accès que l’outil a accordés (jamais ceux que vous avez donnés à la main). ' + (c.sheet_granted || 0) + ' accès accordé(s) par l’outil.' }),
+        el('div', { class: 'row' }, [el('button', { type: 'button', class: 'btn', id: 'sheet-sync', text: 'Partager maintenant avec toutes les personnes invitées', onclick: function () {
+          var out = document.getElementById('sheet-sync-result'); out.textContent = 'Partage en cours…'; out.hidden = false;
+          call('admin.sheet.sync', {}, true).then(function (r) {
+            out.textContent = !r.enabled ? 'Le partage est désactivé : cochez d’abord la case, puis enregistrez.' : r.granted + ' accès accordé(s), ' + r.already + ' déjà en place, ' + r.revoked + ' retiré(s)' + (r.failed.length ? ', ' + r.failed.length + ' en échec : ' + r.failed.map(function (f) { return f.email + ' (' + f.reason + ')'; }).join(' ; ') : '') + (r.partial ? ' — interrompu avant la limite de temps : relancez.' : '.');
+          }).catch(function (e) { out.textContent = ppmErrorText(e); });
+        } })]),
+        el('p', { class: 'note', id: 'sheet-sync-result', hidden: 'hidden' })]),
       el('section', { class: 'grp' }, [el('h3', { text: 'Administrateurs' }), field('Une adresse par ligne ; vous devez rester dans la liste', admins)]),
       el('section', { class: 'grp' }, [el('h3', { text: 'Accès à l’outil' }),
         field('Domaines autorisés, séparés par une virgule (au plus cinq ; vous ne pouvez pas retirer le vôtre)', domainsInput)]),

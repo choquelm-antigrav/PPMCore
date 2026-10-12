@@ -132,6 +132,14 @@ function liveSmokeTest_(opts) {
     if (!v.ok) return { warn: 'démo incomplète (' + v.text + ') : exécutez A6_EFFACER_DEMO deux fois puis A2_SEED_DEMO' };
     return v.text;
   });
+  step('Classeur Données : partage avec les personnes invitées (0.14.2)', function () {
+    var id = getProp(PROP.DATA_ID, '');
+    if (!id) return { warn: 'classeur Données introuvable : exécuter A1_INSTALLER_PPM' };
+    if (!SHEET_DRIVE && typeof DriveApp === 'undefined') return { warn: 'non vérifiable ici' };
+    var name = SHEET_DRIVE ? 'classeur' : DriveApp.getFileById(id).getName();
+    if (!sheetShareOn_()) return { warn: 'le partage est coupé (Administration → Réglages) : « ' + name + ' » n’est ouvert qu’à son propriétaire' };
+    return '« ' + name + ' » : ' + sheetGranted_().length + ' accès accordé(s) par l’outil, ' + sheetDesired_().length + ' personne(s) attendue(s)';
+  });
   step('Mails : quota du jour', function () {
     if (!has('MailApp') || !MailApp.getRemainingDailyQuota) return { warn: 'non vérifiable ici' };
     var q = MailApp.getRemainingDailyQuota();

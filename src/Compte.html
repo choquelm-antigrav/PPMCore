@@ -7,6 +7,9 @@
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <style>
+  .big { display: inline-flex; align-items: center; gap: 10px; padding: 14px 24px; font-size: 17px; font-weight: 600; border-radius: 8px; text-decoration: none; background: var(--accent); color: #fff; }
+  .big:hover { filter: brightness(.94); }
+  .warnbox { margin: 14px 0 0; padding: 12px 16px; background: var(--warn-bg); color: var(--warn-ink); border-left: 4px solid var(--amber); border-radius: 4px; font-size: 14.5px; }
   .box { margin: 0 0 20px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); }
   .panel { padding: 8px 24px 32px; max-width: 880px; }
   .box h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
@@ -34,6 +37,10 @@
 </header>
 
 <main class="zones" style="--cell-min: 380px; --max-cols: 3">
+  <div class="cell wide" id="cell-sheet">
+    <div class="zone" id="zone-sheet" hidden><h2 class="sec">Données du projet : le classeur Google Sheets</h2></div>
+    <section class="panel" id="panel-sheet" aria-label="Classeur de données" hidden></section>
+  </div>
   <div class="cell" id="cell-fiche">
     <div class="zone"><h2 class="sec">Ma fiche</h2></div>
     <section class="panel" id="panel-fiche" aria-label="Ma fiche"></section>
@@ -78,6 +85,26 @@ var BOOT = <?!= boot ?>;
       state.suggestions = { functions: Object.keys(f).sort(), organizations: Object.keys(o).sort() };
       return state.suggestions;
     }).catch(function () { return { functions: [], organizations: [] }; });
+  }
+
+  // ------------------------------------------------------------ le classeur de données
+  /** Le lien du classeur Google Sheets : en tête de la page, bien visible, avec ce qu'il faut savoir avant de le modifier. */
+  function renderSheet() {
+    var s = (state.acct && state.acct.sheet) || {}, panel = $('panel-sheet');
+    clear(panel);
+    var show = !!s.url || s.state === 'failed';
+    $('zone-sheet').hidden = !show; panel.hidden = !show;
+    if (!show) return;
+    var box = el('div', { class: 'box' });
+    if (s.url && s.state === 'granted') box.appendChild(el('p', { text: 'Vous avez accès au classeur qui contient toutes les données de l’outil (projets, planning, ressources, budget), en lecture et en modification.' }));
+    if (s.url && s.state === 'disabled') box.appendChild(el('p', { id: 'sheet-disabled', text: 'Le partage du classeur avec les personnes invitées est désactivé (Administration → Réglages) : seuls les administrateurs voient ce lien.' }));
+    if (s.state === 'failed') box.appendChild(el('p', { class: 'error', id: 'sheet-failed', text: 'Votre accès au classeur n’a pas pu être attribué automatiquement' + (s.reason ? ' (' + s.reason + ')' : '') + '. Demandez à un administrateur de vous le partager, ou de lancer « Partager maintenant » dans Administration.' }));
+    if (s.url) {
+      box.appendChild(el('p', { style: 'margin:14px 0 0' }, [el('a', { class: 'big', id: 'sheet-link', href: s.url, target: '_blank', rel: 'noopener noreferrer', text: 'Ouvrir le classeur Google Sheets ↗' })]));
+      box.appendChild(el('p', { class: 'warnbox', id: 'sheet-warning' }, [el('strong', { text: 'À savoir avant de modifier. ' }),
+        'Une modification faite directement dans le classeur ne passe pas par les règles de l’outil : ni vérification des droits, ni historique, ni contrôle de version. Elle peut mettre jusqu’à 6 minutes à apparaître dans les pages. Ne touchez pas aux colonnes id et version, ni aux dates de création ; n’y supprimez pas de ligne (supprimez depuis l’outil) ; en cas de doute, passez par l’outil. Ce classeur contient des données sensibles (budgets, taux journaliers, rôles) : ne le partagez pas.']));
+    }
+    panel.appendChild(box);
   }
 
   function renderFiche() {
@@ -248,6 +275,7 @@ var BOOT = <?!= boot ?>;
 
   function render() {
     if (!state.acct) return;
+    renderSheet();
     renderFiche();
     renderMine();
     renderNotifications();

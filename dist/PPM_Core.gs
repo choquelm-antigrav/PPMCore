@@ -1,7 +1,7 @@
 /**
- * PPM Core 0.14.2 — fichier unique à installer (fabriqué par tools/build.js, empreinte 12de8b6c7def).
+ * PPM Core 0.14.2 — fichier unique à installer (fabriqué par tools/build.js, empreinte 3bd34304ace4).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
- * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs.
+ * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs.
  */
 
 // ======================================================================
@@ -132,6 +132,8 @@ var PROP = {
   LAST_NIGHTLY: 'PPM_LAST_NIGHTLY',
   LAST_DIGEST: 'PPM_LAST_DIGEST',
   COPILOT: 'PPM_COPILOT',
+  SHEET_SHARE: 'PPM_SHEET_SHARE',     // « non » : le classeur Données n'est plus partagé avec les personnes invitées (oui par défaut)
+  SHEET_GRANTED: 'PPM_SHEET_GRANTED', // adresses à qui l'OUTIL a accordé l'accès (JSON) : seules celles-là sont retirées par lui
   WEBAPP_URL_AT: 'PPM_WEBAPP_URL_AT', // dernière vérification de l'adresse de la web app (ms) : pas d'appel à ScriptApp à chaque page
   DEMO_STEP: 'PPM_DEMO_STEP',
   DEMO_CLEAN: 'PPM_DEMO_CLEAN', // horodatage de la demande de suppression de l'ancienne démo (confirmation par un second lancement)
@@ -2661,6 +2663,14 @@ function liveSmokeTest_(opts) {
     if (!v.ok) return { warn: 'démo incomplète (' + v.text + ') : exécutez A6_EFFACER_DEMO deux fois puis A2_SEED_DEMO' };
     return v.text;
   });
+  step('Classeur Données : partage avec les personnes invitées (0.14.2)', function () {
+    var id = getProp(PROP.DATA_ID, '');
+    if (!id) return { warn: 'classeur Données introuvable : exécuter A1_INSTALLER_PPM' };
+    if (!SHEET_DRIVE && typeof DriveApp === 'undefined') return { warn: 'non vérifiable ici' };
+    var name = SHEET_DRIVE ? 'classeur' : DriveApp.getFileById(id).getName();
+    if (!sheetShareOn_()) return { warn: 'le partage est coupé (Administration → Réglages) : « ' + name + ' » n’est ouvert qu’à son propriétaire' };
+    return '« ' + name + ' » : ' + sheetGranted_().length + ' accès accordé(s) par l’outil, ' + sheetDesired_().length + ' personne(s) attendue(s)';
+  });
   step('Mails : quota du jour', function () {
     if (!has('MailApp') || !MailApp.getRemainingDailyQuota) return { warn: 'non vérifiable ici' };
     var q = MailApp.getRemainingDailyQuota();
@@ -4345,7 +4355,9 @@ defineAction('resources.create', function (p, ctx) {
     values = fillFromDirectory_(values); // nom, fonction, organisation depuis l'annuaire s'ils manquent
   }
   assertTeam_(values);
-  return repoInsert('Resource', values, ctx.actx);
+  var created = repoInsert('Resource', values, ctx.actx);
+  if (!isBlank(values.email)) sheetGrantSafe_(values.email); // la personne invitée ouvre le classeur Données dès maintenant (50_SheetAccess.gs)
+  return created;
 });
 
 defineAction('resources.update', function (p, ctx) {
@@ -6772,7 +6784,8 @@ defineAction('account.get', function (p, ctx) {
     person: res ? personCard_(res, teams, ctx, false) : null,
     roles: roles,
     settings: Object.assign({ notify_frequency: (row && row.notify_frequency) || 'Quotidien', calendar_invites: !!(row && isTrue(row.calendar_invites)) }, reminderSettingsView_(row)),
-    ui: loadPrefs_(ctx.email).ui
+    ui: loadPrefs_(ctx.email).ui,
+    sheet: sheetCardFor_(ctx) // lien du classeur Données, accordé à l'ouverture si la personne l'a en droit
   };
 });
 
@@ -6786,7 +6799,8 @@ function adminView_() {
     reminder_on: reminderDefaults_().on, reminder_days: reminderDefaults_().days,
     appsheet_url: getProp(PROP.APPSHEET_URL, ''), logo_url: getProp(PROP.LOGO_URL, ''),
     projects_folder_id: getProp(PROP.PROJECTS_FOLDER, ''),
-    backup_folder_id: getProp(PROP.BACKUP_FOLDER, ''), webapp_url: getProp(PROP.WEBAPP_URL, '')
+    backup_folder_id: getProp(PROP.BACKUP_FOLDER, ''), webapp_url: getProp(PROP.WEBAPP_URL, ''),
+    sheet_share: sheetShareOn_(), sheet_url: dataSheetUrl_(), sheet_granted: sheetGranted_().length
   };
 }
 
@@ -6843,6 +6857,7 @@ function validateAdminSettings_(v, cur, actor) {
     change('admins', PROP.ADMINS, cur.admins.join(','), list.join(','));
   }
 
+  if (v.sheet_share !== undefined) change('sheet_share', PROP.SHEET_SHARE, cur.sheet_share ? 'oui' : 'non', v.sheet_share ? 'oui' : 'non');
   if (v.copilot_enabled !== undefined) change('copilot', PROP.COPILOT, cur.copilot_enabled ? 'oui' : 'non', v.copilot_enabled ? 'oui' : 'non');
   var mode = v.ai_mode !== undefined ? String(v.ai_mode) : cur.ai_mode;
   var model = v.ai_model !== undefined ? String(v.ai_model).trim() : cur.ai_model;
@@ -6901,6 +6916,7 @@ defineAction('admin.set', function (p, ctx) {
   requireAdmin_(ctx);
   var r = validateAdminSettings_(p.values, adminView_(), ctx.email);
   applyAdminSettings_(r);
+  var shareOff = r.props[PROP.SHEET_SHARE] === 'non' ? sheetRevokeAll_() : null; // partage coupé : les accès que l'outil avait accordés sont retirés
   var at = nowIso();
   repoAppendHistory('ChangeEvent', r.audit.map(function (a) {
     return { id: newId(), at: at, table_name: 'Réglages', entity_id: 'PPM', project_id: '', field: a.field, old_value: a.old, new_value: a.new,
@@ -6908,6 +6924,7 @@ defineAction('admin.set', function (p, ctx) {
   }));
   var out = adminView_();
   out.changed = r.audit.map(function (a) { return a.field; });
+  if (shareOff) out.sheet_revoked = shareOff;
   return out;
 });
 
@@ -7128,6 +7145,7 @@ function deleteTriggers_(handler) {
 function nightlyRun() {
   resetExecution_();
   invalidateAllTables_(); // la nuit repart de ce qui est réellement dans les feuilles
+  try { sheetSync_(); } catch (e) { console.error('PPM partage du classeur : ' + (e && e.message ? e.message : e)); } // les personnes invitées dans la journée ont leur accès ; ceux qui sont partis le perdent
   setProp(PROP.JOB_STATE, JSON.stringify({ step: 0, startedAt: nowIso() }));
   continueNightly();
 }
@@ -10854,4 +10872,139 @@ defineAction('budget.program', function (p, ctx) {
   return { today: todayStr(), program: sc.program, projects: rows,
     totals: Object.assign(programSum_(rows, ['budget_total', 'budget_internal', 'budget_external', 'po_planned', 'po_committed', 'po_received', 'po_closed', 'po_count', 'remaining_external']),
       { overruns: rows.filter(function (r) { return r.overrun; }).length, restricted: rows.filter(function (r) { return r.restricted; }).length }) };
+});
+
+// ======================================================================
+// 50_SheetAccess.gs
+// ======================================================================
+
+/**
+ * PPM Core — 0.14.2 : accès au classeur « Données » (Google Sheets).
+ *
+ * Toute personne invitée à l'outil (une fiche avec une adresse d'un domaine autorisé, créée dans la page Ressources) reçoit l'accès en ÉDITION au classeur
+ * qui contient les données, et son lien est affiché dans Mon compte (et dans Administration pour les administrateurs).
+ *
+ * ATTENTION, choix assumé : modifier le classeur directement CONTOURNE les règles de l'outil (droits, historique, contrôle de version, vérifications) ; le cache
+ * peut retarder de quelques minutes l'affichage d'une saisie. Le classeur « Historique » n'est jamais partagé.
+ *
+ * Règles de prudence :
+ *   - l'outil ne retire QUE les accès qu'il a lui-même accordés (propriété PPM_SHEET_GRANTED) : un partage fait à la main par le propriétaire n'est jamais touché ;
+ *   - un accès n'est accordé qu'à une adresse valide d'un domaine autorisé ;
+ *   - le partage peut être coupé (Administration → Réglages) : les accès accordés par l'outil sont alors retirés ;
+ *   - une erreur de Drive (adresse sans compte Google, quota) est rapportée mais ne bloque jamais l'outil.
+ * Drive prévient chaque personne par un courriel de partage (DriveApp ne permet pas de l'éviter).
+ */
+
+var SHEET_DRIVE = null; // tests : { addEditor(email), removeEditor(email) }
+
+function dataSheetUrl_() {
+  var id = getProp(PROP.DATA_ID, '');
+  return id ? 'https://docs.google.com/spreadsheets/d/' + id + '/edit' : '';
+}
+
+function sheetShareOn_() { return getProp(PROP.SHEET_SHARE, 'oui') !== 'non'; }
+
+function sheetGranted_() {
+  var l = parseJsonSafe(getProp(PROP.SHEET_GRANTED, ''), []);
+  return Array.isArray(l) ? l : [];
+}
+
+function sheetSetGranted_(list) { setProp(PROP.SHEET_GRANTED, JSON.stringify(list)); }
+
+function sheetOwnerEmail_() {
+  try { return String(Session.getEffectiveUser().getEmail() || '').toLowerCase(); } catch (e) { return ''; }
+}
+
+function sheetDrive_() {
+  if (SHEET_DRIVE) return SHEET_DRIVE;
+  var f = DriveApp.getFileById(getProp(PROP.DATA_ID, ''));
+  return { addEditor: function (e) { f.addEditor(e); }, removeEditor: function (e) { f.removeEditor(e); } };
+}
+
+/** Une adresse valide d'un domaine autorisé. */
+function sheetEligible_(email) {
+  var e = String(email || '').toLowerCase().trim();
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e) && isAllowedEmail_(e);
+}
+
+/** Accorde l'accès en édition (une fois : les accès déjà accordés ne sont pas redemandés à Drive). */
+function sheetGrant_(email) {
+  var e = String(email || '').toLowerCase().trim();
+  if (!getProp(PROP.DATA_ID, '')) return { ok: false, state: 'no_sheet' };
+  if (!sheetShareOn_()) return { ok: false, state: 'disabled' };
+  if (!sheetEligible_(e)) return { ok: false, state: 'not_eligible' };
+  if (e === sheetOwnerEmail_()) return { ok: true, state: 'owner', already: true };
+  var granted = sheetGranted_();
+  if (granted.indexOf(e) >= 0) return { ok: true, state: 'granted', already: true };
+  try { sheetDrive_().addEditor(e); } catch (err) { return { ok: false, state: 'failed', reason: String(err && err.message ? err.message : err).slice(0, 160) }; }
+  granted.push(e);
+  sheetSetGranted_(granted);
+  return { ok: true, state: 'granted' };
+}
+
+/** Sans jamais lever d'erreur : à employer partout où l'accès n'est qu'un plus. */
+function sheetGrantSafe_(email) {
+  try { return sheetGrant_(email); } catch (e) { console.error('PPM partage du classeur : ' + (e && e.message ? e.message : e)); return { ok: false, state: 'failed', reason: 'erreur inattendue' }; }
+}
+
+/** Retire un accès que l'outil avait accordé (jamais un autre). */
+function sheetRevoke_(email) {
+  var e = String(email || '').toLowerCase().trim(), granted = sheetGranted_(), i = granted.indexOf(e);
+  if (i < 0) return { ok: true, state: 'not_granted' };
+  try { sheetDrive_().removeEditor(e); } catch (err) { return { ok: false, state: 'failed', reason: String(err && err.message ? err.message : err).slice(0, 160) }; }
+  granted.splice(i, 1);
+  sheetSetGranted_(granted);
+  return { ok: true, state: 'revoked' };
+}
+
+function sheetRevokeAll_() {
+  var out = { revoked: 0, failed: [] };
+  sheetGranted_().slice().forEach(function (e) {
+    var r = sheetRevoke_(e);
+    if (r.ok) out.revoked++; else out.failed.push({ email: e, reason: r.reason || r.state });
+  });
+  return out;
+}
+
+/** Les personnes qui doivent avoir l'accès : fiches avec une adresse autorisée, et administrateurs. */
+function sheetDesired_() {
+  var want = {};
+  repoList('Resource').forEach(function (r) { if (!isBlank(r.email) && sheetEligible_(r.email)) want[String(r.email).toLowerCase().trim()] = true; });
+  adminEmails().forEach(function (e) { if (sheetEligible_(e)) want[e] = true; });
+  return Object.keys(want).sort();
+}
+
+/** Accorde l'accès à toutes les personnes invitées et retire celui des personnes qui ne sont plus dans l'outil (parmi ceux que l'outil avait accordés). */
+function sheetSync_() {
+  var out = { enabled: sheetShareOn_(), url: dataSheetUrl_(), granted: 0, already: 0, revoked: 0, failed: [], partial: false };
+  if (!out.enabled || !out.url) return out;
+  var want = sheetDesired_(), t0 = nowMs();
+  want.forEach(function (e) {
+    if (nowMs() - t0 > 240000) { out.partial = true; return; } // chaque partage prend près d'une seconde : on s'arrête avant la limite d'exécution
+    var r = sheetGrant_(e);
+    if (!r.ok) out.failed.push({ email: e, reason: r.reason || r.state });
+    else if (r.already) out.already++;
+    else out.granted++;
+  });
+  if (!out.partial) sheetGranted_().filter(function (e) { return want.indexOf(e) < 0; }).forEach(function (e) { if (sheetRevoke_(e).ok) out.revoked++; });
+  return out;
+}
+
+/** Ce que Mon compte affiche : le lien si la personne y a accès (accordé à l'ouverture de la page si besoin), un message sinon. */
+function sheetCardFor_(ctx) {
+  var url = dataSheetUrl_(), on = sheetShareOn_();
+  var card = { url: '', enabled: on, state: 'hidden', reason: '' };
+  if (!url) return card;
+  if (ctx.isAdmin) card.url = url; // l'administrateur voit toujours le lien (il est propriétaire ou peut se partager le classeur)
+  if (!on) { card.state = 'disabled'; return card; }
+  if (!ctx.resourceId && !ctx.isAdmin) { card.state = 'no_person'; return card; }
+  var r = sheetGrantSafe_(ctx.email);
+  if (r.ok) { card.url = url; card.state = 'granted'; }
+  else { card.state = r.state === 'failed' ? 'failed' : 'not_eligible'; card.reason = r.reason || ''; }
+  return card;
+}
+
+defineAction('admin.sheet.sync', function (p, ctx) {
+  requireAdmin_(ctx);
+  return sheetSync_();
 });

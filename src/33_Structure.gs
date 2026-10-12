@@ -547,7 +547,9 @@ defineAction('resources.create', function (p, ctx) {
     values = fillFromDirectory_(values); // nom, fonction, organisation depuis l'annuaire s'ils manquent
   }
   assertTeam_(values);
-  return repoInsert('Resource', values, ctx.actx);
+  var created = repoInsert('Resource', values, ctx.actx);
+  if (!isBlank(values.email)) sheetGrantSafe_(values.email); // la personne invitée ouvre le classeur Données dès maintenant (50_SheetAccess.gs)
+  return created;
 });
 
 defineAction('resources.update', function (p, ctx) {

@@ -20,6 +20,7 @@ const src = (f) => fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8')
 let failed = 0;
 const check = (cond, msg) => { if (!cond) { failed++; console.error('✗ ' + msg); } else console.log('  ✓ ' + msg); };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const flat = (t) => String(t).replace(/\s+/g, ' ').trim();
 
 function openPage(file, user, boot) {
   const html = src(file).replace(/<\?!= include\('(?!Style'|Common'|Header')(\w+)'\) \?>/g, (m, n) => require('fs').readFileSync(require('path').join(__dirname, '..', 'src', n + '.html'), 'utf8')).replace("<?!= include('Style') ?>", src('Style.html')).replace("<?!= include('Common') ?>", src('Common.html')).replace("<?!= include('Header') ?>", src('Header.html'))
@@ -269,6 +270,50 @@ function openPage(file, user, boot) {
   await on.until(() => on.doc.getElementById('home'));
   check([...on.doc.querySelectorAll('#home option')].some((o) => o.value === 'copilote'), 'réactivé : il revient');
   c.setProp(c.PROP.COPILOT, 'oui');
+
+  // ---------------------------------------------------------------- 0.14.2 : le lien du classeur de données, en tête de Mon compte et dans Administration
+  const editors = new Set(), driveCalls = [];
+  c.SHEET_DRIVE = { addEditor: (e) => { driveCalls.push('+' + e); if (c.__driveFail) throw new Error(c.__driveFail); editors.add(e); }, removeEditor: (e) => { driveCalls.push('-' + e); editors.delete(e); } };
+  c.sheetSetGranted_([]); c.setProp(c.PROP.SHEET_SHARE, 'oui'); c.Session = Object.assign({}, c.Session || {}, { getEffectiveUser: () => ({ getEmail: () => 'proprio@entreprise.com' }) });
+  const mine = openPage('Compte.html', RWP);
+  await mine.until(() => mine.doc.getElementById('sheet-link'));
+  const link = mine.doc.getElementById('sheet-link');
+  check(!mine.doc.getElementById('panel-sheet').hidden && !mine.doc.getElementById('zone-sheet').hidden, 'Mon compte : la carte du classeur est affichée, en tête de page');
+  check(mine.doc.querySelector('.zones > .cell:first-child').id === 'cell-sheet', 'et c’est la première carte');
+  check(link.getAttribute('href') === 'https://docs.google.com/spreadsheets/d/donnees/edit' && link.getAttribute('target') === '_blank' && /noopener/.test(link.getAttribute('rel')) && /Ouvrir le classeur Google Sheets/.test(link.textContent) && link.className.indexOf('big') >= 0, 'un gros bouton ouvre le classeur Données dans un nouvel onglet');
+  check(/ne passe pas par les règles de l’outil/.test(flat(mine.doc.getElementById('sheet-warning').textContent)) && /6 minutes/.test(mine.doc.getElementById('sheet-warning').textContent) && /id et version/.test(mine.doc.getElementById('sheet-warning').textContent) && /données sensibles/.test(mine.doc.getElementById('sheet-warning').textContent), 'l’avertissement dit ce que la modification directe contourne, le délai, les colonnes à ne pas toucher et la sensibilité des données');
+  check(driveCalls.filter((k) => k === '+' + RWP).length === 1 && editors.has(RWP), 'l’accès a été accordé à l’ouverture, une fois');
+  check(![...mine.doc.querySelectorAll('#panel-sheet a')].some((a) => /historique/.test(a.getAttribute('href'))) && !/spreadsheets\/d\/historique/.test(mine.doc.documentElement.innerHTML), 'aucun lien ne mène au classeur Historique (qui n’est jamais partagé)');
+  // Drive refuse
+  c.sheetSetGranted_([]); editors.clear(); c.__driveFail = 'pas de compte Google';
+  const failing = openPage('Compte.html', RWP);
+  await failing.until(() => failing.doc.getElementById('sheet-failed'));
+  check(!failing.doc.getElementById('sheet-link') && /pas de compte Google/.test(failing.doc.getElementById('sheet-failed').textContent) && /Partager maintenant/.test(failing.doc.getElementById('sheet-failed').textContent), 'Drive refuse : un message dit pourquoi et quoi faire, sans lien trompeur');
+  c.__driveFail = null;
+  // partage coupé : seul l'administrateur voit le lien
+  c.setProp(c.PROP.SHEET_SHARE, 'non');
+  const off = openPage('Compte.html', RWP);
+  await wait(500);
+  check(off.doc.getElementById('panel-sheet').hidden && !off.doc.getElementById('sheet-link'), 'partage coupé : un invité ne voit plus la carte');
+  const offAdmin = openPage('Compte.html', ADMIN);
+  await offAdmin.until(() => offAdmin.doc.getElementById('sheet-link'));
+  check(!!offAdmin.doc.getElementById('sheet-disabled') && /seuls les administrateurs voient ce lien/.test(offAdmin.doc.getElementById('sheet-disabled').textContent), 'partage coupé : l’administrateur voit encore le lien, avec la raison');
+  c.setProp(c.PROP.SHEET_SHARE, 'oui');
+  // Administration
+  const adm = openPage('Admin.html', ADMIN);
+  await adm.until(() => adm.doc.getElementById('f-sheet-share'));
+  check(adm.doc.getElementById('sheet-link').getAttribute('href') === 'https://docs.google.com/spreadsheets/d/donnees/edit' && adm.doc.getElementById('sheet-link').getAttribute('target') === '_blank' && adm.doc.getElementById('f-sheet-share').checked, 'Administration → Réglages : le lien du classeur et la case de partage (cochée)');
+  check(/contourne les règles de l’outil/.test(adm.doc.getElementById('sheet-note').textContent) && /jamais ceux que vous avez donnés à la main/.test(adm.doc.getElementById('sheet-note').textContent) && /courriel de partage/.test(adm.doc.getElementById('sheet-note').textContent), 'la note dit le contournement des règles, les courriels de Google et que les partages manuels ne sont pas touchés');
+  c.repoInsert('Resource', { name: 'Tess', email: 'tess@entreprise.com', resource_type: 'Interne', country: 'FR' }, { actor: 'setup', source: 'setup' });
+  adm.click(adm.doc.getElementById('sheet-sync'));
+  await adm.until(() => /accès accordé/.test(adm.doc.getElementById('sheet-sync-result').textContent));
+  check(editors.has('tess@entreprise.com') && /\d+ accès accordé\(s\), \d+ déjà en place, 0 retiré\(s\)\./.test(adm.doc.getElementById('sheet-sync-result').textContent), '« Partager maintenant » accorde l’accès aux invités et rend le compte rendu : ' + adm.doc.getElementById('sheet-sync-result').textContent);
+  adm.doc.getElementById('f-sheet-share').checked = false;
+  adm.submit(adm.doc.querySelector('form.form'));
+  await adm.until(() => c.getProp(c.PROP.SHEET_SHARE, 'oui') === 'non');
+  await adm.until(() => editors.size === 0);
+  check(c.getProp(c.PROP.SHEET_SHARE, 'oui') === 'non' && editors.size === 0 && c.sheetGranted_().length === 0, 'décocher et enregistrer coupe le partage et retire les accès accordés par l’outil');
+  c.setProp(c.PROP.SHEET_SHARE, 'oui');
 
   console.log(failed ? '\n' + failed + ' échec(s).' : '\nPages Mon compte et Administration : tout est conforme.');
   process.exit(failed ? 1 : 0);

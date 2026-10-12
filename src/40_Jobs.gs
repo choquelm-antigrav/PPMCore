@@ -89,6 +89,7 @@ function deleteTriggers_(handler) {
 function nightlyRun() {
   resetExecution_();
   invalidateAllTables_(); // la nuit repart de ce qui est réellement dans les feuilles
+  try { sheetSync_(); } catch (e) { console.error('PPM partage du classeur : ' + (e && e.message ? e.message : e)); } // les personnes invitées dans la journée ont leur accès ; ceux qui sont partis le perdent
   setProp(PROP.JOB_STATE, JSON.stringify({ step: 0, startedAt: nowIso() }));
   continueNightly();
 }

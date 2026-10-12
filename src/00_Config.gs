@@ -93,6 +93,8 @@ var PROP = {
   LAST_NIGHTLY: 'PPM_LAST_NIGHTLY',
   LAST_DIGEST: 'PPM_LAST_DIGEST',
   COPILOT: 'PPM_COPILOT',
+  SHEET_SHARE: 'PPM_SHEET_SHARE',     // « non » : le classeur Données n'est plus partagé avec les personnes invitées (oui par défaut)
+  SHEET_GRANTED: 'PPM_SHEET_GRANTED', // adresses à qui l'OUTIL a accordé l'accès (JSON) : seules celles-là sont retirées par lui
   WEBAPP_URL_AT: 'PPM_WEBAPP_URL_AT', // dernière vérification de l'adresse de la web app (ms) : pas d'appel à ScriptApp à chaque page
   DEMO_STEP: 'PPM_DEMO_STEP',
   DEMO_CLEAN: 'PPM_DEMO_CLEAN', // horodatage de la demande de suppression de l'ancienne démo (confirmation par un second lancement)
