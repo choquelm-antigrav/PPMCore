@@ -3,12 +3,13 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.14.2">
+<meta name="ppm-version" content="0.15.0">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <style>
   .big { display: inline-flex; align-items: center; gap: 10px; padding: 14px 24px; font-size: 17px; font-weight: 600; border-radius: 8px; text-decoration: none; background: var(--accent); color: #fff; }
   .big:hover { filter: brightness(.94); }
+  ul.locked { margin: 6px 0 0; padding-left: 20px; } ul.locked li { margin: 4px 0; } ul.locked li.cannot { color: var(--muted); }
   .warnbox { margin: 14px 0 0; padding: 12px 16px; background: var(--warn-bg); color: var(--warn-ink); border-left: 4px solid var(--amber); border-radius: 4px; font-size: 14.5px; }
   .box { margin: 0 0 20px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); }
   .panel { padding: 8px 24px 32px; max-width: 880px; }
@@ -103,6 +104,14 @@ var BOOT = <?!= boot ?>;
       box.appendChild(el('p', { style: 'margin:14px 0 0' }, [el('a', { class: 'big', id: 'sheet-link', href: s.url, target: '_blank', rel: 'noopener noreferrer', text: 'Ouvrir le classeur Google Sheets ↗' })]));
       box.appendChild(el('p', { class: 'warnbox', id: 'sheet-warning' }, [el('strong', { text: 'À savoir avant de modifier. ' }),
         'Une modification faite directement dans le classeur ne passe pas par les règles de l’outil : ni vérification des droits, ni historique, ni contrôle de version. Elle peut mettre jusqu’à 6 minutes à apparaître dans les pages. Ne touchez pas aux colonnes id et version, ni aux dates de création ; n’y supprimez pas de ligne (supprimez depuis l’outil) ; en cas de doute, passez par l’outil. Ce classeur contient des données sensibles (budgets, taux journaliers, rôles) : ne le partagez pas.']));
+      if (s.locked && s.locked.length) {
+        box.appendChild(el('h3', { text: 'Feuilles que vous pouvez modifier' }));
+        box.appendChild(el('ul', { id: 'sheet-locked', class: 'locked' }, s.locked.map(function (g) {
+          return el('li', { 'data-group': g.key, class: g.can_edit ? 'can' : 'cannot' }, [el('strong', { text: g.label }), ' (' + g.tables.join(', ') + ') : ',
+            g.can_edit ? 'vous pouvez la modifier.' : 'verrouillée pour vous, réservée aux ' + g.who + '.']);
+        })));
+        box.appendChild(el('p', { class: 'note', id: 'sheet-locked-note', text: 'Les autres feuilles (planning, actualités…) se modifient librement. Ce verrouillage se déduit des rôles : il suit vos rôles tout seul. Il n’empêche que de modifier : vous pouvez toujours lire ces feuilles.' }));
+      }
     }
     panel.appendChild(box);
   }

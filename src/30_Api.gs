@@ -73,7 +73,7 @@ function handleRequest(body, actorEmail, opts) {
     console.error(err && err.stack ? err.stack : err);
     return { ok: false, error: { code: 'INTERNAL', message: 'Erreur interne.', details: null } };
   } finally {
-    if (!(opts && opts.keepMemo)) flushCache_(); // les tables lues dans Sheets partent au cache en un appel
+    if (!(opts && opts.keepMemo)) { flushCache_(); sheetProtectIfDirty_(); } // les tables lues dans Sheets partent au cache en un appel ; la protection suit les rôles
   }
 }
 

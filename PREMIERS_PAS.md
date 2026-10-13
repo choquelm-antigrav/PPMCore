@@ -1,4 +1,4 @@
-# Premiers pas : installer et essayer PPM (version 0.14.2)
+# Premiers pas : installer et essayer PPM (version 0.15.0)
 
 Environ 15 minutes. Pas besoin d'AppSheet pour ces essais. Tout ce qu'il faut est dans le dossier `dist` de l'archive : **12 fichiers**.
 
@@ -42,15 +42,17 @@ Ouvrir l'URL suivie de `?view=gantt`. Les liens en haut de chaque page mènent a
 | **Overview** (page d'accueil) | Créer un projet (« Nouveau projet »), le renommer, lire les indicateurs délais, qualité, coût. |
 | **Ressources** | Ajouter les personnes (avec leur adresse professionnelle : c'est elle qui donne accès), créer les équipes, choisir le rôle de chacun dans le projet, saisir son taux journalier. La colonne **Accès** dit qui peut se connecter. |
 | **Budget** | Définir le **CPN** du projet. Les taux se saisissent dans **Ressources**. **Budget par livrable** : ajouter une ligne (interne : jours ; externe : forfait). **Achats (PO)** : ajouter une PO (numéro Click and Buy, CPN, ressource externe, montant, date de GR attendue, répartition par livrable), la passer en Lancée puis GR. **Bilan par CPN** : engagé et reste. |
-| **Copilote** (en suspens : masqué tant que `PPM_COPILOT` n'est pas `oui`) | **Synthèse** chiffrée du projet ; **Simulation** : choisir un livrable, +10 jours, **Simuler** (rien n'est enregistré) ; **Suggestions** : accepter ou ignorer. |
+| **Copilote** (en suspens : masqué tant que `PPM_COPILOT` n'est pas `oui`) | **Synthèse** chiffrée du projet ; **Suggestions** : accepter ou ignorer ; **Simulation** : « Commencer une simulation », choisir un livrable, +10 jours, **Simuler** (rien n'est enregistré) ; **Questions** et rédaction par l'IA selon le mode ; **Connexion à Gemini** (la clé). Toutes ces zones sont sur la même page. |
 
 Le bouton en haut à droite de la bannière bascule en thème nuit (par défaut, celui de l'ordinateur) et mémorise votre choix. Pour mesurer la vitesse d'affichage : touche F12, onglet Console, chaque page y indique son temps de préparation.
 
 Le logo Airbus n'est pas fourni : si vous avez son adresse `https://…` (portail de marque interne), ajoutez son adresse dans Administration → Réglages (ou la propriété du script `PPM_LOGO_URL`).
 
-Le copilote est **suspendu par défaut**. Pour l'activer : **Administration → Réglages → Copilote → « Activer le Copilote »**, puis Enregistrer et recharger la page. Avant cela, validez avec votre DSI l'usage de clés Gemini personnelles (voir README, « Copilote : la clé Gemini de chaque personne »). Chaque personne ouvre ensuite la page **Copilote** et suit les trois gestes : bouton bleu (ouvre la page de Google), « Créer une clé API » puis « Copier », retour sur la page, « Coller » puis « Enregistrer et tester ». Après la mise à jour 0.13.0, exécutez `A1_INSTALLER_PPM` et acceptez la nouvelle autorisation (appels vers Google).
+Le copilote est **suspendu par défaut**. Pour l'activer : **Administration → Réglages → Copilote → « Activer le Copilote »**, puis Enregistrer et recharger la page. Avant cela, validez avec votre DSI l'usage de clés Gemini personnelles (voir README, « Copilote : la clé Gemini de chaque personne »). Choisissez ensuite le mode, dans **Administration → Réglages → Copilote IA** : **Désactivé** (la synthèse chiffrée, les suggestions et la simulation marchent déjà), **Texte à coller dans Gemini** (**pour commencer** : aucune clé ; l'outil prépare un texte que l'on copie et colle soi-même dans Gemini) ou **Gemini : clé personnelle de chaque compte** (accord de la DSI requis ; **l'administrateur ne saisit aucune clé**, chacun enregistre la sienne). Dans ce dernier mode, une personne qui n'a pas encore sa clé n'est pas bloquée : ses demandes préparent le texte à coller. Pour obtenir les réponses directement, elle ouvre la zone **Connexion à Gemini** de la page **Copilote** (le bouton « Connecter ma clé » l'y amène) et suit les trois gestes : bouton bleu (ouvre la page de Google), « Créer une clé API » puis « Copier », retour sur la page, « Coller » puis « Enregistrer et tester ». Après la mise à jour 0.13.0, exécutez `A1_INSTALLER_PPM` et acceptez la nouvelle autorisation (appels vers Google).
 
 ## Mettre à jour plus tard
+
+**À lire d'abord : [`MISE_A_JOUR.md`](MISE_A_JOUR.md)** (sauvegarde avant de commencer, ce que fait `A1` sur des données existantes, les pièges qui font perdre des données, le retour en arrière, et qui fait quoi entre le propriétaire du script, l'administrateur de l'outil et les utilisateurs). En bref :
 
 1. Remplacer le contenu des 12 fichiers par ceux de la nouvelle archive (toujours les 12 : c'est plus sûr que de chercher ce qui a changé).
 2. Exécuter **A1_INSTALLER_PPM** (il ajoute les nouvelles colonnes et vérifie que chaque page est à la bonne version).

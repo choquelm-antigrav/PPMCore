@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.14.2">
+<meta name="ppm-version" content="0.15.0">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <style>
@@ -74,7 +74,7 @@ var BOOT = <?!= boot ?>;
   var $ = function (id) { return document.getElementById(id); };
   var COUNTRY_NAMES = { FR: 'France', DE: 'Allemagne', UK: 'Royaume-Uni', IN: 'Inde' };
   var STEP_LABELS = { reconcile: 'Réconciliation du journal', rules: 'Moteur de règles', workspace: 'Agenda et Drive', directory: 'Annuaire', backup: 'Sauvegarde des classeurs' };
-  var MODES = [['off', 'Désactivé'], ['manual', 'Texte à coller dans Gemini'], ['api', 'Appel direct à Gemini (accord de la DSI requis)']];
+  var MODES = [['off', 'Désactivé'], ['manual', 'Texte à coller dans Gemini'], ['api', 'Gemini : clé personnelle de chaque compte (accord de la DSI requis)']];
 
   // ------------------------------------------------------------ outils
   function loading(p) { clear(p); p.appendChild(el('p', { class: 'loading', text: 'Chargement…' })); }
@@ -115,8 +115,8 @@ var BOOT = <?!= boot ?>;
     mode.value = c.ai_mode;
     var model = el('input', { type: 'text', id: 'f-model', maxlength: '80', value: c.ai_model, placeholder: 'nom du modèle validé' });
     var quota = el('input', { type: 'number', id: 'f-quota', min: '1', max: '500', step: '1', value: String(c.ai_quota) });
-    var key = el('input', { type: 'password', id: 'f-key', autocomplete: 'new-password', placeholder: c.gemini_key_set ? '•••• clé enregistrée (laisser vide pour la garder)' : 'coller la clé ici' });
-    var clearKey = el('input', { type: 'checkbox', id: 'f-clear-key' });
+    var protectOn = el('input', { type: 'checkbox', id: 'f-sheet-protect' });
+    protectOn.checked = !!c.sheet_protect;
     var sheetOn = el('input', { type: 'checkbox', id: 'f-sheet-share' });
     sheetOn.checked = !!c.sheet_share;
     var copilotOn = el('input', { type: 'checkbox', id: 'f-copilot' });
@@ -136,11 +136,9 @@ var BOOT = <?!= boot ?>;
       var values = {
         admins: admins.value.split(/[\s,;]+/).filter(Boolean), ai_mode: mode.value, ai_model: model.value, ai_quota: Number(quota.value),
         appsheet_url: appsheet.value, logo_url: logo.value, projects_folder_id: folder.value,
-        reminder_on: remOn.checked, reminder_days: Number(remDays.value), copilot_enabled: copilotOn.checked, sheet_share: sheetOn.checked
+        reminder_on: remOn.checked, reminder_days: Number(remDays.value), copilot_enabled: copilotOn.checked, sheet_share: sheetOn.checked, sheet_protect: protectOn.checked
       };
       if (domainsInput.value.trim() !== initialDomains.trim()) values.domains = domainsInput.value;
-      if (key.value.trim()) values.gemini_key = key.value.trim();
-      if (clearKey.checked) values.clear_gemini_key = true;
       save.disabled = true;
       call('admin.set', { values: values }, true).then(function (r) {
         state.cfg = r;
@@ -164,6 +162,23 @@ var BOOT = <?!= boot ?>;
           }).catch(function (e) { out.textContent = ppmErrorText(e); });
         } })]),
         el('p', { class: 'note', id: 'sheet-sync-result', hidden: 'hidden' })]),
+      el('section', { class: 'grp' }, [el('h3', { text: 'Protection du classeur, déduite des rôles' }),
+        el('label', { class: 'opt' }, [protectOn, el('span', { text: 'Verrouiller en modification les feuilles sensibles du classeur, selon les rôles' })]),
+        el('div', { id: 'protect-groups' }, (c.sheet_protect_groups || []).map(function (g) {
+          return el('div', { class: 'prot-group', 'data-group': g.key }, [el('strong', { text: g.label }),
+            el('p', { class: 'note', text: 'Feuilles : ' + g.tables.join(', ') + '. Modifiable par : administrateurs, ' + g.roles.join(', ') + ' (' + plural(g.editors.length, 'personne', 'personnes') + ').' }),
+            el('details', {}, [el('summary', { text: 'Voir les adresses' }), el('p', { class: 'note', text: g.editors.join(', ') || '—' })])]);
+        })),
+        el('p', { class: 'note', id: 'protect-note', text: 'Aucune adresse à gérer : la liste se déduit des rôles actifs (un chef de projet, un DPL ou un PL, où que ce soit) et se met à jour seule quand un rôle ou une fiche change, puis chaque nuit. La protection n’interdit que la MODIFICATION : toute personne qui ouvre le classeur peut encore LIRE ces feuilles (rôles, taux journaliers, budgets). Le propriétaire du script, donc l’outil, peut toujours écrire ; les protections posées à la main ne sont pas touchées.' }),
+        el('div', { class: 'row' }, [el('button', { type: 'button', class: 'btn', id: 'protect-now', text: 'Appliquer les protections maintenant', onclick: function () {
+          var out = document.getElementById('protect-result'); out.textContent = 'Application en cours…'; out.hidden = false;
+          call('admin.sheet.protect', {}, true).then(function (r) {
+            var n = r.groups.reduce(function (s, g) { return s + g.protectedSheets.length; }, 0), skipped = r.skipped.filter(function (e, i, a) { return a.indexOf(e) === i; });
+            out.textContent = !r.ready ? 'Le classeur n’est pas joignable : exécutez A1_INSTALLER_PPM.' : !r.enabled ? r.removedProtections + ' protection(s) retirée(s) : la protection est coupée.'
+              : n + ' feuille(s) protégée(s), ' + r.created + ' protection(s) posée(s)' + (r.failed.length ? ', ' + r.failed.length + ' en échec : ' + r.failed.map(function (f) { return f.table + ' (' + f.reason + ')'; }).join(' ; ') : '') + (skipped.length ? ' ; pas encore éditeurs, faute d’accès au classeur : ' + skipped.join(', ') : '') + '.';
+          }).catch(function (e) { out.textContent = ppmErrorText(e); });
+        } })]),
+        el('p', { class: 'note', id: 'protect-result', hidden: 'hidden' })]),
       el('section', { class: 'grp' }, [el('h3', { text: 'Administrateurs' }), field('Une adresse par ligne ; vous devez rester dans la liste', admins)]),
       el('section', { class: 'grp' }, [el('h3', { text: 'Accès à l’outil' }),
         field('Domaines autorisés, séparés par une virgule (au plus cinq ; vous ne pouvez pas retirer le vôtre)', domainsInput)]),
@@ -172,8 +187,7 @@ var BOOT = <?!= boot ?>;
         el('p', { class: 'note', id: 'copilot-note', text: 'Avec une clé gratuite, Google peut utiliser les données envoyées pour améliorer ses produits ; n’activer qu’avec l’accord de votre entreprise. Le lien « Copilote » apparaît dans la barre du haut après rechargement de la page.' })]),
       c.copilot_enabled ? el('section', { class: 'grp' }, [el('h3', { text: 'Copilote IA' }),
         field('Mode', mode), field('Modèle Gemini', model), field('Quota : demandes par personne et par jour', quota),
-        field('Clé Gemini (jamais réaffichée)', key),
-        el('label', { class: 'opt' }, [clearKey, el('span', { text: 'Supprimer la clé enregistrée' })])]) : null,
+        el('p', { class: 'note', id: 'key-note', text: 'La clé Gemini est strictement personnelle : chaque personne enregistre la sienne dans la page Copilote. L’administrateur n’en saisit pas, et rien n’est partagé.' })]) : null,
       el('section', { class: 'grp' }, [el('h3', { text: 'Rappels avant livraison' }),
         el('label', { class: 'opt' }, [remOn, el('span', { text: 'Ajouter un rappel dans l’agenda du responsable de chaque livrable' })]),
         field('Délai par défaut, en jours ouvrés avant la livraison (chacun peut régler le sien)', remDays)]),

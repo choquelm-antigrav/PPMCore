@@ -157,6 +157,7 @@ function flushCache_() {
 
 /** Après une écriture : la table sera relue dans Sheets, par cette exécution comme par les suivantes. */
 function invalidateTable_(name) {
+  if (name === 'RoleAssignment' || name === 'Resource') _protectDirty = true; // la protection du classeur se déduit des rôles : recalculée en fin de requête
   delete _rowsMemo[name];
   delete _pendingPuts[name]; // une lecture en attente de rangement serait périmée
   var cache = scriptCache_();

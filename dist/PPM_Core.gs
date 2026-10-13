@@ -1,7 +1,7 @@
 /**
- * PPM Core 0.14.2 — fichier unique à installer (fabriqué par tools/build.js, empreinte 3bd34304ace4).
+ * PPM Core 0.15.0 — fichier unique à installer (fabriqué par tools/build.js, empreinte 41d8174198d0).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
- * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs.
+ * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs.
  */
 
 // ======================================================================
@@ -44,7 +44,7 @@ function A8_VERIFIER_ECRITURE() { return verifierEcritureAvecJournal_(); }
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.14.2';
+var PPM_VERSION = '0.15.0';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -86,6 +86,8 @@ var ROLE_LABELS = {
  */
 var PERMISSIONS = {
   'program.create':   ['PL'],
+  'sheet.roles':      ['PL', 'DPL'],       // modifier DIRECTEMENT dans le classeur les feuilles Rôles et personnes (la protection du classeur en découle : 51_SheetProtect.gs)
+  'sheet.budget':     ['PL', 'DPL', 'CP'], // idem pour les feuilles Budget et achats
   'program.view':     ['PL', 'DPL'], // vues consolidées de tous les projets d'un programme (Actualités, Suivi, Budget)
   'project.create':   ['PL', 'DPL'],
   'wbs.edit':         ['PL', 'DPL', 'CP', 'RWP'],
@@ -120,18 +122,18 @@ var PROP = {
   ADMINS: 'PPM_ADMINS',
   BACKUP_FOLDER: 'PPM_BACKUP_FOLDER_ID',
   JOB_STATE: 'PPM_JOB_STATE',
-  GEMINI_KEY: 'PPM_GEMINI_API_KEY',
   APPSHEET_URL: 'PPM_APPSHEET_URL',
   WEBAPP_URL: 'PPM_WEBAPP_URL',
   PROJECTS_FOLDER: 'PPM_PROJECTS_FOLDER_ID',
   AI_MODE: 'PPM_AI_MODE',
-  GEMINI_KEY: 'PPM_GEMINI_API_KEY',
   GEMINI_MODEL: 'PPM_GEMINI_MODEL',
   AI_QUOTA: 'PPM_AI_DAILY_QUOTA',
   LOGO_URL: 'PPM_LOGO_URL',
   LAST_NIGHTLY: 'PPM_LAST_NIGHTLY',
   LAST_DIGEST: 'PPM_LAST_DIGEST',
   COPILOT: 'PPM_COPILOT',
+  SHEET_PROTECT: 'PPM_SHEET_PROTECT',         // « non » : les feuilles sensibles du classeur ne sont plus verrouillées (oui par défaut)
+  SHEET_PROTECT_SIG: 'PPM_SHEET_PROTECT_SIG', // empreinte des éditeurs appliqués : vide = à refaire
   SHEET_SHARE: 'PPM_SHEET_SHARE',     // « non » : le classeur Données n'est plus partagé avec les personnes invitées (oui par défaut)
   SHEET_GRANTED: 'PPM_SHEET_GRANTED', // adresses à qui l'OUTIL a accordé l'accès (JSON) : seules celles-là sont retirées par lui
   WEBAPP_URL_AT: 'PPM_WEBAPP_URL_AT', // dernière vérification de l'adresse de la web app (ms) : pas d'appel à ScriptApp à chaque page
@@ -243,7 +245,7 @@ var PPM_PAGES = [
   { view: 'ressources', file: 'Ressources', title: 'PPM — Ressources',      eyebrow: 'Ressources · Équipes et rôles',         tabs: [''], nav: 'bar',  share: true, shared: ['CommonForms'], parts: [] },
   { view: 'suivi',      file: 'Suivi',      title: 'PPM — Suivi',           eyebrow: 'Suivi · Baselines',                     tabs: [''], nav: 'bar',  share: true, shared: ['CommonProgram'], parts: [] },
   { view: 'actualites', file: 'Actualites', title: 'PPM — Actualités',      eyebrow: 'Actualités · Réunions et actions',      tabs: [''], nav: 'bar',  share: true, shared: ['CommonProgram'], parts: [] },
-  { view: 'copilote',   file: 'Copilote',   title: 'PPM — Copilote',        eyebrow: 'Copilote · Votre clé Gemini',                    tabs: [''], nav: 'bar', share: true, shared: [], parts: [] },
+  { view: 'copilote',   file: 'Copilote',   title: 'PPM — Copilote',        eyebrow: 'Copilote · Synthèse, simulation, questions et clé Gemini',                    tabs: [''], nav: 'bar', share: true, shared: [], parts: [] },
   { view: 'budget',     file: 'Budget',     title: 'PPM — Budget',          eyebrow: 'Budget · CPN et achats',                tabs: [''], nav: 'bar',  share: true, shared: ['CommonForms', 'CommonProgram'], parts: [] },
   { view: 'compte',     file: 'Compte',     title: 'PPM — Mon compte',      eyebrow: 'Mon compte',                            tabs: [''], nav: 'icon', share: false, shared: [], parts: [] },
   { view: 'admin',      file: 'Admin',      title: 'PPM — Administration',  eyebrow: 'Administration',                        tabs: [''], nav: 'icon', share: false, shared: [], parts: [] }
@@ -1697,6 +1699,7 @@ function flushCache_() {
 
 /** Après une écriture : la table sera relue dans Sheets, par cette exécution comme par les suivantes. */
 function invalidateTable_(name) {
+  if (name === 'RoleAssignment' || name === 'Resource') _protectDirty = true; // la protection du classeur se déduit des rôles : recalculée en fin de requête
   delete _rowsMemo[name];
   delete _pendingPuts[name]; // une lecture en attente de rangement serait périmée
   var cache = scriptCache_();
@@ -2358,9 +2361,11 @@ function setupPpm() {
   var year = Number(todayStr().slice(0, 4));
   seedHolidays_([year - 1, year, year + 1, year + 2]);
 
+  var sharedGone = removeSharedKey_(); // 0.15.0 : plus de clé commune, les clés Gemini sont strictement personnelles
   var msg = 'Installation terminée (PPM Core ' + PPM_VERSION + ')\n' +
     'Classeur Données : ' + data.getUrl() + '\n' +
-    'Classeur Historique : ' + history.getUrl() + '\n' + report.join('\n');
+    'Classeur Historique : ' + history.getUrl() + '\n' + report.join('\n') +
+    (sharedGone ? '\nLa clé Gemini commune de l’administrateur a été supprimée : les clés sont strictement personnelles (page Copilote).' : '');
   console.log(msg);
   return msg;
 }
@@ -2671,6 +2676,14 @@ function liveSmokeTest_(opts) {
     if (!sheetShareOn_()) return { warn: 'le partage est coupé (Administration → Réglages) : « ' + name + ' » n’est ouvert qu’à son propriétaire' };
     return '« ' + name + ' » : ' + sheetGranted_().length + ' accès accordé(s) par l’outil, ' + sheetDesired_().length + ' personne(s) attendue(s)';
   });
+  step('Classeur Données : feuilles protégées selon les rôles (0.15.0)', function () {
+    if (!sheetProtectReady_()) return { warn: 'non vérifiable ici' };
+    if (!sheetProtectOn_()) return { warn: 'la protection est coupée (Administration → Réglages) : toutes les feuilles sont modifiables par les personnes invitées' };
+    var book = openBook_('data'), missing = [], total = 0;
+    SHEET_PROTECT_GROUPS.forEach(function (g) { g.tables.forEach(function (t) { total++; var sh = book.getSheetByName(t); if (!sh || !sheetProtectOwn_(sh)) missing.push(t); }); });
+    if (missing.length) return { warn: missing.length + ' feuille(s) sur ' + total + ' non protégée(s) : ' + missing.join(', ') + ' — Administration → « Appliquer les protections maintenant »' };
+    return total + ' feuilles protégées (' + SHEET_PROTECT_GROUPS.map(function (g) { return g.label + ' : ' + sheetProtectEditors_(g).length + ' éditeur(s)'; }).join(' ; ') + ')';
+  });
   step('Mails : quota du jour', function () {
     if (!has('MailApp') || !MailApp.getRemainingDailyQuota) return { warn: 'non vérifiable ici' };
     var q = MailApp.getRemainingDailyQuota();
@@ -2862,7 +2875,7 @@ function handleRequest(body, actorEmail, opts) {
     console.error(err && err.stack ? err.stack : err);
     return { ok: false, error: { code: 'INTERNAL', message: 'Erreur interne.', details: null } };
   } finally {
-    if (!(opts && opts.keepMemo)) flushCache_(); // les tables lues dans Sheets partent au cache en un appel
+    if (!(opts && opts.keepMemo)) { flushCache_(); sheetProtectIfDirty_(); } // les tables lues dans Sheets partent au cache en un appel ; la protection suit les rôles
   }
 }
 
@@ -3186,7 +3199,7 @@ function preloadFor_(view, boot, email) {
     return res;
   };
   if (view === 'compte') { put('account.get', {}); put('news.mine', {}); return pre; }
-  if (view === 'copilote') { put('copilot.key.status', {}); return pre; } // la page ne parle que de la clé de la personne : ni catalogue ni projet
+  if (view === 'copilote') put('copilot.key.status', {}); // la clé de la personne, puis (ci-dessous) le projet : statut, synthèse et suggestions partent avec la page
   if (view === 'overview') { // la carte « Actualités » du projet affiché part avec la page, au lieu d'un aller-retour de plus
     var ov = put('overview.get', { projectId: boot.project || '' });
     if (ov.ok && ov.data.selected) put('news.summary', { projectId: ov.data.selected });
@@ -3236,6 +3249,10 @@ function preloadFor_(view, boot, email) {
     put('ressources.get', { projectId: first });
   } else if (view === 'actualites' && first) {
     put('news.get', { projectId: first });
+  } else if (view === 'copilote' && first) {
+    put('copilot.status', { projectId: first });
+    put('copilot.brief', { projectId: first });       // synthèse chiffrée, sans IA
+    put('copilot.suggestions', { projectId: first }); // constats du moteur de règles
   }
   return pre;
 }
@@ -3266,7 +3283,7 @@ var PAGE_TABLES = {
   budget: ['BudgetLine', 'BudgetPhasing', 'PlanItem', 'Program', 'Project', 'PurchaseOrder', 'PurchaseOrderLink', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   compte: ['HierarchicalTeam', 'Meeting', 'NewsAction', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   admin: ['AiLog', 'BudgetLine', 'ChangeEvent', 'Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
-  copilote: ['Resource', 'RoleAssignment', 'UserSetting']
+  copilote: ['AiLog', 'Baseline', 'BaselineItem', 'ChangeEvent', 'Dependency', 'HolidaySet', 'Insight', 'MilestoneRequirement', 'PlanItem', 'Program', 'ProgressUpdate', 'Project', 'Resource', 'RiskOpportunity', 'RoleAssignment', 'UserSetting', 'WorkPackage']
 };
 
 function renderPage_(e) {
@@ -6134,19 +6151,29 @@ function aiMode_() {
   return ['off', 'manual', 'api'].indexOf(m) >= 0 ? m : 'off';
 }
 
+/**
+ * Vrai quand la demande d'IA se prépare en « texte à coller » : mode manuel, ou mode Gemini pour une personne qui n'a pas (encore) de clé.
+ * Chacun passe ainsi toujours par une voie qui marche : sa clé si elle en a une, sinon le copier-coller.
+ */
+function aiUseManual_(ctx) {
+  if (AI_PROVIDER) return false;
+  var m = aiMode_();
+  return m === 'manual' || (m === 'api' && aiKeyInfo_(ctx).source === 'none');
+}
+
 function aiQuota_() {
   var q = Number(getProp(PROP.AI_QUOTA, '30'));
   return q > 0 ? Math.floor(q) : 30;
 }
 
-/** Le fournisseur d'IA de la personne qui demande : sa clé personnelle (38_CopilotKey.gs), à défaut la clé commune de l'administrateur. */
+/** Le fournisseur d'IA de la personne qui demande : sa clé personnelle (38_CopilotKey.gs), et rien d'autre. */
 function aiProvider_(ctx) {
   if (AI_PROVIDER) return AI_PROVIDER;
   return geminiProviderFor_(ctx);
 }
 
 /** API Gemini (REST generateContent). Les parties renvoyées par le modèle sont rejouées telles quelles. */
-function geminiRest_(key, model) {
+function geminiRest_(key, model, onModelGone) {
   return {
     name: 'gemini:' + model,
     generate: function (req) {
@@ -6163,8 +6190,16 @@ function geminiRest_(key, model) {
       }
       var code = r.code;
       var json = parseJsonSafe(r.text, {});
-      if (code === 429) throw new PpmError('QUOTA', 'Gemini : quota atteint, réessayer plus tard.');
-      if (code >= 300) throw new PpmError('INTERNAL', 'Gemini a répondu ' + code + ' : ' + truncate((json.error && json.error.message) || r.text, 300));
+      var gmsg = googleMessage_(json, r.text, key); // le message de Google, sans jamais laisser passer la clé
+      if (code === 429) throw new PpmError('QUOTA', 'Gemini : quota atteint (celui de votre clé chez Google), réessayez plus tard.');
+      if (code === 401 || code === 403 || (code === 400 && /api[ _-]?key/i.test(gmsg))) {
+        throw new PpmError('CONFIG', 'Google refuse votre clé Gemini (' + gmsg + '). Reconnectez-la dans la zone « Connexion à Gemini » de la page Copilote : en attendant, vous pouvez utiliser le texte à coller.');
+      }
+      if (code === 404) {
+        if (onModelGone) onModelGone();
+        throw new PpmError('CONFIG', 'Google ne propose plus le modèle « ' + model + ' » : réessayez, un autre sera choisi pour votre clé.');
+      }
+      if (code >= 300) throw new PpmError('INTERNAL', 'Gemini a répondu ' + code + ' : ' + gmsg);
       var parts = (((json.candidates || [])[0] || {}).content || {}).parts || [];
       return {
         raw: parts,
@@ -6240,10 +6275,10 @@ function runAi_(ctx, projectId, purpose, task, facts, opts) {
   if (mode === 'off') {
     throw new PpmError('CONFIG', 'Le copilote IA n’est pas activé (propriété PPM_AI_MODE). Les synthèses chiffrées, simulations et suggestions restent disponibles.');
   }
-  if (mode === 'manual' && !AI_PROVIDER) {
+  if (aiUseManual_(ctx)) {
     var prompt = manualPrompt_(task, facts, opts.extra);
     var id = logAi_(ctx, projectId, purpose, 'manual', prompt, '', []);
-    return { mode: 'manual', prompt: prompt, logId: id };
+    return { mode: 'manual', prompt: prompt, logId: id, fallback: mode === 'api' ? 'no_key' : '' };
   }
   if (aiUsedToday_(ctx.email) >= aiQuota_()) throw new PpmError('QUOTA', 'Quota du copilote atteint pour aujourd’hui (' + aiQuota_() + ' demandes).');
   var provider = aiProvider_(ctx);
@@ -6394,6 +6429,7 @@ defineAction('copilot.status', function (p, ctx) {
   return {
     mode: mode, model: mode === 'api' ? getProp(PROP.GEMINI_MODEL, '') : '',
     quota: { used: mode === 'api' ? aiUsedToday_(ctx.email) : 0, limit: aiQuota_() },
+    key: aiKeyInfo_(ctx), usesManual: aiUseManual_(ctx), // pour la page : sa clé, et si ses demandes passent par le texte à coller
     canDecide: isBlank(p.projectId) ? false : can(ctx, 'insight.decide', { type: 'project', id: p.projectId })
   };
 });
@@ -6437,7 +6473,7 @@ defineAction('copilot.ask', function (p, ctx) {
   var data = loadCopilotData_(projectId);
   var brief = buildProjectBrief(data, projectId, todayStr(), data.holFor);
   var tools = copilotTools_(data, projectId, brief);
-  if (aiMode_() === 'manual' && !AI_PROVIDER) {
+  if (aiUseManual_(ctx)) {
     var items = tools.handlers.list_items({ filter: 'all' });
     return runAi_(ctx, projectId, 'question', question, brief.facts, { extra: 'Livrables et jalons (JSON) :\n' + JSON.stringify(items) });
   }
@@ -6576,7 +6612,33 @@ function userKeyGet_(email) {
   return o && o.k ? o : null;
 }
 
-function userKeySet_(email, key) { setProp(userKeyProp_(email), JSON.stringify({ k: key, at: todayStr() })); }
+/** Range la clé de la personne et le modèle que Google lui a proposé (retenu : on ne le redemande pas à chaque demande d'IA). */
+function userKeySet_(email, key, model) { setProp(userKeyProp_(email), JSON.stringify({ k: key, at: todayStr(), m: model || '' })); }
+
+/** Retient (ou oublie, si vide) le modèle de la personne, sans toucher à sa clé. */
+function userKeyModel_(email, model) {
+  var o = userKeyGet_(email);
+  if (!o) return;
+  o.m = model || '';
+  setProp(userKeyProp_(email), JSON.stringify(o));
+}
+
+/**
+ * Quelle clé servira à cette personne : la sienne, ou aucune. Les clés sont STRICTEMENT PERSONNELLES (0.15.0) : il n'y a plus de clé commune de l'administrateur.
+ * Ne montre jamais la clé : seulement s'il y en a une et ses quatre derniers caractères.
+ */
+function aiKeyInfo_(ctx) {
+  var mine = ctx && ctx.email ? userKeyGet_(ctx.email) : null;
+  return { mine: !!mine, source: mine ? 'mine' : 'none', last4: mine ? String(mine.k).slice(-4) : '' };
+}
+
+/** Ancienne propriété de la clé commune de l'administrateur : supprimée à l'installation et chaque nuit si elle traîne encore. Vrai si elle existait. */
+var LEGACY_SHARED_KEY_PROP = 'PPM_GEMINI_API_KEY';
+function removeSharedKey_() {
+  if (!getProp(LEGACY_SHARED_KEY_PROP, '')) return false;
+  deleteProp(LEGACY_SHARED_KEY_PROP);
+  return true;
+}
 
 /** Ce qu'on a le droit de montrer : jamais la clé, seulement s'il y en a une et ses quatre derniers caractères. */
 function userKeyStatus_(email) {
@@ -6673,18 +6735,21 @@ function geminiProbe_(key, opts) {
   return { ok: true, refused: false, model: model, message: '', steps: steps };
 }
 
-/** Le fournisseur d'IA de cette personne : sa clé d'abord, à défaut la clé commune de l'administrateur ; modèle réglé par l'administrateur, sinon choisi chez Google. */
+/** Le fournisseur d'IA de cette personne : SA clé, et rien d'autre ; modèle réglé par l'administrateur, sinon celui retenu à l'enregistrement de la clé. */
 function geminiProviderFor_(ctx) {
   var mine = ctx && ctx.email ? userKeyGet_(ctx.email) : null;
-  var key = mine ? mine.k : getProp(PROP.GEMINI_KEY, '');
+  var key = mine ? mine.k : '';
   if (!key) throw new PpmError('CONFIG', 'Pas de clé Gemini : ouvrez la page Copilote et enregistrez votre clé.');
-  var model = getProp(PROP.GEMINI_MODEL, '');
+  // le modèle : celui que l'administrateur a fixé, sinon celui retenu à l'enregistrement de la clé (aucun appel réseau de plus), sinon choisi chez Google puis retenu
+  var fixed = getProp(PROP.GEMINI_MODEL, ''), model = fixed || (mine && mine.m) || '', onGone = null;
   if (!model) {
     var probe = geminiProbe_(key, {});
     if (!probe.model) throw new PpmError('CONFIG', 'Aucun modèle Gemini utilisable' + (probe.message ? ' (' + probe.message + ')' : '') + ' : vérifiez votre clé dans la page Copilote.');
     model = probe.model;
+    if (mine) userKeyModel_(ctx.email, model);
   }
-  return geminiRest_(key, model);
+  if (mine && !fixed) onGone = function () { userKeyModel_(ctx.email, ''); }; // Google a retiré ce modèle : le prochain essai en choisira un autre
+  return geminiRest_(key, model, onGone);
 }
 
 // ---------------------------------------------------------------- actions de la page Copilote
@@ -6706,7 +6771,7 @@ defineAction('copilot.key.set', function (p, ctx) {
   }
   var probe = geminiProbe_(key, {});
   if (probe.refused) throw new PpmError('VALIDATION', 'Google refuse cette clé (' + probe.message + '). Créez-en une nouvelle sur la page de Google, puis recollez-la.');
-  userKeySet_(ctx.email, key);
+  userKeySet_(ctx.email, key, probe.model);
   var out = userKeyStatus_(ctx.email);
   out.keys_url = GEMINI_KEYS_URL;
   out.tested = probe.ok;
@@ -6720,6 +6785,7 @@ defineAction('copilot.key.test', function (p, ctx) {
   var mine = userKeyGet_(ctx.email);
   if (!mine) throw new PpmError('VALIDATION', 'Aucune clé enregistrée : collez-en une d’abord.');
   var probe = geminiProbe_(mine.k, { generate: true });
+  if (probe.ok && probe.model) userKeyModel_(ctx.email, probe.model); // le test met à jour le modèle retenu
   return { ok: probe.ok, refused: probe.refused, model: probe.model, message: probe.message, steps: probe.steps };
 });
 
@@ -6795,12 +6861,12 @@ function adminView_() {
   return {
     admins: adminEmails(), domain: allowedDomains().join(', '),
     copilot_enabled: copilotEnabled_(), ai_mode: aiMode_(), ai_model: getProp(PROP.GEMINI_MODEL, ''), ai_quota: aiQuota_(),
-    gemini_key_set: !!getProp(PROP.GEMINI_KEY, ''),
     reminder_on: reminderDefaults_().on, reminder_days: reminderDefaults_().days,
     appsheet_url: getProp(PROP.APPSHEET_URL, ''), logo_url: getProp(PROP.LOGO_URL, ''),
     projects_folder_id: getProp(PROP.PROJECTS_FOLDER, ''),
     backup_folder_id: getProp(PROP.BACKUP_FOLDER, ''), webapp_url: getProp(PROP.WEBAPP_URL, ''),
-    sheet_share: sheetShareOn_(), sheet_url: dataSheetUrl_(), sheet_granted: sheetGranted_().length
+    sheet_share: sheetShareOn_(), sheet_url: dataSheetUrl_(), sheet_granted: sheetGranted_().length,
+    sheet_protect: sheetProtectOn_(), sheet_protect_groups: sheetProtectView_()
   };
 }
 
@@ -6857,24 +6923,15 @@ function validateAdminSettings_(v, cur, actor) {
     change('admins', PROP.ADMINS, cur.admins.join(','), list.join(','));
   }
 
+  if (v.sheet_protect !== undefined) change('sheet_protect', PROP.SHEET_PROTECT, cur.sheet_protect ? 'oui' : 'non', v.sheet_protect ? 'oui' : 'non');
   if (v.sheet_share !== undefined) change('sheet_share', PROP.SHEET_SHARE, cur.sheet_share ? 'oui' : 'non', v.sheet_share ? 'oui' : 'non');
   if (v.copilot_enabled !== undefined) change('copilot', PROP.COPILOT, cur.copilot_enabled ? 'oui' : 'non', v.copilot_enabled ? 'oui' : 'non');
   var mode = v.ai_mode !== undefined ? String(v.ai_mode) : cur.ai_mode;
   var model = v.ai_model !== undefined ? String(v.ai_model).trim() : cur.ai_model;
-  var keySet = cur.gemini_key_set;
   if (['off', 'manual', 'api'].indexOf(mode) < 0) throw new PpmError('VALIDATION', 'Mode du copilote inconnu : off, manual ou api.');
   if (model && !/^[A-Za-z0-9._:-]{1,80}$/.test(model)) throw new PpmError('VALIDATION', 'Nom de modèle invalide (lettres, chiffres, point, tiret, deux-points).');
-  if (v.clear_gemini_key && !isBlank(v.gemini_key)) throw new PpmError('VALIDATION', 'Remplacer et supprimer la clé en même temps n’a pas de sens.');
-  if (v.clear_gemini_key) {
-    if (keySet) change('gemini_key', PROP.GEMINI_KEY, 'définie', null, ['définie', 'supprimée']);
-    keySet = false;
-  }
-  if (!isBlank(v.gemini_key)) {
-    var k = String(v.gemini_key).trim();
-    if (!/^[A-Za-z0-9_-]{20,200}$/.test(k)) throw new PpmError('VALIDATION', 'Clé Gemini invalide : 20 à 200 caractères, lettres, chiffres, tiret ou souligné.');
-    props[PROP.GEMINI_KEY] = k;
-    audit.push({ field: 'gemini_key', old: keySet ? 'définie' : 'aucune', new: 'remplacée' });
-    keySet = true;
+  if (v.gemini_key !== undefined || v.clear_gemini_key !== undefined) {
+    throw new PpmError('VALIDATION', 'La clé Gemini est strictement personnelle : chaque personne enregistre la sienne dans la page Copilote ; l’administrateur n’en saisit plus.');
   }
   change('ai_mode', PROP.AI_MODE, cur.ai_mode, mode);
   change('ai_model', PROP.GEMINI_MODEL, cur.ai_model, model);
@@ -6897,7 +6954,7 @@ function validateAdminSettings_(v, cur, actor) {
     change('projects_folder_id', PROP.PROJECTS_FOLDER, cur.projects_folder_id, f);
   }
   // Une valeur vidée supprime la propriété plutôt que d'en garder une vide.
-  Object.keys(props).forEach(function (k2) { if (props[k2] === '' && k2 !== PROP.GEMINI_KEY) props[k2] = null; });
+  Object.keys(props).forEach(function (k2) { if (props[k2] === '') props[k2] = null; });
   return { props: props, audit: audit };
 }
 
@@ -6917,6 +6974,7 @@ defineAction('admin.set', function (p, ctx) {
   var r = validateAdminSettings_(p.values, adminView_(), ctx.email);
   applyAdminSettings_(r);
   var shareOff = r.props[PROP.SHEET_SHARE] === 'non' ? sheetRevokeAll_() : null; // partage coupé : les accès que l'outil avait accordés sont retirés
+  var protectReport = r.props[PROP.SHEET_PROTECT] !== undefined ? sheetProtectApply_() : null; // protection activée ou coupée : posée ou retirée tout de suite
   var at = nowIso();
   repoAppendHistory('ChangeEvent', r.audit.map(function (a) {
     return { id: newId(), at: at, table_name: 'Réglages', entity_id: 'PPM', project_id: '', field: a.field, old_value: a.old, new_value: a.new,
@@ -6925,6 +6983,7 @@ defineAction('admin.set', function (p, ctx) {
   var out = adminView_();
   out.changed = r.audit.map(function (a) { return a.field; });
   if (shareOff) out.sheet_revoked = shareOff;
+  if (protectReport) out.sheet_protect_report = protectReport;
   return out;
 });
 
@@ -7145,7 +7204,9 @@ function deleteTriggers_(handler) {
 function nightlyRun() {
   resetExecution_();
   invalidateAllTables_(); // la nuit repart de ce qui est réellement dans les feuilles
-  try { sheetSync_(); } catch (e) { console.error('PPM partage du classeur : ' + (e && e.message ? e.message : e)); } // les personnes invitées dans la journée ont leur accès ; ceux qui sont partis le perdent
+  try { removeSharedKey_(); } catch (e) { /* rien de plus à faire */ } // 0.15.0 : plus de clé commune
+  try { sheetSync_(); } catch (e) { console.error('PPM partage du classeur : ' + (e && e.message ? e.message : e)); }
+  try { if (sheetProtectReady_()) sheetProtectApply_(); } catch (e) { console.error('PPM protection du classeur : ' + (e && e.message ? e.message : e)); } // contrôle complet chaque nuit // les personnes invitées dans la journée ont leur accès ; ceux qui sont partis le perdent
   setProp(PROP.JOB_STATE, JSON.stringify({ step: 0, startedAt: nowIso() }));
   continueNightly();
 }
@@ -10987,6 +11048,7 @@ function sheetSync_() {
     else out.granted++;
   });
   if (!out.partial) sheetGranted_().filter(function (e) { return want.indexOf(e) < 0; }).forEach(function (e) { if (sheetRevoke_(e).ok) out.revoked++; });
+  _protectDirty = true; sheetProtectIfDirty_(); // de nouveaux accès : les protections peuvent maintenant les compter parmi leurs éditeurs
   return out;
 }
 
@@ -10999,6 +11061,7 @@ function sheetCardFor_(ctx) {
   if (!on) { card.state = 'disabled'; return card; }
   if (!ctx.resourceId && !ctx.isAdmin) { card.state = 'no_person'; return card; }
   var r = sheetGrantSafe_(ctx.email);
+  card.locked = sheetLockedFor_(ctx); // feuilles que la personne peut modifier, et celles qui lui sont verrouillées
   if (r.ok) { card.url = url; card.state = 'granted'; }
   else { card.state = r.state === 'failed' ? 'failed' : 'not_eligible'; card.reason = r.reason || ''; }
   return card;
@@ -11008,3 +11071,167 @@ defineAction('admin.sheet.sync', function (p, ctx) {
   requireAdmin_(ctx);
   return sheetSync_();
 });
+
+// ======================================================================
+// 51_SheetProtect.gs
+// ======================================================================
+
+/**
+ * PPM Core — 0.15.0 : protection des feuilles sensibles du classeur « Données », déduite des rôles.
+ *
+ * Deux groupes de feuilles sont verrouillés en ÉDITION (la lecture reste ouverte à qui ouvre le classeur : voir la note en fin de fichier) :
+ *   - « Rôles et personnes » (RoleAssignment, Role, Resource) : modifiables par les Program Leader, Domain Program Leader et administrateurs.
+ *     Resource en fait partie : une personne est reconnue par l'adresse de sa fiche, la modifier reviendrait à prendre le rôle d'une autre.
+ *   - « Budget et achats » (BudgetLine, BudgetPhasing, PurchaseOrder, PurchaseOrderLink, RateCard, ActualImport) : en plus, les chefs de projet.
+ *
+ * Personne ne gère ces accès à la main : la liste de ceux qui peuvent modifier chaque groupe se DÉDUIT des rôles actifs (droits `sheet.roles` et `sheet.budget` de
+ * la table PERMISSIONS, 00_Config.gs) et des administrateurs, et se recalcule seule quand un rôle ou une fiche change (hook de invalidateTable_), la nuit, et à la demande.
+ * Les droits portent sur le rôle tenu n'importe où (PL ou DPL d'un programme, chef de projet d'un projet) : une protection de feuille ne peut pas être plus fine.
+ *
+ * Le propriétaire du script (qui exécute l'outil) peut toujours écrire : les écritures de l'outil ne sont donc jamais bloquées. Les feuilles de l'outil protégées sont repérées par
+ * leur description (« PPM: »), les protections posées à la main ne sont jamais touchées. Les autres feuilles (planning, actualités…) restent en édition libre.
+ */
+
+var _protectDirty = false;
+
+var SHEET_PROTECT_GROUPS = [
+  { key: 'roles', label: 'Rôles et personnes', perm: 'sheet.roles', tables: ['RoleAssignment', 'Role', 'Resource'],
+    why: 'qui a quel rôle, et à quelle adresse correspond chaque personne (donc qui est qui)' },
+  { key: 'budget', label: 'Budget et achats', perm: 'sheet.budget', tables: ['BudgetLine', 'BudgetPhasing', 'PurchaseOrder', 'PurchaseOrderLink', 'RateCard', 'ActualImport'],
+    why: 'lignes de budget, étalement, commandes d’achat et grilles de taux' }
+];
+
+function sheetProtectOn_() { return getProp(PROP.SHEET_PROTECT, 'oui') !== 'non'; }
+
+/** Prêt à agir : un classeur Données et le service Sheets (absents dans la plupart des essais). */
+function sheetProtectReady_() { return typeof SpreadsheetApp !== 'undefined' && !!getProp(PROP.DATA_ID, ''); }
+
+/** Les adresses qui peuvent modifier un groupe : administrateurs, et personnes ayant un rôle actif du droit du groupe, où que ce soit. */
+function sheetProtectEditors_(group) {
+  var roles = PERMISSIONS[group.perm] || [], today = todayStr(), byId = indexBy_(repoList('Resource')), out = {};
+  adminEmails().forEach(function (e) { out[e] = true; });
+  repoList('RoleAssignment').forEach(function (a) {
+    if (roles.indexOf(a.role_code) < 0) return;
+    if (!isBlank(a.start_date) && String(a.start_date) > today) return;
+    if (!isBlank(a.end_date) && String(a.end_date) < today) return;
+    var r = byId[a.resource_id];
+    if (r && !isBlank(r.email)) out[String(r.email).toLowerCase().trim()] = true;
+  });
+  return Object.keys(out).sort();
+}
+
+function sheetProtectDesc_(group) {
+  var names = { PL: 'Program Leader', DPL: 'Domain Program Leader', CP: 'chef de projet' };
+  return 'PPM:' + group.key + ' — modifiable par : administrateurs, ' + (PERMISSIONS[group.perm] || []).map(function (r) { return names[r] || r; }).join(', ') + ' (déduit des rôles ; ne pas modifier à la main)';
+}
+
+function sheetProtectSig_() {
+  var o = { on: sheetProtectOn_(), g: {} };
+  SHEET_PROTECT_GROUPS.forEach(function (g) { o.g[g.key] = sheetProtectEditors_(g); });
+  return sha256Hex_(JSON.stringify(o)).slice(0, 24);
+}
+
+function sheetProtectOwn_(sh) {
+  var list = sh.getProtections(SpreadsheetApp.ProtectionType.SHEET), mine = null;
+  list.forEach(function (p) { if (!mine && String(p.getDescription()).indexOf('PPM:') === 0) mine = p; });
+  return mine;
+}
+
+/** Pose (ou ajuste) la protection d'une feuille pour qu'elle n'ait pour éditeurs que les adresses voulues et le propriétaire. */
+function sheetProtectOne_(sh, group, want, owner) {
+  var p = sheetProtectOwn_(sh), created = false;
+  if (!p) { p = sh.protect(); created = true; }
+  p.setDescription(sheetProtectDesc_(group));
+  p.setWarningOnly(false);
+  if (owner) { try { p.addEditor(owner); } catch (e) { /* déjà éditeur */ } } // le propriétaire d'abord : comme Google le recommande avant de retirer les autres
+  var current = p.getEditors().map(function (u) { return String(u.getEmail()).toLowerCase(); });
+  var toAdd = want.filter(function (e) { return current.indexOf(e) < 0; });
+  var toRemove = current.filter(function (e) { return want.indexOf(e) < 0 && e !== owner; });
+  if (toAdd.length) p.addEditors(toAdd);
+  if (toRemove.length) p.removeEditors(toRemove);
+  if (p.canDomainEdit && p.canDomainEdit()) p.setDomainEdit(false); // sinon tout le domaine garderait la main
+  return { created: created, added: toAdd.length, removed: toRemove.length };
+}
+
+/** Retire les protections posées par l'outil (jamais celles posées à la main). */
+function sheetProtectRemoveOwn_(sh) {
+  var n = 0;
+  sh.getProtections(SpreadsheetApp.ProtectionType.SHEET).forEach(function (p) { if (String(p.getDescription()).indexOf('PPM:') === 0) { p.remove(); n++; } });
+  return n;
+}
+
+/**
+ * Applique (ou retire, si la protection est coupée) les protections de toutes les feuilles. Rend un compte rendu ; ne lève jamais d'erreur.
+ * La signature des éditeurs n'est mémorisée que si tout a réussi : un échec est donc réessayé à la prochaine occasion.
+ */
+function sheetProtectApply_() {
+  var out = { enabled: sheetProtectOn_(), ready: sheetProtectReady_(), groups: [], failed: [], skipped: [], created: 0, removedProtections: 0 };
+  if (!out.ready) return out;
+  var book = openBook_('data'), owner = sheetOwnerEmail_();
+  SHEET_PROTECT_GROUPS.forEach(function (group) {
+    var editors = sheetProtectEditors_(group), want = [];
+    // un éditeur de protection doit pouvoir modifier le classeur : les autres sont notés « écartés » et l'application sera refaite quand ils y auront accès
+    if (out.enabled) editors.forEach(function (e) { if (e === owner || sheetGrantSafe_(e).ok) want.push(e); else out.skipped.push(e); });
+    if (out.enabled && owner && want.indexOf(owner) < 0) want.push(owner);
+    var g = { key: group.key, label: group.label, tables: group.tables.slice(), editors: editors, protectedSheets: [] };
+    group.tables.forEach(function (table) {
+      try {
+        var sh = book.getSheetByName(table);
+        if (!sh) { out.failed.push({ table: table, reason: 'feuille absente' }); return; }
+        if (!out.enabled) { out.removedProtections += sheetProtectRemoveOwn_(sh); return; }
+        var r = sheetProtectOne_(sh, group, want, owner);
+        if (r.created) out.created++;
+        g.protectedSheets.push(table);
+      } catch (e) {
+        out.failed.push({ table: table, reason: String(e && e.message ? e.message : e).slice(0, 160) });
+      }
+    });
+    out.groups.push(g);
+  });
+  // la signature n'est mémorisée que si TOUT est en place : aucun échec, et aucun éditeur voulu écarté faute d'accès au classeur (sinon, il ne serait jamais ajouté ensuite)
+  if (!out.failed.length && !out.skipped.length) setProp(PROP.SHEET_PROTECT_SIG, sheetProtectSig_());
+  else setProp(PROP.SHEET_PROTECT_SIG, ''); // à refaire à la prochaine occasion
+  return out;
+}
+
+/** Un rôle ou une fiche a changé pendant cette requête : si la liste des éditeurs a changé, les protections sont mises à jour (quelques secondes). Jamais d'erreur. */
+function sheetProtectIfDirty_() {
+  if (!_protectDirty) return;
+  _protectDirty = false;
+  try {
+    if (!sheetProtectReady_()) return;
+    if (sheetProtectSig_() === getProp(PROP.SHEET_PROTECT_SIG, '')) return;
+    sheetProtectApply_();
+  } catch (e) {
+    console.error('PPM protection du classeur : ' + (e && e.message ? e.message : e));
+    try { setProp(PROP.SHEET_PROTECT_SIG, ''); } catch (e2) { /* rien de plus à faire */ }
+  }
+}
+
+/** Ce que Mon compte montre : pour chaque groupe, si la personne peut modifier ses feuilles. */
+function sheetLockedFor_(ctx) {
+  if (!sheetProtectOn_()) return [];
+  return SHEET_PROTECT_GROUPS.map(function (g) {
+    var editors = sheetProtectEditors_(g);
+    return { key: g.key, label: g.label, tables: g.tables.slice(), why: g.why, can_edit: !!ctx.email && editors.indexOf(ctx.email) >= 0,
+      who: 'administrateurs, ' + (PERMISSIONS[g.perm] || []).map(function (r) { return ROLE_LABELS[r] || r; }).join(', ') };
+  });
+}
+
+/** Ce qu'Administration montre : les groupes, leurs feuilles et ceux qui peuvent les modifier. */
+function sheetProtectView_() {
+  return SHEET_PROTECT_GROUPS.map(function (g) {
+    return { key: g.key, label: g.label, tables: g.tables.slice(), why: g.why, editors: sheetProtectEditors_(g),
+      roles: (PERMISSIONS[g.perm] || []).map(function (r) { return ROLE_LABELS[r] || r; }) };
+  });
+}
+
+defineAction('admin.sheet.protect', function (p, ctx) {
+  requireAdmin_(ctx);
+  return sheetProtectApply_();
+});
+
+/*
+ * LIMITE À CONNAÎTRE : une protection de feuille n'interdit que la MODIFICATION. Toute personne qui peut ouvrir le classeur peut encore LIRE ces feuilles : rôles, taux
+ * journaliers (feuille Resource) et budgets. Pour les cacher, il faudrait ne pas partager ces données (classeur séparé, ou classeur de consultation généré sans elles).
+ */

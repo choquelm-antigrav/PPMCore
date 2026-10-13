@@ -3,11 +3,11 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.14.2">
+<meta name="ppm-version" content="0.15.0">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <style>
-  .panel { padding: 8px 24px 28px; max-width: 880px; }
+
   .zone[hidden], .panel[hidden] { display: none; }
   h2.sec { margin: 24px 0 12px; font-size: 16px; font-weight: 600; }
   .box { margin: 0 0 16px; padding: 18px 20px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); }
@@ -40,7 +40,36 @@
   details p { margin: 6px 0 6px 18px; font-size: 15px; }
   dialog { width: min(480px, calc(100% - 32px)); }
   dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
-  @media (max-width: 700px) { .panel { padding: 8px 12px 24px; } .big { width: 100%; justify-content: center; } }
+  @media (max-width: 700px) { .big { width: 100%; justify-content: center; } }
+
+  /* synthèse, suggestions, simulation, questions (0.15.0 : de nouveau à l'écran, en zones) */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 0 0 16px; }
+  .card { padding: 12px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
+  .lines { margin: 0 0 20px; padding: 0; list-style: none; display: grid; gap: 6px; max-width: 80ch; }
+  .lines li { padding: 8px 12px; background: var(--surface); border-left: 4px solid var(--rule); border-radius: 2px; }
+  .lines li.alert { border-left-color: var(--red); }
+  .lines li.warn { border-left-color: var(--amber); }
+  .ai { margin: 20px 0 0; padding: 14px 16px; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; max-width: 80ch; }
+  .ai h3 { margin: 0 0 8px; font-size: 15px; }
+  .ai .answer { white-space: pre-wrap; margin: 0 0 10px; line-height: 1.5; }
+  .ai textarea { width: 100%; min-height: 160px; font: 12.5px/1.4 ui-monospace, Menlo, Consolas, monospace; padding: 8px; border: 1px solid var(--rule); border-radius: 4px; }
+  .mode { margin-left: 8px; }
+  .hyp { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; margin: 0 0 12px; }
+  .hyp label { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
+  .hyp select { min-width: 260px; max-width: 100%; }
+  .hyp input[type=number] { width: 90px; padding: 5px 8px; border: 1px solid var(--rule); border-radius: 4px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .chip { padding: 4px 10px; border: 1px solid var(--rule); border-radius: 14px; background: var(--surface); cursor: pointer; font-size: 13.5px; }
+  .chip .x { margin-left: 6px; color: var(--muted); }
+  .ask textarea { width: 100%; max-width: 80ch; min-height: 70px; padding: 8px; border: 1px solid var(--rule); border-radius: 4px; font: inherit; }
+  .qa { margin: 16px 0 0; display: grid; gap: 12px; max-width: 80ch; }
+  .qa .q { font-weight: 600; margin: 0 0 4px; }
+  .sugg { display: grid; gap: 10px; max-width: 90ch; }
+  .sugg article { padding: 12px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
+  .sugg p { margin: 4px 0; }
+  .sugg input[type=text] { flex: 1; min-width: 180px; padding: 5px 8px; border: 1px solid var(--rule); border-radius: 4px; }
+  .zones .ai, .zones .sugg, .zones .qa, .zones .lines, .zones .ask textarea { max-width: none; }
+  @media (max-width: 700px) { .hyp select { min-width: 0; width: 100%; } .hyp label { width: 100%; } }
 </style>
 </head>
 <body>
@@ -48,13 +77,34 @@
 <header>
   <div class="title">
     <h1 id="title">Copilote</h1>
-    <span class="context" id="context">Connecter votre clé Gemini</span>
+    <p class="context" id="context"></p>
   </div>
+  <div class="controls"><select id="picker" aria-label="Projet"></select></div>
 </header>
 
+<main class="zones" style="--cell-min: 480px; --max-cols: 2">
+  <div class="cell wide" id="cell-synthese">
+    <div class="zone"><h2 class="sec">Synthèse du projet</h2></div>
+    <section class="panel" id="panel-synthese" aria-label="Synthèse"></section>
+  </div>
+  <div class="cell" id="cell-suggestions">
+    <div class="zone"><h2 class="sec" id="title-sugg">Suggestions du moteur de règles</h2></div>
+    <section class="panel" id="panel-suggestions" aria-label="Suggestions"></section>
+  </div>
+  <div class="cell" id="cell-simulation">
+    <div class="zone"><h2 class="sec">Simulation « et si… »</h2></div>
+    <section class="panel" id="panel-simulation" aria-label="Simulation"></section>
+  </div>
+  <div class="cell wide" id="cell-questions">
+    <div class="zone"><h2 class="sec">Poser une question au copilote</h2></div>
+    <section class="panel" id="panel-questions" aria-label="Questions"></section>
+  </div>
+  <div class="cell" id="cell-key-status">
 <div class="zone"><h2 class="sec">Votre connexion à Gemini</h2></div>
 <section class="panel" id="panel-status" aria-live="polite"></section>
+  </div>
 
+  <div class="cell">
 <div class="zone"><h2 class="sec">Obtenir votre clé en trois gestes</h2></div>
 <section class="panel" id="panel-get">
   <div class="box">
@@ -78,7 +128,9 @@
     <p>Recopiez la clé en entier, sans rien ajouter avant ou après. Si elle vient d’une ancienne manipulation, créez-en une <strong>nouvelle</strong> avec le bouton bleu : Google remplace progressivement les anciennes clés, et seules les nouvelles sont sûres de fonctionner.</p>
   </details>
 </section>
+  </div>
 
+  <div class="cell">
 <div class="zone"><h2 class="sec">Enregistrer votre clé</h2></div>
 <section class="panel" id="panel-save">
   <div class="box">
@@ -93,16 +145,22 @@
     <p class="error" id="key-error" role="alert" hidden></p>
   </div>
 </section>
+  </div>
 
+  <div class="cell">
 <div class="zone"><h2 class="sec">À savoir avant de commencer</h2></div>
 <section class="panel" id="panel-know">
+  <p class="note" id="mode-note" style="margin:0 0 10px"></p>
   <p class="warn" id="data-warning"><strong>Vos données.</strong> Avec une clé gratuite de Google, ce qui est envoyé à Gemini peut servir à améliorer les produits de Google, et des personnes peuvent le relire ; ce n’est pas le cas avec une clé facturée (conditions de Google). N’envoyez pas de données confidentielles de l’entreprise sans son accord.</p>
   <div class="box">
     <p><strong>Où va votre clé ?</strong> Dans un coffre privé du serveur de l’outil, rangé à part des données des projets. Personne d’autre ne peut la voir ni l’utiliser, et l’outil ne vous la montre plus une fois enregistrée. Elle ne sert qu’à <em>vos</em> demandes.</p>
     <p><strong>La supprimer ?</strong> Ici, à tout moment. Si vous pensez qu’elle a fuité, supprimez-la aussi côté Google.</p>
-    <p class="muted" style="margin-bottom:0"><strong>La suite.</strong> Cette page prépare la connexion. Les synthèses, questions et simulations du Copilote viendront ensuite, avec cette même clé.</p>
+    <p class="muted" style="margin-bottom:0"><strong>À quoi sert la clé ?</strong> Aux demandes d’IA de cette page (synthèse rédigée, explication d’une simulation, questions) quand l’administrateur a choisi le mode Gemini. En mode « texte à coller », vous n’en avez pas besoin.</p>
   </div>
 </section>
+  </div>
+
+</main>
 
 <dialog id="clear-dialog" aria-labelledby="clear-title">
   <h2 id="clear-title" style="margin-top:0">Supprimer votre clé ?</h2>
@@ -117,6 +175,382 @@
 
 <script>
 var BOOT = <?!= boot ?>;
+</script>
+<script>
+(function () {
+  'use strict';
+  var el = ppm.el, clear = ppm.clear, plural = ppm.plural, toast = ppm.toast, call = ppm.call, frDate = function (s) { return ppm.frDate(s, '—'); };
+  var state = { projectId: '', catalog: null, status: null, brief: null, briefAi: null, simOpen: false,
+    items: null, hyps: [], sim: null, simAi: null, qa: [], sugg: null, seq: 0 };
+  var $ = function (id) { return document.getElementById(id); };
+  var GEMINI_URL = 'https://gemini.google.com/app';
+
+  // ------------------------------------------------------------ outils
+  function days(n) { return n === null || n === undefined ? '' : n === 0 ? '=' : (n > 0 ? '+' : '−') + plural(Math.abs(n), 'jour', 'jours'); }
+  function loading(panel) { clear(panel); panel.appendChild(el('p', { class: 'loading', text: 'Chargement…' })); }
+  function empty(panel, title, text) { clear(panel); panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: title }), el('span', { text: text || '' })])); }
+  function card(k, v, s, alert) {
+    return el('div', { class: 'card' + (alert ? ' alert' : '') }, [el('p', { class: 'k', text: k }), el('p', { class: 'v', text: v }), s ? el('p', { class: 's', text: s }) : null]);
+  }
+  function table(head, rows) {
+    return el('div', { class: 'table-wrap' }, [el('table', {}, [
+      el('thead', {}, [el('tr', {}, head.map(function (h) { return el('th', { scope: 'col', text: h }); }))]), el('tbody', {}, rows)])]);
+  }
+  function mode() { return state.status ? state.status.mode : 'off'; }
+  /** Les demandes d'IA partent-elles chez Gemini avec une clé ? Non en mode « texte à coller », ni en mode Gemini pour une personne qui n'a pas encore connecté sa clé. */
+  function viaKey() { return mode() === 'api' && !(state.status && state.status.usesManual); }
+  function scrollToKey() { var t = $('cell-key-status'); if (t && t.scrollIntoView) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  /** Mode Gemini sans clé personnelle : on le dit, et on mène à la zone où la connecter (le texte à coller marche en attendant). */
+  function keyHint() {
+    if (!(mode() === 'api' && state.status && state.status.usesManual)) return null;
+    return el('p', { class: 'note key-hint' }, ['Le copilote est en mode Gemini, mais vous n’avez pas encore connecté votre clé : cette demande prépare un texte à coller dans Gemini. ',
+      el('button', { type: 'button', class: 'btn', text: 'Connecter ma clé', onclick: scrollToKey })]);
+  }
+
+  // ------------------------------------------------------------ bloc IA (réponse, texte à copier, avis)
+  function aiBlock(ai, title) {
+    var box = el('div', { class: 'ai' }, [el('h3', { text: title })]);
+    if (ai.mode === 'manual') {
+      var ta = el('textarea', { readonly: 'readonly', 'aria-label': 'Texte à coller dans Gemini', class: 'prompt' });
+      ta.value = ai.prompt;
+      box.appendChild(el('p', { class: 'note', text: 'Copiez ce texte et collez-le dans Gemini : il contient les consignes et les chiffres calculés par l’outil. Relisez la réponse avant de l’utiliser.' }));
+      box.appendChild(ta);
+      box.appendChild(el('div', { class: 'row' }, [
+        el('button', { type: 'button', class: 'btn primary', text: 'Copier le texte', onclick: function () { copy(ta); } }),
+        el('a', { class: 'btn', href: GEMINI_URL, target: '_blank', rel: 'noopener', text: 'Ouvrir Gemini' })
+      ]));
+      return box;
+    }
+    box.appendChild(el('p', { class: 'answer', text: ai.text }));
+    if (ai.unverified && ai.unverified.length) {
+      box.appendChild(el('p', { class: 'warnbox', text: 'Chiffres absents des données de l’outil : ' + ai.unverified.join(', ') + '. Ne les reprenez pas sans vérification.' }));
+    } else {
+      box.appendChild(el('p', { class: 'note', text: 'Tous les chiffres cités se retrouvent dans les données calculées par l’outil.' + (ai.steps && ai.steps.length ? ' Données consultées : ' + ai.steps.map(stepLabel).join(', ') + '.' : '') }));
+    }
+    var fb = el('div', { class: 'row' }, [el('span', { class: 'muted', text: 'Cette réponse vous est-elle utile ?' })]);
+    [['Utile', true], ['Pas utile', false]].forEach(function (b) {
+      fb.appendChild(el('button', { type: 'button', class: 'btn', text: b[0], onclick: function (e) {
+        var btns = fb.querySelectorAll('button');
+        Array.prototype.forEach.call(btns, function (x) { x.disabled = true; });
+        call('copilot.feedback', { logId: ai.logId, useful: b[1] }, true).then(function () { e.target.textContent = b[0] + ' ✓'; toast('Merci : votre avis sert à mesurer la pertinence du copilote.'); })
+          .catch(function (err) { Array.prototype.forEach.call(btns, function (x) { x.disabled = false; }); toast(err.message || 'Avis non enregistré.', true); });
+      } }));
+    });
+    box.appendChild(fb);
+    return box;
+  }
+  function stepLabel(s) {
+    return { get_brief: 'synthèse', list_items: 'liste des livrables', simulate_shift: 'simulation', list_risks: 'risques', list_alerts: 'alertes' }[s] || s;
+  }
+  function copy(ta) {
+    var done = function () { toast('Texte copié : collez-le dans Gemini.'); };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(ta.value).then(done, fallback); return; }
+    } catch (e) { /* voir ci-dessous */ }
+    fallback();
+    function fallback() {
+      ta.focus(); ta.select();
+      try { if (document.execCommand('copy')) { done(); return; } } catch (e) { /* rien */ }
+      toast('Texte sélectionné : faites Ctrl+C (ou Cmd+C) pour le copier.');
+    }
+  }
+  function aiButtonLabel(what) {
+    return viaKey() ? what + ' avec Gemini' : 'Préparer le texte pour Gemini';
+  }
+
+  // ------------------------------------------------------------ navigation
+  /** Plus d'onglets : toutes les zones s'affichent ensemble. Le projet courant se retrouve dans la barre du haut. */
+  function remember() {
+    var base = BOOT.baseUrl || '';
+    try { google.script.history.replace(null, { view: 'copilote', project: state.projectId }); } catch (e) { /* hors web app */ }
+    Array.prototype.forEach.call(document.querySelectorAll('.ppm-bar [data-view]'), function (n) {
+      var v = n.getAttribute('data-view');
+      if (['gantt', 'structure', 'suivi', 'copilote', 'budget'].indexOf(v) >= 0 && state.projectId) n.setAttribute('href', base + '?view=' + v + '&project=' + state.projectId);
+    });
+  }
+  function fillPicker() {
+    var sel = $('picker'); clear(sel);
+    var cat = state.catalog, byProgram = {};
+    cat.projects.forEach(function (p) { (byProgram[p.program_id || ''] = byProgram[p.program_id || ''] || []).push(p); });
+    var sortCode = function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); };
+    var group = function (label, list) {
+      if (!list || !list.length) return;
+      var og = el('optgroup', { label: label });
+      list.sort(sortCode).forEach(function (p) { og.appendChild(el('option', { value: p.id, text: p.code + ' ' + p.name + (p.status === 'Clos' ? ' (clos)' : '') })); });
+      sel.appendChild(og);
+    };
+    cat.programs.slice().sort(sortCode).forEach(function (g) { group(g.code + ' ' + g.name, byProgram[g.id]); });
+    group('Hors programme', byProgram['']);
+    sel.value = state.projectId;
+  }
+  function renderContext() {
+    var p = state.catalog.projects.filter(function (x) { return x.id === state.projectId; })[0];
+    $('title').textContent = p ? p.code + ' ' + p.name : 'Copilote';
+    var m = mode();
+    var ctx = $('context'); clear(ctx);
+    var note = $('mode-note'), st = state.status, info = (st && st.key) || { source: 'none', last4: '' };
+    if (note) note.textContent = m === 'api'
+      ? (info.source === 'mine' ? 'Mode actuel : Gemini, avec votre clé personnelle (se terminant par ' + info.last4 + '). Vos demandes passent par votre compte Google, avec son propre quota.'
+        : st && st.usesManual ? 'Mode actuel : Gemini, mais vous n’avez pas encore connecté votre clé : vos demandes préparent un texte à coller dans Gemini. Connectez votre clé ci-dessous pour obtenir les réponses directement.'
+        : 'Mode actuel : Gemini. Votre clé sert aux demandes d’IA de cette page.')
+      : m === 'manual' ? 'Mode actuel : texte à coller dans Gemini. Aucune clé n’est nécessaire : elle ne servira que si l’administrateur passe le copilote en mode Gemini.'
+      : 'Le copilote IA est désactivé : la clé ne sert pas encore. La synthèse chiffrée, les suggestions et la simulation fonctionnent sans IA.';
+    var badge = m === 'api' ? (st && st.usesManual ? 'IA : Gemini — votre clé reste à connecter (texte à coller en attendant)'
+        : 'IA : Gemini' + (st.model ? ' (' + st.model + ')' : '') + ' — ' + st.quota.used + '/' + st.quota.limit + ' demandes aujourd’hui')
+      : m === 'manual' ? 'IA : texte à coller dans Gemini' : 'IA désactivée';
+    ctx.appendChild(el('span', { class: 'badge mode ' + (m === 'off' ? '' : 'ok'), id: 'mode-badge', text: badge }));
+  }
+
+  function loadProject(id) {
+    state.projectId = id; state.brief = null; state.briefAi = null; state.items = null; state.simOpen = false; state.hyps = []; state.sim = null; state.simAi = null; state.qa = []; state.sugg = null;
+    $('picker').value = id;
+    remember();
+    return call('copilot.status', { projectId: id }).then(function (s) { state.status = s; renderContext(); return render(); })
+      .catch(function (e) { toast(e.message || 'Erreur.', true); });
+  }
+  function render() {
+    renderQuestions();
+    renderSimulation();
+    return Promise.all([renderSynthese(), renderSuggestions()]);
+  }
+
+  // ------------------------------------------------------------ synthèse
+  function renderSynthese() {
+    var panel = $('panel-synthese');
+    if (!state.brief) {
+      loading(panel);
+      var ticket = ++state.seq;
+      return call('copilot.brief', { projectId: state.projectId }).then(function (b) {
+        if (ticket !== state.seq) return;
+        state.brief = b; renderSynthese();
+      }).catch(function (e) { empty(panel, 'Synthèse indisponible.', e.message); });
+    }
+    var f = state.brief.facts, st = f.schedule;
+    clear(panel);
+    var cards = el('div', { class: 'cards' });
+    cards.appendChild(card('Avancement', f.progress.weighted_pct + ' %', plural(f.progress.done, 'élément terminé', 'éléments terminés') + ' sur ' + f.progress.items));
+    cards.appendChild(card('Fin du plan', frDate(st.plan_end), st.margin_to_target === null ? (st.target_end ? '' : 'Pas de fin visée') :
+      (st.margin_to_target >= 0 ? plural(st.margin_to_target, 'jour ouvré', 'jours ouvrés') + ' de marge' : plural(-st.margin_to_target, 'jour ouvré', 'jours ouvrés') + ' après la fin visée'), st.margin_to_target !== null && st.margin_to_target < 0));
+    cards.appendChild(card('Écart à la baseline', f.baseline ? days(st.slip_vs_baseline) : '—', f.baseline ? f.baseline.label + ' du ' + frDate(f.baseline.frozen_on) : 'Pas de baseline', st.slip_vs_baseline > 0));
+    cards.appendChild(card('En retard', String(f.late_count), f.late_count ? 'dont « ' + f.late[0].name + ' »' : 'aucun élément', f.late_count > 0));
+    cards.appendChild(card('Alertes', String(f.insights.alerte), plural(f.insights.vigilance, 'vigilance', 'vigilances'), f.insights.alerte > 0));
+    panel.appendChild(cards);
+    panel.appendChild(el('ul', { class: 'lines', id: 'brief-lines' }, state.brief.lines.map(function (l) { return el('li', { class: l.tone || '', text: l.text }); })));
+
+    if (f.upcoming_milestones.length) {
+      panel.appendChild(el('h2', { class: 'sec', text: 'Jalons des 90 prochains jours' }));
+      panel.appendChild(table(['Jalon', 'Date', 'Dans', 'Écart à la baseline', 'Menacé par'], f.upcoming_milestones.map(function (m) {
+        return el('tr', {}, [el('td', { text: m.name }), el('td', { text: frDate(m.date) }), el('td', { text: plural(m.in_days, 'jour', 'jours') }),
+          el('td', { class: 'num' + (m.slip_vs_baseline > 0 ? ' late' : ''), text: m.slip_vs_baseline === null ? '—' : days(m.slip_vs_baseline) }),
+          el('td', { class: m.threatened_by.length ? 'late' : '', text: m.threatened_by.join(', ') || '—' })]);
+      })));
+    }
+    if (f.due_soon.length) {
+      panel.appendChild(el('h2', { class: 'sec', text: 'Échéances des 14 prochains jours' }));
+      panel.appendChild(table(['Livrable', 'Fin prévue', 'Avancement', 'Responsable'], f.due_soon.map(function (d) {
+        return el('tr', {}, [el('td', {}, [d.name, d.critical ? el('span', { class: 'badge warn', text: 'critique', style: 'margin-left:6px' }) : null]),
+          el('td', { text: frDate(d.finish) }), el('td', { class: 'num', text: d.progress_pct + ' %' }), el('td', { text: d.owner || '—' })]);
+      })));
+    }
+    if (f.weak_signals.length) {
+      panel.appendChild(el('h2', { class: 'sec', text: 'Signaux faibles' }));
+      panel.appendChild(el('p', { class: 'note', text: 'Commentaires d’avancement récents qui annoncent un blocage, avant que la date ne bouge.' }));
+      panel.appendChild(table(['Livrable', 'Déclaré le', 'Commentaire'], f.weak_signals.map(function (s) {
+        return el('tr', {}, [el('td', { text: s.item }), el('td', { text: frDate(s.date) }), el('td', { text: '« ' + s.comment + ' »' })]);
+      })));
+    }
+
+    if (mode() === 'off') {
+      panel.appendChild(el('p', { class: 'note', text: 'Synthèse calculée par l’outil ; rédaction par Gemini non activée.' }));
+    } else {
+      var hint = keyHint(); if (hint) panel.appendChild(hint);
+      panel.appendChild(el('div', { class: 'row', style: 'margin-top:16px' }, [el('button', { type: 'button', class: 'btn primary', id: 'brief-ai',
+        text: aiButtonLabel('Rédiger la synthèse'), onclick: function (e) {
+          e.target.disabled = true;
+          call('copilot.brief', { projectId: state.projectId, ai: true }, true).then(function (b) { state.briefAi = b.ai; refreshStatus(); renderSynthese(); })
+            .catch(function (err) { e.target.disabled = false; toast(err.message || 'Échec.', true); });
+        } })]));
+      if (state.briefAi) panel.appendChild(aiBlock(state.briefAi, state.briefAi.mode === 'manual' ? 'Texte à coller dans Gemini' : 'Synthèse rédigée par Gemini'));
+    }
+  }
+  function refreshStatus() { call('copilot.status', { projectId: state.projectId }).then(function (s) { state.status = s; renderContext(); }).catch(function () { /* rien */ }); }
+
+  // ------------------------------------------------------------ simulation
+  function renderSimulation() {
+    var panel = $('panel-simulation');
+    if (!state.simOpen) {
+      clear(panel);
+      panel.appendChild(el('p', { class: 'note', text: 'Décalez un livrable ou un jalon et voyez ce qui bouge : fin du plan, jalons menacés, autres projets touchés. Rien n’est enregistré.' }));
+      panel.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'sim-open', text: 'Commencer une simulation', onclick: function () { state.simOpen = true; renderSimulation(); } }));
+      return Promise.resolve();
+    }
+    if (!state.items) {
+      loading(panel);
+      return call('gantt.project', { projectId: state.projectId }).then(function (g) {
+        state.items = g.rows.filter(function (r) { return r.kind === 'item' && r.finish && !r.external; });
+        renderSimulation();
+      }).catch(function (e) { empty(panel, 'Planning indisponible.', e.message); });
+    }
+    clear(panel);
+    if (!state.items.length) { panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucun élément daté dans ce projet.' })])); return Promise.resolve(); }
+    var sel = el('select', { id: 'sim-item', 'aria-label': 'Élément à décaler' });
+    state.items.forEach(function (r) { sel.appendChild(el('option', { value: r.id, text: r.name + ' — fin ' + frDate(r.finish) })); });
+    var nb = el('input', { type: 'number', id: 'sim-days', value: '5', min: '-200', max: '200', step: '1', 'aria-label': 'Décalage en jours ouvrés' });
+    panel.appendChild(el('div', { class: 'hyp' }, [
+      el('label', {}, ['Élément', sel]), el('label', {}, ['Décalage (jours ouvrés, négatif pour avancer)', nb]),
+      el('button', { type: 'button', class: 'btn', id: 'sim-add', text: 'Ajouter l’hypothèse', onclick: function () {
+        var n = Math.round(Number(nb.value));
+        if (!n) { toast('Indiquez un décalage différent de zéro.', true); return; }
+        var it = state.items.filter(function (r) { return r.id === sel.value; })[0];
+        state.hyps = state.hyps.filter(function (h) { return h.itemId !== it.id; }).concat([{ itemId: it.id, name: it.name, shiftDays: n }]);
+        state.sim = null; state.simAi = null; renderSimulation();
+      } })
+    ]));
+    var chips = el('div', { class: 'chips', id: 'sim-hyps' });
+    state.hyps.forEach(function (h) {
+      chips.appendChild(el('span', { class: 'chip' }, [h.name + ' ' + (h.shiftDays > 0 ? '+' : '−') + plural(Math.abs(h.shiftDays), 'jour', 'jours'),
+        el('button', { type: 'button', class: 'x', 'aria-label': 'Retirer ' + h.name, text: '×', style: 'border:0;background:none;cursor:pointer', onclick: function () {
+          state.hyps = state.hyps.filter(function (x) { return x !== h; }); state.sim = null; state.simAi = null; renderSimulation();
+        } })]));
+    });
+    panel.appendChild(chips);
+    var go = el('button', { type: 'button', class: 'btn primary', id: 'sim-run', text: 'Simuler', onclick: runSim });
+    go.disabled = !state.hyps.length;
+    panel.appendChild(el('div', { class: 'row' }, [go, el('span', { class: 'muted', text: state.hyps.length ? '' : 'Ajoutez au moins une hypothèse.' })]));
+    if (state.sim) renderSimResult(panel);
+    return Promise.resolve();
+  }
+  function runSim() {
+    call('simulations.run', { projectId: state.projectId, changes: state.hyps.map(function (h) { return { itemId: h.itemId, shiftDays: h.shiftDays }; }) })
+      .then(function (r) { state.sim = r; state.simAi = null; renderSimulation(); })
+      .catch(function (e) { toast(e.message || 'Simulation impossible.', true); });
+  }
+  function renderSimResult(panel) {
+    var r = state.sim, pe = r.plan_end;
+    var box = el('div', { id: 'sim-result' });
+    box.appendChild(el('h2', { class: 'sec', text: 'Résultat' }));
+    var cards = el('div', { class: 'cards' });
+    cards.appendChild(card('Fin du plan', frDate(pe.after), pe.shift ? days(pe.shift) + ' ouvrés (avant : ' + frDate(pe.before) + ')' : 'Inchangée', pe.shift > 0));
+    if (pe.baseline) cards.appendChild(card('Écart à la baseline', days(pe.slip_vs_baseline), 'fin figée le ' + frDate(pe.baseline), pe.slip_vs_baseline > 0));
+    cards.appendChild(card('Décalés en cascade', String(r.domino), r.domino ? 'successeurs repoussés' : 'la marge absorbe', r.domino > 0));
+    cards.appendChild(card('Jalons menacés', String(r.newly_threatened.length), '', r.newly_threatened.length > 0));
+    cards.appendChild(card('Autres projets', String(r.external_impacts.length), r.external_impacts.length ? 'à prévenir' : 'aucun impact', r.external_impacts.length > 0));
+    box.appendChild(cards);
+    box.appendChild(table(['Élément', 'Fin avant', 'Fin après', 'Décalage', 'Pourquoi'], r.moved.map(function (m) {
+      return el('tr', {}, [el('td', { text: m.name }), el('td', { text: frDate(m.before_finish) }), el('td', { text: frDate(m.finish) }),
+        el('td', { class: 'num' + (m.shift > 0 ? ' late' : ''), text: days(m.shift) }), el('td', { text: m.hypothesis ? 'Hypothèse' : 'Suit « ' + m.cause + ' »' })]);
+    })));
+    var list = function (title, items) { if (!items.length) return; box.appendChild(el('h2', { class: 'sec', text: title })); box.appendChild(el('ul', {}, items.map(function (t) { return el('li', { text: t }); }))); };
+    list('Jalons qui deviendraient menacés', r.newly_threatened.map(function (t) { return '« ' + t.milestone + ' » (' + frDate(t.milestone_date) + ') : « ' + t.deliverable + ' » finirait le ' + frDate(t.deliverable_finish) + '.'; }));
+    list('Autres projets touchés', r.external_impacts.map(function (e) { return e.project + ' · « ' + e.name + ' » devrait être repoussé de ' + plural(e.gap, 'jour ouvré', 'jours ouvrés') + ' (à cause de « ' + e.because + ' »).'; }));
+    list('Éléments qui passeraient sur le chemin critique', r.newly_critical.map(function (n) { return n; }));
+    r.notes.forEach(function (n) { box.appendChild(el('p', { class: 'note', text: n })); });
+    box.appendChild(el('p', { class: 'note', text: 'Rien n’est enregistré. Pour appliquer une hypothèse, déplacez les barres dans le Planning.' }));
+    if (mode() !== 'off') {
+      var hintS = keyHint(); if (hintS) box.appendChild(hintS);
+      box.appendChild(el('button', { type: 'button', class: 'btn', id: 'sim-ai', text: aiButtonLabel('Expliquer'), onclick: function (e) {
+        e.target.disabled = true;
+        call('simulations.run', { projectId: state.projectId, explain: true, changes: state.hyps.map(function (h) { return { itemId: h.itemId, shiftDays: h.shiftDays }; }) }, true)
+          .then(function (res) { state.simAi = res.ai; refreshStatus(); renderSimulation(); })
+          .catch(function (err) { e.target.disabled = false; toast(err.message || 'Échec.', true); });
+      } }));
+      if (state.simAi) box.appendChild(aiBlock(state.simAi, state.simAi.mode === 'manual' ? 'Texte à coller dans Gemini' : 'Explication de Gemini'));
+    }
+    panel.appendChild(box);
+  }
+
+  // ------------------------------------------------------------ questions
+  var EXAMPLES = ['Quels livrables risquent de retarder le prochain jalon ?', 'Que se passe-t-il si le livrable le plus en retard glisse encore de 5 jours ?', 'Quels points aborder au prochain COPIL ?'];
+  function renderQuestions() {
+    var panel = $('panel-questions');
+    clear(panel);
+    if (mode() === 'off') {
+      empty(panel, 'Questions au copilote : non activées.', 'Un administrateur doit choisir le mode du copilote (Administration › Réglages › Copilote IA) : « texte à coller dans Gemini » pour commencer, ou « Gemini » une fois la clé validée par la DSI. La synthèse, les suggestions et la simulation fonctionnent déjà sans IA.');
+      return;
+    }
+    var hintQ = keyHint(); if (hintQ) panel.appendChild(hintQ);
+    var ta = el('textarea', { id: 'question', maxlength: '1000', 'aria-label': 'Votre question', placeholder: 'Votre question…' });
+    var chips = el('div', { class: 'chips' }, EXAMPLES.map(function (q) { return el('button', { type: 'button', class: 'chip', text: q, onclick: function () { ta.value = q; ta.focus(); } }); }));
+    var ask = el('button', { type: 'button', class: 'btn primary', id: 'ask-btn', text: viaKey() ? 'Demander' : 'Préparer le texte pour Gemini', onclick: function () {
+      var q = ta.value.trim();
+      if (!q) { toast('Posez une question.', true); return; }
+      ask.disabled = true;
+      call('copilot.ask', { projectId: state.projectId, question: q }, true).then(function (a) {
+        state.qa.unshift({ q: q, a: a }); ta.value = ''; refreshStatus(); renderQuestions();
+      }).catch(function (e) { ask.disabled = false; toast(e.message || 'Échec.', true); });
+    } });
+    panel.appendChild(el('div', { class: 'ask' }, [chips, ta, el('div', { class: 'row', style: 'margin-top:8px' }, [ask])]));
+    var qa = el('div', { class: 'qa', id: 'qa' });
+    state.qa.forEach(function (x) { qa.appendChild(el('div', {}, [el('p', { class: 'q', text: x.q }), aiBlock(x.a, x.a.mode === 'manual' ? 'Texte à coller dans Gemini' : 'Réponse')])); });
+    panel.appendChild(qa);
+  }
+
+  // ------------------------------------------------------------ suggestions
+  function renderSuggestions() {
+    var panel = $('panel-suggestions');
+    loading(panel);
+    return call('copilot.suggestions', { projectId: state.projectId }).then(function (s) {
+      state.sugg = s;
+      $('title-sugg').textContent = 'Suggestions du moteur de règles' + (s.pending.length ? ' (' + s.pending.length + ')' : '');
+      clear(panel);
+      if (!s.canDecide) panel.appendChild(el('p', { class: 'note', text: 'Lecture seule : le chef de projet, le DPL ou le Program Leader décident.' }));
+      var st = s.stats;
+      var cards = el('div', { class: 'cards' });
+      cards.appendChild(card('En attente', String(s.pending.length), ''));
+      cards.appendChild(card('Taux d’acceptation', st.accept_rate === null ? '—' : st.accept_rate + ' %', 'des suggestions traitées'));
+      if (st.ai_answers) cards.appendChild(card('Réponses de Gemini', String(st.ai_answers), st.ai_useful + ' utiles, ' + st.ai_not_useful + ' pas utiles'));
+      panel.appendChild(cards);
+      if (!s.pending.length) panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucune suggestion en attente.' })]));
+      var list = el('div', { class: 'sugg', id: 'sugg-list' });
+      s.pending.forEach(function (x) {
+        var art = el('article', { 'data-insight': x.id }, [
+          el('div', { class: 'row' }, [el('span', { class: 'badge ' + (x.severity === 'Alerte' ? 'alert' : x.severity === 'Vigilance' ? 'warn' : ''), text: x.severity })]),
+          el('p', { text: x.message }), x.suggestion ? el('p', { class: 'muted', text: 'Suggestion : ' + x.suggestion }) : null
+        ]);
+        if (s.canDecide) {
+          var note = el('input', { type: 'text', maxlength: '500', placeholder: 'Note (facultative)', 'aria-label': 'Note' });
+          var decide = function (d) {
+            return function () {
+              call('insights.decide', { id: x.id, version: x.version, decision: d, note: note.value }, true)
+                .then(function () { toast(d === 'Accepté' ? 'Suggestion acceptée.' : 'Suggestion ignorée.'); return renderSuggestions(); })
+                .catch(function (e) { toast(e.message || 'Échec.', true); });
+            };
+          };
+          art.appendChild(el('div', { class: 'row', style: 'margin-top:8px' }, [note,
+            el('button', { type: 'button', class: 'btn primary', text: 'Accepter', onclick: decide('Accepté') }),
+            el('button', { type: 'button', class: 'btn', text: 'Ignorer', onclick: decide('Ignoré') })]));
+        }
+        list.appendChild(art);
+      });
+      panel.appendChild(list);
+      if (s.recent.length) {
+        panel.appendChild(el('h2', { class: 'sec', text: 'Décisions récentes' }));
+        panel.appendChild(table(['Constat', 'Décision', 'Par', 'Note'], s.recent.map(function (r) {
+          return el('tr', {}, [el('td', { text: r.message }), el('td', {}, [el('span', { class: 'badge ' + (r.status === 'Accepté' ? 'ok' : ''), text: r.status })]),
+            el('td', { text: r.decided_by + ' · ' + frDate(r.decided_at) }), el('td', { text: r.note || '' })]);
+        })));
+      }
+    }).catch(function (e) { empty(panel, 'Suggestions indisponibles.', e.message); });
+  }
+
+  // ------------------------------------------------------------ démarrage
+  $('picker').addEventListener('change', function () { loadProject(this.value); });
+  call('planning.catalog', {}).then(function (cat) {
+    state.catalog = cat;
+    var first = BOOT.project || (cat.projects.filter(function (p) { return p.status !== 'Clos'; })[0] || cat.projects[0] || {}).id;
+    if (!first) { ['synthese', 'suggestions', 'simulation', 'questions'].forEach(function (z) { empty($('panel-' + z), 'Aucun projet pour l’instant.', 'Créez un projet dans l’application AppSheet, puis revenez ici.'); }); return; }
+    state.projectId = first;
+    fillPicker();
+    return loadProject(first);
+  }).catch(function (e) { empty($('panel-synthese'), 'Chargement impossible.', e.message); });
+
+  window.addEventListener('ppm-key-changed', function () {
+    if (!state.projectId) return;
+    call('copilot.status', { projectId: state.projectId }).then(function (st) { state.status = st; renderContext(); renderSynthese(); renderQuestions(); renderSimulation(); }).catch(function () { /* rien */ });
+  });
+
+  window.__ppmPro = { state: state };
+})();
 </script>
 <script>
 (function () {
@@ -179,10 +613,13 @@ var BOOT = <?!= boot ?>;
     err.hidden = true; btn.disabled = true;
     call('copilot.key.set', { key: inp.value }, true).then(function (r) {
       inp.value = '';                                    // la clé ne reste pas à l'écran
-      state.st = r; renderStatus();
+      state.st = r; renderStatus(); keyChanged();
       toast(r.warning ? r.warning : 'Clé enregistrée et vérifiée par Google' + (r.model ? ' (modèle : ' + r.model + ')' : '') + '.', !!r.warning);
     }).catch(function (e) { err.textContent = ppmErrorText(e); err.hidden = false; }).then(function () { btn.disabled = false; });
   }
+
+  /** Prévient les zones du projet : la clé a changé, les boutons d'IA doivent suivre (Gemini direct, ou texte à coller). */
+  function keyChanged() { try { window.dispatchEvent(new Event('ppm-key-changed')); } catch (e) { /* rien */ } }
 
   function testKey() {
     var out = $('test-result'), btn = $('key-test');
@@ -197,7 +634,7 @@ var BOOT = <?!= boot ?>;
 
   function clearKey() {
     $('clear-ok').disabled = true;
-    call('copilot.key.clear', {}, true).then(function (s) { closeDialog($('clear-dialog')); state.st = s; renderStatus(); toast('Clé supprimée.'); })
+    call('copilot.key.clear', {}, true).then(function (s) { closeDialog($('clear-dialog')); state.st = s; renderStatus(); keyChanged(); toast('Clé supprimée.'); })
       .catch(function (e) { toast(ppmErrorText(e), true); }).then(function () { $('clear-ok').disabled = false; });
   }
 
@@ -208,8 +645,6 @@ var BOOT = <?!= boot ?>;
   $('support-copy').addEventListener('click', function () { copyText(SUPPORT, 'Message copié : collez-le dans un mail à votre support.'); });
   $('clear-cancel').addEventListener('click', function () { closeDialog($('clear-dialog')); });
   $('clear-ok').addEventListener('click', clearKey);
-  var base = BOOT.baseUrl || '';
-  if ($('nav-plan')) $('nav-plan').setAttribute('href', base + '?view=gantt' + (BOOT.project ? '&project=' + BOOT.project : ''));
   loadStatus();
   window.__ppm = { state: state, load: loadStatus };
 })();

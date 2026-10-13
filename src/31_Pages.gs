@@ -38,7 +38,7 @@ function preloadFor_(view, boot, email) {
     return res;
   };
   if (view === 'compte') { put('account.get', {}); put('news.mine', {}); return pre; }
-  if (view === 'copilote') { put('copilot.key.status', {}); return pre; } // la page ne parle que de la clé de la personne : ni catalogue ni projet
+  if (view === 'copilote') put('copilot.key.status', {}); // la clé de la personne, puis (ci-dessous) le projet : statut, synthèse et suggestions partent avec la page
   if (view === 'overview') { // la carte « Actualités » du projet affiché part avec la page, au lieu d'un aller-retour de plus
     var ov = put('overview.get', { projectId: boot.project || '' });
     if (ov.ok && ov.data.selected) put('news.summary', { projectId: ov.data.selected });
@@ -88,6 +88,10 @@ function preloadFor_(view, boot, email) {
     put('ressources.get', { projectId: first });
   } else if (view === 'actualites' && first) {
     put('news.get', { projectId: first });
+  } else if (view === 'copilote' && first) {
+    put('copilot.status', { projectId: first });
+    put('copilot.brief', { projectId: first });       // synthèse chiffrée, sans IA
+    put('copilot.suggestions', { projectId: first }); // constats du moteur de règles
   }
   return pre;
 }
@@ -118,7 +122,7 @@ var PAGE_TABLES = {
   budget: ['BudgetLine', 'BudgetPhasing', 'PlanItem', 'Program', 'Project', 'PurchaseOrder', 'PurchaseOrderLink', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   compte: ['HierarchicalTeam', 'Meeting', 'NewsAction', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   admin: ['AiLog', 'BudgetLine', 'ChangeEvent', 'Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
-  copilote: ['Resource', 'RoleAssignment', 'UserSetting']
+  copilote: ['AiLog', 'Baseline', 'BaselineItem', 'ChangeEvent', 'Dependency', 'HolidaySet', 'Insight', 'MilestoneRequirement', 'PlanItem', 'Program', 'ProgressUpdate', 'Project', 'Resource', 'RiskOpportunity', 'RoleAssignment', 'UserSetting', 'WorkPackage']
 };
 
 function renderPage_(e) {

@@ -30,12 +30,39 @@ function parseEntered(v) {
 
 function makeFakeSheets() {
   const books = {};
+  const stats = { protectCalls: 0 };
   let seq = 0;
   const noop = () => proxy();
   const proxy = () => new Proxy(function () {}, { get: (t, k) => (k === 'then' ? undefined : noop), apply: () => proxy() });
 
+  /** Protection d'une feuille comme Google la décrit : par défaut tous les éditeurs du classeur peuvent encore modifier, et l'édition par le domaine est ouverte. */
+  class Protection {
+    constructor(sheet, type) { this.sheet = sheet; this.type = type; this.desc = ''; this.warning = false; this.domain = true; this.editors = new Set([].concat([...sheet.book.editors], [sheet.book.owner])); }
+    getDescription() { return this.desc; }
+    setDescription(d) { this.desc = d; return this; }
+    setWarningOnly(b) { this.warning = !!b; return this; }
+    isWarningOnly() { return this.warning; }
+    getProtectionType() { return this.type; }
+    getEditors() { return [...this.editors].map((e) => ({ getEmail: () => e })); }
+    addEditor(u) { return this.addEditors([typeof u === 'string' ? u : u.getEmail()]); }
+    addEditors(list) {
+      list.forEach((e) => {
+        e = String(e).toLowerCase();
+        if (!this.sheet.book.editors.has(e) && e !== this.sheet.book.owner) throw new Error('Impossible d’ajouter ' + e + ' : cette personne ne peut pas modifier le classeur');
+        this.editors.add(e);
+      });
+      return this;
+    }
+    removeEditors(list) { list.forEach((u) => { const e = String(typeof u === 'string' ? u : u.getEmail()).toLowerCase(); if (e !== this.sheet.book.owner) this.editors.delete(e); }); return this; }
+    canDomainEdit() { return this.domain; }
+    setDomainEdit(b) { this.domain = !!b; return this; }
+    remove() { this.sheet.protections = this.sheet.protections.filter((p) => p !== this); }
+  }
+
   class Sheet {
-    constructor(name) { this.name = name; this.cells = new Map(); this.fmt = new Map(); this.maxRows = 1000; this.maxCols = 26; this.stats = { reads: 0, writes: 0 }; }
+    constructor(name) { this.name = name; this.cells = new Map(); this.fmt = new Map(); this.maxRows = 1000; this.maxCols = 26; this.stats = { reads: 0, writes: 0 }; this.protections = []; this.book = null; }
+    protect() { stats.protectCalls++; const p = new Protection(this, 'SHEET'); this.protections.push(p); return p; }
+    getProtections(type) { stats.protectCalls++; return this.protections.filter((p) => !type || p.type === type); }
     key(r, c) { return r + ',' + c; }
     getName() { return this.name; }
     lastRow_() { let m = 0; this.cells.forEach((v, k) => { if (v !== '' && v !== null) m = Math.max(m, +k.split(',')[0]); }); return m; }
@@ -99,14 +126,21 @@ function makeFakeSheets() {
   }
 
   class Spreadsheet {
-    constructor(title) { this.id = 'fake-book-' + (++seq); this.title = title; this.sheets = [new Sheet('Feuille 1')]; }
+    constructor(title) { this.id = 'fake-book-' + (++seq); this.title = title; this.editors = new Set(); this.owner = 'proprio@entreprise.com'; this.sheets = []; this.insertSheet('Feuille 1'); }
     getId() { return this.id; }
     getUrl() { return 'https://docs.google.com/spreadsheets/d/' + this.id; }
     getName() { return this.title; }
     setSpreadsheetTimeZone() { return this; }
     getSheets() { return this.sheets.slice(); }
     getSheetByName(n) { return this.sheets.find((s) => s.name === n) || null; }
-    insertSheet(n) { const s = new Sheet(n); this.sheets.push(s); return s; }
+    insertSheet(n) { const s = new Sheet(n); s.book = this; this.sheets.push(s); return s; }
+    /** Qui peut modifier une feuille : il faut pouvoir modifier le classeur, puis être éditeur de la protection si la feuille en a une (et l'édition par le domaine est ouverte à tous les éditeurs). */
+    canEdit(sheetName, email) {
+      const e = String(email).toLowerCase(), sh = this.getSheetByName(sheetName);
+      if (e === this.owner) return true;
+      if (!this.editors.has(e)) return false;
+      return sh.protections.every((p) => p.domain || p.editors.has(e) || p.warning);
+    }
     deleteSheet(s) { this.sheets = this.sheets.filter((x) => x !== s); }
   }
 
@@ -114,6 +148,8 @@ function makeFakeSheets() {
     create: (title) => { const b = new Spreadsheet(title); books[b.id] = b; return b; },
     openById: (id) => { if (!books[id]) throw new Error('Spreadsheet introuvable : ' + id); return books[id]; },
     newDataValidation: noop,
+    ProtectionType: { SHEET: 'SHEET', RANGE: 'RANGE' },
+    stats,
     books
   };
   return app;

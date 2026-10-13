@@ -150,23 +150,22 @@ module.exports = function () {
     eq(w.c.getProp(w.c.userKeyProp_(MIA), ''), '', 'et rien n’a été enregistré');
   });
 
-  test('Utilisation de la clé : celle de la personne d’abord, sinon la clé commune, modèle de l’administrateur ou choisi chez Google', () => {
+  test('Utilisation de la clé : uniquement celle de la personne (jamais une clé commune), modèle de l’administrateur ou retenu', () => {
     const w = enabled(lot2World()); const calls = fakeGoogle(w, {});
     const gen = (email) => { const prov = w.c.geminiProviderFor_({ email }); calls.length = 0; prov.generate({ system: 's', contents: [{ role: 'user', parts: [{ text: 'q' }] }] }); return { name: prov.name, last: calls[calls.length - 1] }; };
-    let thrown; try { w.c.geminiProviderFor_({ email: MIA }); } catch (e) { thrown = e; }
-    ok(thrown && thrown.code === 'CONFIG' && /page Copilote/.test(thrown.message), 'sans aucune clé : on renvoie vers la page Copilote');
-    w.c.setProp(w.c.PROP.GEMINI_KEY, KEY_B);
+    const refuses = (email) => { let thrown; try { w.c.geminiProviderFor_({ email }); } catch (e) { thrown = e; } return thrown; };
+    ok(refuses(MIA) && refuses(MIA).code === 'CONFIG' && /page Copilote/.test(refuses(MIA).message), 'sans aucune clé : on renvoie vers la page Copilote');
+    w.c.setProp('PPM_GEMINI_API_KEY', KEY_B); // l'ancienne propriété d'une clé commune : ignorée (0.15.0)
+    ok(refuses(MIA) && refuses(MIA).code === 'CONFIG', 'une ancienne clé commune qui traîne n’est jamais utilisée pour quelqu’un d’autre');
     w.c.setProp(w.c.PROP.GEMINI_MODEL, 'gemini-choisi-par-admin');
-    let g = gen(MIA);
-    eq([g.name, g.last.opts.headers['x-goog-api-key']], ['gemini:gemini-choisi-par-admin', KEY_B], 'sans clé personnelle : la clé commune, au modèle de l’administrateur, sans appel de liste');
-    ok(/gemini-choisi-par-admin:generateContent$/.test(g.last.url) && !g.last.url.includes(KEY_B), 'adresse du modèle, sans la clé');
     w.call(MIA, 'copilot.key.set', { key: KEY_A });
-    g = gen(MIA);
-    eq(g.last.opts.headers['x-goog-api-key'], KEY_A, 'avec sa clé personnelle : c’est la sienne qui part');
-    eq(gen(CP).last.opts.headers['x-goog-api-key'], KEY_B, 'et Carla, sans clé personnelle, reste sur la clé commune');
+    let g = gen(MIA);
+    eq([g.name, g.last.opts.headers['x-goog-api-key']], ['gemini:gemini-choisi-par-admin', KEY_A], 'avec sa clé : c’est la sienne qui part, au modèle de l’administrateur, sans appel de liste');
+    ok(/gemini-choisi-par-admin:generateContent$/.test(g.last.url) && !g.last.url.includes(KEY_A), 'adresse du modèle, sans la clé');
+    ok(refuses(CP) && refuses(CP).code === 'CONFIG', 'et Carla, sans clé, n’emprunte celle de personne');
     w.c.setProp(w.c.PROP.GEMINI_MODEL, '');
     g = gen(MIA);
-    eq(g.name, 'gemini:gemini-flash-latest', 'sans modèle réglé : choisi chez Google avec la clé de la personne');
+    eq(g.name, 'gemini:gemini-flash-latest', 'sans modèle réglé : celui retenu à l’enregistrement de la clé de la personne');
     // le tout passe par la demande du copilote : le quota, le garde-fou des chiffres et le journal restent en place
     w.c.AI_PROVIDER = null; w.c.setProp(w.c.PROP.AI_MODE, 'api');
     const r = w.c.runAi_({ email: MIA, actx: { actor: MIA, source: 'test' } }, w.p1.id, 'test', 'Dis OK', { x: 1 }, {});

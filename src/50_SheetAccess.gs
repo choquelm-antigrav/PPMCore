@@ -107,6 +107,7 @@ function sheetSync_() {
     else out.granted++;
   });
   if (!out.partial) sheetGranted_().filter(function (e) { return want.indexOf(e) < 0; }).forEach(function (e) { if (sheetRevoke_(e).ok) out.revoked++; });
+  _protectDirty = true; sheetProtectIfDirty_(); // de nouveaux accès : les protections peuvent maintenant les compter parmi leurs éditeurs
   return out;
 }
 
@@ -119,6 +120,7 @@ function sheetCardFor_(ctx) {
   if (!on) { card.state = 'disabled'; return card; }
   if (!ctx.resourceId && !ctx.isAdmin) { card.state = 'no_person'; return card; }
   var r = sheetGrantSafe_(ctx.email);
+  card.locked = sheetLockedFor_(ctx); // feuilles que la personne peut modifier, et celles qui lui sont verrouillées
   if (r.ok) { card.url = url; card.state = 'granted'; }
   else { card.state = r.state === 'failed' ? 'failed' : 'not_eligible'; card.reason = r.reason || ''; }
   return card;

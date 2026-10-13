@@ -75,7 +75,33 @@ function userKeyGet_(email) {
   return o && o.k ? o : null;
 }
 
-function userKeySet_(email, key) { setProp(userKeyProp_(email), JSON.stringify({ k: key, at: todayStr() })); }
+/** Range la clé de la personne et le modèle que Google lui a proposé (retenu : on ne le redemande pas à chaque demande d'IA). */
+function userKeySet_(email, key, model) { setProp(userKeyProp_(email), JSON.stringify({ k: key, at: todayStr(), m: model || '' })); }
+
+/** Retient (ou oublie, si vide) le modèle de la personne, sans toucher à sa clé. */
+function userKeyModel_(email, model) {
+  var o = userKeyGet_(email);
+  if (!o) return;
+  o.m = model || '';
+  setProp(userKeyProp_(email), JSON.stringify(o));
+}
+
+/**
+ * Quelle clé servira à cette personne : la sienne, ou aucune. Les clés sont STRICTEMENT PERSONNELLES (0.15.0) : il n'y a plus de clé commune de l'administrateur.
+ * Ne montre jamais la clé : seulement s'il y en a une et ses quatre derniers caractères.
+ */
+function aiKeyInfo_(ctx) {
+  var mine = ctx && ctx.email ? userKeyGet_(ctx.email) : null;
+  return { mine: !!mine, source: mine ? 'mine' : 'none', last4: mine ? String(mine.k).slice(-4) : '' };
+}
+
+/** Ancienne propriété de la clé commune de l'administrateur : supprimée à l'installation et chaque nuit si elle traîne encore. Vrai si elle existait. */
+var LEGACY_SHARED_KEY_PROP = 'PPM_GEMINI_API_KEY';
+function removeSharedKey_() {
+  if (!getProp(LEGACY_SHARED_KEY_PROP, '')) return false;
+  deleteProp(LEGACY_SHARED_KEY_PROP);
+  return true;
+}
 
 /** Ce qu'on a le droit de montrer : jamais la clé, seulement s'il y en a une et ses quatre derniers caractères. */
 function userKeyStatus_(email) {
@@ -172,18 +198,21 @@ function geminiProbe_(key, opts) {
   return { ok: true, refused: false, model: model, message: '', steps: steps };
 }
 
-/** Le fournisseur d'IA de cette personne : sa clé d'abord, à défaut la clé commune de l'administrateur ; modèle réglé par l'administrateur, sinon choisi chez Google. */
+/** Le fournisseur d'IA de cette personne : SA clé, et rien d'autre ; modèle réglé par l'administrateur, sinon celui retenu à l'enregistrement de la clé. */
 function geminiProviderFor_(ctx) {
   var mine = ctx && ctx.email ? userKeyGet_(ctx.email) : null;
-  var key = mine ? mine.k : getProp(PROP.GEMINI_KEY, '');
+  var key = mine ? mine.k : '';
   if (!key) throw new PpmError('CONFIG', 'Pas de clé Gemini : ouvrez la page Copilote et enregistrez votre clé.');
-  var model = getProp(PROP.GEMINI_MODEL, '');
+  // le modèle : celui que l'administrateur a fixé, sinon celui retenu à l'enregistrement de la clé (aucun appel réseau de plus), sinon choisi chez Google puis retenu
+  var fixed = getProp(PROP.GEMINI_MODEL, ''), model = fixed || (mine && mine.m) || '', onGone = null;
   if (!model) {
     var probe = geminiProbe_(key, {});
     if (!probe.model) throw new PpmError('CONFIG', 'Aucun modèle Gemini utilisable' + (probe.message ? ' (' + probe.message + ')' : '') + ' : vérifiez votre clé dans la page Copilote.');
     model = probe.model;
+    if (mine) userKeyModel_(ctx.email, model);
   }
-  return geminiRest_(key, model);
+  if (mine && !fixed) onGone = function () { userKeyModel_(ctx.email, ''); }; // Google a retiré ce modèle : le prochain essai en choisira un autre
+  return geminiRest_(key, model, onGone);
 }
 
 // ---------------------------------------------------------------- actions de la page Copilote
@@ -205,7 +234,7 @@ defineAction('copilot.key.set', function (p, ctx) {
   }
   var probe = geminiProbe_(key, {});
   if (probe.refused) throw new PpmError('VALIDATION', 'Google refuse cette clé (' + probe.message + '). Créez-en une nouvelle sur la page de Google, puis recollez-la.');
-  userKeySet_(ctx.email, key);
+  userKeySet_(ctx.email, key, probe.model);
   var out = userKeyStatus_(ctx.email);
   out.keys_url = GEMINI_KEYS_URL;
   out.tested = probe.ok;
@@ -219,6 +248,7 @@ defineAction('copilot.key.test', function (p, ctx) {
   var mine = userKeyGet_(ctx.email);
   if (!mine) throw new PpmError('VALIDATION', 'Aucune clé enregistrée : collez-en une d’abord.');
   var probe = geminiProbe_(mine.k, { generate: true });
+  if (probe.ok && probe.model) userKeyModel_(ctx.email, probe.model); // le test met à jour le modèle retenu
   return { ok: probe.ok, refused: probe.refused, model: probe.model, message: probe.message, steps: probe.steps };
 });
 

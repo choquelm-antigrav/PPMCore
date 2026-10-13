@@ -30,6 +30,8 @@ require('./test_sheets_layer')();
 require('./test_program')();
 require('./test_speed')();
 require('./test_sheet_access')();
+require('./test_sheet_protect')();
+require('./test_copilot_api')();
 console.log('\n' + results.passed + ' réussis, ' + results.failed + ' en échec');
 if (results.failed) {
   results.failures.forEach((f) => console.log('\n✗ ' + f.name + '\n' + (f.error && f.error.stack)));

@@ -54,7 +54,7 @@ module.exports = function () {
     eq(w.raw(DPL, 'admin.holidays.seed', { years: [2028] }).error.code, 'FORBIDDEN');
     eq(w.raw(CP, 'admin.holidays.set', { id: 'FR-2026', dates: [] }).error.code, 'FORBIDDEN');
     const g = w.call(ADMIN, 'admin.get', {});
-    eq([g.admins, g.domain, g.ai_mode, g.ai_quota, g.gemini_key_set], [[ADMIN], 'entreprise.com', 'off', 30, false]);
+    eq([g.admins, g.domain, g.ai_mode, g.ai_quota, 'gemini_key_set' in g], [[ADMIN], 'entreprise.com', 'off', 30, false], 'plus aucune trace d’une clé commune dans les réglages (0.15.0)');
   });
 
   test('Administrateurs : jamais zéro, pas de retrait de soi-même, adresses du domaine', () => {
@@ -73,24 +73,21 @@ module.exports = function () {
     eq(w.raw(CP, 'admin.get', {}).error.code, 'FORBIDDEN', 'et celui-ci perd l’accès aussitôt');
   });
 
-  test('Copilote : clé Gemini commune en écriture seule, mode api sans clé commune (chacun a la sienne), quota borné, chaque changement tracé', () => {
+  test('Copilote : mode api sans clé commune (chacun a la sienne), clé commune refusée, quota borné, chaque changement tracé', () => {
     const w = lot2World();
     const KEY = 'AbCdEfGhIjKlMnOpQrStUvWxYz_0123456789';
-    ok(!adminSet(lot2World(), { ai_mode: 'api' }).error, 'mode api accepté sans clé commune : chaque personne enregistre sa propre clé (0.13.0)');
+    ok(!adminSet(lot2World(), { ai_mode: 'api' }).error, 'mode api accepté : chaque personne enregistre sa propre clé');
     eq(adminSet(w, { ai_mode: 'perroquet' }).error.code, 'VALIDATION');
-    eq(adminSet(w, { gemini_key: 'trop court' }).error.code, 'VALIDATION');
     eq(adminSet(w, { ai_model: 'modèle avec espaces' }).error.code, 'VALIDATION');
-    eq(adminSet(w, { clear_gemini_key: true, gemini_key: KEY }).error.code, 'VALIDATION');
-    const r = w.call(ADMIN, 'admin.set', { values: { gemini_key: KEY, ai_model: 'gemini-test', ai_mode: 'api' } });
-    eq([r.ai_mode, r.ai_model, r.gemini_key_set], ['api', 'gemini-test', true]);
-    ok(!JSON.stringify(r).includes(KEY) && !JSON.stringify(w.call(ADMIN, 'admin.get', {})).includes(KEY), 'la clé n’est jamais renvoyée');
-    eq(w.c.getProp(w.c.PROP.GEMINI_KEY, ''), KEY, 'mais elle est bien enregistrée pour le copilote');
+    const refused = adminSet(w, { gemini_key: KEY });
+    ok(refused.error.code === 'VALIDATION' && /strictement personnelle/.test(refused.error.message) && /page Copilote/.test(refused.error.message), 'une clé commune est refusée : ' + refused.error.message);
+    eq(adminSet(w, { clear_gemini_key: true }).error.code, 'VALIDATION', 'et « supprimer la clé commune » n’existe plus');
+    eq([w.c.getProp('PPM_GEMINI_API_KEY', ''), JSON.stringify(w.c.repoList('ChangeEvent')).includes(KEY)], ['', false], 'rien n’a été enregistré ni tracé');
+    const r = w.call(ADMIN, 'admin.set', { values: { ai_model: 'gemini-test', ai_mode: 'api' } });
+    eq([r.ai_mode, r.ai_model, 'gemini_key_set' in r], ['api', 'gemini-test', false]);
     const events = w.c.repoList('ChangeEvent').filter((e) => e.table_name === 'Réglages');
-    ok(events.some((e) => e.field === 'gemini_key' && e.new_value === 'remplacée') && events.every((e) => !JSON.stringify(e).includes(KEY)), 'trace sans la clé');
     ok(events.some((e) => e.field === 'ai_mode' && e.old_value === 'off' && e.new_value === 'api' && e.actor === ADMIN), 'trace du mode : avant, après, auteur');
-    ok(!adminSet(w, { clear_gemini_key: true }).error, 'on peut supprimer la clé commune : les clés personnelles prennent le relais');
-    const off = w.call(ADMIN, 'admin.set', { values: { ai_mode: 'manual', clear_gemini_key: true } });
-    eq([off.ai_mode, off.gemini_key_set, w.c.getProp(w.c.PROP.GEMINI_KEY, '')], ['manual', false, '']);
+    ok(events.every((e) => e.field !== 'gemini_key'), 'plus aucune trace de clé dans le journal des réglages');
     [0, 501, 2.5, 'beaucoup'].forEach((q) => eq(adminSet(w, { ai_quota: q }).error.code, 'VALIDATION', 'quota ' + q));
     eq(w.call(ADMIN, 'admin.set', { values: { ai_quota: 40 } }).ai_quota, 40);
     eq(w.c.aiQuota_(), 40, 'le copilote applique le nouveau quota');

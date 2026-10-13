@@ -72,9 +72,11 @@ function setupPpm() {
   var year = Number(todayStr().slice(0, 4));
   seedHolidays_([year - 1, year, year + 1, year + 2]);
 
+  var sharedGone = removeSharedKey_(); // 0.15.0 : plus de clé commune, les clés Gemini sont strictement personnelles
   var msg = 'Installation terminée (PPM Core ' + PPM_VERSION + ')\n' +
     'Classeur Données : ' + data.getUrl() + '\n' +
-    'Classeur Historique : ' + history.getUrl() + '\n' + report.join('\n');
+    'Classeur Historique : ' + history.getUrl() + '\n' + report.join('\n') +
+    (sharedGone ? '\nLa clé Gemini commune de l’administrateur a été supprimée : les clés sont strictement personnelles (page Copilote).' : '');
   console.log(msg);
   return msg;
 }

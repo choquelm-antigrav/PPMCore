@@ -22,19 +22,29 @@ function aiMode_() {
   return ['off', 'manual', 'api'].indexOf(m) >= 0 ? m : 'off';
 }
 
+/**
+ * Vrai quand la demande d'IA se prépare en « texte à coller » : mode manuel, ou mode Gemini pour une personne qui n'a pas (encore) de clé.
+ * Chacun passe ainsi toujours par une voie qui marche : sa clé si elle en a une, sinon le copier-coller.
+ */
+function aiUseManual_(ctx) {
+  if (AI_PROVIDER) return false;
+  var m = aiMode_();
+  return m === 'manual' || (m === 'api' && aiKeyInfo_(ctx).source === 'none');
+}
+
 function aiQuota_() {
   var q = Number(getProp(PROP.AI_QUOTA, '30'));
   return q > 0 ? Math.floor(q) : 30;
 }
 
-/** Le fournisseur d'IA de la personne qui demande : sa clé personnelle (38_CopilotKey.gs), à défaut la clé commune de l'administrateur. */
+/** Le fournisseur d'IA de la personne qui demande : sa clé personnelle (38_CopilotKey.gs), et rien d'autre. */
 function aiProvider_(ctx) {
   if (AI_PROVIDER) return AI_PROVIDER;
   return geminiProviderFor_(ctx);
 }
 
 /** API Gemini (REST generateContent). Les parties renvoyées par le modèle sont rejouées telles quelles. */
-function geminiRest_(key, model) {
+function geminiRest_(key, model, onModelGone) {
   return {
     name: 'gemini:' + model,
     generate: function (req) {
@@ -51,8 +61,16 @@ function geminiRest_(key, model) {
       }
       var code = r.code;
       var json = parseJsonSafe(r.text, {});
-      if (code === 429) throw new PpmError('QUOTA', 'Gemini : quota atteint, réessayer plus tard.');
-      if (code >= 300) throw new PpmError('INTERNAL', 'Gemini a répondu ' + code + ' : ' + truncate((json.error && json.error.message) || r.text, 300));
+      var gmsg = googleMessage_(json, r.text, key); // le message de Google, sans jamais laisser passer la clé
+      if (code === 429) throw new PpmError('QUOTA', 'Gemini : quota atteint (celui de votre clé chez Google), réessayez plus tard.');
+      if (code === 401 || code === 403 || (code === 400 && /api[ _-]?key/i.test(gmsg))) {
+        throw new PpmError('CONFIG', 'Google refuse votre clé Gemini (' + gmsg + '). Reconnectez-la dans la zone « Connexion à Gemini » de la page Copilote : en attendant, vous pouvez utiliser le texte à coller.');
+      }
+      if (code === 404) {
+        if (onModelGone) onModelGone();
+        throw new PpmError('CONFIG', 'Google ne propose plus le modèle « ' + model + ' » : réessayez, un autre sera choisi pour votre clé.');
+      }
+      if (code >= 300) throw new PpmError('INTERNAL', 'Gemini a répondu ' + code + ' : ' + gmsg);
       var parts = (((json.candidates || [])[0] || {}).content || {}).parts || [];
       return {
         raw: parts,
@@ -128,10 +146,10 @@ function runAi_(ctx, projectId, purpose, task, facts, opts) {
   if (mode === 'off') {
     throw new PpmError('CONFIG', 'Le copilote IA n’est pas activé (propriété PPM_AI_MODE). Les synthèses chiffrées, simulations et suggestions restent disponibles.');
   }
-  if (mode === 'manual' && !AI_PROVIDER) {
+  if (aiUseManual_(ctx)) {
     var prompt = manualPrompt_(task, facts, opts.extra);
     var id = logAi_(ctx, projectId, purpose, 'manual', prompt, '', []);
-    return { mode: 'manual', prompt: prompt, logId: id };
+    return { mode: 'manual', prompt: prompt, logId: id, fallback: mode === 'api' ? 'no_key' : '' };
   }
   if (aiUsedToday_(ctx.email) >= aiQuota_()) throw new PpmError('QUOTA', 'Quota du copilote atteint pour aujourd’hui (' + aiQuota_() + ' demandes).');
   var provider = aiProvider_(ctx);
@@ -282,6 +300,7 @@ defineAction('copilot.status', function (p, ctx) {
   return {
     mode: mode, model: mode === 'api' ? getProp(PROP.GEMINI_MODEL, '') : '',
     quota: { used: mode === 'api' ? aiUsedToday_(ctx.email) : 0, limit: aiQuota_() },
+    key: aiKeyInfo_(ctx), usesManual: aiUseManual_(ctx), // pour la page : sa clé, et si ses demandes passent par le texte à coller
     canDecide: isBlank(p.projectId) ? false : can(ctx, 'insight.decide', { type: 'project', id: p.projectId })
   };
 });
@@ -325,7 +344,7 @@ defineAction('copilot.ask', function (p, ctx) {
   var data = loadCopilotData_(projectId);
   var brief = buildProjectBrief(data, projectId, todayStr(), data.holFor);
   var tools = copilotTools_(data, projectId, brief);
-  if (aiMode_() === 'manual' && !AI_PROVIDER) {
+  if (aiUseManual_(ctx)) {
     var items = tools.handlers.list_items({ filter: 'all' });
     return runAi_(ctx, projectId, 'question', question, brief.facts, { extra: 'Livrables et jalons (JSON) :\n' + JSON.stringify(items) });
   }

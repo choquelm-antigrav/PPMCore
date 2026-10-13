@@ -58,12 +58,12 @@ function adminView_() {
   return {
     admins: adminEmails(), domain: allowedDomains().join(', '),
     copilot_enabled: copilotEnabled_(), ai_mode: aiMode_(), ai_model: getProp(PROP.GEMINI_MODEL, ''), ai_quota: aiQuota_(),
-    gemini_key_set: !!getProp(PROP.GEMINI_KEY, ''),
     reminder_on: reminderDefaults_().on, reminder_days: reminderDefaults_().days,
     appsheet_url: getProp(PROP.APPSHEET_URL, ''), logo_url: getProp(PROP.LOGO_URL, ''),
     projects_folder_id: getProp(PROP.PROJECTS_FOLDER, ''),
     backup_folder_id: getProp(PROP.BACKUP_FOLDER, ''), webapp_url: getProp(PROP.WEBAPP_URL, ''),
-    sheet_share: sheetShareOn_(), sheet_url: dataSheetUrl_(), sheet_granted: sheetGranted_().length
+    sheet_share: sheetShareOn_(), sheet_url: dataSheetUrl_(), sheet_granted: sheetGranted_().length,
+    sheet_protect: sheetProtectOn_(), sheet_protect_groups: sheetProtectView_()
   };
 }
 
@@ -120,24 +120,15 @@ function validateAdminSettings_(v, cur, actor) {
     change('admins', PROP.ADMINS, cur.admins.join(','), list.join(','));
   }
 
+  if (v.sheet_protect !== undefined) change('sheet_protect', PROP.SHEET_PROTECT, cur.sheet_protect ? 'oui' : 'non', v.sheet_protect ? 'oui' : 'non');
   if (v.sheet_share !== undefined) change('sheet_share', PROP.SHEET_SHARE, cur.sheet_share ? 'oui' : 'non', v.sheet_share ? 'oui' : 'non');
   if (v.copilot_enabled !== undefined) change('copilot', PROP.COPILOT, cur.copilot_enabled ? 'oui' : 'non', v.copilot_enabled ? 'oui' : 'non');
   var mode = v.ai_mode !== undefined ? String(v.ai_mode) : cur.ai_mode;
   var model = v.ai_model !== undefined ? String(v.ai_model).trim() : cur.ai_model;
-  var keySet = cur.gemini_key_set;
   if (['off', 'manual', 'api'].indexOf(mode) < 0) throw new PpmError('VALIDATION', 'Mode du copilote inconnu : off, manual ou api.');
   if (model && !/^[A-Za-z0-9._:-]{1,80}$/.test(model)) throw new PpmError('VALIDATION', 'Nom de modèle invalide (lettres, chiffres, point, tiret, deux-points).');
-  if (v.clear_gemini_key && !isBlank(v.gemini_key)) throw new PpmError('VALIDATION', 'Remplacer et supprimer la clé en même temps n’a pas de sens.');
-  if (v.clear_gemini_key) {
-    if (keySet) change('gemini_key', PROP.GEMINI_KEY, 'définie', null, ['définie', 'supprimée']);
-    keySet = false;
-  }
-  if (!isBlank(v.gemini_key)) {
-    var k = String(v.gemini_key).trim();
-    if (!/^[A-Za-z0-9_-]{20,200}$/.test(k)) throw new PpmError('VALIDATION', 'Clé Gemini invalide : 20 à 200 caractères, lettres, chiffres, tiret ou souligné.');
-    props[PROP.GEMINI_KEY] = k;
-    audit.push({ field: 'gemini_key', old: keySet ? 'définie' : 'aucune', new: 'remplacée' });
-    keySet = true;
+  if (v.gemini_key !== undefined || v.clear_gemini_key !== undefined) {
+    throw new PpmError('VALIDATION', 'La clé Gemini est strictement personnelle : chaque personne enregistre la sienne dans la page Copilote ; l’administrateur n’en saisit plus.');
   }
   change('ai_mode', PROP.AI_MODE, cur.ai_mode, mode);
   change('ai_model', PROP.GEMINI_MODEL, cur.ai_model, model);
@@ -160,7 +151,7 @@ function validateAdminSettings_(v, cur, actor) {
     change('projects_folder_id', PROP.PROJECTS_FOLDER, cur.projects_folder_id, f);
   }
   // Une valeur vidée supprime la propriété plutôt que d'en garder une vide.
-  Object.keys(props).forEach(function (k2) { if (props[k2] === '' && k2 !== PROP.GEMINI_KEY) props[k2] = null; });
+  Object.keys(props).forEach(function (k2) { if (props[k2] === '') props[k2] = null; });
   return { props: props, audit: audit };
 }
 
@@ -180,6 +171,7 @@ defineAction('admin.set', function (p, ctx) {
   var r = validateAdminSettings_(p.values, adminView_(), ctx.email);
   applyAdminSettings_(r);
   var shareOff = r.props[PROP.SHEET_SHARE] === 'non' ? sheetRevokeAll_() : null; // partage coupé : les accès que l'outil avait accordés sont retirés
+  var protectReport = r.props[PROP.SHEET_PROTECT] !== undefined ? sheetProtectApply_() : null; // protection activée ou coupée : posée ou retirée tout de suite
   var at = nowIso();
   repoAppendHistory('ChangeEvent', r.audit.map(function (a) {
     return { id: newId(), at: at, table_name: 'Réglages', entity_id: 'PPM', project_id: '', field: a.field, old_value: a.old, new_value: a.new,
@@ -188,6 +180,7 @@ defineAction('admin.set', function (p, ctx) {
   var out = adminView_();
   out.changed = r.audit.map(function (a) { return a.field; });
   if (shareOff) out.sheet_revoked = shareOff;
+  if (protectReport) out.sheet_protect_report = protectReport;
   return out;
 });
 

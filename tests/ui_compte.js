@@ -154,21 +154,19 @@ function openPage(file, user, boot) {
   await a.until(() => a.doc.getElementById('f-admins'));
   check(!a.doc.getElementById('ppm-admin').hidden && a.doc.getElementById('ppm-admin').getAttribute('aria-current') === 'page', 'lien « Administration » visible et marqué pour un administrateur');
   check(a.doc.getElementById('f-admins').value === ADMIN && a.doc.getElementById('f-mode').value === 'off' && a.doc.getElementById('f-quota').value === '30', 'réglages actuels affichés');
-  check(/entreprise\.com/.test(a.text('panel-reglages')) && !a.doc.getElementById('f-key').value, 'domaine en lecture seule ; champ de clé toujours vide');
+  check(/entreprise\.com/.test(a.text('panel-reglages')) && !a.doc.getElementById('f-key') && !a.doc.getElementById('f-clear-key'), 'domaine en lecture seule ; plus de champ de clé commune');
+  check(/strictement personnelle/.test(a.text('key-note')) && /page Copilote/.test(a.text('key-note')) && /rien n’est partagé/.test(a.text('key-note')), 'la note dit que la clé est strictement personnelle : ' + a.text('key-note').slice(0, 90));
   a.doc.getElementById('f-admins').value = 'dora@entreprise.com';
   a.submit(a.doc.querySelector('form.form'));
   await a.until(() => !a.doc.getElementById('cfg-error').hidden);
   check(/vous retirer vous-même/.test(a.text('cfg-error')) && /DPL|dora/.test(c.getProp(c.PROP.ADMINS, '')) === false, 'se retirer des administrateurs refusé, message sous le formulaire : ' + a.text('cfg-error'));
   a.doc.getElementById('f-admins').value = ADMIN + '\ndora@entreprise.com';
-  const KEY = 'AbCdEfGhIjKlMnOpQrStUvWxYz_0123456789';
-  a.doc.getElementById('f-mode').value = 'manual'; a.doc.getElementById('f-key').value = KEY;
+  a.doc.getElementById('f-mode').value = 'manual';
   a.doc.getElementById('f-quota').value = '40';
   a.submit(a.doc.querySelector('form.form'));
   await a.until(() => /réglages? enregistrés?/.test(a.text('toast')));
-  check(/4 réglages enregistrés/.test(a.text('toast')), 'confirmation avec le nombre de réglages modifiés : ' + a.text('toast'));
-  check(c.adminEmails().join() === ADMIN + ',dora@entreprise.com' && c.aiQuota_() === 40 && c.aiMode_() === 'manual' && c.getProp(c.PROP.GEMINI_KEY, '') === KEY, 'administrateurs, quota, mode et clé enregistrés');
-  await a.until(() => a.doc.getElementById('f-key').placeholder.includes('clé enregistrée'));
-  check(!a.doc.documentElement.outerHTML.includes(KEY), 'la clé n’apparaît nulle part dans la page après enregistrement');
+  check(/3 réglages enregistrés/.test(a.text('toast')), 'confirmation avec le nombre de réglages modifiés : ' + a.text('toast'));
+  check(c.adminEmails().join() === ADMIN + ',dora@entreprise.com' && c.aiQuota_() === 40 && c.aiMode_() === 'manual', 'administrateurs, quota et mode enregistrés');
   // 0.13.0 : l'administrateur active ou suspend le copilote d'une case à cocher
   check(a.doc.getElementById('f-copilot').checked === true && /rechargement de la page/.test(a.text('copilot-note')) && /accord de votre entreprise/.test(a.text('copilot-note')), 'copilote : case d’activation visible, cochée car activé, avec l’avertissement et la note de rechargement');
   a.doc.getElementById('f-copilot').checked = false;
@@ -239,7 +237,7 @@ function openPage(file, user, boot) {
   a.win.__ppm.render();
   await a.until(() => /Réglages de l’outil/.test(a.text('panel-journaux')));
   const logs = a.text('panel-journaux');
-  check(/Réglages de l’outil/.test(logs) && /gemini_key/.test(logs) && /remplacée/.test(logs) && !logs.includes(KEY), 'réglages tracés, sans jamais montrer la clé');
+  check(/Réglages de l’outil/.test(logs) && /ai_mode/.test(logs) && !/gemini_key/.test(logs), 'réglages tracés, sans aucune clé');
   check(/Aucun échange enregistré/.test(logs), 'échanges avec le copilote : vide tant que l’IA n’est pas utilisée');
 
   // ---------------------------------------------------------------- domaines autorisés : un champ, avec ses garde-fous
@@ -314,6 +312,37 @@ function openPage(file, user, boot) {
   await adm.until(() => editors.size === 0);
   check(c.getProp(c.PROP.SHEET_SHARE, 'oui') === 'non' && editors.size === 0 && c.sheetGranted_().length === 0, 'décocher et enregistrer coupe le partage et retire les accès accordés par l’outil');
   c.setProp(c.PROP.SHEET_SHARE, 'oui');
+
+  // ---------------------------------------------------------------- 0.15.0 : la protection du classeur, déduite des rôles
+  const lockedOf = async (user) => { const q = openPage('Compte.html', user); await q.until(() => q.doc.getElementById('sheet-locked')); return Object.fromEntries([...q.doc.querySelectorAll('#sheet-locked li')].map((li) => [li.getAttribute('data-group'), li.className])); };
+  const lk = { rwp: await lockedOf(RWP), cp: await lockedOf(CP), dpl: await lockedOf('dora@entreprise.com'), member: await lockedOf('mia@entreprise.com'), admin: await lockedOf(ADMIN) };
+  check(JSON.stringify(lk.rwp) === '{"roles":"cannot","budget":"cannot"}' && JSON.stringify(lk.member) === '{"roles":"cannot","budget":"cannot"}', 'responsable de workpackage et membre : rôles et budget verrouillés pour eux');
+  check(JSON.stringify(lk.cp) === '{"roles":"cannot","budget":"can"}', 'chef de projet : peut modifier le budget, pas les rôles');
+  check(JSON.stringify(lk.dpl) === '{"roles":"can","budget":"can"}' && JSON.stringify(lk.admin) === '{"roles":"can","budget":"can"}', 'DPL et administrateur : les deux');
+  const cpCard = openPage('Compte.html', CP); await cpCard.until(() => cpCard.doc.getElementById('sheet-locked'));
+  const lis = [...cpCard.doc.querySelectorAll('#sheet-locked li')].map((li) => flat(li.textContent));
+  check(/Rôles et personnes \(RoleAssignment, Role, Resource\) : verrouillée pour vous, réservée aux administrateurs, Program Leader, Domain Program Leader\./.test(lis[0]) && /Budget et achats \(BudgetLine.*RateCard.*\) : vous pouvez la modifier\./.test(lis[1]), 'la liste nomme les feuilles, qui peut les modifier et ce que la personne peut faire : ' + lis[0].slice(0, 90));
+  check(/Les autres feuilles \(planning, actualités…\) se modifient librement/.test(cpCard.doc.getElementById('sheet-locked-note').textContent) && /vous pouvez toujours lire/.test(cpCard.doc.getElementById('sheet-locked-note').textContent) && /suit vos rôles tout seul/.test(cpCard.doc.getElementById('sheet-locked-note').textContent), 'la note dit que le reste est libre, que la lecture reste possible et que le verrouillage suit les rôles');
+  c.setProp(c.PROP.SHEET_PROTECT, 'non');
+  const noLock = openPage('Compte.html', CP); await noLock.until(() => noLock.doc.getElementById('sheet-link'));
+  check(!noLock.doc.getElementById('sheet-locked'), 'protection coupée : plus de liste de feuilles verrouillées');
+  c.setProp(c.PROP.SHEET_PROTECT, 'oui');
+  // Administration
+  const adm2 = openPage('Admin.html', ADMIN); await adm2.until(() => adm2.doc.getElementById('f-sheet-protect'));
+  const groups = [...adm2.doc.querySelectorAll('.prot-group')];
+  check(adm2.doc.getElementById('f-sheet-protect').checked && groups.length === 2, 'Administration : la case de protection (cochée) et les deux groupes de feuilles');
+  check(/Rôles et personnes/.test(groups[0].textContent) && /RoleAssignment, Role, Resource/.test(groups[0].textContent) && /administrateurs, Program Leader, Domain Program Leader/.test(groups[0].textContent) && /Chef de projet/.test(groups[1].textContent) && /BudgetLine/.test(groups[1].textContent), 'chaque groupe nomme ses feuilles et les rôles qui peuvent les modifier');
+  check(/carla@entreprise\.com/.test(groups[1].querySelector('details').textContent) && !/carla@entreprise\.com/.test(groups[0].querySelector('details').textContent) && /dora@entreprise\.com/.test(groups[0].querySelector('details').textContent), 'les adresses éditrices : le chef de projet pour le budget seulement, le DPL pour les deux');
+  check(/MODIFICATION/.test(adm2.doc.getElementById('protect-note').textContent) && /LIRE ces feuilles/.test(adm2.doc.getElementById('protect-note').textContent) && /Aucune adresse à gérer/.test(adm2.doc.getElementById('protect-note').textContent), 'la note dit qu’il n’y a rien à gérer, que seule la modification est interdite et que la lecture reste ouverte');
+  c.sheetProtectApply_ = () => ({ enabled: true, ready: true, groups: [{ key: 'roles', protectedSheets: ['RoleAssignment', 'Role', 'Resource'] }, { key: 'budget', protectedSheets: ['BudgetLine', 'BudgetPhasing', 'PurchaseOrder', 'PurchaseOrderLink', 'RateCard', 'ActualImport'] }], failed: [{ table: 'Role', reason: 'quota' }], skipped: ['carla@entreprise.com', 'carla@entreprise.com'], created: 9, removedProtections: 0 });
+  adm2.click(adm2.doc.getElementById('protect-now'));
+  await adm2.until(() => /feuille\(s\) protégée\(s\)/.test(adm2.doc.getElementById('protect-result').textContent));
+  check(/9 feuille\(s\) protégée\(s\), 9 protection\(s\) posée\(s\), 1 en échec : Role \(quota\) ; pas encore éditeurs, faute d’accès au classeur : carla@entreprise\.com\./.test(adm2.doc.getElementById('protect-result').textContent), '« Appliquer maintenant » rend un compte rendu complet : ' + adm2.doc.getElementById('protect-result').textContent);
+  let offReport = null; c.sheetProtectApply_ = () => { offReport = { removedProtections: 9 }; return { enabled: false, ready: true, groups: [], failed: [], skipped: [], created: 0, removedProtections: 9 }; };
+  adm2.doc.getElementById('f-sheet-protect').checked = false; adm2.submit(adm2.doc.querySelector('form.form'));
+  await adm2.until(() => c.getProp(c.PROP.SHEET_PROTECT, 'oui') === 'non');
+  check(c.getProp(c.PROP.SHEET_PROTECT, 'oui') === 'non' && offReport && offReport.removedProtections === 9, 'décocher et enregistrer coupe la protection et retire celles de l’outil tout de suite');
+  c.setProp(c.PROP.SHEET_PROTECT, 'oui');
 
   console.log(failed ? '\n' + failed + ' échec(s).' : '\nPages Mon compte et Administration : tout est conforme.');
   process.exit(failed ? 1 : 0);

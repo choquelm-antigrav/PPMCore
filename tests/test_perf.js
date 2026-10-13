@@ -106,7 +106,8 @@ module.exports = function () {
     eq(ov, ['overview.get|{"projectId":"' + id + '"}', 'news.summary|{"projectId":"' + id + '"}'], 'Overview : la carte Actualités du projet affiché part avec la page, sans aller-retour de plus (0.14.2)');
     const ov0 = keys('overview', {});
     ok(ov0.length === 2 && /^news\.summary\|\{"projectId":"[0-9a-f-]{36}"\}$/.test(ov0[1]), 'sans projet demandé, le préchargement suit le projet que l’Overview choisit : ' + ov0[1]);
-    eq(keys('copilote'), ['copilot.key.status|{}'], 'la page Copilote ne précharge que l’état de la clé de la personne');
+    const cop = keys('copilote', { project: id });
+    eq(cop, ['copilot.key.status|{}', 'planning.catalog|{}', 'copilot.status|{"projectId":"' + id + '"}', 'copilot.brief|{"projectId":"' + id + '"}', 'copilot.suggestions|{"projectId":"' + id + '"}'], 'la page Copilote précharge la clé, le catalogue, le statut, la synthèse chiffrée et les suggestions du projet (0.15.0)');
     eq(keys('gantt', { program: w.prog.id }).pop(), 'gantt.program|{"programId":"' + w.prog.id + '"}');
     eq(w.c.stableJson_({ b: [2, { d: 1, c: null }], a: 'x' }), '{"a":"x","b":[2,{"c":null,"d":1}]}');
   });

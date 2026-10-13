@@ -153,7 +153,7 @@ module.exports = function () {
       eq([...used].sort(), [...c.PAGE_TABLES[v]].sort(), v + ' : tables lues = tables demandées d’avance');
     });
     const kb = (v) => { w.cold(); open(w, v); let bytes = 0; const ga = c.CACHE_PROVIDER.getAll; c.CACHE_PROVIDER.getAll = (ks) => { const o = ga(ks); Object.values(o).forEach((x) => { bytes += String(x).length; }); return o; }; open(w, v); c.CACHE_PROVIDER.getAll = ga; return bytes; };
-    ok(kb('copilote') < 0.5 * kb('overview') && kb('copilote') < 60000, 'la page Copilote (3 tables) ne tire plus les tables du planning, du budget ni des actualités : ' + kb('copilote') + ' octets');
+    ok(kb('ressources') < 0.5 * kb('overview') && kb('compte') < 0.5 * kb('overview'), 'Ressources et Compte ne tirent plus les tables du planning, du budget ni des actualités : ' + kb('ressources') + ' et ' + kb('compte') + ' octets, contre ' + kb('overview') + ' pour l’Overview');
     ok(!c.PAGE_TABLES.compte.includes('BaselineItem') && !c.PAGE_TABLES.structure.includes('BaselineItem'), 'Compte et Structure ne tirent plus les écarts de baseline, la plus grosse table');
   });
 

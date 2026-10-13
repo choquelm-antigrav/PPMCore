@@ -140,6 +140,14 @@ function liveSmokeTest_(opts) {
     if (!sheetShareOn_()) return { warn: 'le partage est coupé (Administration → Réglages) : « ' + name + ' » n’est ouvert qu’à son propriétaire' };
     return '« ' + name + ' » : ' + sheetGranted_().length + ' accès accordé(s) par l’outil, ' + sheetDesired_().length + ' personne(s) attendue(s)';
   });
+  step('Classeur Données : feuilles protégées selon les rôles (0.15.0)', function () {
+    if (!sheetProtectReady_()) return { warn: 'non vérifiable ici' };
+    if (!sheetProtectOn_()) return { warn: 'la protection est coupée (Administration → Réglages) : toutes les feuilles sont modifiables par les personnes invitées' };
+    var book = openBook_('data'), missing = [], total = 0;
+    SHEET_PROTECT_GROUPS.forEach(function (g) { g.tables.forEach(function (t) { total++; var sh = book.getSheetByName(t); if (!sh || !sheetProtectOwn_(sh)) missing.push(t); }); });
+    if (missing.length) return { warn: missing.length + ' feuille(s) sur ' + total + ' non protégée(s) : ' + missing.join(', ') + ' — Administration → « Appliquer les protections maintenant »' };
+    return total + ' feuilles protégées (' + SHEET_PROTECT_GROUPS.map(function (g) { return g.label + ' : ' + sheetProtectEditors_(g).length + ' éditeur(s)'; }).join(' ; ') + ')';
+  });
   step('Mails : quota du jour', function () {
     if (!has('MailApp') || !MailApp.getRemainingDailyQuota) return { warn: 'non vérifiable ici' };
     var q = MailApp.getRemainingDailyQuota();

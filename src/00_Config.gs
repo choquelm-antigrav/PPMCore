@@ -5,7 +5,7 @@
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.14.2';
+var PPM_VERSION = '0.15.0';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -47,6 +47,8 @@ var ROLE_LABELS = {
  */
 var PERMISSIONS = {
   'program.create':   ['PL'],
+  'sheet.roles':      ['PL', 'DPL'],       // modifier DIRECTEMENT dans le classeur les feuilles Rôles et personnes (la protection du classeur en découle : 51_SheetProtect.gs)
+  'sheet.budget':     ['PL', 'DPL', 'CP'], // idem pour les feuilles Budget et achats
   'program.view':     ['PL', 'DPL'], // vues consolidées de tous les projets d'un programme (Actualités, Suivi, Budget)
   'project.create':   ['PL', 'DPL'],
   'wbs.edit':         ['PL', 'DPL', 'CP', 'RWP'],
@@ -81,18 +83,18 @@ var PROP = {
   ADMINS: 'PPM_ADMINS',
   BACKUP_FOLDER: 'PPM_BACKUP_FOLDER_ID',
   JOB_STATE: 'PPM_JOB_STATE',
-  GEMINI_KEY: 'PPM_GEMINI_API_KEY',
   APPSHEET_URL: 'PPM_APPSHEET_URL',
   WEBAPP_URL: 'PPM_WEBAPP_URL',
   PROJECTS_FOLDER: 'PPM_PROJECTS_FOLDER_ID',
   AI_MODE: 'PPM_AI_MODE',
-  GEMINI_KEY: 'PPM_GEMINI_API_KEY',
   GEMINI_MODEL: 'PPM_GEMINI_MODEL',
   AI_QUOTA: 'PPM_AI_DAILY_QUOTA',
   LOGO_URL: 'PPM_LOGO_URL',
   LAST_NIGHTLY: 'PPM_LAST_NIGHTLY',
   LAST_DIGEST: 'PPM_LAST_DIGEST',
   COPILOT: 'PPM_COPILOT',
+  SHEET_PROTECT: 'PPM_SHEET_PROTECT',         // « non » : les feuilles sensibles du classeur ne sont plus verrouillées (oui par défaut)
+  SHEET_PROTECT_SIG: 'PPM_SHEET_PROTECT_SIG', // empreinte des éditeurs appliqués : vide = à refaire
   SHEET_SHARE: 'PPM_SHEET_SHARE',     // « non » : le classeur Données n'est plus partagé avec les personnes invitées (oui par défaut)
   SHEET_GRANTED: 'PPM_SHEET_GRANTED', // adresses à qui l'OUTIL a accordé l'accès (JSON) : seules celles-là sont retirées par lui
   WEBAPP_URL_AT: 'PPM_WEBAPP_URL_AT', // dernière vérification de l'adresse de la web app (ms) : pas d'appel à ScriptApp à chaque page
