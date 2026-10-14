@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.15.1">
+<meta name="ppm-version" content="0.15.2">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -470,6 +470,54 @@
   .swatch.diamond { width: 11px; height: 11px; border-radius: 2px; transform: rotate(45deg); background: var(--cyan); }
   .swatch.thin { height: 4px; background: var(--summary); } .swatch.external { background: transparent; border: 1.5px dashed var(--muted); }
   .swatch.today { width: 3px; height: 14px; border-radius: 2px; background: var(--red); }
+  /* ---- liste de gauche, recherche et filtres, entête de dates qui reste visible (0.15.2) ---- */
+  .plan-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 0 0 10px; }
+  .plan-tools[hidden] { display: none; }
+  .plan-tools input[type=search] { flex: 1 1 220px; max-width: 320px; padding: 7px 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; }
+  .pills { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+  .pill { padding: 5px 12px; border: 1px solid var(--rule); border-radius: 999px; background: var(--surface); color: var(--ink); cursor: pointer; font-size: 13px; }
+  .pill:hover { background: var(--hover); }
+  .pill[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: var(--on-accent); }
+  :root.dark .pill[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #031126; }
+  .pl-count { color: var(--muted); font-size: 13px; }
+  .plan { position: relative; overflow: auto; max-height: 78vh; min-height: 240px; }
+  .plan-inner { display: flex; align-items: flex-start; width: max-content; min-width: 100%; }
+  .plan-chart { flex: 0 0 auto; }
+  .plan-chart .gantt-container { overflow: visible !important; height: auto !important; }
+  .plan-left { position: sticky; left: 0; z-index: 6; flex: 0 0 var(--lw, 340px); width: var(--lw, 340px); background: var(--surface); border-right: 1px solid var(--rule); box-shadow: 6px 0 10px -8px rgba(0, 0, 0, .3); font-size: 13px; }
+  .list-off .plan-left { display: none; }
+  .pl-head, .pl-row { display: flex; align-items: center; box-sizing: border-box; padding-right: 8px; }
+  .pl-head { position: sticky; top: 0; z-index: 7; height: 57px; align-items: flex-end; padding-bottom: 8px; background: var(--surface); border-bottom: 1px solid var(--rule); color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
+  .pl-row { height: 40px; border-bottom: 1px solid var(--rule); cursor: pointer; }
+  .pl-row:nth-child(odd) { background: color-mix(in srgb, var(--tint) 38%, var(--surface)); }
+  .pl-row.hover, .pl-row.active { background: var(--hover); }
+  .pl-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .pl-name { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 4px; }
+  .pl-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pl-col { flex: 0 0 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+  .pl-owner { width: 92px; padding-left: 6px; } .pl-fin { width: 46px; text-align: right; } .pl-pct { width: 40px; text-align: right; }
+  .pl-row.kind-wp .pl-text { font-weight: 600; color: var(--ink); }
+  .pl-row.kind-external .pl-text { color: var(--muted); font-style: italic; }
+  .pl-row.is-late .pl-text, .pl-row.is-violated .pl-text { color: var(--alert-ink); }
+  .pl-toggle { flex: 0 0 18px; width: 18px; height: 22px; padding: 0; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 13px; }
+  .pl-toggle:hover { color: var(--ink); }
+  .pl-dot { flex: 0 0 18px; width: 18px; text-align: center; color: var(--muted); font-size: 9px; }
+  .pl-dot::before { content: '●'; }
+  .pl-undated { padding: 10px 8px 14px; border-top: 2px solid var(--rule); }
+  .pl-undated h3 { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+  .pl-undated button { display: block; width: 100%; text-align: left; padding: 4px 6px; border: 0; background: none; color: var(--accent); cursor: pointer; font: inherit; border-radius: 4px; }
+  .pl-undated button:hover { background: var(--hover); }
+  .gantt .bar-wrapper.row-hover .bar { fill-opacity: .34; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .3)); }
+  .gantt .sticky-header { pointer-events: none; }
+  .pl-busy { color: var(--muted); font-size: 13px; }
+  .pl-busy::before { content: ''; display: inline-block; width: 10px; height: 10px; margin-right: 6px; border: 2px solid var(--accent); border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -1px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .toast.undo { bottom: 74px; display: flex; align-items: center; gap: 12px; }
+  .toast.undo[hidden] { display: none; }
+  .toast.undo .btn { padding: 3px 10px; background: transparent; color: inherit; border-color: currentColor; font-size: 13px; }
+  @media (min-width: 1280px) { .plan-left { --lw: 400px; } .pl-owner { width: 112px; } }
+  @media (max-width: 900px) { .plan-left { --lw: 280px; } .pl-owner { display: none; } }
+  @media (max-width: 700px) { .plan-left { --lw: 150px; } .pl-fin, .pl-pct { display: none; } .plan { max-height: 70vh; } }
   @media (max-width: 700px) {
     header .controls { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; padding-bottom: 4px; }
     header .controls > * { flex: 0 0 auto; }
@@ -695,6 +743,21 @@
 
 <main id="main">
   <div class="chart">
+    <div class="plan-tools" id="plan-tools" hidden>
+      <input type="search" id="pl-q" placeholder="Rechercher un élément, un responsable…" aria-label="Rechercher dans le planning" autocomplete="off">
+      <div class="pills" role="group" aria-label="Filtrer les éléments">
+        <button type="button" class="pill" data-filter="all" aria-pressed="true">Tous</button>
+        <button type="button" class="pill" data-filter="late" aria-pressed="false">En retard</button>
+        <button type="button" class="pill" data-filter="critical" aria-pressed="false">Critiques</button>
+        <button type="button" class="pill" data-filter="violated" aria-pressed="false">Non respectés</button>
+        <button type="button" class="pill" data-filter="mine" aria-pressed="false">Les miens</button>
+      </div>
+      <span class="pl-count" id="pl-count" aria-live="polite"></span>
+      <span class="pl-busy" id="pl-busy" role="status" hidden>Enregistrement…</span>
+      <button type="button" class="btn" id="pl-collapse">Tout replier</button>
+      <button type="button" class="btn" id="pl-expand">Tout déplier</button>
+      <button type="button" class="btn" id="pl-list" aria-pressed="true" title="Afficher ou masquer la liste de gauche">Liste</button>
+    </div>
     <div class="gantt-host" id="host"></div>
     <p class="undated" id="undated" hidden></p>
     <section class="issues" id="issues" hidden>
@@ -708,16 +771,7 @@
   <aside id="details" hidden aria-live="polite"></aside>
 </main>
 
-<dialog id="confirm">
-  <h2>Déplacer cet élément ?</h2>
-  <p id="confirm-text"></p>
-  <p id="confirm-warn" class="warn" hidden></p>
-  <p>Les éléments liés ne bougent pas : un écart éventuel apparaîtra en rouge.</p>
-  <div class="actions">
-    <button type="button" class="btn" id="confirm-cancel">Annuler</button>
-    <button type="button" class="btn primary" id="confirm-ok">Déplacer</button>
-  </div>
-</dialog>
+<div class="toast undo" id="undo-toast" role="status" hidden><span id="undo-text"></span> <button type="button" class="btn" id="undo-btn">Annuler</button></div>
 
 <div class="toast" id="toast" role="status" hidden></div>
 
@@ -731,7 +785,9 @@ var BOOT = <?!= boot ?>;
   var el = ppm.el, clear = ppm.clear, uuid = ppm.uuid, plural = ppm.plural, toast = ppm.toast, call = ppm.call, frDate = function (s) { return ppm.frDate(s, '—'); };
 
   var state = { link: null, mode: 'project', projectId: '', programId: '', data: null, catalog: null,
-    viewMode: 'Week', gantt: null, lastDrag: 0, pending: null };
+    viewMode: 'Week', gantt: null, lastDrag: 0,
+    collapsed: {}, filter: 'all', q: '', listOpen: window.innerWidth >= 700, activeId: '', keepView: null,
+    epoch: 0, pendingWrites: 0, chain: Promise.resolve(), afterReload: [] };
   var $ = function (id) { return document.getElementById(id); };
 
   // ------------------------------------------------------------ outils
@@ -795,6 +851,7 @@ var BOOT = <?!= boot ?>;
 
   // ------------------------------------------------------------ chargement
   function loadProject(id) {
+    if (id !== state.projectId) { state.collapsed = {}; state.filter = 'all'; state.q = ''; $('pl-q').value = ''; }
     state.mode = 'project'; state.projectId = id; closeDetails(); syncPicker(); remember();
     showLoading();
     return call('gantt.project', { projectId: id }).then(function (d) {
@@ -894,7 +951,9 @@ var BOOT = <?!= boot ?>;
       sum.appendChild(el('span', { class: 'base-note', text: ' Pas encore de baseline : les écarts ne sont pas mesurés.' }));
     }
 
-    var dated = d.rows.filter(function (r) { return r.start && r.finish; });
+    var vis = visibleRows(d.rows);
+    var dated = vis.filter(function (r) { return r.start && r.finish; });
+    var extra = vis.filter(function (r) { return !(r.start && r.finish); });
     var undated = d.rows.filter(function (r) { return r.kind === 'item' && !(r.start && r.finish); });
     var und = $('undated');
     und.hidden = !undated.length;
@@ -910,12 +969,16 @@ var BOOT = <?!= boot ?>;
       return { id: r.id, name: escapeHtml(label), start: r.start, end: r.finish, progress: Math.max(0, Math.min(100, r.progress || 0)),
         dependencies: (preds[r.id] || []).join(','), custom_class: itemClasses(r) };
     });
+    var isItem = function (r) { return r.kind === 'item' || r.kind === 'external'; };
+    $('pl-count').textContent = filterActive() ? plural(vis.filter(isItem).length, 'élément affiché', 'éléments affichés') + ' sur ' + d.rows.filter(isItem).length : '';
+    syncTools();
     if (!tasks.length) {
-      showEmpty('Aucun élément daté dans ce projet.', 'Ajoutez des livrables et des jalons avec leurs dates dans l’application AppSheet, puis cliquez sur Actualiser.');
-      renderIssues([]);
+      if (filterActive()) showEmpty('Aucun élément ne correspond.', 'Changez de filtre ou effacez la recherche.');
+      else showEmpty('Aucun élément daté dans ce projet.', 'Ajoutez des livrables et des jalons avec leurs dates dans l’application AppSheet, puis cliquez sur Actualiser.');
+      renderIssues(filterActive() ? d.violations : []);
       return;
     }
-    drawGantt(tasks, d.dependencies);
+    drawGantt(tasks, d.dependencies, { mode: 'project', rows: dated, extra: extra });
     renderIssues(d.violations);
   }
 
@@ -956,7 +1019,7 @@ var BOOT = <?!= boot ?>;
     setChips(chips);
     $('undated').hidden = true;
 
-    var tasks = [], depsByTarget = {};
+    var tasks = [], depsByTarget = {}, listRows = [];
     d.crossDependencies.forEach(function (x) {
       (depsByTarget['prj:' + x.to_project] = depsByTarget['prj:' + x.to_project] || {})['prj:' + x.from_project] = true;
     });
@@ -966,9 +1029,11 @@ var BOOT = <?!= boot ?>;
       if (p.late || p.violations) cls.push('is-late');
       tasks.push({ id: 'prj:' + p.id, name: escapeHtml(p.code + ' ' + p.name + ' · ' + p.progress + ' %'), start: p.start, end: p.finish, progress: p.progress,
         dependencies: Object.keys(depsByTarget['prj:' + p.id] || {}).join(','), custom_class: cls.join(' ') });
+      listRows.push({ id: 'prj:' + p.id, kind: 'project', name: p.code + ' ' + p.name, level: 0, owner: p.manager || '', finish: p.finish, progress: p.progress, late: !!(p.late || p.violations) });
       p.milestones.forEach(function (m) {
         tasks.push({ id: m.id, name: escapeHtml(m.name), start: m.date, end: m.date, progress: m.status === 'Terminé' ? 100 : 0,
           custom_class: 'is-milestone is-locked ' + (m.status === 'Terminé' ? 's-done is-done' : 's-todo') + (m.critical ? ' is-critical' : '') });
+      listRows.push({ id: m.id, kind: 'item', item_type: 'Jalon', name: m.name, level: 1, owner: '', finish: m.date, progress: m.status === 'Terminé' ? 100 : 0 });
       });
     });
     if (!tasks.length) {
@@ -977,7 +1042,7 @@ var BOOT = <?!= boot ?>;
       return;
     }
     var arrows = d.crossDependencies.map(function (x) { return { from: 'prj:' + x.from_project, to: 'prj:' + x.to_project, violated: x.violated }; });
-    drawGantt(tasks, arrows);
+    drawGantt(tasks, arrows, { mode: 'program', rows: listRows, extra: [] });
 
     var box = $('issues'), head = $('issues-head'), body = $('issues-body');
     clear(head); clear(body);
@@ -998,7 +1063,7 @@ var BOOT = <?!= boot ?>;
   // ------------------------------------------------------------ habillage du diagramme (0.15.1)
   var NS = 'http://www.w3.org/2000/svg';
   function svgEl(name, attrs) { var n = document.createElementNS(NS, name); Object.keys(attrs || {}).forEach(function (k) { n.setAttribute(k, String(attrs[k])); }); return n; }
-  function scroller() { return $('host').querySelector('.gantt-container'); }
+  function scroller() { return $('host').querySelector('.plan'); }
   function startOfToday() { var d = new Date(); d.setHours(0, 0, 0, 0); return d; }
   function gridBox(svg) {
     var bg = svg.querySelector('.grid-background');
@@ -1041,7 +1106,7 @@ var BOOT = <?!= boot ?>;
     var x = todayX(svg); if (x === null) return;
     var box = gridBox(svg), o = state.gantt.options, g = svg.appendChild(svgEl('g', { class: 'today' }));
     g.appendChild(svgEl('line', { class: 'today-line', x1: x, x2: x, y1: o.header_height, y2: box.h }));
-    var chip = g.appendChild(svgEl('g', { class: 'today-chip' }));
+    var chip = (svg.querySelector('g.sticky-header') || g).appendChild(svgEl('g', { class: 'today-chip' }));
     var cy = o.header_height - 24;
     chip.appendChild(svgEl('rect', { x: x - 41, y: cy, width: 82, height: 18, rx: 9 }));
     var t = chip.appendChild(svgEl('text', { x: x, y: cy + 9.5 })); t.textContent = 'Aujourd’hui';
@@ -1054,7 +1119,7 @@ var BOOT = <?!= boot ?>;
     if (!sc || !svg || !state.gantt) return;
     var x = todayX(svg), target;
     if (x === null) target = startOfToday() < state.gantt.gantt_start ? 0 : sc.scrollWidth;
-    else target = Math.max(0, x - sc.clientWidth * 0.3);
+    else target = Math.max(0, x - (sc.clientWidth - leftW()) * 0.3);
     if (smooth && sc.scrollTo) sc.scrollTo({ left: target, behavior: 'smooth' }); else sc.scrollLeft = target;
   }
   function syncTodayBtn() {
@@ -1099,7 +1164,7 @@ var BOOT = <?!= boot ?>;
   var tipNode = null, tipFor = null;
   function hideTip() {
     if (tipNode) tipNode.hidden = true;
-    tipFor = null;
+    tipFor = null; markHover('');
     Array.prototype.forEach.call(document.querySelectorAll('.arrow path.hl'), function (p) { p.classList.remove('hl'); });
   }
   function tipContent(id) {
@@ -1150,13 +1215,13 @@ var BOOT = <?!= boot ?>;
     host.addEventListener('mouseover', function (e) {
       if (window.matchMedia && window.matchMedia('(hover: none)').matches) return;
       var g = e.target.closest && e.target.closest('.bar-wrapper');
-      if (!g || state.pending) return;
+      if (!g) return;
       var id = g.getAttribute('data-id');
       if (id === tipFor) return;
       hideTip();
       var content = tipContent(id); if (!content) return;
       if (!tipNode) { tipNode = el('div', { class: 'tip', id: 'tip', role: 'tooltip', hidden: 'hidden' }); document.body.appendChild(tipNode); }
-      clear(tipNode); tipNode.appendChild(content); tipNode.hidden = false; tipFor = id;
+      clear(tipNode); tipNode.appendChild(content); tipNode.hidden = false; tipFor = id; markHover(id);
       var svg = host.querySelector('svg');
       if (svg) Array.prototype.forEach.call(svg.querySelectorAll('.arrow path[data-from="' + cssEscape(id) + '"], .arrow path[data-to="' + cssEscape(id) + '"]'), function (p) { p.classList.add('hl'); });
       placeTip(e.clientX, e.clientY);
@@ -1170,14 +1235,128 @@ var BOOT = <?!= boot ?>;
     host.addEventListener('mousedown', hideTip);
   }
 
+  // ------------------------------------------------------------ liste de gauche, recherche et filtres (0.15.2)
+  function shortDate(s) { return s ? frDate(s).slice(0, 5) : ''; }
+  function leftW() { var l = $('plan-left'); return l && !$('host').classList.contains('list-off') ? l.offsetWidth : 0; }
+  function filterActive() { return state.filter !== 'all' || !!state.q.trim(); }
+
+  /** Lignes affichées : tout, moins ce que les replis cachent ; avec un filtre ou une recherche, uniquement les éléments qui correspondent et leurs workpackages. */
+  function visibleRows(rows) {
+    var f = state.filter, q = state.q.trim().toLowerCase();
+    if (!filterActive()) {
+      var out = [], hideBelow = null;
+      rows.forEach(function (r) {
+        if (hideBelow !== null) { if (r.level > hideBelow) return; hideBelow = null; }
+        out.push(r);
+        if (r.kind === 'wp' && state.collapsed[r.id]) hideBelow = r.level;
+      });
+      return out;
+    }
+    var keep = {};
+    rows.forEach(function (r, i) {
+      if (r.kind === 'wp') return;
+      var ok = true;
+      if (f === 'late') ok = !!r.late; else if (f === 'critical') ok = !!r.critical && r.kind === 'item'; else if (f === 'violated') ok = !!r.violated; else if (f === 'mine') ok = !!r.mine;
+      if (r.kind === 'external' && f !== 'all') ok = false;
+      if (ok && q) ok = (r.name + ' ' + (r.owner || '') + ' ' + (r.wbs_code || '')).toLowerCase().indexOf(q) >= 0;
+      if (!ok) return;
+      keep[i] = true;
+      for (var j = i - 1, lvl = r.level; j >= 0 && lvl > 0; j--) { if (rows[j].kind === 'wp' && rows[j].level < lvl) { keep[j] = true; lvl = rows[j].level; } }
+    });
+    return rows.filter(function (r, i) { return keep[i]; });
+  }
+
+  function leftRow(r) {
+    var open = !state.collapsed[r.id], cls = ['pl-row', 'kind-' + r.kind];
+    if (r.late) cls.push('is-late'); if (r.violated) cls.push('is-violated');
+    var label = (r.item_type === 'Jalon' ? '◆ ' : '') + (r.wbs_code ? r.wbs_code + ' ' : '') + (r.kind === 'external' ? '[' + r.project_code + '] ' : '') + r.name;
+    var lead = r.kind === 'wp'
+      ? el('button', { type: 'button', class: 'pl-toggle', 'aria-expanded': String(open), 'aria-label': (open ? 'Replier ' : 'Déplier ') + r.name, text: open ? '▾' : '▸', onclick: function (e) { e.stopPropagation(); toggleCollapse(r.id); } })
+      : el('span', { class: 'pl-dot', 'aria-hidden': 'true' });
+    var pct = r.kind === 'external' ? '' : r.item_type === 'Jalon' ? (r.progress >= 100 ? '✓' : '') : (r.progress || 0) + ' %';
+    var row = el('div', { class: cls.join(' '), 'data-id': r.id, role: 'row', tabindex: '0', title: label }, [
+      el('span', { class: 'pl-name', style: 'padding-left:' + (4 + (r.level || 0) * 14) + 'px' }, [lead, el('span', { class: 'pl-text', text: label })]), document.createTextNode(' '),
+      el('span', { class: 'pl-col pl-owner', text: r.owner || '' }), document.createTextNode(' '), el('span', { class: 'pl-col pl-fin', text: shortDate(r.finish) }), document.createTextNode(' '), el('span', { class: 'pl-col pl-pct', text: pct })]); // les espaces comptent pour la lecture à voix haute
+    row.addEventListener('click', function () { onBarClick(r.id); revealBar(r.id); });
+    row.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onBarClick(r.id); revealBar(r.id); } });
+    return row;
+  }
+  /** Une ligne par barre, dans le même ordre et à la même hauteur (40 px) que le diagramme ; les éléments sans dates, qui n'ont pas de barre, sont listés dessous. */
+  function leftPanel(meta) {
+    var panel = el('div', { class: 'plan-left', id: 'plan-left', role: 'table', 'aria-label': 'Liste des éléments' }, [
+      el('div', { class: 'pl-head', role: 'row' }, [el('span', { class: 'pl-name', style: 'padding-left:8px', text: meta.mode === 'program' ? 'Projet' : 'Élément' }), document.createTextNode(' '),
+        el('span', { class: 'pl-col pl-owner', text: meta.mode === 'program' ? 'Chef' : 'Resp.' }), document.createTextNode(' '), el('span', { class: 'pl-col pl-fin', text: 'Fin' }), document.createTextNode(' '), el('span', { class: 'pl-col pl-pct', text: '%' })])]);
+    meta.rows.forEach(function (r) { panel.appendChild(leftRow(r)); });
+    if (meta.extra && meta.extra.length) {
+      var box = panel.appendChild(el('div', { class: 'pl-undated', id: 'pl-undated' }, [el('h3', { text: 'Sans dates, donc sans barre (' + meta.extra.length + ')' })]));
+      meta.extra.forEach(function (r) {
+        box.appendChild(el('button', { type: 'button', 'data-id': r.id, onclick: function () { onBarClick(r.id); } }, [(r.wbs_code ? r.wbs_code + ' ' : '') + r.name + (r.kind === 'wp' ? ' (vide)' : '')]));
+      });
+    }
+    panel.addEventListener('mouseover', function (e) { var r = e.target.closest && e.target.closest('.pl-row'); if (r) markHover(r.getAttribute('data-id')); });
+    panel.addEventListener('mouseleave', function () { markHover(''); });
+    return panel;
+  }
+  function markHover(id) {
+    Array.prototype.forEach.call($('host').querySelectorAll('.pl-row.hover, .bar-wrapper.row-hover'), function (n) { n.classList.remove('hover', 'row-hover'); });
+    if (!id) return;
+    var row = $('host').querySelector('.pl-row[data-id="' + cssEscape(id) + '"]'); if (row) row.classList.add('hover');
+    var bar = $('host').querySelector('.bar-wrapper[data-id="' + cssEscape(id) + '"]'); if (bar) bar.classList.add('row-hover');
+  }
+  function markActive() {
+    Array.prototype.forEach.call($('host').querySelectorAll('.pl-row.active'), function (n) { n.classList.remove('active'); });
+    if (!state.activeId) return;
+    var row = $('host').querySelector('.pl-row[data-id="' + cssEscape(state.activeId) + '"]'); if (row) row.classList.add('active');
+  }
+  /** Amène la barre à l'écran si elle est hors de la partie visible du diagramme. */
+  function revealBar(id) {
+    var sc = scroller(), w = $('host').querySelector('.bar-wrapper[data-id="' + cssEscape(id) + '"]');
+    if (!sc || !w) return;
+    var bar = w.querySelector('rect.bar'), x = Number(bar.getAttribute('x')), bw = Number(bar.getAttribute('width'));
+    var left = sc.scrollLeft, right = sc.scrollLeft + sc.clientWidth - leftW();
+    if (x + bw < left + 20 || x > right - 20) {
+      var target = Math.max(0, x - 40);
+      if (sc.scrollTo) sc.scrollTo({ left: target, behavior: 'smooth' }); else sc.scrollLeft = target;
+    }
+  }
+  /** Mémorise la position avant un nouveau dessin, pour que replier, filtrer ou rafraîchir ne ramène pas en haut ni sur aujourd'hui. */
+  function keepView(resetTop) {
+    var sc = scroller();
+    state.keepView = sc ? { left: sc.scrollLeft, top: resetTop ? 0 : sc.scrollTop } : null;
+  }
+  function toggleCollapse(id) {
+    if (state.collapsed[id]) delete state.collapsed[id]; else state.collapsed[id] = true;
+    keepView(false); rerender();
+  }
+  function syncTools() {
+    var tools = $('plan-tools');
+    tools.hidden = state.mode !== 'project' || !state.data;
+    Array.prototype.forEach.call(tools.querySelectorAll('.pill'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-filter') === state.filter)); });
+    $('pl-list').setAttribute('aria-pressed', String(state.listOpen));
+    $('host').classList.toggle('list-off', !state.listOpen);
+  }
+  /** L'entête de dates (mois, jours) reste en haut quand on fait défiler vers le bas : on l'extrait de la grille et on la décale à chaque défilement. */
+  function makeStickyHeader(svg) {
+    var hdr = svgEl('g', { class: 'sticky-header' });
+    Array.prototype.forEach.call(svg.querySelectorAll('.grid-header, .upper-text, .lower-text'), function (n) { hdr.appendChild(n); });
+    svg.appendChild(hdr);
+    return hdr;
+  }
+
   // ------------------------------------------------------------ Gantt
-  function drawGantt(tasks, deps) {
-    var host = $('host'); clear(host);
-    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    host.appendChild(svg);
+  function drawGantt(tasks, deps, meta) {
+    meta = meta || { mode: 'project', rows: [], extra: [] };
+    var host = $('host'), keep = state.keepView;
+    state.keepView = null;
+    clear(host);
+    var plan = el('div', { class: 'plan' }), inner = el('div', { class: 'plan-inner' }), chart = el('div', { class: 'plan-chart' });
+    inner.appendChild(leftPanel(meta)); inner.appendChild(chart); plan.appendChild(inner); host.appendChild(plan);
+    var svg = document.createElementNS(NS, 'svg');
+    chart.appendChild(svg);
     state.gantt = new Gantt(svg, tasks, {
       view_mode: state.viewMode,
       language: 'fr',
+      header_height: 50,
       bar_height: 26,
       padding: 14,
       bar_corner_radius: 8,
@@ -1188,13 +1367,17 @@ var BOOT = <?!= boot ?>;
     paintBaselines();
     $('main').classList.toggle('critical-off', !$('critical').checked);
     $('main').classList.toggle('baseline-off', !$('baseline').checked);
-    paintWeekends(svg); paintToday(svg); paintMilestones(svg);
-    var sc = scroller();
-    if (sc) sc.onscroll = function () {
-      hideTip();
+    paintWeekends(svg); paintMilestones(svg);
+    var hdr = makeStickyHeader(svg); // en dernier : l'entête doit passer au-dessus de tout, losanges compris
+    paintToday(svg);
+    var sc = scroller(), place = function () { hdr.setAttribute('transform', 'translate(0,' + sc.scrollTop + ')'); };
+    sc.onscroll = function () {
+      hideTip(); place();
       if (!state.rafLabels) state.rafLabels = requestAnimationFrame(function () { state.rafLabels = 0; updateLabels(); });
     };
-    scrollToToday(false); updateLabels(); syncTodayBtn(); bindTips();
+    syncTools(); markActive();
+    if (keep) { sc.scrollLeft = keep.left; sc.scrollTop = keep.top; place(); } else scrollToToday(false);
+    updateLabels(); syncTodayBtn(); bindTips();
   }
 
   /**
@@ -1265,17 +1448,12 @@ var BOOT = <?!= boot ?>;
         : 'Vous ne pouvez pas déplacer cet élément : il faut être responsable de son workpackage, chef de projet ou au-dessus.', true);
       return;
     }
-    var ns = ymd(start), nf = ymd(end);
+    // La bibliothèque convertit la position en date avec une erreur d'arrondi d'une heure : un début voulu le 13 à 0 h arrive le 12 à 23 h. Lu tel quel, il prendrait
+    // le jour d'avant (et chaque déplacement allongerait l'élément d'un jour) : on l'arrondit au jour le plus proche. La fin (inclusive, 23 h 59) n'est pas touchée.
+    var ns = ymd(new Date(start.getTime() + 2 * 3600 * 1000)), nf = ymd(end);
     if (row.item_type === 'Jalon') nf = ns;
     if (ns === row.start && nf === row.finish) return;
-    state.pending = { row: row, start: ns, finish: nf };
-    $('confirm-text').textContent = '« ' + row.name + ' » : du ' + frDate(row.start) + ' au ' + frDate(row.finish) +
-      ', déplacé du ' + frDate(ns) + ' au ' + frDate(nf) + '.';
-    var weekend = [ns, nf].filter(isWeekend);
-    $('confirm-warn').hidden = !weekend.length;
-    $('confirm-warn').textContent = weekend.length ? 'Attention : ' + weekend.map(frDate).join(' et ') + ' tombe un week-end.' : '';
-    var dlg = $('confirm');
-    if (dlg.showModal) dlg.showModal(); else if (window.confirm($('confirm-text').textContent)) confirmMove(); else cancelMove();
+    moveItem(row, ns, nf, true);
   }
 
   function rerender() {
@@ -1283,27 +1461,87 @@ var BOOT = <?!= boot ?>;
     if (state.mode === 'program') renderProgram(); else renderProject();
   }
 
-  function confirmMove() {
-    var p = state.pending; state.pending = null;
-    if ($('confirm').open) $('confirm').close();
-    if (!p) return;
-    call('planitems.update', { id: p.row.id, version: p.row.version, patch: { planned_start: p.start, planned_finish: p.finish } }, true)
-      .then(function () { toast('Dates enregistrées.'); return loadProject(state.projectId); })
-      .catch(function (err) {
-        if (err.code === 'CONFLICT') toast('Quelqu’un a modifié cet élément entre-temps : le planning est rechargé, recommencez le déplacement.', true);
-        else toast(err.message || 'Enregistrement impossible.', true);
-        return loadProject(state.projectId);
-      });
+  // ------------------------------------------------------------ mise à jour optimiste (0.15.2)
+  /*
+   * Une modification s'affiche tout de suite ; le serveur la confirme ensuite. Les écritures partent l'une après l'autre (file), et le planning n'est relu
+   * (sans squelette, en gardant la position, la sélection, les replis et les filtres) qu'une fois la file vide : on récupère ainsi marges, chemin critique et
+   * dépendances non respectées recalculés. Si le serveur refuse, l'écran revient en arrière et dit pourquoi.
+   */
+  function busy(on) { var b = $('pl-busy'); if (b) b.hidden = !on; }
+
+  function write(job) {
+    state.epoch++; state.pendingWrites++; busy(true);
+    state.chain = state.chain
+      .then(function () { return job.run(); })
+      .then(function () { return true; }, function (err) { try { job.revert(err); } catch (e) { /* l'écran est déjà à jour */ } return false; })
+      .then(function () { state.pendingWrites--; return state.pendingWrites ? null : silentReload(); });
+    return state.chain;
   }
-  function cancelMove() {
-    state.pending = null;
-    if ($('confirm').open) $('confirm').close();
-    rerender();
+
+  function silentReload() {
+    if (state.mode !== 'project' || !state.projectId) { busy(false); return Promise.resolve(); }
+    var epoch = state.epoch, pid = state.projectId;
+    return call('gantt.project', { projectId: pid }).then(function (d) {
+      if (epoch !== state.epoch || state.pendingWrites || state.projectId !== pid || state.mode !== 'project') return; // une modification plus récente est partie : son rechargement suivra
+      state.data = d; keepView(false); renderProject();
+      var r = state.activeId ? findRow(state.activeId) : null;
+      if (r && !state.link && !$('details').hidden) { if (r.kind === 'item') showItem(r); else if (r.kind === 'wp') showWp(r); }
+      busy(false);
+      var fns = state.afterReload; state.afterReload = [];
+      fns.forEach(function (f) { try { f(); } catch (e) { /* un message en moins */ } });
+    }).catch(function (err) { busy(false); toast(err.message || 'Le planning n’a pas pu être actualisé : cliquez sur Actualiser.', true); });
+  }
+
+  /** Redessine avec la position gardée, et rouvre le détail de l'élément (ses dépendances, son avancement viennent de changer). */
+  function redrawKeep(id) {
+    keepView(false); rerender();
+    var r = id ? findRow(id) : null;
+    if (r && r.kind === 'item' && !state.link) showItem(r);
+  }
+
+  var undoTimer = null;
+  function hideUndo() { clearTimeout(undoTimer); $('undo-toast').hidden = true; }
+  function undoToast(text, fn) {
+    $('undo-text').textContent = text; $('undo-toast').hidden = false;
+    $('undo-btn').onclick = function () { hideUndo(); fn(); };
+    clearTimeout(undoTimer); undoTimer = setTimeout(hideUndo, 9000);
+  }
+
+  /** Déplace un élément : la barre est déjà à sa place (glissée) ; on garde l'écran, on enregistre en arrière-plan, et on propose d'annuler. */
+  function moveItem(row, ns, nf, offerUndo) {
+    var old = { start: row.start, finish: row.finish }, before = (state.data.violations || []).length;
+    row.start = ns; row.finish = nf;
+    keepView(false); rerender();
+    if (offerUndo) {
+      var weekend = [ns, nf].filter(isWeekend);
+      undoToast('« ' + row.name + ' » : du ' + frDate(ns) + ' au ' + frDate(nf) + '.' + (weekend.length ? ' Attention : ' + weekend.map(frDate).join(' et ') + ' tombe un week-end.' : ''),
+        function () {
+          var cur = findRow(row.id) || row; // le planning a pu être relu depuis : on reprend la ligne actuelle, pas celle de l'époque
+          moveItem(cur, old.start, old.finish, false); toast('Déplacement annulé.');
+        });
+      state.afterReload.push(function () {
+        var now = (state.data.violations || []).length;
+        if (now > before) toast('Attention : ce déplacement laisse ' + plural(now - before, 'dépendance non respectée', 'dépendances non respectées') + ' (les éléments liés ne bougent pas).', true);
+      });
+    }
+    write({
+      run: function () {
+        var cur = findRow(row.id) || row; // version à jour au moment de partir (une écriture précédente de la file a pu la changer)
+        return call('planitems.update', { id: cur.id, version: cur.version, patch: { planned_start: ns, planned_finish: nf } }, true)
+          .then(function (u) { if (u && u.version) cur.version = u.version; });
+      },
+      revert: function (err) {
+        row.start = old.start; row.finish = old.finish; hideUndo();
+        keepView(false); rerender();
+        toast(err.code === 'CONFLICT' ? 'Quelqu’un a modifié cet élément entre-temps : le planning est rechargé, recommencez le déplacement.' : (err.message || 'Enregistrement impossible.'), true);
+      }
+    });
   }
 
   // ------------------------------------------------------------ détails
   function closeDetails() {
     endLink(true);
+    state.activeId = ''; markActive();
     clear($('details'));
     $('details').hidden = true;
     $('main').classList.remove('with-details');
@@ -1369,9 +1607,13 @@ var BOOT = <?!= boot ?>;
       var v = Number(input.value);
       if (!(v >= 0 && v <= 100)) { toast('L’avancement doit être compris entre 0 et 100 %.', true); return; }
       submit.disabled = true;
-      call('progress.declare', { planItemId: r.id, progressPct: v, comment: comment.value.trim() }, true)
-        .then(function () { toast('Avancement déclaré : ' + v + ' %.'); return loadProject(state.projectId); })
-        .catch(function (err) { submit.disabled = false; toast(err.message || 'Déclaration impossible.', true); });
+      var old = { progress: r.progress, status: r.status }, text = comment.value.trim();
+      r.progress = v;
+      redrawKeep(r.id); toast('Avancement déclaré : ' + v + ' %.');
+      write({
+        run: function () { return call('progress.declare', { planItemId: r.id, progressPct: v, comment: text }, true); },
+        revert: function (err) { r.progress = old.progress; r.status = old.status; redrawKeep(r.id); toast(err.message || 'Déclaration impossible.', true); }
+      });
     } }, [
       el('h3', { text: 'Déclarer l’avancement' }),
       el('div', { class: 'row' }, [el('label', { for: 'pct', text: 'Avancement' }), input, document.createTextNode('%')]),
@@ -1386,11 +1628,6 @@ var BOOT = <?!= boot ?>;
   function depName(id) { var r = findRow(id); return r ? (r.kind === 'external' ? '[' + r.project_code + '] ' : '') + r.name : 'élément'; }
   function lagText(n) { return n ? ', ' + (n > 0 ? '+' : '−') + Math.abs(n) + ' j' : ''; }
   function canEditRow(id) { var r = findRow(id); return !!(r && r.kind === 'item' && r.canEdit); }
-
-  /** loadProject referme le détail : on le rouvre sur le même élément une fois le planning rechargé. */
-  function reloadAndShow(id) {
-    return loadProject(state.projectId).then(function () { var r = findRow(id); if (r && r.kind === 'item') showItem(r); });
-  }
 
   function depsSection(r) {
     var d = state.data, all = d.dependencies || [];
@@ -1432,18 +1669,22 @@ var BOOT = <?!= boot ?>;
         return;
       }
       clearTimeout(timer); b.disabled = true;
-      call('dependencies.delete', { id: x.id, version: x.version }, true)
-        .then(function () { toast('Lien retiré.'); return reloadAndShow(r.id); })
-        .catch(function (err) {
+      var all = state.data.dependencies, idx = all.indexOf(x);
+      if (idx >= 0) all.splice(idx, 1);
+      redrawKeep(r.id); toast('Lien retiré.');
+      write({
+        run: function () { return call('dependencies.delete', { id: x.id, version: x.version }, true); },
+        revert: function (err) {
+          all.splice(Math.min(Math.max(idx, 0), all.length), 0, x); redrawKeep(r.id);
           toast(err.code === 'CONFLICT' ? 'Ce lien a été modifié entre-temps : le planning est rechargé.' : (err.message || 'Retrait impossible.'), true);
-          return reloadAndShow(r.id);
-        });
+        }
+      });
     });
     return b;
   }
 
   /** mode « pred » : l'élément ouvert doit attendre un autre ; mode « succ » : un autre doit attendre l'élément ouvert. */
-  function startLink(r, mode) {
+  function startLink(r, mode, prefill) {
     endLink(true);
     var host = $('dep-form-host'); clear(host);
     var sel = el('select', { id: 'dep-pick', 'aria-label': mode === 'pred' ? 'Élément à attendre' : 'Élément qui attendra' }, [el('option', { value: '', text: 'Chargement de la liste…' })]);
@@ -1466,18 +1707,29 @@ var BOOT = <?!= boot ?>;
       e.preventDefault();
       if (!sel.value) return;
       submit.disabled = true;
-      var pred = mode === 'pred' ? sel.value : r.id, succ = mode === 'pred' ? r.id : sel.value;
-      call('dependencies.create', { values: { predecessor_id: pred, successor_id: succ, dep_type: type.value, lag_days: lag.value === '' ? 0 : Number(lag.value) } }, true)
-        .then(function () {
-          var names = depName(pred) + ' → ' + depName(succ);
-          endLink(true);
-          return reloadAndShow(r.id).then(function () {
-            var v = (state.data.violations || []).filter(function (x) { return x.predecessor_id === pred && x.successor_id === succ; })[0];
-            if (v) toast('Lien créé, mais non respecté par les dates actuelles : il manque ' + plural(v.gap_days, 'jour ouvré', 'jours ouvrés') + ' (date requise le ' + frDate(v.required) + '). Décalez l’un des deux éléments.', true);
-            else toast('Lien créé : ' + names + '.');
-          });
-        })
-        .catch(function (err) { submit.disabled = !sel.value; toast(err.message || 'Création impossible.', true); });
+      var pred = mode === 'pred' ? sel.value : r.id, succ = mode === 'pred' ? r.id : sel.value, chosen = sel.value;
+      var t = type.value, n = lag.value === '' ? 0 : Number(lag.value);
+      var temp = { id: 'tmp:' + Date.now() + ':' + pred + ':' + succ, version: 1, from: pred, to: succ, type: t, lag: n, violated: false };
+      state.data.dependencies.push(temp);
+      endLink(true);
+      redrawKeep(r.id); toast('Lien créé : ' + depName(pred) + ' → ' + depName(succ) + '.');
+      state.afterReload.push(function () {
+        var v = (state.data.violations || []).filter(function (x) { return x.predecessor_id === pred && x.successor_id === succ; })[0];
+        if (v) toast('Lien créé, mais non respecté par les dates actuelles : il manque ' + plural(v.gap_days, 'jour ouvré', 'jours ouvrés') + ' (date requise le ' + frDate(v.required) + '). Décalez l’un des deux éléments.', true);
+      });
+      write({
+        run: function () {
+          return call('dependencies.create', { values: { predecessor_id: pred, successor_id: succ, dep_type: t, lag_days: n } }, true)
+            .then(function (created) { temp.id = created.id; temp.version = created.version; });
+        },
+        revert: function (err) {
+          var i = state.data.dependencies.indexOf(temp); if (i >= 0) state.data.dependencies.splice(i, 1);
+          redrawKeep(r.id);
+          var row = findRow(r.id);
+          if (row && row.kind === 'item') startLink(row, mode, { pick: chosen, type: t, lag: n }); // le formulaire revient avec le même choix, à corriger
+          toast(err.message || 'Création impossible.', true);
+        }
+      });
     } }, [
       el('h4', { text: mode === 'pred' ? '« ' + r.name + ' » doit attendre…' : '« ' + r.name + ' » bloque…' }),
       el('p', { class: 'note', text: 'Choisissez dans la liste, ou cliquez sur la barre de l’élément dans le diagramme.' }),
@@ -1504,6 +1756,7 @@ var BOOT = <?!= boot ?>;
       });
       order.forEach(function (k) { sel.appendChild(groups[k]); });
       state.link.loading = false;
+      if (prefill && sel.querySelector('option[value="' + cssEscape(prefill.pick) + '"]')) { sel.value = prefill.pick; type.value = prefill.type; lag.value = String(prefill.lag); update(); }
       if (!cands.length) sentence.textContent = mode === 'pred' ? 'Tous les éléments sont déjà liés à celui-ci.' : 'Aucun élément déjà lié ou que vous puissiez modifier : rien à ajouter ici.';
       else if (info.truncated) sentence.textContent = 'Liste limitée aux 400 premiers éléments.';
     }).catch(function (err) { endLink(true); toast(err.message || 'Liste des éléments indisponible.', true); });
@@ -1563,6 +1816,7 @@ var BOOT = <?!= boot ?>;
 
   function onBarClick(id) {
     if (Date.now() - state.lastDrag < 400) return;
+    if (!state.link) { state.activeId = id; markActive(); }
     if (state.mode === 'program') {
       if (id.indexOf('prj:') === 0) {
         var p = state.data.projects.filter(function (x) { return 'prj:' + x.id === id; })[0];
@@ -1599,13 +1853,24 @@ var BOOT = <?!= boot ?>;
   $('baseline').addEventListener('change', function () { $('main').classList.toggle('baseline-off', !this.checked); });
   $('reload').addEventListener('click', function () { reload(); });
   $('today-btn').addEventListener('click', function () { scrollToToday(true); });
-  $('confirm-ok').addEventListener('click', confirmMove);
-  $('confirm-cancel').addEventListener('click', cancelMove);
-  $('confirm').addEventListener('cancel', function (e) { e.preventDefault(); cancelMove(); });
+  var qTimer = null;
+  $('pl-q').addEventListener('input', function () {
+    var v = this.value; clearTimeout(qTimer);
+    qTimer = setTimeout(function () { state.q = v; keepView(true); rerender(); }, 150);
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#plan-tools .pill'), function (b) {
+    b.addEventListener('click', function () { state.filter = b.getAttribute('data-filter'); keepView(true); rerender(); });
+  });
+  $('pl-collapse').addEventListener('click', function () {
+    (state.data.rows || []).forEach(function (r) { if (r.kind === 'wp' && r.level === 0) state.collapsed[r.id] = true; });
+    keepView(true); rerender();
+  });
+  $('pl-expand').addEventListener('click', function () { state.collapsed = {}; keepView(false); rerender(); });
+  $('pl-list').addEventListener('click', function () { state.listOpen = !state.listOpen; keepView(false); syncTools(); rerender(); });
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
     if (state.link) { endLink(); return; } // d'abord abandonner le lien en cours : le détail reste ouvert
-    if (!$('details').hidden && !$('confirm').open) closeDetails();
+    if (!$('details').hidden) closeDetails();
   });
 
   // ------------------------------------------------------------ démarrage
@@ -1621,7 +1886,7 @@ var BOOT = <?!= boot ?>;
     return loadProject(first);
   }).catch(showError);
 
-  window.__ppm = { state: state, onBarClick: onBarClick, onDateChange: onDateChange, confirmMove: confirmMove, todayX: todayX, scrollToToday: scrollToToday, updateLabels: updateLabels, showLoading: showLoading };
+  window.__ppm = { state: state, onBarClick: onBarClick, onDateChange: onDateChange, moveItem: moveItem, write: write, silentReload: silentReload, hideUndo: hideUndo, todayX: todayX, scrollToToday: scrollToToday, updateLabels: updateLabels, showLoading: showLoading };
 })();
 </script>
 </body>

@@ -121,6 +121,23 @@ module.exports = function () {
     ok(!asBob.rows.find((r) => r.id === spec.id).canDeclare);
   });
 
+  test('Gantt projet : chaque élément dit s’il est « à moi » (responsable de l’élément), pour le filtre « Les miens » (0.15.2)', () => {
+    const w = world(), c = w.c, S = { actor: 'setup', source: 'setup' };
+    const alice = c.repoList('Resource').find((r) => r.name === 'Alice'), dan = c.repoList('Resource').find((r) => r.name === 'Dan');
+    const items = c.repoList('PlanItem').filter((i) => i.project_id === w.p1.id);
+    c.repoUpdate('PlanItem', items[0].id, { owner_resource_id: alice.id }, null, S);
+    c.repoUpdate('PlanItem', items[1].id, { owner_resource_id: dan.id }, null, S);
+    const mine = (who) => w.call(who, 'gantt.project', { projectId: w.p1.id }).data.rows.filter((r) => r.kind === 'item' && r.mine).map((r) => r.id).sort();
+    const owned = (res) => c.repoList('PlanItem').filter((i) => i.project_id === w.p1.id && i.owner_resource_id === res.id).map((i) => i.id).sort();
+    ok(owned(alice).length >= 1 && owned(dan).length >= 1, 'chacun est responsable d’au moins un élément : Alice ' + owned(alice).length + ', Dan ' + owned(dan).length);
+    eq(mine('alice@entreprise.com'), owned(alice), 'Alice : exactement les éléments dont elle est responsable');
+    eq(mine('dan@entreprise.com'), owned(dan), 'Dan : les siens, pas ceux d’Alice');
+    ok(!mine('dan@entreprise.com').some((id) => mine('alice@entreprise.com').includes(id)), 'aucun élément n’est « à moi » pour deux personnes à la fois');
+    eq(mine('admin@entreprise.com'), [], 'un administrateur sans fiche : aucun élément à lui');
+    const sansResponsable = w.call('alice@entreprise.com', 'gantt.project', { projectId: w.p1.id }).data.rows.filter((r) => r.kind === 'item' && !r.owner);
+    ok(sansResponsable.every((r) => r.mine === false), 'un élément sans responsable n’est à personne (pas de faux « à moi »)');
+  });
+
   test('Gantt projet : chaque dépendance porte son identifiant et sa version, pour la retirer depuis la page (0.15.1)', () => {
     const { call, A, p1, spec, plan } = world();
     const deps = call('alice@entreprise.com', 'gantt.project', { projectId: p1.id }).data.dependencies;

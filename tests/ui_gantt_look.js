@@ -100,7 +100,7 @@ function openPage(today, onStart) {
   check(!!line && doc.querySelector('.today-chip text').textContent === 'Aujourd’hui', 'une ligne et une pastille « Aujourd’hui »');
   const tx = w.__ppm.todayX();
   check(Math.abs(Number(line.getAttribute('x1')) - tx) < 0.01 && tx > 0, 'positionnée sur le jour courant (' + Math.round(tx) + ' px)');
-  const sc = doc.querySelector('.gantt-container'); const asked = [];
+  const sc = doc.querySelector('.plan'); const asked = [];
   sc.scrollTo = (o) => asked.push(o);
   check(!doc.getElementById('today-btn').disabled, 'le bouton « Aujourd’hui » est actif');
   doc.getElementById('today-btn').click();
@@ -122,11 +122,11 @@ function openPage(today, onStart) {
   const lab = wrap(plans.id).querySelector('.bar-label'), pb = barOf(plans.id);
   const bx = Number(pb.getAttribute('x')), bw = Number(pb.getAttribute('width'));
   check(!lab.classList.contains('big') && bw > 100, 'le nom de « Plans structure » est dans sa barre (' + Math.round(bw) + ' px)');
-  Object.defineProperty(doc.querySelector('.gantt-container'), 'scrollLeft', { value: bx + 60, configurable: true });
+  Object.defineProperty(doc.querySelector('.plan'), 'scrollLeft', { value: bx + 60, configurable: true });
   w.__ppm.updateLabels();
   const x1 = Number(wrap(plans.id).querySelector('.bar-label').getAttribute('x'));
   check(Math.abs(x1 - (bx + 70)) < 0.01 && wrap(plans.id).querySelector('.bar-label').style.textAnchor === 'start', 'barre à moitié défilée : le nom se cale sur le bord visible, à gauche (x = ' + Math.round(x1) + ')');
-  Object.defineProperty(doc.querySelector('.gantt-container'), 'scrollLeft', { value: bx + bw + 500, configurable: true });
+  Object.defineProperty(doc.querySelector('.plan'), 'scrollLeft', { value: bx + bw + 500, configurable: true });
   w.__ppm.updateLabels();
   const x2 = Number(wrap(plans.id).querySelector('.bar-label').getAttribute('x'));
   check(x2 <= bx + bw - 40 - 8 + 0.01 && x2 >= bx, 'barre presque sortie de l’écran : le nom reste dans la barre, calé sur son extrémité (x = ' + Math.round(x2) + ')');

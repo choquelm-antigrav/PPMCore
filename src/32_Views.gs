@@ -163,6 +163,7 @@ function buildProjectGantt(data, projectId, ctx, today) {
       critical: !!f.critical, float: f.float === undefined ? null : f.float, late_finish: f.lateFinish || null,
       late: !isDone_(it) && !isBlank(itemFinish(it)) && itemFinish(it) < today,
       violated: !!violatedItem[it.id], version: it.version,
+      mine: !isBlank(it.owner_resource_id) && it.owner_resource_id === uctx.resourceId, // « les miens » : responsable de l'élément (0.15.2)
       canEdit: can(uctx, 'wbs.edit', { type: 'planitem', id: it.id }),
       canDeclare: it.item_type === 'Livrable' && can(uctx, 'progress.declare', { type: 'planitem', id: it.id })
     }, baselineOf(it));

@@ -1,5 +1,5 @@
 /**
- * PPM Core 0.15.1 — fichier unique à installer (fabriqué par tools/build.js, empreinte 411254a97ea4).
+ * PPM Core 0.15.2 — fichier unique à installer (fabriqué par tools/build.js, empreinte 7aaa8d1fcb39).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
  * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs.
  */
@@ -44,7 +44,7 @@ function A8_VERIFIER_ECRITURE() { return verifierEcritureAvecJournal_(); }
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.15.1';
+var PPM_VERSION = '0.15.2';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -3519,6 +3519,7 @@ function buildProjectGantt(data, projectId, ctx, today) {
       critical: !!f.critical, float: f.float === undefined ? null : f.float, late_finish: f.lateFinish || null,
       late: !isDone_(it) && !isBlank(itemFinish(it)) && itemFinish(it) < today,
       violated: !!violatedItem[it.id], version: it.version,
+      mine: !isBlank(it.owner_resource_id) && it.owner_resource_id === uctx.resourceId, // « les miens » : responsable de l'élément (0.15.2)
       canEdit: can(uctx, 'wbs.edit', { type: 'planitem', id: it.id }),
       canDeclare: it.item_type === 'Livrable' && can(uctx, 'progress.declare', { type: 'planitem', id: it.id })
     }, baselineOf(it));

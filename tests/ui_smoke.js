@@ -90,25 +90,63 @@ const check = (cond, msg) => { if (!cond) { console.error('✗ ' + msg); process
   await tick();
   check(c.repoGet('PlanItem', spec.id).progress_pct == 40, 'avancement 40 % enregistré');
 
-  // Déplacement confirmé
+  // Déplacement immédiat, avec « Annuler » (0.15.2) : plus de boîte de confirmation
+  const waitFor = async (cond, n) => { for (let i = 0; i < (n || 80) && !cond(); i++) await tick(); return !!cond(); };
+  const reloads = () => calls.filter((x) => x === 'gantt.project').length;
+  const specRow = () => w.__ppm.state.data.rows.find((r) => r.id === spec.id);
+  const orig = { start: c.repoGet('PlanItem', spec.id).planned_start, finish: c.repoGet('PlanItem', spec.id).planned_finish };
+  w.__ppm.state.lastDrag = 0;
+  const r0 = reloads();
+  w.__ppm.onDateChange({ id: spec.id }, new w.Date(2026, 9, 7), new w.Date(2026, 9, 13, 23, 59, 59));
+  check(!doc.getElementById('undo-toast').hidden && doc.getElementById('undo-text').textContent.includes('du 07/10/2026 au 13/10/2026') && !doc.getElementById('undo-text').textContent.includes('week-end'), 'plus de boîte de confirmation : le déplacement s’applique tout de suite, un message rappelle les nouvelles dates et propose « Annuler »');
+  check(specRow().start === '2026-10-07' && specRow().finish === '2026-10-13' && !doc.getElementById('pl-busy').hidden, 'l’écran est déjà à jour avant la réponse du serveur, et « Enregistrement… » le dit');
+  await waitFor(() => c.repoGet('PlanItem', spec.id).planned_start === '2026-10-07' && reloads() > r0 && doc.getElementById('pl-busy').hidden);
+  const moved = c.repoGet('PlanItem', spec.id);
+  check(moved.planned_start === '2026-10-07' && moved.planned_finish === '2026-10-13', 'dates enregistrées en arrière-plan');
+  check(c.repoGet('PlanItem', plans.id).planned_start === '2026-10-12', 'successeur inchangé (H7)');
+  check(reloads() === r0 + 1 && doc.getElementById('pl-busy').hidden, 'le planning est relu une seule fois, sans écran de chargement, puis l’indicateur disparaît');
+  check(doc.querySelectorAll('.arrow path.is-violated').length === 2, 'nouvelle violation en rouge après la relecture (marges et dépendances recalculées)');
+  check(/ce déplacement laisse 1 dépendance non respectée/.test(doc.getElementById('toast').textContent), 'et un message prévient que le déplacement laisse une dépendance non respectée : ' + doc.getElementById('toast').textContent.slice(0, 80));
+  // annuler
+  doc.getElementById('undo-btn').click();
+  check(specRow().start === orig.start && doc.getElementById('undo-toast').hidden && /Déplacement annulé/.test(doc.getElementById('toast').textContent), '« Annuler » remet l’écran tout de suite');
+  await waitFor(() => c.repoGet('PlanItem', spec.id).planned_start === orig.start && doc.getElementById('pl-busy').hidden);
+  check(c.repoGet('PlanItem', spec.id).planned_start === orig.start && c.repoGet('PlanItem', spec.id).planned_finish === orig.finish, 'et les dates d’origine sont réécrites');
+  // l'erreur d'arrondi d'une heure de la bibliothèque (début à 23 h la veille du jour voulu) ne doit ni décaler le début ni allonger l'élément
+  const durBefore = (Date.parse(specRow().finish) - Date.parse(specRow().start)) / 86400000;
+  w.__ppm.state.lastDrag = 0;
+  w.__ppm.onDateChange({ id: spec.id }, new w.Date(2026, 9, 7, 23, 0, 0), new w.Date(2026, 9, 12, 22, 59, 59));
+  check(specRow().start === '2026-10-08' && specRow().finish === '2026-10-12' && (Date.parse(specRow().finish) - Date.parse(specRow().start)) / 86400000 === durBefore, 'un début reçu à 23 h la veille est ramené au bon jour : la durée est conservée (' + specRow().start + ' → ' + specRow().finish + ')');
+  await waitFor(() => c.repoGet('PlanItem', spec.id).planned_start === '2026-10-08' && doc.getElementById('pl-busy').hidden);
+  w.__ppm.onDateChange({ id: spec.id }, new w.Date(2026, 9, 7), new w.Date(2026, 9, 13, 23, 59, 59));
+  await waitFor(() => c.repoGet('PlanItem', spec.id).planned_start === '2026-10-07' && doc.getElementById('pl-busy').hidden);
+  // week-end : prévenu, pas interdit
+  w.__ppm.state.lastDrag = 0;
+  w.__ppm.onDateChange({ id: spec.id }, new w.Date(2026, 9, 10), new w.Date(2026, 9, 13, 23, 59, 59));
+  check(/tombe un week-end/.test(doc.getElementById('undo-text').textContent) && /10\/10\/2026/.test(doc.getElementById('undo-text').textContent), 'une date de week-end est signalée dans le message, sans bloquer');
+  await waitFor(() => c.repoGet('PlanItem', spec.id).planned_start === '2026-10-10' && doc.getElementById('pl-busy').hidden);
+  // le serveur refuse (modifié ailleurs entre-temps) : retour arrière et explication
+  specRow().version = 1;
   w.__ppm.state.lastDrag = 0;
   w.__ppm.onDateChange({ id: spec.id }, new w.Date(2026, 9, 7), new w.Date(2026, 9, 13, 23, 59, 59));
-  check(doc.getElementById('confirm').open, 'confirmation demandée avant déplacement');
-  check(doc.getElementById('confirm-text').textContent.includes('07/10/2026 au 13/10/2026'), 'nouvelles dates dans la confirmation');
-  w.__ppm.confirmMove();
-  for (let i = 0; i < 20 && c.repoGet('PlanItem', spec.id).planned_start !== '2026-10-07'; i++) await tick();
-  for (let i = 0; i < 10; i++) await tick();
-  const moved = c.repoGet('PlanItem', spec.id);
-  check(moved.planned_start === '2026-10-07' && moved.planned_finish === '2026-10-13', 'dates enregistrées');
-  check(c.repoGet('PlanItem', plans.id).planned_start === '2026-10-12', 'successeur inchangé (H7)');
-  check(doc.querySelectorAll('.arrow path.is-violated').length === 2, 'nouvelle violation en rouge après rechargement');
+  check(specRow().start === '2026-10-07', 'refus à venir : l’écran avance quand même');
+  await waitFor(() => /Quelqu’un a modifié cet élément/.test(doc.getElementById('toast').textContent));
+  check(/Quelqu’un a modifié cet élément entre-temps/.test(doc.getElementById('toast').textContent) && doc.getElementById('undo-toast').hidden, 'modifié ailleurs : message clair, plus d’« Annuler »');
+  await waitFor(() => specRow().start === '2026-10-10' && doc.getElementById('pl-busy').hidden);
+  check(specRow().start === '2026-10-10' && c.repoGet('PlanItem', spec.id).planned_start === '2026-10-10', 'l’écran est revenu aux dates du serveur');
+  // rétablit le déplacement attendu par la suite
+  w.__ppm.state.lastDrag = 0;
+  w.__ppm.onDateChange({ id: spec.id }, new w.Date(2026, 9, 7), new w.Date(2026, 9, 13, 23, 59, 59));
+  await waitFor(() => c.repoGet('PlanItem', spec.id).planned_start === '2026-10-07' && doc.getElementById('pl-busy').hidden);
+  check(c.repoGet('PlanItem', spec.id).planned_start === '2026-10-07', 'le déplacement s’enregistre de nouveau avec la version à jour');
 
+  w.__ppm.hideUndo(); // le message « Annuler » du déplacement précédent est encore affiché : on le ferme pour voir si un lecteur en obtient un
   // Utilisateur sans droit
   user = 'bob@entreprise.com';
   doc.getElementById('reload').click();
   for (let i = 0; i < 20; i++) await tick();
   w.__ppm.onDateChange({ id: plans.id }, new w.Date(2026, 9, 14), new w.Date(2026, 9, 20, 23, 59, 59));
-  check(!doc.getElementById('confirm').open, 'pas de confirmation pour un lecteur');
+  check(doc.getElementById('undo-toast').hidden, 'aucun déplacement ni « Annuler » pour un lecteur');
   check(doc.getElementById('toast').textContent.includes('Vous ne pouvez pas déplacer'), 'message clair pour un lecteur');
   w.__ppm.state.lastDrag = 0;
   w.__ppm.onBarClick(plans.id);

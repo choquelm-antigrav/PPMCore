@@ -109,6 +109,7 @@ const ready = async (p) => { for (let i = 0; i < 30 && !p.doc.querySelector('.ba
   check(!p.doc.getElementById('dep-submit').disabled && p.flat(p.text('dep-sentence')) === '« Spécification » doit être fini avant que « Dossier libre » commence.', 'une phrase claire dit ce que le lien signifie : ' + p.flat(p.text('dep-sentence')));
   check(p.doc.querySelector('.bar-wrapper[data-id="' + spec.id + '"]').classList.contains('link-target'), 'l’élément choisi est mis en évidence dans le diagramme');
   submit(p);
+  check(p.flat(p.text('deps-preds')).includes('Spécification Fin → Début') && has(spec, libre).length === 0 && !p.doc.getElementById('dep-form') && !!p.doc.querySelector('.arrow path[data-from="' + spec.id + '"][data-to="' + libre.id + '"]'), 'mise à jour optimiste : le lien et sa flèche s’affichent AVANT la réponse du serveur, le formulaire est déjà refermé');
   await p.until(() => has(spec, libre).length === 1 && p.doc.querySelector('#details h2') && p.doc.querySelector('#details h2').textContent === 'Dossier libre' && p.doc.getElementById('deps-preds'));
   const d1 = has(spec, libre)[0];
   check(d1 && d1.dep_type === 'FS' && Number(d1.lag_days) === 0, 'lien créé : Fin → Début, sans décalage, par défaut');
@@ -148,7 +149,9 @@ const ready = async (p) => { for (let i = 0; i < 30 && !p.doc.querySelector('.ba
   choose(p, cdr.id); submit(p);
   await p.until(() => /boucle/.test(p.toast()));
   check(/boucle dans le planning/.test(p.toast()) && deps().length === before && has(cdr, spec).length === 0, 'Revue CDR → Spécification fermerait une boucle : refusé avec une explication, rien d’enregistré : ' + p.toast());
-  check(!!p.doc.getElementById('dep-form') && !p.doc.getElementById('dep-submit').disabled, 'le formulaire reste ouvert pour choisir autre chose');
+  check(!has(cdr, spec).length && !p.doc.querySelector('#deps-preds li[data-dep^="tmp:"]'), 'le lien affiché par anticipation a disparu de l’écran');
+  await p.until(() => p.doc.getElementById('dep-form') && p.doc.getElementById('dep-pick').value === cdr.id && !p.doc.getElementById('dep-submit').disabled);
+  check(!!p.doc.getElementById('dep-form') && p.doc.getElementById('dep-pick').value === cdr.id && !p.doc.getElementById('dep-submit').disabled, 'refusé : le formulaire revient avec le même choix (Revue CDR), à corriger ou à abandonner');
   p.doc.getElementById('dep-cancel').click();
   check(!p.doc.getElementById('dep-form') && !p.doc.getElementById('main').classList.contains('linking') && p.doc.querySelector('#details h2').textContent === 'Spécification', '« Annuler » referme le formulaire, le détail reste ouvert');
 
@@ -180,6 +183,17 @@ const ready = async (p) => { for (let i = 0; i < 30 && !p.doc.querySelector('.ba
   rm.click();
   await p.until(() => has(spec, libre).length === 0 && !p.doc.querySelector('#deps-preds li[data-dep="' + d1.id + '"]'));
   check(has(spec, libre).length === 0 && /Lien retiré\./.test(p.toast()) && p.doc.querySelector('#details h2').textContent === 'Dossier libre', 'le second clic retire le lien (supprimé dans les données), le détail est rafraîchi : ' + p.toast());
+
+  // ---- un retrait refusé par le serveur : le lien revient à l'écran
+  await openItem(p, libre);
+  const d2row = p.doc.querySelector('#deps-succs li[data-dep="' + d2.id + '"]');
+  p.w.__ppm.state.data.dependencies.find((d) => d.id === d2.id).version = 0; // l'écran croit connaître une version périmée
+  d2row.querySelector('.dep-remove').click(); d2row.querySelector('.dep-remove').click();
+  check(!p.doc.querySelector('#deps-succs li[data-dep="' + d2.id + '"]'), 'retrait optimiste : le lien disparaît de l’écran tout de suite');
+  await p.until(() => /modifié entre-temps/.test(p.toast()));
+  check(/Ce lien a été modifié entre-temps/.test(p.toast()) && has(libre, rapport).length === 1, 'refusé (version périmée) : message clair, le lien existe toujours côté serveur');
+  await p.until(() => p.doc.querySelector('#deps-succs li[data-dep="' + d2.id + '"]'));
+  check(!!p.doc.querySelector('#deps-succs li[data-dep="' + d2.id + '"]'), 'et il est revenu à l’écran');
 
   // ---- le mode programme n'offre pas de liens
   await p.until(() => true);

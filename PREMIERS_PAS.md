@@ -1,4 +1,4 @@
-# Premiers pas : installer et essayer PPM (version 0.15.1)
+# Premiers pas : installer et essayer PPM (version 0.15.2)
 
 Environ 15 minutes. Pas besoin d'AppSheet pour ces essais. Tout ce qu'il faut est dans le dossier `dist` de l'archive : **12 fichiers**.
 
@@ -33,7 +33,7 @@ Ouvrir l'URL suivie de `?view=gantt`. Les liens en haut de chaque page mènent a
 
 | Page | Ce qu'on essaie |
 | --- | --- |
-| **Planning** | S'ouvre sur **aujourd'hui** (bouton « Aujourd'hui » pour y revenir) ; **survoler** une barre pour un résumé (dates, responsable, avancement, marge) ; chemin critique ; glisser une barre pour la déplacer ; cliquer une barre pour déclarer un avancement ; **créer une dépendance** : cliquer un livrable, section « Dépendances » du panneau, **« + Doit attendre… »** ou **« + Bloque… »**, puis choisir l'autre élément dans la liste **ou cliquer sa barre**, **Créer le lien** (« Retirer », en deux clics, pour supprimer). |
+| **Planning** | S'ouvre sur **aujourd'hui** (bouton « Aujourd'hui » pour y revenir) ; **survoler** une barre pour un résumé (dates, responsable, avancement, marge) ; chemin critique ; glisser une barre pour la déplacer (**enregistré tout de suite**, bouton « Annuler » 9 secondes) ; **liste de gauche** avec recherche, filtres et workpackages repliables ; cliquer une barre pour déclarer un avancement ; **créer une dépendance** : cliquer un livrable, section « Dépendances » du panneau, **« + Doit attendre… »** ou **« + Bloque… »**, puis choisir l'autre élément dans la liste **ou cliquer sa barre**, **Créer le lien** (« Retirer », en deux clics, pour supprimer). |
 | **OBS/WBS** | L'organisation (par rôles ou par équipes) au-dessus du découpage du projet ; bouton **Attributs affichés** dans chaque zone. Zone **Ressources à positionner** : les personnes créées sans rôle ; cliquer l'une d'elles, puis **Positionner dans l'organigramme**. Zone **Découpage (WBS)** : **Ajouter un workpackage**, puis cliquer une carte pour **Ajouter** un livrable ou un jalon, **Modifier** (nom, responsable, dates, rattachement) ou **Supprimer** ; sur un livrable, la section **Dépendances**. En **Organisation** : « Attribuer un rôle », « Ajouter une personne », « Ajouter une équipe », et les boutons de chaque carte. |
 | **Suivi** | Zone **Baselines** → **Figer la baseline B0**. Déplacer ensuite une barre dans le Planning : un trait gris garde l'ancienne place. **Changements à valider** → **Tout valider**. **Agenda et Drive** → **Créer l'agenda et le dossier du projet**.  |
 | **Mon compte** (icône de personne, en haut à droite) | **Notifications** → **Me l'envoyer maintenant** : le mail récapitulatif arrive dans votre boîte. Même page : le **rappel avant livraison** (votre délai en jours ouvrés, 10 par défaut). **Affichage** : choisir le thème et la page d'accueil. |

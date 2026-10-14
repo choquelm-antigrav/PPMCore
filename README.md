@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.15.1)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.15.2)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -194,6 +194,21 @@ Les tests chargent les fichiers `.gs` tels quels, avec des tables en mémoire à
 - **Aperçu** : `node tests/preview_demo.js 8124` sert toutes les pages sur la démo complète.
 - **Overview, repère « Personnes »** : il compte maintenant les membres du projet (il comptait les adresses joignables, ce qui est trompeur pour des personnes sans adresse). **Indicateur de coût** : un dépassement du budget externe sur un seul CPN le met en alerte, même si le total du projet reste sous son budget (les analyses se font par CPN).
 
+## Planning : liste de gauche, recherche, filtres, enregistrement immédiat (0.15.2)
+
+**Liste de gauche.** Une ligne par barre, à la même hauteur (40 px) et dans le même ordre, avec le nom (indenté), le **responsable**, la **date de fin** et l'**avancement** ; les retards et dépendances non respectées sont en rouge, les jalons précédés d'un losange (coche s'ils sont terminés), les voisins d'un autre projet en italique avec leur code. Elle reste en place quand on fait défiler vers la droite, et son entête comme celui des dates restent en haut quand on fait défiler vers le bas (le diagramme défile dans son propre cadre).
+- **Arbre repliable** : ▾/▸ devant chaque workpackage cache ses éléments et sous-workpackages, dans la liste **et** dans le diagramme ; « Tout replier » / « Tout déplier ». Changer de projet repart sans repli ni filtre.
+- **Recherche** (nom, responsable, code WBS) et **filtres** « Tous », « En retard », « Critiques », « Non respectés », « Les miens » (éléments dont vous êtes responsable) ; un compteur dit « n éléments affichés sur N ». Un filtre garde la position horizontale ; sans résultat, un message clair, la recherche reste là pour corriger.
+- **Éléments sans dates** : listés sous la liste (« Sans dates, donc sans barre »), cliquables : on peut enfin ouvrir leur détail et leur créer des liens.
+- **Survol et sélection liés** : survoler une ligne met la barre en évidence, et inversement ; cliquer une ligne ouvre le détail et amène la barre à l'écran. Bouton **« Liste »** pour la masquer ; sur téléphone elle est fermée au départ (le diagramme garde toute la largeur).
+
+**Enregistrement immédiat (mise à jour optimiste).** Une modification s'affiche **tout de suite** ; le serveur la confirme ensuite, avec un indicateur « Enregistrement… ».
+- **Déplacer une barre** n'ouvre plus de boîte de confirmation : le déplacement s'applique, un message rappelle les nouvelles dates (et prévient si une date tombe un week-end) avec un bouton **« Annuler »** pendant 9 secondes. Les éléments liés ne bougent toujours pas ; si le déplacement laisse des dépendances non respectées, un message le dit une fois les calculs refaits.
+- **Liens** (créer, retirer) et **avancement déclaré** : même principe.
+- **Les écritures partent l'une après l'autre**, et le planning n'est relu (sans écran de chargement, en gardant position, sélection, replis et filtres) **qu'une fois la file vide**, pour retrouver marges, chemin critique et dépendances non respectées recalculés. Une relecture devenue obsolète (une modification plus récente est partie pendant ce temps) est écartée, pour ne jamais écraser ce que vous venez de faire.
+- **Si le serveur refuse** (élément modifié entre-temps, droits, boucle), l'écran revient en arrière et explique pourquoi ; les autres écritures de la file continuent.
+- **Défaut corrigé au passage** (il datait d'avant) : la bibliothèque convertit un glisser en dates avec une erreur d'arrondi d'une heure ; la page prenait alors le jour **d'avant** pour début, et chaque déplacement **allongeait l'élément d'un jour** (début décalé de 5 jours, fin de 6). Le début est maintenant arrondi au jour le plus proche : la durée est conservée.
+
 ## Un Planning plus moderne (0.15.1)
 
 Même bibliothèque (Frappe Gantt 0.6.1), un habillage entièrement revu, sans changer ce que la page sait faire :
@@ -209,7 +224,7 @@ Même bibliothèque (Frappe Gantt 0.6.1), un habillage entièrement revu, sans c
 - **Barre d'outils** : « Critique » et « Baseline » en pastilles (toujours des cases à cocher accessibles) ; sur téléphone, l'entête passe sur une ligne défilante et le diagramme démarre à 31 % de la hauteur de l'écran (plus d'un tiers avant).
 - **Légende** mise à jour (statuts, losange, fine barre, aujourd'hui).
 
-**Non fait, à discuter** : jours fériés du calendrier du projet (le serveur ne les envoie pas à la page), liste fixe à gauche, mise à jour optimiste (niveau suivant). Les jalons de la vue programme restent sur leurs propres lignes (la bibliothèque dessine une barre par ligne).
+**Non fait, à discuter** : jours fériés du calendrier du projet (le serveur ne les envoie pas à la page). Les jalons de la vue programme restent sur leurs propres lignes (la bibliothèque dessine une barre par ligne).
 
 ## Dépendances créées depuis le Planning (0.15.1)
 
@@ -218,7 +233,7 @@ Dans la page **Planning (Gantt)**, un clic sur un livrable ou un jalon ouvre son
 1. **« + Doit attendre… »** (l'élément ouvert attend un autre) ou **« + Bloque… »** (un autre attend l'élément ouvert) ouvre un petit formulaire dans le panneau.
 2. **Choisir l'autre élément** : dans la liste (regroupée par workpackage ; les éléments des autres projets du même programme sont proposés avec leur code de projet ; ceux déjà liés ne le sont pas), **ou en cliquant sa barre dans le diagramme** (le diagramme passe en mode « choix », la barre choisie est mise en évidence).
 3. Une **phrase** dit ce que le lien signifie (« X doit être fini avant que Y commence »). Par défaut : Fin → Début, sans décalage. Les **Options** (repliées) permettent un autre type et un décalage en jours ouvrés (négatif : chevauchement).
-4. **Créer le lien** : le planning se recharge, la flèche apparaît, le panneau reste ouvert. Si le lien n'est pas respecté par les dates actuelles, il est créé mais un message le dit (« il manque N jours ouvrés, date requise le … ») : c'est à vous de décaler l'un des deux éléments.
+4. **Créer le lien** : la flèche apparaît **tout de suite** et le panneau reste ouvert ; le serveur confirme en arrière-plan (s'il refuse, le lien disparaît et le formulaire revient avec le même choix, avec l'explication). Si le lien n'est pas respecté par les dates actuelles, il est créé mais un message le dit (« il manque N jours ouvrés, date requise le … ») : c'est à vous de décaler l'un des deux éléments.
 
 **Retirer** un lien : bouton « Retirer » en regard, en **deux clics** (le premier arme « Confirmer le retrait », quatre secondes). **Échap** abandonne la création en cours (un second Échap ferme le panneau).
 

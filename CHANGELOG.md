@@ -1,5 +1,12 @@
 # Journal des versions
 
+## 0.15.2 — Planning : liste de gauche, filtres, enregistrement immédiat
+
+- **Liste de gauche** alignée sur le diagramme (nom indenté, responsable, fin, avancement), **arbre des workpackages repliable**, **recherche** et filtres (en retard, critiques, non respectés, les miens), éléments sans dates listés et ouvrables, survol et sélection liés, entêtes (dates et liste) qui restent en haut, bouton « Liste », fermée au départ sur téléphone. Le serveur indique quels éléments sont « à moi » (`mine`).
+- **Mise à jour optimiste** : déplacement (message « Annuler » à la place de la boîte de confirmation, avertissement de week-end), liens et avancement s'affichent tout de suite ; écritures en file, **une seule relecture silencieuse** une fois la file vide (position, sélection, replis et filtres gardés), relecture obsolète écartée, retour arrière expliqué en cas de refus.
+- **Défaut corrigé** : un déplacement à la souris allongeait l'élément d'un jour (erreur d'arrondi d'une heure de la bibliothèque, début pris la veille) ; le début est arrondi au jour le plus proche.
+- Tests : `ui_gantt_liste.js` (45), `ui_gantt_optimiste.js` (13), `ui_smoke.js` réécrit pour le déplacement immédiat (37), `ui_gantt_liens.js` (47), un test serveur ; 285 tests serveur, dix-sept essais de pages.
+
 ## 0.15.1 — dépendances créées depuis le Planning
 
 - **Planning plus moderne** (même bibliothèque, habillage revu) : ouverture sur aujourd'hui avec ligne et pastille « Aujourd'hui » et bouton de retour ; barres teintées, avancement plein, couleur par statut (à faire, en cours, terminé, critique, retard), plus hautes et arrondies ; workpackages en fine barre, jalons en losange ; noms qui suivent le défilement ; infobulle au survol et flèches accentuées de l'élément ; week-ends estompés ; barres de projet nommées avec leur avancement en vue programme ; chargement en barres fantômes ; barre d'outils en pastilles et entête compact sur téléphone ; légende mise à jour. Tests : `ui_gantt_look.js` (33 vérifications, date figée).
