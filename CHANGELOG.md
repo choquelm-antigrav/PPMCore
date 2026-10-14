@@ -1,5 +1,12 @@
 # Journal des versions
 
+## 0.15.1 — dépendances créées depuis le Planning
+
+- **Planning plus moderne** (même bibliothèque, habillage revu) : ouverture sur aujourd'hui avec ligne et pastille « Aujourd'hui » et bouton de retour ; barres teintées, avancement plein, couleur par statut (à faire, en cours, terminé, critique, retard), plus hautes et arrondies ; workpackages en fine barre, jalons en losange ; noms qui suivent le défilement ; infobulle au survol et flèches accentuées de l'élément ; week-ends estompés ; barres de projet nommées avec leur avancement en vue programme ; chargement en barres fantômes ; barre d'outils en pastilles et entête compact sur téléphone ; légende mise à jour. Tests : `ui_gantt_look.js` (33 vérifications, date figée).
+- **Créer une dépendance depuis la page Planning** : dans le panneau d'un livrable ou jalon, section « Dépendances » (ce qu'il doit attendre, ce qu'il bloque, type et décalage, lien non respecté en rouge) et boutons « + Doit attendre… » / « + Bloque… » ; l'autre élément se choisit dans une liste (par workpackage, autres projets du programme compris, éléments déjà liés exclus) **ou en cliquant sa barre** ; une phrase dit ce que le lien signifie ; options repliées (type, décalage) ; lien non respecté signalé à la création ; « Retirer » en deux clics ; Échap abandonne ; le formulaire reste à l'écran. Mêmes règles qu'OBS/WBS (droit `wbs.edit` sur l'élément aval, pas de doublon, pas de boucle).
+- `gantt.project` renvoie la **version** de chaque dépendance (retrait sans conflit silencieux). Aucune nouvelle action serveur.
+- Tests : `ui_gantt_liens.js` (42 vérifications : liste, clic sur barre, options, lien non respecté, boucle, doublon, retrait, Échap, droits d'un chef de projet, d'un responsable de workpackage et d'un membre) et un test serveur ; 284 tests serveur, quinze essais de pages.
+
 ## 0.15.0 — Copilote complet (clé Gemini strictement personnelle), classeur ouvert et protégé selon les rôles, pages plus rapides
 
 - **Rôles et personnes** (`RoleAssignment`, `Role`, `Resource`) : modifiables par les administrateurs, PL et DPL seulement. **Budget et achats** (`BudgetLine`, `BudgetPhasing`, `PurchaseOrder`, `PurchaseOrderLink`, `RateCard`, `ActualImport`) : en plus, les chefs de projet. Droits `sheet.roles` et `sheet.budget` dans `PERMISSIONS`.

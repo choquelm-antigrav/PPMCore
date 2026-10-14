@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.15.0)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.15.1)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -193,6 +193,36 @@ Les tests chargent les fichiers `.gs` tels quels, avec des tables en mémoire à
 - **Reprise** : chaque étape est enregistrée dans la propriété `PPM_DEMO_STEP`. Si une étape échoue, le message dit laquelle, les précédentes sont conservées, et il suffit de relancer. **Limite** : il n'y a pas de fonction pour effacer la démo ; pour repartir de zéro, installer sur de nouveaux classeurs (les noms de la démo, retrouvés par leur plus récent homonyme, ne se mélangent pas à de vraies fiches).
 - **Aperçu** : `node tests/preview_demo.js 8124` sert toutes les pages sur la démo complète.
 - **Overview, repère « Personnes »** : il compte maintenant les membres du projet (il comptait les adresses joignables, ce qui est trompeur pour des personnes sans adresse). **Indicateur de coût** : un dépassement du budget externe sur un seul CPN le met en alerte, même si le total du projet reste sous son budget (les analyses se font par CPN).
+
+## Un Planning plus moderne (0.15.1)
+
+Même bibliothèque (Frappe Gantt 0.6.1), un habillage entièrement revu, sans changer ce que la page sait faire :
+
+- **Ouverture sur aujourd'hui** : la page défile jusqu'au jour courant (30 % de la largeur visible à gauche), avec une **ligne rouge et une pastille « Aujourd'hui »** dans la rangée des dates, et un bouton **« Aujourd'hui »** pour y revenir. Si aujourd'hui est hors de la période (projet passé ou à venir), la page s'ouvre sur la fin ou le début, et le bouton est grisé avec son explication.
+- **Barres teintées** : fond doux, **avancement en teinte pleine**, plus hautes (26 px) et plus arrondies. La couleur dit le **statut** : à faire (gris ardoise), en cours (bleu), terminé (vert) ; le **chemin critique** passe en ambre, un **retard** en rouge ; un élément d'un autre projet est en pointillés. Le contour rouge reste réservé au retard et à la dépendance non respectée. La couleur du survol et de la sélection suit le statut (la bibliothèque imposait un gris et un mauve).
+- **Workpackages en fine barre**, leur nom au-dessus ; **jalons en losange** (dessiné par la page : la barre d'origine, invisible, garde le clic et le glisser).
+- **Les noms restent lisibles quand on défile** : le nom d'une barre se cale sur le bord visible de la barre.
+- **Infobulle au survol** (souris seulement, pas sur écran tactile) : nom, type, dates, responsable, avancement, statut, et en pastilles le chemin critique, le retard, la dépendance non respectée, la marge et l'écart à la baseline. Au survol d'un élément, **ses flèches s'accentuent** ; au repos elles sont discrètes (rouges si la dépendance n'est pas respectée). La vue programme a la sienne (projet, jalon).
+- **Week-ends estompés** (vues jour et semaine ; pas en vue mois), lignes plus discrètes, baseline en trait plus fin et plus léger.
+- **Vue programme** : chaque barre de projet porte son **nom et son avancement** (« P1 Nacelle · 60 % »).
+- **Chargement en barres fantômes** au lieu d'une ligne de texte, dès l'ouverture de la page.
+- **Barre d'outils** : « Critique » et « Baseline » en pastilles (toujours des cases à cocher accessibles) ; sur téléphone, l'entête passe sur une ligne défilante et le diagramme démarre à 31 % de la hauteur de l'écran (plus d'un tiers avant).
+- **Légende** mise à jour (statuts, losange, fine barre, aujourd'hui).
+
+**Non fait, à discuter** : jours fériés du calendrier du projet (le serveur ne les envoie pas à la page), liste fixe à gauche, mise à jour optimiste (niveau suivant). Les jalons de la vue programme restent sur leurs propres lignes (la bibliothèque dessine une barre par ligne).
+
+## Dépendances créées depuis le Planning (0.15.1)
+
+Dans la page **Planning (Gantt)**, un clic sur un livrable ou un jalon ouvre son panneau ; la section **Dépendances** y liste ce qu'il **doit attendre** et ce qu'il **bloque**, avec le type de lien (Fin → Début, Début → Début, Fin → Fin, Début → Fin) et le décalage, et signale en rouge un lien **non respecté** par les dates. Pour en ajouter :
+
+1. **« + Doit attendre… »** (l'élément ouvert attend un autre) ou **« + Bloque… »** (un autre attend l'élément ouvert) ouvre un petit formulaire dans le panneau.
+2. **Choisir l'autre élément** : dans la liste (regroupée par workpackage ; les éléments des autres projets du même programme sont proposés avec leur code de projet ; ceux déjà liés ne le sont pas), **ou en cliquant sa barre dans le diagramme** (le diagramme passe en mode « choix », la barre choisie est mise en évidence).
+3. Une **phrase** dit ce que le lien signifie (« X doit être fini avant que Y commence »). Par défaut : Fin → Début, sans décalage. Les **Options** (repliées) permettent un autre type et un décalage en jours ouvrés (négatif : chevauchement).
+4. **Créer le lien** : le planning se recharge, la flèche apparaît, le panneau reste ouvert. Si le lien n'est pas respecté par les dates actuelles, il est créé mais un message le dit (« il manque N jours ouvrés, date requise le … ») : c'est à vous de décaler l'un des deux éléments.
+
+**Retirer** un lien : bouton « Retirer » en regard, en **deux clics** (le premier arme « Confirmer le retrait », quatre secondes). **Échap** abandonne la création en cours (un second Échap ferme le panneau).
+
+Règles (les mêmes que dans OBS/WBS, c'est la même action serveur) : on ne peut pas lier un élément à lui-même, ni créer un doublon, ni fermer une **boucle** dans le planning (refusé avec explication). Il faut le droit **`wbs.edit` sur l'élément qui attend** (le successeur) : un responsable de workpackage lie des éléments de son workpackage, un membre ne voit que la liste et n'a aucun bouton ; pour « + Bloque… », la liste ne propose que les éléments que la personne peut modifier. Pas de création de lien en vue programme (les barres y sont des projets). L'élément n'ayant pas de dates n'a pas de barre : on le choisit dans la liste. **Non vérifié dans votre Apps Script** (essai dans un navigateur simulé, avec le vrai Core).
 
 ## Feuilles protégées selon les rôles (0.15.0)
 

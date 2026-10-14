@@ -1,5 +1,5 @@
 /**
- * PPM Core 0.15.0 — fichier unique à installer (fabriqué par tools/build.js, empreinte 41d8174198d0).
+ * PPM Core 0.15.1 — fichier unique à installer (fabriqué par tools/build.js, empreinte 411254a97ea4).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
  * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs.
  */
@@ -44,7 +44,7 @@ function A8_VERIFIER_ECRITURE() { return verifierEcritureAvecJournal_(); }
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.15.0';
+var PPM_VERSION = '0.15.1';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -3610,7 +3610,7 @@ function buildProjectGantt(data, projectId, ctx, today) {
     baseline: baselineInfo,
     rows: rows,
     dependencies: deps.filter(function (d) { return names[d.predecessor_id] && names[d.successor_id]; }).map(function (d) {
-      return { id: d.id, from: d.predecessor_id, to: d.successor_id, type: d.dep_type, lag: Number(d.lag_days) || 0, violated: !!violatedDep[d.id] };
+      return { id: d.id, version: d.version, from: d.predecessor_id, to: d.successor_id, type: d.dep_type, lag: Number(d.lag_days) || 0, violated: !!violatedDep[d.id] };
     }),
     violations: violations.map(function (v) {
       return Object.assign({}, v, { predecessor_name: names[v.predecessor_id], successor_name: names[v.successor_id] });

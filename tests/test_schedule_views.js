@@ -121,6 +121,21 @@ module.exports = function () {
     ok(!asBob.rows.find((r) => r.id === spec.id).canDeclare);
   });
 
+  test('Gantt projet : chaque dépendance porte son identifiant et sa version, pour la retirer depuis la page (0.15.1)', () => {
+    const { call, A, p1, spec, plan } = world();
+    const deps = call('alice@entreprise.com', 'gantt.project', { projectId: p1.id }).data.dependencies;
+    ok(deps.every((d) => d.id && d.version >= 1 && ['FS', 'SS', 'FF', 'SF'].indexOf(d.type) >= 0 && typeof d.violated === 'boolean'), 'identifiant, version, type, décalage et état : ' + JSON.stringify(deps[0]));
+    const link = deps.find((d) => d.from === spec.id && d.to === plan.id);
+    ok(link && link.version >= 1, 'le lien Spécification → Plans est dans la liste');
+    // modifié ailleurs entre-temps : la suppression avec l'ancienne version est refusée (conflit), pas silencieuse
+    call(A, 'dependencies.update', { id: link.id, version: link.version, patch: { lag_days: 1 } });
+    const stale = call('alice@entreprise.com', 'dependencies.delete', { id: link.id, version: link.version });
+    eq([stale.ok, stale.error && stale.error.code], [false, 'CONFLICT'], 'retirer un lien modifié entre-temps est refusé avec un conflit');
+    const fresh = call('alice@entreprise.com', 'gantt.project', { projectId: p1.id }).data.dependencies.find((d) => d.id === link.id);
+    ok(fresh.version > link.version && fresh.lag === 1, 'la page relue voit la nouvelle version et le décalage');
+    ok(call('alice@entreprise.com', 'dependencies.delete', { id: link.id, version: fresh.version }).ok, 'avec la version à jour, le retrait réussit');
+  });
+
   test('Déplacement depuis le Gantt : violation signalée, aucune date propagée', () => {
     const { call, p1, spec, plan } = world();
     const cur = call('alice@entreprise.com', 'planitems.get', { id: spec.id }).data;

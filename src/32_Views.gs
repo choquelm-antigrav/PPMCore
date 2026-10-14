@@ -254,7 +254,7 @@ function buildProjectGantt(data, projectId, ctx, today) {
     baseline: baselineInfo,
     rows: rows,
     dependencies: deps.filter(function (d) { return names[d.predecessor_id] && names[d.successor_id]; }).map(function (d) {
-      return { id: d.id, from: d.predecessor_id, to: d.successor_id, type: d.dep_type, lag: Number(d.lag_days) || 0, violated: !!violatedDep[d.id] };
+      return { id: d.id, version: d.version, from: d.predecessor_id, to: d.successor_id, type: d.dep_type, lag: Number(d.lag_days) || 0, violated: !!violatedDep[d.id] };
     }),
     violations: violations.map(function (v) {
       return Object.assign({}, v, { predecessor_name: names[v.predecessor_id], successor_name: names[v.successor_id] });
