@@ -23,21 +23,27 @@ function requireAdmin_(ctx) {
 // ---------------------------------------------------------------- Mon compte
 
 defineAction('account.get', function (p, ctx) {
-  var data = { programs: repoList('Program'), projects: repoList('Project'), workpackages: repoList('WorkPackage') };
+  var data = { programs: repoList('Program'), projects: repoList('Project'), workpackages: repoList('WorkPackage'), planitems: repoList('PlanItem') };
   var res = ctx.resourceId ? repoGet('Resource', ctx.resourceId) : null;
   var teams = indexBy_(repoList('HierarchicalTeam'));
   var row = userSettingRow_(ctx.email);
   var roles = (ctx.assignments || []).map(function (a) {
+    var code = effectiveRoleCode_(a, ctx.lookup);
     return {
-      role_code: a.role_code, role_label: ROLE_LABELS[a.role_code] || a.role_code, rank: ROLE_RANK[a.role_code],
+      role_code: code, role_label: ROLE_LABELS[code] || code, rank: ROLE_RANK[code],
       scope_type: a.scope_type, scope_id: a.scope_id, scope_label: scopeLabel_(data, a.scope_type, a.scope_id),
       since: a.start_date || '', until: a.end_date || ''
     };
   }).filter(function (r) { return r.scope_label; }).reduce(function (acc, r) {
-    var k = r.role_code + '|' + r.scope_type + '|' + r.scope_id;
+    // plusieurs livrables ou jalons avec le même rôle : une seule ligne, avec leur nombre
+    var k = r.role_code + '|' + r.scope_type + '|' + (r.scope_type === 'planitem' ? '' : r.scope_id);
     var i = acc.index[k];
-    if (i === undefined) { acc.index[k] = acc.list.length; acc.list.push(r); }
-    else if (r.since && (!acc.list[i].since || r.since < acc.list[i].since)) acc.list[i].since = r.since;
+    if (i === undefined) { acc.index[k] = acc.list.length; r.n = 1; acc.list.push(r); }
+    else {
+      var cur = acc.list[i];
+      if (r.scope_type === 'planitem') { cur.n++; cur.scope_label = countLabel_(cur.n, 'livrable ou jalon', 'livrables ou jalons'); cur.scope_id = ''; }
+      if (r.since && (!cur.since || r.since < cur.since)) cur.since = r.since;
+    }
     return acc;
   }, { list: [], index: {} }).list.sort(function (a, b) {
     return (a.rank - b.rank) || String(a.scope_label).localeCompare(String(b.scope_label), 'fr');

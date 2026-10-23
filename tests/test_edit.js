@@ -134,8 +134,10 @@ module.exports = function () {
     eq(w.c.repoList('WorkPackage').length, 3, 'rien n’a été supprimé');
     eq(w.raw(RWP, 'wbs.delete', { kind: 'wp', id: w.w2.id, cascade: true }).error.code, 'FORBIDDEN', 'pas dans le WP d’un autre');
     eq(w.raw(MEMBER, 'wbs.delete', { kind: 'wp', id: w.w1.id, cascade: true }).error.code, 'FORBIDDEN');
-    const r = w.call(RWP, 'wbs.delete', { kind: 'wp', id: w.w1.id, cascade: true });
-    eq(r.deleted, { wps: 2, items: 2, dependencies: 2, requirements: 0 }, 'Rémi supprime son WP avec son contenu : A→B et B→C partent, C→J reste');
+    eq(w.raw(RWP, 'wbs.delete', { kind: 'wp', id: w.w1.id, cascade: true }).error.code, 'FORBIDDEN', 'un Workpackage leader ne supprime pas son propre WP : c’est le niveau du dessus (chef de projet)');
+    eq(w.c.repoList('WorkPackage').length, 3, 'rien n’est parti après ce refus');
+    const r = w.call(CP, 'wbs.delete', { kind: 'wp', id: w.w1.id, cascade: true });
+    eq(r.deleted, { wps: 2, items: 2, dependencies: 2, requirements: 0 }, 'le chef de projet supprime le WP avec son contenu : A→B et B→C partent, C→J reste');
     eq(w.c.repoList('Dependency').length, 1);
     const tree = w.call(CP, 'wbs.tree', { projectId: w.p1.id }).nodes;
     const ids = new Set(tree.map((n) => n.id));

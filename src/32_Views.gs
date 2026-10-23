@@ -417,49 +417,49 @@ defineAction('obs.list', function (p) {
   return buildObs(loadPlanningData_(), type, requireParam(p, 'scopeId'), todayStr());
 });
 
-var SCOPE_TABLE = { program: 'Program', project: 'Project', workpackage: 'WorkPackage' };
+var SCOPE_TABLE = { program: 'Program', project: 'Project', workpackage: 'WorkPackage', planitem: 'PlanItem' };
 
+/**
+ * Pose un rôle sur un objet. Règles (05_Rbac.gs, roleAssignCheck_) : le rôle se pose sur son type d'objet et nulle part ailleurs ; c'est un niveau strictement
+ * supérieur, détenu sur l'objet ou au-dessus, qui le pose. Reader ne se pose pas. Plusieurs personnes peuvent détenir le même rôle sur un objet.
+ */
 defineAction('roles.assign', function (p, ctx) {
   var v = p.values || {};
   var type = requireParam(v, 'scope_type');
   if (!SCOPE_TABLE[type]) throw new PpmError('VALIDATION', 'Périmètre invalide : ' + type);
   mustGet(SCOPE_TABLE[type], requireParam(v, 'scope_id'));
   mustGet('Resource', requireParam(v, 'resource_id'));
-  if (ROLES.indexOf(v.role_code) < 0) throw new PpmError('VALIDATION', 'Rôle inconnu : ' + v.role_code);
-  requireCan(ctx, 'roles.assign', { type: type, id: v.scope_id });
-  // On n'attribue pas un rôle plus élevé que le sien sur ce périmètre (un CP ne nomme pas un DPL).
-  if (!ctx.isAdmin && ROLE_RANK[v.role_code] < bestRankOn_(ctx, { type: type, id: v.scope_id })) {
-    throw new PpmError('FORBIDDEN', 'Vous ne pouvez pas attribuer un rôle plus élevé que le vôtre sur ce périmètre.');
-  }
+  var scope = { type: type, id: v.scope_id };
+  var problem = roleAssignCheck_(ctx, v.role_code, scope);
+  if (problem) throw new PpmError(problem.code, problem.message);
   var dup = repoList('RoleAssignment', function (a) {
     return a.resource_id === v.resource_id && a.role_code === v.role_code && a.scope_type === type &&
       String(a.scope_id) === String(v.scope_id) && (isBlank(a.end_date) || String(a.end_date) >= todayStr());
   });
   if (dup.length) throw new PpmError('VALIDATION', 'Ce rôle est déjà attribué à cette personne sur ce périmètre.');
-  return repoInsert('RoleAssignment', {
-    resource_id: v.resource_id, role_code: v.role_code, scope_type: type, scope_id: v.scope_id,
-    start_date: v.start_date || todayStr(), end_date: v.end_date || ''
-  }, ctx.actx);
-});
-
-/** Meilleur rang détenu par l'appelant sur le périmètre ou un périmètre englobant. */
-function bestRankOn_(ctx, scope) {
-  var chain = scopeAncestors(scope, ctx.lookup);
-  var best = 99;
-  ctx.assignments.forEach(function (a) {
-    var covers = chain.some(function (s) { return s.type === a.scope_type && String(s.id) === String(a.scope_id); });
-    if (covers && ROLE_RANK[a.role_code] < best) best = ROLE_RANK[a.role_code];
+  return withLock(function () {
+    var rec = repoInsert('RoleAssignment', {
+      resource_id: v.resource_id, role_code: v.role_code, scope_type: type, scope_id: v.scope_id,
+      start_date: v.start_date || todayStr(), end_date: v.end_date || ''
+    }, ctx.actx);
+    var kind = objectKindOf_(scope, ctx.lookup);
+    if (PRINCIPAL_ROLE[kind] === v.role_code) syncPrincipal_(kind, v.scope_id, ctx.actx);
+    return rec;
   });
-  return best;
-}
+});
 
 /** Fin d'une affectation : on renseigne la date de fin (hier), sans supprimer, pour garder l'historique. */
 defineAction('roles.end', function (p, ctx) {
   var id = requireParam(p, 'id');
   var a = mustGet('RoleAssignment', id);
-  requireCan(ctx, 'roles.assign', { type: a.scope_type, id: a.scope_id });
-  if (!ctx.isAdmin && ROLE_RANK[a.role_code] < bestRankOn_(ctx, { type: a.scope_type, id: a.scope_id })) {
-    throw new PpmError('FORBIDDEN', 'Vous ne pouvez pas retirer un rôle plus élevé que le vôtre.');
+  var scope = { type: a.scope_type, id: a.scope_id };
+  if (!ctx.isAdmin && !(bestRankOn_(ctx, scope) < ROLE_RANK[effectiveRoleCode_(a, ctx.lookup)])) {
+    throw new PpmError('FORBIDDEN', 'Un rôle se retire depuis un niveau supérieur au sien.');
   }
-  return repoUpdate('RoleAssignment', id, { end_date: addCalendarDays(todayStr(), -1) }, p.version, ctx.actx);
+  return withLock(function () {
+    var rec = repoUpdate('RoleAssignment', id, { end_date: addCalendarDays(todayStr(), -1) }, p.version, ctx.actx);
+    var kind = objectKindOf_(scope, ctx.lookup);
+    if (PRINCIPAL_ROLE[kind] && (a.role_code === PRINCIPAL_ROLE[kind] || (a.role_code === 'RWP' && PRINCIPAL_ROLE[kind] !== 'DO'))) syncPrincipal_(kind, a.scope_id, ctx.actx);
+    return rec;
+  });
 });

@@ -8,7 +8,8 @@
  *     (hors WP)                       J Revue (jalon)   09/11          (Carla)
  *   A → B → C → J (fin-début)
  *
- *   Rôles : Dora DPL du programme, Carla CP, Rémi RWP du WP 1, Mia membre du projet.
+ *   Rôles (huit niveaux, 0.15.3) : Dora DPL des projets P1 et P2, Carla CP de P1 (posée par la fiche projet), Rémi Workpackage leader du WP 1 et Deliverable owner de A et B
+ *   (posés par leur responsable), Mia Contributor de A, B, C et J.
  *   Xavier : externe, adresse hors domaine.
  */
 const { freshCore } = require('./harness');
@@ -34,19 +35,18 @@ function lot2World(opts = {}) {
   const p1 = call(A, 'projects.create', { values: { code: 'P1', name: 'Projet 1', program_id: prog.id, status: 'Actif', holiday_country: 'FR', manager_resource_id: carla.id } });
   const p2 = call(A, 'projects.create', { values: { code: 'P2', name: 'Projet vide', program_id: prog.id, status: 'Actif', holiday_country: 'FR' } });
   const role = (r, code, type, id) => c.repoInsert('RoleAssignment', { resource_id: r.id, role_code: code, scope_type: type, scope_id: id }, S);
-  role(dora, 'DPL', 'program', prog.id);
-  role(carla, 'CP', 'project', p1.id);
-  role(mia, 'MEMBER', 'project', p1.id);
+  role(dora, 'DPL', 'project', p1.id);
+  role(dora, 'DPL', 'project', p2.id);
   const w1 = call(A, 'workpackages.create', { values: { project_id: p1.id, wbs_code: '1', name: 'Conception', owner_resource_id: remi.id } });
   const w11 = call(A, 'workpackages.create', { values: { project_id: p1.id, wbs_code: '1.1', name: 'Calcul', parent_wp_id: w1.id } });
   const w2 = call(A, 'workpackages.create', { values: { project_id: p1.id, wbs_code: '2', name: 'Essais', owner_resource_id: carla.id } });
-  role(remi, 'RWP', 'workpackage', w1.id);
   const item = (name, type, s, f, wp, owner) => call(A, 'planitems.create', { values: {
     project_id: p1.id, name, item_type: type, planned_start: s, planned_finish: f, wp_id: wp ? wp.id : '', owner_resource_id: owner.id } });
   const a = item('Spécification', 'Livrable', '2026-10-05', '2026-10-09', w1, remi);
   const b = item('Calcul', 'Livrable', '2026-10-12', '2026-10-23', w11, remi);
   const cc = item('Essais', 'Livrable', '2026-10-26', '2026-11-06', w2, carla);
   const j = item('Revue', 'Jalon', '2026-11-09', '2026-11-09', null, carla);
+  [a, b, cc, j].forEach((x) => role(mia, 'CONTRIB', 'planitem', x.id));
   [[a, b], [b, cc], [cc, j]].forEach((x) => call(A, 'dependencies.create', { values: { predecessor_id: x[0].id, successor_id: x[1].id, dep_type: 'FS' } }));
   c.SENT_MAILS.length = 0;
   return { c, S, A, raw, call, carla, remi, mia, dora, xavier, prog, p1, p2, w1, w11, w2, a, b, cc, j };

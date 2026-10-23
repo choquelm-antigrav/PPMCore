@@ -13,7 +13,6 @@ module.exports = function () {
     const proj = call('admin@entreprise.com', 'projects.create', {
       values: { code: 'P1', name: 'Projet 1', program_id: prog.id, manager_resource_id: alice.id, status: 'Actif', holiday_country: 'FR' }
     }).data;
-    c.repoInsert('RoleAssignment', { resource_id: alice.id, role_code: 'CP', scope_type: 'project', scope_id: proj.id }, S);
     return { c, call, alice, prog, proj };
   }
 

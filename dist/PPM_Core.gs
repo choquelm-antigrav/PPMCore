@@ -1,7 +1,7 @@
 /**
- * PPM Core 0.15.2 — fichier unique à installer (fabriqué par tools/build.js, empreinte 7aaa8d1fcb39).
+ * PPM Core 0.15.2 — fichier unique à installer (fabriqué par tools/build.js, empreinte 9412264fb9f2).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
- * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs.
+ * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs, 53_Roles.gs.
  */
 
 // ======================================================================
@@ -22,6 +22,7 @@
  *   A6_EFFACER_DEMO           supprime la démo (programmes DEMO et NAC) pour la recréer ; deux lancements : le premier montre, le second supprime
  *   A7_TESTER_DANS_APPS_SCRIPT  test de contrôle avec les vrais services Google, en lecture seule (rien n'est écrit)
  *   A8_VERIFIER_ECRITURE        le seul test qui écrit : une feuille temporaire (supprimée) pour vérifier que les textes restent des textes
+ *   A9_MIGRER_ROLES             reprend les rôles et responsables d'avant la 0.15.3 (DPL, responsable de WP, membre…) dans les huit niveaux (additive, relançable ; _SIMULATION : compte seulement)
  * Les implémentations sont dans 20_Setup.gs, 21_LiveTest.gs, 40_Jobs.gs et 47_Demo.gs.
  */
 function A1_INSTALLER_PPM() { return installerPpm_(); }
@@ -32,6 +33,8 @@ function A5_INSTALLER_DECLENCHEURS() { return installTriggers(); }
 function A6_EFFACER_DEMO() { return effacerDemo_(); }
 function A7_TESTER_DANS_APPS_SCRIPT() { return testerDansAppsScript_(); }
 function A8_VERIFIER_ECRITURE() { return verifierEcritureAvecJournal_(); }
+function A9_MIGRER_ROLES() { return migrerRoles_(false); }
+function A9_MIGRER_ROLES_SIMULATION() { return migrerRoles_(true); }
 
 // ======================================================================
 // 00_Config.gs
@@ -64,52 +67,90 @@ var THRESHOLDS = {
 /** Conversion probabilité 1–5 → pourcentage (section 5.7). */
 var PROBABILITY_MAP = { 1: 0.1, 2: 0.3, 3: 0.5, 4: 0.7, 5: 0.9 };
 
-/** Rang des rôles : on ne peut attribuer qu'un rôle de rang égal ou inférieur au sien. */
-var ROLE_RANK = { PL: 0, DPL: 1, CP: 2, RWP: 3, MEMBER: 4 };
+/**
+ * Huit niveaux de responsabilité (0.15.3). Le numéro le plus BAS est le niveau le plus haut ; un niveau a les droits de ceux du dessous (règle 2).
+ *   0 Program Leader (programme) · 1 Domain Program Leader (plusieurs projets) · 2 Chef de projet (un projet) · 3 Workpackage leader (un workpackage)
+ *   4 Sub-workpackage leader (un sous-workpackage) · 5 Deliverable owner (un livrable ou un jalon) · 6 Contributor (avancement d'un livrable ou d'un jalon)
+ *   7 Reader : rôle PAR DÉFAUT de toute personne sans autre rôle, jamais enregistré ; lit tout, ne modifie rien.
+ * Les rôles se cumulent (règle 3) : on peut être Contributor d'un livrable et Workpackage leader d'un autre workpackage.
+ */
+var ROLE_RANK = { PL: 0, DPL: 1, CP: 2, WPL: 3, SWPL: 4, DO: 5, CONTRIB: 6, READER: 7 };
 
-/** Rôles (section 7). MEMBER = membre affecté (affectation explicite ou ligne budgétaire). */
-var ROLES = ['PL', 'DPL', 'CP', 'RWP', 'MEMBER'];
+var ROLES = ['PL', 'DPL', 'CP', 'WPL', 'SWPL', 'DO', 'CONTRIB', 'READER'];
+
+/** Rôles qu'on enregistre (READER est implicite). */
+var ASSIGNABLE_ROLES = ['PL', 'DPL', 'CP', 'WPL', 'SWPL', 'DO', 'CONTRIB'];
 
 var ROLE_LABELS = {
   PL: 'Program Leader',
   DPL: 'Domain Program Leader',
   CP: 'Chef de projet',
-  RWP: 'Responsable de workpackage',
-  MEMBER: 'Membre affecté'
+  WPL: 'Workpackage leader',
+  SWPL: 'Sub-workpackage leader',
+  DO: 'Deliverable owner',
+  CONTRIB: 'Contributor',
+  READER: 'Reader'
+};
+
+/** Sur quel type d'objet chaque rôle se pose, et nulle part ailleurs : pas de chef de projet sur un livrable, pas de Deliverable owner sur un workpackage. */
+var ROLE_OBJECT = { PL: 'program', DPL: 'project', CP: 'project', WPL: 'workpackage', SWPL: 'subworkpackage', DO: 'planitem', CONTRIB: 'planitem' };
+var OBJECT_LABELS = { program: 'un programme', project: 'un projet', workpackage: 'un workpackage', subworkpackage: 'un sous-workpackage', planitem: 'un livrable ou un jalon' };
+
+/** Anciens codes (avant 0.15.3), reconnus seulement par la migration. */
+var LEGACY_ROLE_CODES = ['RWP', 'MEMBER'];
+
+/**
+ * Droits d'écriture, exprimés par NIVEAU MINIMAL : le rôle indiqué et tous ceux du dessus l'ont, sur l'objet où le rôle est posé et tout ce qu'il contient.
+ * 'wbs.edit' et 'wbs.delete' ont ici un niveau de base, affiné selon le type d'objet visé (voir wbsLevel_ dans 05_Rbac.gs).
+ * L'administrateur plateforme a tous les droits. Les actions de portée « global » sont accordées si l'on détient le rôle sur n'importe quel périmètre.
+ */
+var PERMISSION_LEVEL = {
+  'program.create':   'PL',
+  'sheet.roles':      'DPL',     // modifier DIRECTEMENT dans le classeur les feuilles Rôles et personnes (la protection du classeur en découle : 51_SheetProtect.gs)
+  'sheet.budget':     'CP',      // idem pour les feuilles Budget et achats
+  'program.view':     'DPL',     // vues consolidées de tous les projets d'un programme (Actualités, Suivi, Budget)
+  'project.create':   'DPL',
+  'wbs.edit':         'DO',      // modifier un objet, ou créer dedans : le niveau exact dépend de l'objet (projet CP, workpackage WPL, sous-workpackage SWPL, livrable DO)
+  'wbs.delete':       'DO',      // supprimer un objet : projet DPL, workpackage CP, sous-workpackage WPL, livrable ou jalon DO
+  'progress.declare': 'CONTRIB',
+  'baseline.manage':  'CP',
+  'baseline.request': 'CONTRIB',
+  'budget.edit':      'WPL',
+  'cpn.edit':         'CP',
+  'po.edit':          'CONTRIB',
+  'ratecard.manage':  'CP',
+  'actuals.manage':   'CP',
+  'roles.assign':     'DO',      // poser un rôle : le niveau exact dépend du rôle posé (voir roleAssignError_ dans 05_Rbac.gs)
+  'resource.edit':    'CP',      // créer et modifier les personnes (page Ressources)
+  'risk.create':      'CONTRIB',
+  'risk.edit':        'CP',
+  'changes.ack':      'CP',
+  'workspace.manage': 'CP',
+  'insight.decide':   'CP',
+  'news.add':         'CP',
+  'news.manage':      'CP',
+  'sensitive.read':   'WPL',     // lire les tarifs journaliers et les comptes rendus de réunion (le budget se lit avec budget.edit, sur son périmètre : un WPL voit celui de son workpackage) ; tout le reste se lit sans rôle
+  'addon.install':    '*'
 };
 
 /**
- * Matrice des droits d'écriture (section 7).
- * '*' = tout utilisateur authentifié. L'administrateur plateforme a tous les droits.
- * Les actions de portée « global » (rate card, création de programme) sont accordées
- * si l'utilisateur détient le rôle sur n'importe quel périmètre.
+ * Droits « en profondeur » : un rôle détenu n'importe où DANS le périmètre visé compte (un Contributor sur un livrable peut demander une baseline pour son projet,
+ * un DPL posé sur des projets voit les vues consolidées de leur programme).
  */
-var PERMISSIONS = {
-  'program.create':   ['PL'],
-  'sheet.roles':      ['PL', 'DPL'],       // modifier DIRECTEMENT dans le classeur les feuilles Rôles et personnes (la protection du classeur en découle : 51_SheetProtect.gs)
-  'sheet.budget':     ['PL', 'DPL', 'CP'], // idem pour les feuilles Budget et achats
-  'program.view':     ['PL', 'DPL'], // vues consolidées de tous les projets d'un programme (Actualités, Suivi, Budget)
-  'project.create':   ['PL', 'DPL'],
-  'wbs.edit':         ['PL', 'DPL', 'CP', 'RWP'],
-  'progress.declare': ['DPL', 'CP', 'RWP', 'MEMBER'],
-  'baseline.manage':  ['DPL', 'CP'],
-  'baseline.request': ['PL', 'DPL', 'CP', 'RWP', 'MEMBER'],
-  'budget.edit':      ['PL', 'DPL', 'CP', 'RWP'],
-  'cpn.edit':         ['PL', 'DPL', 'CP'],
-  'po.edit':          ['PL', 'DPL', 'CP', 'RWP', 'MEMBER'],
-  'ratecard.manage':  ['DPL', 'CP'],
-  'actuals.manage':   ['DPL', 'CP'],
-  'roles.assign':     ['PL', 'DPL', 'CP'],
-  'resource.edit':    ['PL', 'DPL', 'CP'],
-  'risk.create':      ['PL', 'DPL', 'CP', 'RWP', 'MEMBER'],
-  'risk.edit':        ['PL', 'DPL', 'CP'],
-  'changes.ack':      ['DPL', 'CP'],
-  'workspace.manage': ['PL', 'DPL', 'CP'],
-  'insight.decide':   ['PL', 'DPL', 'CP'],
-  'news.add':         ['PL', 'DPL', 'CP'],
-  'news.manage':      ['PL', 'DPL', 'CP'],
-  'addon.install':    ['*']
+var PERMISSION_DEEP = {
+  'baseline.request': true, 'po.edit': true, 'risk.create': true, 'sensitive.read': true,
+  'program.view': true, 'project.create': true
 };
+
+/** Les rôles autorisés par droit, déduits des niveaux (conservé pour la protection du classeur et les libellés). */
+var PERMISSIONS = (function () {
+  var out = {};
+  Object.keys(PERMISSION_LEVEL).forEach(function (action) {
+    var min = PERMISSION_LEVEL[action];
+    out[action] = min === '*' ? ['*'] : ASSIGNABLE_ROLES.filter(function (r) { return ROLE_RANK[r] <= ROLE_RANK[min]; });
+  });
+  return out;
+})();
 
 /** Durée d'une tranche de traitement planifié (plafond Apps Script : 6 min par exécution). */
 var JOB_SLICE_MS = 5 * 60 * 1000;
@@ -345,7 +386,7 @@ var SCHEMA = {
     book: 'data',
     cols: ['id', 'resource_id', 'role_code', 'scope_type', 'scope_id', 'start_date', 'end_date'],
     required: ['resource_id', 'role_code', 'scope_type', 'scope_id'],
-    enums: { role_code: ROLES, scope_type: ['program', 'project', 'workpackage'] }
+    enums: { role_code: ASSIGNABLE_ROLES.concat(LEGACY_ROLE_CODES), scope_type: ['program', 'project', 'workpackage', 'planitem'] }
   },
 
   // ---------- Classeur Données : fil d'actualités du projet (0.12.0) ----------
@@ -1093,14 +1134,13 @@ function dependencyViolations(items, deps, holFor) {
 /**
  * PPM Core — droits contextualisés (section 7).
  *
- * Un droit détenu sur un périmètre vaut pour tout ce qu'il contient :
- *   programme ⊃ projet ⊃ workpackage (⊃ sous-WP) ⊃ livrable/jalon.
- * Les rôles se cumulent. Un « membre affecté » (MEMBER) l'est par affectation
- * explicite ou par une ligne budgétaire sur le livrable.
+ * Un rôle posé sur un objet vaut pour tout ce qu'il contient (règle 2) :
+ *   programme ⊃ projet ⊃ workpackage ⊃ sous-workpackage ⊃ livrable/jalon.
+ * Les rôles se cumulent (règle 3). Huit niveaux (00_Config.gs) : PL, DPL, CP, WPL, SWPL, DO, CONTRIB, READER (implicite : lit tout, ne modifie rien).
+ * Un droit est exprimé par un NIVEAU MINIMAL : ce niveau et tous ceux du dessus l'ont. Les droits d'écriture sur le WBS dépendent du type d'objet visé.
  *
  * Toutes les fonctions reçoivent un objet lookup, ce qui les rend testables :
  *   lookup.planitem(id), lookup.workpackage(id), lookup.project(id), lookup.risk(id)
- *   lookup.budgetMember(resourceId, planItemId) → booléen
  */
 
 /**
@@ -1150,33 +1190,103 @@ function activeAssignments(resourceId, assignments, today) {
   });
 }
 
+/** Les rôles enregistrables de rang au plus égal à celui donné : le rôle et tous ceux du dessus. */
+function rolesUpTo_(rank) {
+  return ASSIGNABLE_ROLES.filter(function (r) { return ROLE_RANK[r] <= rank; });
+}
+
+/**
+ * Genre d'objet d'un périmètre : programme, projet, workpackage, sous-workpackage (un workpackage qui a un parent) ou livrable/jalon.
+ * Sert à savoir quel rôle peut y être posé et quel niveau y modifie.
+ */
+function objectKindOf_(scope, lookup) {
+  if (!scope) return '';
+  if (scope.type === 'workpackage') {
+    var w = lookup.workpackage(scope.id);
+    return w && !isBlank(w.parent_wp_id) ? 'subworkpackage' : 'workpackage';
+  }
+  return scope.type;
+}
+
+/**
+ * Rang minimal (numéro le plus haut) qui peut agir sur l'objet visé avec wbs.edit (modifier l'objet, ou créer dedans) ou wbs.delete (le supprimer) :
+ * le niveau de l'objet modifie ; le niveau du dessus crée et supprime l'objet (sauf un livrable ou un jalon, que son Deliverable owner supprime aussi).
+ */
+function wbsRank_(action, scope, lookup) {
+  var del = action === 'wbs.delete';
+  switch (objectKindOf_(scope, lookup)) {
+    case 'program': return 0;
+    case 'project': return del ? 1 : 2;
+    case 'workpackage': return del ? 2 : 3;
+    case 'subworkpackage': return del ? 3 : 4;
+    case 'planitem': return 5;
+    default: return 2;
+  }
+}
+
+/** Les rôles qui ont ce droit sur ce périmètre. */
+function permissionRoles_(action, scope, lookup) {
+  if ((action === 'wbs.edit' || action === 'wbs.delete') && scope && scope.type !== 'global') return rolesUpTo_(wbsRank_(action, scope, lookup));
+  return PERMISSIONS[action];
+}
+
+/**
+ * Code de rôle réellement appliqué : les anciens codes d'avant la 0.15.3 gardent leurs droits jusqu'à la migration (A9_MIGRER_ROLES) ;
+ * le responsable de workpackage devient Workpackage leader (ou Sub-workpackage leader sur un sous-workpackage), le membre devient Contributor.
+ */
+function effectiveRoleCode_(a, lookup) {
+  if (a.role_code === 'RWP') {
+    var w = a.scope_type === 'workpackage' && lookup ? lookup.workpackage(a.scope_id) : null;
+    return w && !isBlank(w.parent_wp_id) ? 'SWPL' : 'WPL';
+  }
+  if (a.role_code === 'MEMBER') return 'CONTRIB';
+  return a.role_code;
+}
+
+function sameScope_(s, type, id) { return s.type === type && String(s.id) === String(id); }
+
+/** Le périmètre de l'affectation est-il dans (ou égal à) la cible ? */
+function assignmentWithin_(a, target, lookup) {
+  return scopeAncestors({ type: a.scope_type, id: a.scope_id }, lookup).some(function (s) { return sameScope_(s, target.type, target.id); });
+}
+
+/** Affectations actives d'une ressource à une date donnée. */
+function activeAssignments(resourceId, assignments, today) {
+  return (assignments || []).filter(function (a) {
+    if (isTrue(a.deleted) || a.resource_id !== resourceId) return false;
+    if (!isBlank(a.start_date) && String(a.start_date) > today) return false;
+    if (!isBlank(a.end_date) && String(a.end_date) < today) return false;
+    return true;
+  });
+}
+
 /**
  * L'utilisateur peut-il faire action sur scope ?
  * ctx : { resourceId, isAdmin, assignments (actives), lookup }
+ * Hors administrateur, il faut détenir, sur le périmètre ou un périmètre qui le contient, un rôle de niveau suffisant ; pour les droits « en profondeur »
+ * (PERMISSION_DEEP), un rôle détenu n'importe où dans le périmètre visé compte aussi.
  */
 function can(ctx, action, scope) {
-  var allowed = PERMISSIONS[action];
-  if (!allowed) throw new PpmError('CONFIG', 'Action sans règle de droits : ' + action);
+  var level = PERMISSION_LEVEL[action];
+  if (!level) throw new PpmError('CONFIG', 'Action sans règle de droits : ' + action);
   if (ctx.isAdmin) return true;
-  if (allowed.indexOf('*') >= 0) return true;
+  if (level === '*') return true;
   if (!ctx.resourceId) return false;
 
-  var roles = ctx.assignments || [];
+  // un risque se rattache au projet : pour un droit « en profondeur », on raisonne sur ce projet
+  if (PERMISSION_DEEP[action] && scope && scope.type === 'risk') scope = parentScope(scope, ctx.lookup) || scope;
+  var allowed = permissionRoles_(action, scope, ctx.lookup);
+  var roles = (ctx.assignments || []).map(function (a) {
+    return { code: effectiveRoleCode_(a, ctx.lookup), scope_type: a.scope_type, scope_id: a.scope_id };
+  }).filter(function (a) { return allowed.indexOf(a.code) >= 0; });
+  if (!roles.length) return false;
 
-  if (!scope || scope.type === 'global') {
-    return roles.some(function (a) { return allowed.indexOf(a.role_code) >= 0; });
-  }
+  if (!scope || scope.type === 'global') return true;
 
   var chain = scopeAncestors(scope, ctx.lookup);
-  var granted = roles.some(function (a) {
-    if (allowed.indexOf(a.role_code) < 0) return false;
-    return chain.some(function (s) { return s.type === a.scope_type && String(s.id) === String(a.scope_id); });
-  });
-  if (granted) return true;
-
-  // Membre affecté par une ligne budgétaire sur le livrable visé.
-  if (allowed.indexOf('MEMBER') >= 0 && scope.type === 'planitem' && ctx.lookup.budgetMember) {
-    return ctx.lookup.budgetMember(ctx.resourceId, scope.id) === true;
+  if (roles.some(function (a) { return chain.some(function (s) { return sameScope_(s, a.scope_type, a.scope_id); }); })) return true;
+  if (PERMISSION_DEEP[action] && (scope.type === 'project' || scope.type === 'program')) {
+    return roles.some(function (a) { return assignmentWithin_({ scope_type: a.scope_type, scope_id: a.scope_id }, scope, ctx.lookup); });
   }
   return false;
 }
@@ -1186,6 +1296,48 @@ function requireCan(ctx, action, scope) {
   if (!can(ctx, action, scope)) {
     throw new PpmError('FORBIDDEN', 'Droit insuffisant pour « ' + action + ' »', { scope: scope });
   }
+}
+
+/** Meilleur rang (numéro le plus bas) détenu par l'appelant sur le périmètre ou un périmètre englobant ; 99 s'il n'en a aucun. */
+function bestRankOn_(ctx, scope) {
+  var chain = scopeAncestors(scope, ctx.lookup), best = 99;
+  (ctx.assignments || []).forEach(function (a) {
+    if (!chain.some(function (s) { return sameScope_(s, a.scope_type, a.scope_id); })) return;
+    var r = ROLE_RANK[effectiveRoleCode_(a, ctx.lookup)];
+    if (r !== undefined && r < best) best = r;
+  });
+  return best;
+}
+
+/**
+ * Peut-on poser ce rôle sur cet objet ? Renvoie null si oui, sinon la raison.
+ *   1. le rôle se pose sur son type d'objet et nulle part ailleurs (pas de chef de projet sur un livrable, pas de Deliverable owner sur un workpackage) ;
+ *   2. c'est un niveau STRICTEMENT supérieur, détenu sur l'objet ou au-dessus, qui le pose (un livrable reçoit son Deliverable owner d'un Sub-workpackage leader ou au-dessus) ;
+ *   3. Reader ne se pose pas : c'est le rôle par défaut. Le Program Leader est posé par l'administrateur (personne n'est au-dessus).
+ */
+function roleAssignCheck_(ctx, roleCode, scope) {
+  var bad = function (code, message) { return { code: code, message: message }; };
+  if (roleCode === 'READER') return bad('VALIDATION', 'Reader est le rôle par défaut de toute personne sans autre rôle : il ne se pose pas.');
+  if (ASSIGNABLE_ROLES.indexOf(roleCode) < 0) return bad('VALIDATION', 'Rôle inconnu : ' + roleCode);
+  var kind = objectKindOf_(scope, ctx.lookup), want = ROLE_OBJECT[roleCode];
+  if (kind !== want) return bad('VALIDATION', ROLE_LABELS[roleCode] + ' se pose sur ' + OBJECT_LABELS[want] + ', pas sur ' + (OBJECT_LABELS[kind] || 'cet objet') + '.');
+  if (ctx.isAdmin) return null;
+  if (!(bestRankOn_(ctx, scope) < ROLE_RANK[roleCode])) {
+    return bad('FORBIDDEN', roleCode === 'PL' ? 'Le Program Leader est désigné par l’administrateur.'
+      : ROLE_LABELS[roleCode] + ' est désigné par un niveau supérieur au sien sur ' + OBJECT_LABELS[kind] + '.');
+  }
+  return null;
+}
+
+/** Même contrôle, en message seul (null si le rôle peut être posé). */
+function roleAssignError_(ctx, roleCode, scope) {
+  var c = roleAssignCheck_(ctx, roleCode, scope);
+  return c ? c.message : null;
+}
+
+/** Les rôles que l'appelant peut poser sur cet objet. */
+function assignableRolesOn_(ctx, scope) {
+  return ASSIGNABLE_ROLES.filter(function (r) { return roleAssignError_(ctx, r, scope) === null; });
 }
 
 // ======================================================================
@@ -2030,6 +2182,10 @@ function projectIdOf(table, rec) {
           var w = repoGet('WorkPackage', rec.scope_id);
           return w ? w.project_id : '';
         }
+        if (rec.scope_type === 'planitem') {
+          var pi = repoGet('PlanItem', rec.scope_id);
+          return pi ? pi.project_id : '';
+        }
         return '';
       default: return '';
     }
@@ -2158,7 +2314,7 @@ function runHooks(table, before, rec, actx) {
 
 /**
  * Une attribution de rôle saisie dans AppSheet est revérifiée comme par l'API :
- * droit « roles.assign » sur le périmètre et rang au plus égal au sien (section 7).
+ * bon type d'objet pour le rôle, et niveau strictement supérieur détenu sur l'objet ou au-dessus (roleAssignCheck_, 05_Rbac.gs).
  * Si elle n'est pas permise, elle est annulée et son auteur prévenu.
  */
 function hookRoleAssignmentGuard(before, rec, actx) {
@@ -2169,12 +2325,12 @@ function hookRoleAssignmentGuard(before, rec, actx) {
   // La ligne contrôlée ne peut pas servir à se donner raison (auto-nomination).
   ctx.assignments = ctx.assignments.filter(function (a) { return a.id !== rec.id; });
   var scope = { type: rec.scope_type, id: rec.scope_id };
-  var allowed = ctx.isAdmin || (can(ctx, 'roles.assign', scope) && ROLE_RANK[rec.role_code] >= bestRankOn_(ctx, scope));
+  var allowed = roleAssignError_(ctx, rec.role_code, scope) === null;
   if (allowed) return true;
   repoUpdate('RoleAssignment', rec.id, { deleted: true }, null, { actor: 'ppm-core', source: 'core' });
   notifyUser(actx.actor, 'Attribution de rôle annulée',
-    'Vous ne pouvez pas attribuer le rôle ' + rec.role_code + ' sur ce périmètre : il faut détenir le droit ' +
-    'd’attribuer les rôles et un rôle au moins aussi élevé. L’attribution a été annulée.');
+    'Vous ne pouvez pas attribuer le rôle ' + rec.role_code + ' sur cet objet : un rôle se pose sur son type d’objet et ' +
+    'depuis un niveau supérieur au sien. L’attribution a été annulée.');
   return false;
 }
 
@@ -2426,10 +2582,9 @@ function ensureSheet_(ss, name) {
 var SETUP_ACTX = { actor: 'setup', source: 'setup' };
 
 function seedRoles_() {
-  var levels = { PL: 'program', DPL: 'program', CP: 'project', RWP: 'workpackage', MEMBER: 'project' };
   ROLES.forEach(function (code) {
     if (!repoGet('Role', code)) {
-      repoInsert('Role', { id: code, code: code, label: ROLE_LABELS[code], scope_level: levels[code] }, SETUP_ACTX);
+      repoInsert('Role', { id: code, code: code, label: ROLE_LABELS[code], scope_level: ROLE_OBJECT[code] || '' }, SETUP_ACTX);
     }
   });
 }
@@ -2997,14 +3152,22 @@ defineAction('projects.create', function (p, ctx) {
   var v = p.values || {};
   requireCan(ctx, 'project.create', isBlank(v.program_id) ? { type: 'global' } : { type: 'program', id: v.program_id });
   if (!isBlank(v.program_id)) mustGet('Program', v.program_id);
-  return repoInsert('Project', v, ctx.actx);
+  var projRec = repoInsert('Project', v, ctx.actx);
+  applyPrincipal_(ctx.actx, 'project', projRec.id, '', projRec.manager_resource_id);
+  autoAssignCreatorDpl_(ctx, projRec);
+  return projRec;
 });
 
 defineAction('projects.update', function (p, ctx) {
   var id = requireParam(p, 'id');
   mustGet('Project', id);
+  var projBefore = mustGet('Project', id);
   requireCan(ctx, 'wbs.edit', { type: 'project', id: id });
-  return repoUpdate('Project', id, p.patch || {}, p.version, ctx.actx);
+  var projPatch = p.patch || {};
+  if ('manager_resource_id' in projPatch) assertCanSetPrincipal_(ctx, 'project', { type: 'project', id: id }, projBefore.manager_resource_id, projPatch.manager_resource_id);
+  var projAfter = repoUpdate('Project', id, projPatch, p.version, ctx.actx);
+  if ('manager_resource_id' in projPatch) applyPrincipal_(ctx.actx, 'project', id, projBefore.manager_resource_id, projAfter.manager_resource_id);
+  return projAfter;
 });
 
 defineAction('workpackages.list', function (p) {
@@ -3021,22 +3184,28 @@ defineAction('workpackages.create', function (p, ctx) {
     if (parent.project_id !== v.project_id) throw new PpmError('VALIDATION', 'Le WP parent appartient à un autre projet.');
   }
   requireCan(ctx, 'wbs.edit', isBlank(v.parent_wp_id) ? { type: 'project', id: v.project_id } : { type: 'workpackage', id: v.parent_wp_id });
-  return repoInsert('WorkPackage', v, ctx.actx);
+  var wpRec = repoInsert('WorkPackage', v, ctx.actx);
+  applyPrincipal_(ctx.actx, isBlank(wpRec.parent_wp_id) ? 'workpackage' : 'subworkpackage', wpRec.id, '', wpRec.owner_resource_id);
+  return wpRec;
 });
 
 defineAction('workpackages.update', function (p, ctx) {
   var id = requireParam(p, 'id');
-  mustGet('WorkPackage', id);
+  var wpBefore = mustGet('WorkPackage', id);
   requireCan(ctx, 'wbs.edit', { type: 'workpackage', id: id });
   var patch = Object.assign({}, p.patch || {});
   delete patch.project_id;
-  return repoUpdate('WorkPackage', id, patch, p.version, ctx.actx);
+  var wpKind = isBlank(wpBefore.parent_wp_id) ? 'workpackage' : 'subworkpackage';
+  if ('owner_resource_id' in patch) assertCanSetPrincipal_(ctx, wpKind, { type: 'workpackage', id: id }, wpBefore.owner_resource_id, patch.owner_resource_id);
+  var wpAfter = repoUpdate('WorkPackage', id, patch, p.version, ctx.actx);
+  if ('owner_resource_id' in patch) applyPrincipal_(ctx.actx, wpKind, id, wpBefore.owner_resource_id, wpAfter.owner_resource_id);
+  return wpAfter;
 });
 
 defineAction('workpackages.delete', function (p, ctx) {
   var id = requireParam(p, 'id');
   mustGet('WorkPackage', id);
-  requireCan(ctx, 'wbs.edit', { type: 'workpackage', id: id });
+  requireCan(ctx, 'wbs.delete', { type: 'workpackage', id: id });
   return repoSoftDelete('WorkPackage', id, p.version, ctx.actx);
 });
 
@@ -3055,22 +3224,27 @@ defineAction('planitems.create', function (p, ctx) {
   }
   requireCan(ctx, 'wbs.edit', isBlank(v.wp_id) ? { type: 'project', id: v.project_id } : { type: 'workpackage', id: v.wp_id });
   var values = Object.assign({ status: 'À faire', progress_pct: 0 }, v);
-  return repoInsert('PlanItem', values, ctx.actx);
+  var itemRec = repoInsert('PlanItem', values, ctx.actx);
+  applyPrincipal_(ctx.actx, 'planitem', itemRec.id, '', itemRec.owner_resource_id);
+  return itemRec;
 });
 
 defineAction('planitems.update', function (p, ctx) {
   var id = requireParam(p, 'id');
-  mustGet('PlanItem', id);
+  var itemBefore = mustGet('PlanItem', id);
   requireCan(ctx, 'wbs.edit', { type: 'planitem', id: id });
   var patch = Object.assign({}, p.patch || {});
   ['project_id', 'progress_pct', 'status', 'last_progress_at'].forEach(function (k) { delete patch[k]; });
-  return repoUpdate('PlanItem', id, patch, p.version, ctx.actx);
+  if ('owner_resource_id' in patch) assertCanSetPrincipal_(ctx, 'planitem', { type: 'planitem', id: id }, itemBefore.owner_resource_id, patch.owner_resource_id);
+  var itemAfter = repoUpdate('PlanItem', id, patch, p.version, ctx.actx);
+  if ('owner_resource_id' in patch) applyPrincipal_(ctx.actx, 'planitem', id, itemBefore.owner_resource_id, itemAfter.owner_resource_id);
+  return itemAfter;
 });
 
 defineAction('planitems.delete', function (p, ctx) {
   var id = requireParam(p, 'id');
   mustGet('PlanItem', id);
-  requireCan(ctx, 'wbs.edit', { type: 'planitem', id: id });
+  requireCan(ctx, 'wbs.delete', { type: 'planitem', id: id });
   return repoSoftDelete('PlanItem', id, p.version, ctx.actx);
 });
 
@@ -3773,51 +3947,51 @@ defineAction('obs.list', function (p) {
   return buildObs(loadPlanningData_(), type, requireParam(p, 'scopeId'), todayStr());
 });
 
-var SCOPE_TABLE = { program: 'Program', project: 'Project', workpackage: 'WorkPackage' };
+var SCOPE_TABLE = { program: 'Program', project: 'Project', workpackage: 'WorkPackage', planitem: 'PlanItem' };
 
+/**
+ * Pose un rôle sur un objet. Règles (05_Rbac.gs, roleAssignCheck_) : le rôle se pose sur son type d'objet et nulle part ailleurs ; c'est un niveau strictement
+ * supérieur, détenu sur l'objet ou au-dessus, qui le pose. Reader ne se pose pas. Plusieurs personnes peuvent détenir le même rôle sur un objet.
+ */
 defineAction('roles.assign', function (p, ctx) {
   var v = p.values || {};
   var type = requireParam(v, 'scope_type');
   if (!SCOPE_TABLE[type]) throw new PpmError('VALIDATION', 'Périmètre invalide : ' + type);
   mustGet(SCOPE_TABLE[type], requireParam(v, 'scope_id'));
   mustGet('Resource', requireParam(v, 'resource_id'));
-  if (ROLES.indexOf(v.role_code) < 0) throw new PpmError('VALIDATION', 'Rôle inconnu : ' + v.role_code);
-  requireCan(ctx, 'roles.assign', { type: type, id: v.scope_id });
-  // On n'attribue pas un rôle plus élevé que le sien sur ce périmètre (un CP ne nomme pas un DPL).
-  if (!ctx.isAdmin && ROLE_RANK[v.role_code] < bestRankOn_(ctx, { type: type, id: v.scope_id })) {
-    throw new PpmError('FORBIDDEN', 'Vous ne pouvez pas attribuer un rôle plus élevé que le vôtre sur ce périmètre.');
-  }
+  var scope = { type: type, id: v.scope_id };
+  var problem = roleAssignCheck_(ctx, v.role_code, scope);
+  if (problem) throw new PpmError(problem.code, problem.message);
   var dup = repoList('RoleAssignment', function (a) {
     return a.resource_id === v.resource_id && a.role_code === v.role_code && a.scope_type === type &&
       String(a.scope_id) === String(v.scope_id) && (isBlank(a.end_date) || String(a.end_date) >= todayStr());
   });
   if (dup.length) throw new PpmError('VALIDATION', 'Ce rôle est déjà attribué à cette personne sur ce périmètre.');
-  return repoInsert('RoleAssignment', {
-    resource_id: v.resource_id, role_code: v.role_code, scope_type: type, scope_id: v.scope_id,
-    start_date: v.start_date || todayStr(), end_date: v.end_date || ''
-  }, ctx.actx);
-});
-
-/** Meilleur rang détenu par l'appelant sur le périmètre ou un périmètre englobant. */
-function bestRankOn_(ctx, scope) {
-  var chain = scopeAncestors(scope, ctx.lookup);
-  var best = 99;
-  ctx.assignments.forEach(function (a) {
-    var covers = chain.some(function (s) { return s.type === a.scope_type && String(s.id) === String(a.scope_id); });
-    if (covers && ROLE_RANK[a.role_code] < best) best = ROLE_RANK[a.role_code];
+  return withLock(function () {
+    var rec = repoInsert('RoleAssignment', {
+      resource_id: v.resource_id, role_code: v.role_code, scope_type: type, scope_id: v.scope_id,
+      start_date: v.start_date || todayStr(), end_date: v.end_date || ''
+    }, ctx.actx);
+    var kind = objectKindOf_(scope, ctx.lookup);
+    if (PRINCIPAL_ROLE[kind] === v.role_code) syncPrincipal_(kind, v.scope_id, ctx.actx);
+    return rec;
   });
-  return best;
-}
+});
 
 /** Fin d'une affectation : on renseigne la date de fin (hier), sans supprimer, pour garder l'historique. */
 defineAction('roles.end', function (p, ctx) {
   var id = requireParam(p, 'id');
   var a = mustGet('RoleAssignment', id);
-  requireCan(ctx, 'roles.assign', { type: a.scope_type, id: a.scope_id });
-  if (!ctx.isAdmin && ROLE_RANK[a.role_code] < bestRankOn_(ctx, { type: a.scope_type, id: a.scope_id })) {
-    throw new PpmError('FORBIDDEN', 'Vous ne pouvez pas retirer un rôle plus élevé que le vôtre.');
+  var scope = { type: a.scope_type, id: a.scope_id };
+  if (!ctx.isAdmin && !(bestRankOn_(ctx, scope) < ROLE_RANK[effectiveRoleCode_(a, ctx.lookup)])) {
+    throw new PpmError('FORBIDDEN', 'Un rôle se retire depuis un niveau supérieur au sien.');
   }
-  return repoUpdate('RoleAssignment', id, { end_date: addCalendarDays(todayStr(), -1) }, p.version, ctx.actx);
+  return withLock(function () {
+    var rec = repoUpdate('RoleAssignment', id, { end_date: addCalendarDays(todayStr(), -1) }, p.version, ctx.actx);
+    var kind = objectKindOf_(scope, ctx.lookup);
+    if (PRINCIPAL_ROLE[kind] && (a.role_code === PRINCIPAL_ROLE[kind] || (a.role_code === 'RWP' && PRINCIPAL_ROLE[kind] !== 'DO'))) syncPrincipal_(kind, a.scope_id, ctx.actx);
+    return rec;
+  });
 });
 
 // ======================================================================
@@ -3951,8 +4125,9 @@ function byName_(a, b) {
 // ---------------------------------------------------------------- OBS par rôles
 
 function scopeLabel_(data, type, id) {
-  var rec = ({ program: indexBy_(data.programs), project: indexBy_(data.projects), workpackage: indexBy_(data.workpackages) }[type] || {})[id];
+  var rec = ({ program: indexBy_(data.programs), project: indexBy_(data.projects), workpackage: indexBy_(data.workpackages), planitem: indexBy_(data.planitems || []) }[type] || {})[id];
   if (!rec) return '';
+  if (type === 'planitem') return rec.name;
   if (type === 'workpackage') return (rec.wbs_code ? rec.wbs_code + ' ' : '') + rec.name;
   return rec.code + ' — ' + rec.name;
 }
@@ -5078,11 +5253,12 @@ function projectMemberIds_(data, projectId, today) {
   var people = {};
   if (!isBlank(project.manager_resource_id)) people[project.manager_resource_id] = true;
   data.workpackages.forEach(function (w) { if (wpIds[w.id] && !isBlank(w.owner_resource_id)) people[w.owner_resource_id] = true; });
-  data.planitems.forEach(function (i) { if (i.project_id === projectId && !isBlank(i.owner_resource_id)) people[i.owner_resource_id] = true; });
+  var itemIds = {};
+  data.planitems.forEach(function (i) { if (i.project_id === projectId) { itemIds[i.id] = true; if (!isBlank(i.owner_resource_id)) people[i.owner_resource_id] = true; } });
   (data.assignments || []).forEach(function (a) {
     if (isTrue(a.deleted)) return;
     if (!isBlank(a.end_date) && String(a.end_date) < today) return;
-    var hit = (a.scope_type === 'project' && a.scope_id === projectId) || (a.scope_type === 'workpackage' && wpIds[a.scope_id]) ||
+    var hit = (a.scope_type === 'project' && a.scope_id === projectId) || (a.scope_type === 'workpackage' && wpIds[a.scope_id]) || (a.scope_type === 'planitem' && itemIds[a.scope_id]) ||
       (a.scope_type === 'program' && !isBlank(project.program_id) && a.scope_id === project.program_id);
     if (hit) people[a.resource_id] = true;
   });
@@ -6827,21 +7003,27 @@ function requireAdmin_(ctx) {
 // ---------------------------------------------------------------- Mon compte
 
 defineAction('account.get', function (p, ctx) {
-  var data = { programs: repoList('Program'), projects: repoList('Project'), workpackages: repoList('WorkPackage') };
+  var data = { programs: repoList('Program'), projects: repoList('Project'), workpackages: repoList('WorkPackage'), planitems: repoList('PlanItem') };
   var res = ctx.resourceId ? repoGet('Resource', ctx.resourceId) : null;
   var teams = indexBy_(repoList('HierarchicalTeam'));
   var row = userSettingRow_(ctx.email);
   var roles = (ctx.assignments || []).map(function (a) {
+    var code = effectiveRoleCode_(a, ctx.lookup);
     return {
-      role_code: a.role_code, role_label: ROLE_LABELS[a.role_code] || a.role_code, rank: ROLE_RANK[a.role_code],
+      role_code: code, role_label: ROLE_LABELS[code] || code, rank: ROLE_RANK[code],
       scope_type: a.scope_type, scope_id: a.scope_id, scope_label: scopeLabel_(data, a.scope_type, a.scope_id),
       since: a.start_date || '', until: a.end_date || ''
     };
   }).filter(function (r) { return r.scope_label; }).reduce(function (acc, r) {
-    var k = r.role_code + '|' + r.scope_type + '|' + r.scope_id;
+    // plusieurs livrables ou jalons avec le même rôle : une seule ligne, avec leur nombre
+    var k = r.role_code + '|' + r.scope_type + '|' + (r.scope_type === 'planitem' ? '' : r.scope_id);
     var i = acc.index[k];
-    if (i === undefined) { acc.index[k] = acc.list.length; acc.list.push(r); }
-    else if (r.since && (!acc.list[i].since || r.since < acc.list[i].since)) acc.list[i].since = r.since;
+    if (i === undefined) { acc.index[k] = acc.list.length; r.n = 1; acc.list.push(r); }
+    else {
+      var cur = acc.list[i];
+      if (r.scope_type === 'planitem') { cur.n++; cur.scope_label = countLabel_(cur.n, 'livrable ou jalon', 'livrables ou jalons'); cur.scope_id = ''; }
+      if (r.since && (!cur.since || r.since < cur.since)) cur.since = r.since;
+    }
     return acc;
   }, { list: [], index: {} }).list.sort(function (a, b) {
     return (a.rank - b.rank) || String(a.scope_label).localeCompare(String(b.scope_label), 'fr');
@@ -7476,6 +7658,7 @@ defineAction('wbs.create', function (p, ctx) {
       };
       applyWpCpn_(ctx, { project_id: projectId, parent_wp_id: parent ? parent.id : '', cpn: '', cpn_label: '', id: '' }, v, newWp);
       var rec = repoInsert('WorkPackage', newWp, ctx.actx);
+      applyPrincipal_(ctx.actx, parent ? 'subworkpackage' : 'workpackage', rec.id, '', owner);
       return { kind: 'wp', id: rec.id, record: rec };
     }
     if (!isBlank(parentId)) {
@@ -7491,6 +7674,7 @@ defineAction('wbs.create', function (p, ctx) {
       planned_start: dates.planned_start, planned_finish: dates.planned_finish, milestone_category: cat,
       status: 'À faire', progress_pct: 0
     }, ctx.actx);
+    applyPrincipal_(ctx.actx, 'planitem', item.id, '', owner);
     return { kind: 'item', id: item.id, record: item };
   });
 });
@@ -7523,7 +7707,11 @@ defineAction('wbs.update', function (p, ctx) {
         // un déplacement renumérote, sauf si un code est imposé
         if (!('wbs_code' in patch)) out.wbs_code = nextWbsCode_(wps.filter(function (x) { return x.id !== id; }), np);
       }
-      return { kind: 'wp', id: id, record: repoUpdate('WorkPackage', id, out, p.version, ctx.actx) };
+      var wkind = isBlank(w.parent_wp_id) ? 'workpackage' : 'subworkpackage';
+      if ('owner_resource_id' in out) assertCanSetPrincipal_(ctx, wkind, wbsScope_('workpackage', id), w.owner_resource_id, out.owner_resource_id);
+      var wrec = repoUpdate('WorkPackage', id, out, p.version, ctx.actx);
+      if ('owner_resource_id' in out) applyPrincipal_(ctx.actx, wkind, id, w.owner_resource_id, wrec.owner_resource_id);
+      return { kind: 'wp', id: id, record: wrec };
     }
     var it = mustGet('PlanItem', id);
     requireCan(ctx, 'wbs.edit', wbsScope_('planitem', id));
@@ -7549,7 +7737,10 @@ defineAction('wbs.update', function (p, ctx) {
       requireCan(ctx, 'wbs.edit', dest ? wbsScope_('workpackage', dest.id) : wbsScope_('project', it.project_id));
       out.wp_id = dest ? dest.id : '';
     }
-    return { kind: 'item', id: id, record: repoUpdate('PlanItem', id, out, p.version, ctx.actx) };
+    if ('owner_resource_id' in out) assertCanSetPrincipal_(ctx, 'planitem', wbsScope_('planitem', id), it.owner_resource_id, out.owner_resource_id);
+    var irec = repoUpdate('PlanItem', id, out, p.version, ctx.actx);
+    if ('owner_resource_id' in out) applyPrincipal_(ctx.actx, 'planitem', id, it.owner_resource_id, irec.owner_resource_id);
+    return { kind: 'item', id: id, record: irec };
   });
 });
 
@@ -7589,21 +7780,21 @@ defineAction('wbs.delete', function (p, ctx) {
     var add = function (c) { res.deleted.dependencies += c.dependencies; res.deleted.requirements += c.requirements; };
     if (kind === 'item') {
       mustGet('PlanItem', id);
-      requireCan(ctx, 'wbs.edit', wbsScope_('planitem', id));
+      requireCan(ctx, 'wbs.delete', wbsScope_('planitem', id));
       add(detachItem_(id, ctx.actx));
       repoSoftDelete('PlanItem', id, p.version, ctx.actx);
       res.deleted.items = 1;
       return res;
     }
     var w = mustGet('WorkPackage', id);
-    requireCan(ctx, 'wbs.edit', wbsScope_('workpackage', id));
+    requireCan(ctx, 'wbs.delete', wbsScope_('workpackage', id));
     var content = wpContent_(id, w.project_id);
     if ((content.wps.length || content.items.length) && !p.cascade) {
       throw new PpmError('VALIDATION', 'Ce workpackage contient ' + content.wps.length + ' sous-workpackage(s) et ' + content.items.length +
         ' élément(s) : déplacez-les, ou confirmez la suppression avec leur contenu.', { rule: 'NOT_EMPTY', wps: content.wps.length, items: content.items.length });
     }
     content.items.forEach(function (i) {
-      requireCan(ctx, 'wbs.edit', wbsScope_('planitem', i.id));
+      requireCan(ctx, 'wbs.delete', wbsScope_('planitem', i.id));
       add(detachItem_(i.id, ctx.actx));
       repoSoftDelete('PlanItem', i.id, null, ctx.actx);
       res.deleted.items++;
@@ -7703,23 +7894,27 @@ function checkLag_(v) {
 
 // ---------------------------------------------------------------- rôles
 
-/** Ce que l'utilisateur peut attribuer : les périmètres où il a le droit, avec le rang minimal des rôles qu'il peut donner. */
+/** Ce que l'utilisateur peut attribuer : pour chaque objet, les rôles qu'il peut y poser (règles de roleAssignCheck_ : bon type d'objet, niveau strictement supérieur). */
 defineAction('roles.options', function (p, ctx) {
   var out = [];
   var projects = indexBy_(repoList('Project'));
   var push = function (type, id, label) {
     var scope = { type: type, id: id };
-    if (!can(ctx, 'roles.assign', scope)) return;
-    out.push({ type: type, id: id, label: label, min_rank: ctx.isAdmin ? 0 : bestRankOn_(ctx, scope) });
+    var roles = assignableRolesOn_(ctx, scope);
+    if (!roles.length) return;
+    out.push({ type: type, id: id, label: label, roles: roles, min_rank: Math.min.apply(null, roles.map(function (r) { return ROLE_RANK[r]; })) });
   };
   repoList('Program').forEach(function (g) { push('program', g.id, g.code + ' — ' + g.name); });
   repoList('Project').forEach(function (x) { push('project', x.id, x.code + ' — ' + x.name); });
   repoList('WorkPackage').forEach(function (w) {
     push('workpackage', w.id, (w.wbs_code ? w.wbs_code + ' ' : '') + w.name + ' (' + (projects[w.project_id] ? projects[w.project_id].code : '?') + ')');
   });
+  repoList('PlanItem').forEach(function (i) {
+    push('planitem', i.id, i.name + ' (' + (projects[i.project_id] ? projects[i.project_id].code : '?') + ')');
+  });
   return {
-    roles: ROLES.map(function (c) { return { code: c, label: ROLE_LABELS[c] || c, rank: ROLE_RANK[c] }; }),
-    scopes: out.slice(0, 600)
+    roles: ASSIGNABLE_ROLES.map(function (c) { return { code: c, label: ROLE_LABELS[c] || c, rank: ROLE_RANK[c], object: ROLE_OBJECT[c] }; }),
+    scopes: out.slice(0, 900)
   };
 });
 
@@ -8076,7 +8271,7 @@ function budgetNumber_(v, label, max) {
 
 function lineView_(l, ctx, phasing, resById, projectId) {
   var res = resById[l.resource_id];
-  var seeRate = ctx.isAdmin || can(ctx, 'ratecard.manage', { type: 'project', id: projectId });
+  var seeRate = ctx.isAdmin || can(ctx, 'sensitive.read', { type: 'project', id: projectId });
   return {
     id: l.id, version: l.version, deliverable_id: l.deliverable_id,
     resource: { id: l.resource_id, name: res ? res.name : '', type: res ? res.resource_type : '' },
@@ -8361,12 +8556,9 @@ function isInternalUser_(ctx) {
   return !!r && !isTrue(r.deleted) && r.resource_type === 'Interne';
 }
 
-/** Nommé dans l'équipe du projet : un rôle sur le projet (ou au-dessus), ou sur l'un de ses workpackages. */
+/** Nommé dans l'équipe du projet : un rôle sur le projet (ou au-dessus), sur l'un de ses workpackages ou sur l'un de ses livrables ou jalons. */
 function namedInProject_(ctx, projectId) {
-  if (can(ctx, 'po.edit', { type: 'project', id: projectId })) return true;
-  var wpIds = {};
-  repoList('WorkPackage', function (w) { return w.project_id === projectId; }).forEach(function (w) { wpIds[w.id] = true; });
-  return (ctx.assignments || []).some(function (a) { return a.scope_type === 'workpackage' && wpIds[a.scope_id]; });
+  return can(ctx, 'po.edit', { type: 'project', id: projectId }); // droit « en profondeur » : un rôle sur le projet, un de ses workpackages ou un de ses livrables suffit
 }
 
 function canPoEdit_(ctx, projectId) {
@@ -8880,7 +9072,7 @@ function projectKpis_(data, project, today, ctx) {
   var hasLine = {}; lines.forEach(function (l) { hasLine[l.deliverable_id] = true; });
   var balance = lines.length || pos.length ? computeBalance_({ project: project, wps: wps, items: deliverables, lines: lines, pos: pos }) : null;
   var lateGr = pos.filter(function (o) { return o.status === 'Lancée' && !isBlank(o.gr_due_date) && String(o.gr_due_date) < today; }).length;
-  var showAmounts = !!ctx && (ctx.isAdmin || can(ctx, 'budget.edit', { type: 'project', id: project.id }));
+  var showAmounts = !!ctx && (ctx.isAdmin || can(ctx, 'budget.edit', { type: 'project', id: project.id })); // les montants du projet : chef de projet et au-dessus ; un Workpackage leader ne voit que le budget de son workpackage (page Budget)
   var time = timeKpi_({ project: project, items: items, deps: deps, baselineEnd: baselineEndOf_(project), today: today, holFor: data.holFor });
   var quality = qualityKpi_({ project: project, risks: data.risks.filter(function (r) { return r.project_id === project.id; }), insights: data.insights.filter(function (x) { return x.project_id === project.id; }), items: items, today: today });
   var cost = costKpi_({ balance: balance, lateGr: lateGr, withoutBudget: lines.length ? deliverables.filter(function (i) { return !hasLine[i.id]; }).length : 0, showAmounts: showAmounts });
@@ -8998,6 +9190,7 @@ defineAction('projects.save', function (p, ctx) {
       cpn: cpn, cpn_label: cpn ? wbsShortText_(v.cpn_label, 120, 'Désignation du CPN') : ''
     }), ctx.actx);
     if (manager) repoInsert('RoleAssignment', { resource_id: manager, role_code: 'CP', scope_type: 'project', scope_id: rec.id, start_date: todayStr() }, ctx.actx);
+    autoAssignCreatorDpl_(ctx, rec);
     return { id: rec.id, version: rec.version, code: rec.code, name: rec.name, created: true };
   });
 });
@@ -9017,9 +9210,11 @@ defineAction('projects.save', function (p, ctx) {
  * La création et la modification des personnes et des équipes passent par resources.* et teams.* (42_Org.gs).
  */
 
-var PROJECT_ROLE_CHOICES = [{ code: 'CP', label: 'Chef de projet' }, { code: 'MEMBER', label: 'Membre affecté' }];
+var PROJECT_ROLE_CHOICES = [{ code: 'CP', label: 'Chef de projet' }]; // les autres rôles se posent sur leur objet, dans le WBS
 
-function canSeeRates_(ctx) { return ctx.isAdmin || can(ctx, 'ratecard.manage', { type: 'global' }); }
+/** Les tarifs journaliers se lisent à partir du Workpackage leader ; les fixer reste réservé au chef de projet et au-dessus (ratecard.manage). */
+function canSeeRates_(ctx) { return ctx.isAdmin || can(ctx, 'sensitive.read', { type: 'global' }); }
+function canSetRates_(ctx) { return ctx.isAdmin || can(ctx, 'ratecard.manage', { type: 'global' }); }
 
 /** Équipes à plat, dans l'ordre de l'arborescence, avec leur profondeur et leur nombre de membres. */
 function teamsFlat_(teams, resources) {
@@ -9047,21 +9242,29 @@ defineAction('ressources.get', function (p, ctx) {
   var today = todayStr();
   var resources = repoList('Resource'), teams = repoList('HierarchicalTeam');
   var teamById = indexBy_(teams);
-  var data = { programs: repoList('Program'), projects: repoList('Project'), workpackages: repoList('WorkPackage') };
+  var data = { programs: repoList('Program'), projects: repoList('Project'), workpackages: repoList('WorkPackage'), planitems: repoList('PlanItem') };
   var canRates = canSeeRates_(ctx);
   var scope = project ? { type: 'project', id: project.id } : null;
   var wpIds = {};
+  var itemIds = {};
   if (project) data.workpackages.forEach(function (w) { if (w.project_id === project.id) wpIds[w.id] = true; });
+  if (project) data.planitems.forEach(function (i) { if (i.project_id === project.id) itemIds[i.id] = true; });
   var placed = {};
   repoList('RoleAssignment').forEach(function (a) { if (isBlank(a.end_date) || String(a.end_date) >= today) placed[a.resource_id] = true; });
   var roles = {};
   if (project) {
     repoList('RoleAssignment').forEach(function (a) {
       if (!isBlank(a.end_date) && String(a.end_date) < today) return;
-      var hit = (a.scope_type === 'project' && a.scope_id === project.id) || (a.scope_type === 'workpackage' && wpIds[a.scope_id]) ||
+      var hit = (a.scope_type === 'project' && a.scope_id === project.id) || (a.scope_type === 'workpackage' && wpIds[a.scope_id]) || (a.scope_type === 'planitem' && itemIds[a.scope_id]) ||
         (a.scope_type === 'program' && !isBlank(project.program_id) && a.scope_id === project.program_id);
       if (!hit) return;
       var list = roles[a.resource_id] = roles[a.resource_id] || [];
+      if (a.scope_type === 'planitem') { // plusieurs livrables ou jalons avec le même rôle : une seule ligne, avec leur nombre
+        var grouped = list.filter(function (x) { return x.code === a.role_code && x.scope_type === 'planitem'; })[0];
+        if (grouped) { grouped.n++; grouped.scope = countLabel_(grouped.n, 'livrable ou jalon', 'livrables ou jalons'); return; }
+        list.push({ key: a.role_code + '|planitem', n: 1, code: a.role_code, label: ROLE_LABELS[a.role_code] || a.role_code, scope_type: 'planitem', scope: '1 livrable ou jalon', rank: ROLE_RANK[a.role_code] });
+        return;
+      }
       var key = a.role_code + '|' + a.scope_type + '|' + a.scope_id;
       if (list.some(function (x) { return x.key === key; })) return;
       list.push({ key: key, code: a.role_code, label: ROLE_LABELS[a.role_code] || a.role_code, scope_type: a.scope_type, scope: scopeLabel_(data, a.scope_type, a.scope_id), rank: ROLE_RANK[a.role_code] });
@@ -9074,16 +9277,19 @@ defineAction('ressources.get', function (p, ctx) {
     if (!isBlank(i.owner_resource_id)) { var o = owned[i.owner_resource_id] = owned[i.owner_resource_id] || { d: 0, m: 0 }; if (i.item_type === 'Jalon') o.m++; else o.d++; }
     if (!isBlank(i.wp_id)) (wpItems[i.wp_id] = wpItems[i.wp_id] || []).push(i);
   });
-  var contrib = {};
+  var contrib = {}, itemById = {};
+  repoList('PlanItem', function (i) { return !project || i.project_id === project.id; }).forEach(function (i) { itemById[i.id] = i; });
   repoList('RoleAssignment').forEach(function (a) {
-    if (a.scope_type !== 'workpackage' || (a.role_code !== 'MEMBER' && a.role_code !== 'RWP') || (!isBlank(a.end_date) && String(a.end_date) < today)) return;
+    if (!isBlank(a.end_date) && String(a.end_date) < today) return;
     var set = contrib[a.resource_id] = contrib[a.resource_id] || {};
+    if (a.scope_type === 'planitem' && ['DO', 'CONTRIB'].indexOf(a.role_code) >= 0) { var it = itemById[a.scope_id]; if (it && it.owner_resource_id !== a.resource_id) set[it.id] = true; return; }
+    if (a.scope_type !== 'workpackage' || ['WPL', 'SWPL', 'RWP', 'MEMBER'].indexOf(a.role_code) < 0) return;
     (wpItems[a.scope_id] || []).forEach(function (i) { if (i.owner_resource_id !== a.resource_id) set[i.id] = true; });
   });
   var editAll = canEditResources_(ctx);
   var people = resources.map(function (r) {
     var mine = (roles[r.id] || []).sort(function (a, b) { return a.rank - b.rank; });
-    var projectLevel = mine.filter(function (x) { return x.scope_type === 'project' && (x.code === 'CP' || x.code === 'MEMBER'); }).map(function (x) { return x.code; });
+    var projectLevel = mine.filter(function (x) { return x.scope_type === 'project' && x.code === 'CP'; }).map(function (x) { return x.code; });
     return {
       resource_id: r.id, version: r.version, name: r.name, email: r.email || '', job_function: r.job_function || '', organization: r.organization || '',
       unplaced: !placed[r.id],
@@ -9092,62 +9298,51 @@ defineAction('ressources.get', function (p, ctx) {
       resource_type: r.resource_type, supplier: r.supplier || '', country: r.country || '', capacity: isBlank(r.capacity_days_month) ? '' : Number(r.capacity_days_month),
       team_id: r.team_id || '', team: teamById[r.team_id] ? teamById[r.team_id].name : '',
       roles: mine.map(function (x) { return { code: x.code, label: x.label, scope: x.scope, scope_type: x.scope_type }; }),
-      project_role: projectLevel.indexOf('CP') >= 0 ? 'CP' : projectLevel.indexOf('MEMBER') >= 0 ? 'MEMBER' : '',
+      project_role: projectLevel.indexOf('CP') >= 0 ? 'CP' : '',
       daily_rate: canRates && !isBlank(r.daily_rate) ? Number(r.daily_rate) : null,
       rate_source: canRates ? (!isBlank(r.daily_rate) ? 'fiche' : (rateFor_(r.rate_profile, r.country, today) !== null ? 'grille' : '')) : ''
     };
   }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
-  var canAssign = !!scope && can(ctx, 'roles.assign', scope);
-  var best = canAssign && !ctx.isAdmin ? bestRankOn_(ctx, scope) : 0;
+  var assignable = scope ? assignableRolesOn_(ctx, scope) : [];
+  var canAssign = assignable.indexOf('CP') >= 0;
   return {
     project: project ? { id: project.id, code: project.code, name: project.name, manager_id: project.manager_resource_id || '' } : null,
     people: people, teams: teamsFlat_(teams, resources),
     canEdit: editAll, canRates: canRates, canAssign: canAssign,
-    roleChoices: canAssign ? PROJECT_ROLE_CHOICES.filter(function (c) { return ROLE_RANK[c.code] >= best; }) : [],
+    roleChoices: PROJECT_ROLE_CHOICES.filter(function (c) { return assignable.indexOf(c.code) >= 0; }),
     countries: COUNTRIES, domains: allowedDomains()
   };
 });
 
-/** Rôle de projet d'une personne : 'CP' (chef de projet), 'MEMBER' (membre affecté) ou '' (aucun). Les rôles sur un workpackage ne bougent pas. */
+/** Rôle de projet d'une personne : 'CP' (chef de projet) ou '' (aucun). Les autres rôles se posent sur leur objet, dans le WBS ; ceux d'un workpackage ou d'un livrable ne bougent pas ici. */
 defineAction('people.setProjectRole', function (p, ctx) {
   var project = mustGet('Project', requireParam(p, 'projectId'));
   var person = mustGet('Resource', requireParam(p, 'resourceId'));
   var role = isBlank(p.role) ? '' : p.role;
-  if (['', 'CP', 'MEMBER'].indexOf(role) < 0) throw new PpmError('VALIDATION', 'Rôle de projet inconnu : chef de projet ou membre affecté.');
+  if (['', 'CP'].indexOf(role) < 0) throw new PpmError('VALIDATION', 'Rôle de projet inconnu : seul le chef de projet se pose sur un projet depuis cette page.');
   var scope = { type: 'project', id: project.id };
-  requireCan(ctx, 'roles.assign', scope);
-  var best = ctx.isAdmin ? 0 : bestRankOn_(ctx, scope);
-  if (role && ROLE_RANK[role] < best) throw new PpmError('FORBIDDEN', 'Vous ne pouvez pas attribuer un rôle plus élevé que le vôtre.');
+  var problem = roleAssignCheck_(ctx, 'CP', scope);
+  if (problem) throw new PpmError(problem.code, problem.message);
   if (role === 'CP' && person.resource_type !== 'Interne') throw new PpmError('VALIDATION', 'Le chef de projet doit être une personne interne.');
   return withLock(function () {
     var today = todayStr(), yesterday = addCalendarDays(today, -1);
     var active = repoList('RoleAssignment', function (a) {
-      return a.resource_id === person.id && a.scope_type === 'project' && a.scope_id === project.id && (a.role_code === 'CP' || a.role_code === 'MEMBER') && (isBlank(a.end_date) || String(a.end_date) >= today);
+      return a.resource_id === person.id && a.scope_type === 'project' && a.scope_id === project.id && a.role_code === 'CP' && (isBlank(a.end_date) || String(a.end_date) >= today);
     });
-    var same = active.length === 1 && active[0].role_code === role;
+    var same = active.length === 1 && role === 'CP';
     if (!same) {
-      active.forEach(function (a) {
-        if (ROLE_RANK[a.role_code] < best) throw new PpmError('FORBIDDEN', 'Vous ne pouvez pas retirer un rôle plus élevé que le vôtre.');
-      });
       active.forEach(function (a) { repoUpdate('RoleAssignment', a.id, { end_date: yesterday }, null, ctx.actx); });
       if (role) repoInsert('RoleAssignment', { resource_id: person.id, role_code: role, scope_type: 'project', scope_id: project.id, start_date: today }, ctx.actx);
     }
-    // le chef de projet du projet suit les affectations : celui qui n'est plus chef de projet est remplacé par un autre, ou aucun
-    var cps = repoList('RoleAssignment', function (a) {
-      return a.role_code === 'CP' && a.scope_type === 'project' && a.scope_id === project.id && (isBlank(a.end_date) || String(a.end_date) >= today);
-    }).map(function (a) { return a.resource_id; });
-    var current = repoGet('Project', project.id);
-    var manager = current.manager_resource_id || '';
-    if (manager && cps.indexOf(manager) < 0) manager = '';
-    if (!manager && cps.length) manager = cps[0];
-    if (manager !== (current.manager_resource_id || '')) repoUpdate('Project', project.id, { manager_resource_id: manager }, null, ctx.actx);
-    return { role: role, manager_id: manager, changed: !same };
+    // le chef de projet de la fiche projet suit les affectations : celui qui n'est plus chef de projet est remplacé par un autre, ou aucun
+    syncPrincipal_('project', project.id, ctx.actx);
+    return { role: role, manager_id: repoGet('Project', project.id).manager_resource_id || '', changed: !same };
   });
 });
 
 /** Taux journalier d'une personne (vide pour l'effacer). Le chef de projet et le DPL seuls le voient et le fixent. */
 defineAction('people.setRate', function (p, ctx) {
-  if (!canSeeRates_(ctx)) throw new PpmError('FORBIDDEN', 'Les taux journaliers sont réservés au chef de projet et au DPL.');
+  if (!canSetRates_(ctx)) throw new PpmError('FORBIDDEN', 'Fixer les taux journaliers est réservé au chef de projet et aux niveaux au-dessus.');
   var r = mustGet('Resource', requireParam(p, 'resourceId'));
   var value = '';
   if (!(p.daily_rate === null || p.daily_rate === undefined || String(p.daily_rate).trim() === '')) {
@@ -10092,7 +10287,7 @@ function newsAdapter_() { return NEWS_ADAPTER || realNews_(); }
 
 // ---------------------------------------------------------------- droits
 
-/** Qui voit les actualités d'un projet : l'administrateur et toute personne qui y a un rôle. */
+/** Qui est dans l'équipe d'un projet : l'administrateur et toute personne qui y a un rôle (même sur un seul livrable). */
 function newsMember_(ctx, project) {
   if (ctx.isAdmin) return true;
   if (!ctx.resourceId) return false;
@@ -10103,12 +10298,13 @@ function newsMember_(ctx, project) {
 function newsAccess_(ctx, project) {
   var scope = { type: 'project', id: project.id };
   var member = newsMember_(ctx, project);
-  return { member: member, view: member, add: can(ctx, 'news.add', scope), manage: can(ctx, 'news.manage', scope) };
+  // les comptes rendus de réunion se lisent à partir du Workpackage leader (droit sensitive.read, en profondeur) ; les actions de chacun restent visibles de leur titulaire (news.mine)
+  return { member: member, view: can(ctx, 'sensitive.read', scope), add: can(ctx, 'news.add', scope), manage: can(ctx, 'news.manage', scope) };
 }
 
 function newsMustView_(ctx, project) {
   var a = newsAccess_(ctx, project);
-  if (!a.view) throw new PpmError('FORBIDDEN', 'Les actualités sont réservées aux membres du projet.');
+  if (!a.view) throw new PpmError('FORBIDDEN', 'Les comptes rendus de réunion sont réservés aux Workpackage leaders et aux niveaux au-dessus.');
   return a;
 }
 
@@ -10450,7 +10646,9 @@ defineAction('news.digest.publish', function (p, ctx) {
     if (p.notify !== false) {
       var base = newsBase_(), members = newsProjectMembers_(project, base);
       var url = getProp(PROP.WEBAPP_URL, '');
-      base.resources.filter(function (r) { return members[r.id] && !isTrue(r.deleted) && !isBlank(r.email) && (!allowedDomains().length || isAllowedEmail_(String(r.email).toLowerCase())); }).slice(0, 150).forEach(function (r) {
+      // la synthèse reprend des comptes rendus : elle ne part qu'à ceux qui peuvent les lire (Workpackage leader et au-dessus)
+      var rolesData = { workpackages: base.wps, planitems: base.items, assignments: repoList('RoleAssignment') };
+      base.resources.filter(function (r) { return members[r.id] && personReadsSensitive_(rolesData, r.id, project, today) && !isTrue(r.deleted) && !isBlank(r.email) && (!allowedDomains().length || isAllowedEmail_(String(r.email).toLowerCase())); }).slice(0, 150).forEach(function (r) {
         var body = 'Bonjour ' + r.name + ',\n\nActualités du projet ' + project.code + ' ' + project.name + ' au ' + frDate_(today) + ' :\n\n' + text + '\n' + (url ? '\nDétail et vos actions : ' + url + '?view=actualites&project=' + project.id + '\n' : '');
         var html = '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1F2A33;max-width:640px"><p>Bonjour ' + escHtml_(r.name) + ',</p><p>Actualités du projet <b>' + escHtml_(project.code + ' ' + project.name) + '</b> au ' + escHtml_(frDate_(today)) + ' :</p>' +
           text.split(/\n+/).map(function (l) { return '<p style="margin:4px 0">' + escHtml_(l) + '</p>'; }).join('') + (url ? '<p style="margin-top:18px"><a href="' + escHtml_(url + '?view=actualites&project=' + project.id) + '">Détail et vos actions</a></p>' : '') + '</div>';
@@ -10475,7 +10673,7 @@ function newsDigestSections_(data, person, today, windowStart, link) {
   var memberOf = {};
   (data.assignments || []).forEach(function (a) { if (a.resource_id === person.id && scopeOf[a.scope_id]) memberOf[scopeOf[a.scope_id]] = true; });
   data.projects.forEach(function (p) { if (p.manager_resource_id === person.id) memberOf[p.id] = true; });
-  data.projects.filter(function (p) { return memberOf[p.id] && !isTrue(p.deleted) && p.status !== 'Clos'; }).forEach(function (p) {
+  data.projects.filter(function (p) { return memberOf[p.id] && !isTrue(p.deleted) && p.status !== 'Clos' && personReadsSensitive_(data, person.id, p, today); }).forEach(function (p) {
     var digest = n.digests.filter(function (d) { return d.project_id === p.id && !isTrue(d.deleted) && d.digest_date >= windowStart; })
       .sort(function (a, b) { return String(b.digest_date).localeCompare(String(a.digest_date)); })[0];
     var lines = [];
@@ -11236,3 +11434,209 @@ defineAction('admin.sheet.protect', function (p, ctx) {
  * LIMITE À CONNAÎTRE : une protection de feuille n'interdit que la MODIFICATION. Toute personne qui peut ouvrir le classeur peut encore LIRE ces feuilles : rôles, taux
  * journaliers (feuille Resource) et budgets. Pour les cacher, il faudrait ne pas partager ces données (classeur séparé, ou classeur de consultation généré sans elles).
  */
+
+// ======================================================================
+// 53_Roles.gs
+// ======================================================================
+
+/**
+ * PPM Core — 0.15.3 : rôles par niveau (suite de 05_Rbac.gs et 00_Config.gs).
+ *
+ * RESPONSABLE PRINCIPAL. Les colonnes `owner_resource_id` (workpackage, élément) et `manager_resource_id` (projet) sont lues partout (synthèse du matin, Copilote,
+ * baselines, agenda, constats « sans responsable »). Elles sont conservées et deviennent le « principal » de l'objet : la première personne qui détient le rôle de
+ * l'objet (Chef de projet, Workpackage leader, Sub-workpackage leader, Deliverable owner), ou vide s'il n'y en a plus. Poser un rôle met la colonne à jour ;
+ * écrire la colonne par l'ancien chemin (formulaire du WBS, API, page Vue d'ensemble) pose le rôle, avec les mêmes règles.
+ *
+ * MIGRATION. rolesMigrate_ reprend les données d'avant la 0.15.3 (A9_MIGRER_ROLES) : additive pour les nouvelles lignes, jamais destructrice (les anciens rôles sont terminés,
+ * pas supprimés), relançable, avec une simulation.
+ */
+
+/** Le rôle que porte le responsable principal de chaque genre d'objet. */
+var PRINCIPAL_ROLE = { project: 'CP', workpackage: 'WPL', subworkpackage: 'SWPL', planitem: 'DO' };
+
+var PRINCIPAL_TABLE = { project: 'Project', workpackage: 'WorkPackage', subworkpackage: 'WorkPackage', planitem: 'PlanItem' };
+var PRINCIPAL_SCOPE_TYPE = { project: 'project', workpackage: 'workpackage', subworkpackage: 'workpackage', planitem: 'planitem' };
+
+/** « 1 livrable ou jalon », « 4 livrables ou jalons » : le nombre et le bon nombre grammatical. */
+function countLabel_(n, one, many) { return n + ' ' + (n > 1 ? many : one); }
+
+function principalColumn_(kind) { return kind === 'project' ? 'manager_resource_id' : 'owner_resource_id'; }
+
+function roleActive_(a, today) {
+  return !isTrue(a.deleted) && (isBlank(a.end_date) || String(a.end_date) >= today);
+}
+
+/** Les affectations actives de ce rôle (et de son ancien code) sur ce périmètre, dans l'ordre où elles ont été posées. */
+function roleHolders_(code, scopeType, scopeId, today) {
+  var legacy = code === 'WPL' || code === 'SWPL' ? 'RWP' : '';
+  return repoList('RoleAssignment', function (a) {
+    return (a.role_code === code || (legacy && a.role_code === legacy)) && a.scope_type === scopeType && String(a.scope_id) === String(scopeId) && roleActive_(a, today);
+  }).sort(function (a, b) {
+    return String(a.created_at || '').localeCompare(String(b.created_at || '')) || String(a.id).localeCompare(String(b.id));
+  });
+}
+
+/** Le principal d'un objet = la première personne qui détient son rôle, vide sinon. Ne réécrit que si la valeur change. */
+function syncPrincipal_(kind, id, actx) {
+  var table = PRINCIPAL_TABLE[kind], rec = repoGet(table, id);
+  if (!rec || isTrue(rec.deleted)) return;
+  var holders = roleHolders_(PRINCIPAL_ROLE[kind], PRINCIPAL_SCOPE_TYPE[kind], id, todayStr());
+  var col = principalColumn_(kind), cur = rec[col] || '';
+  var want = holders.some(function (h) { return h.resource_id === cur; }) ? cur : (holders.length ? holders[0].resource_id : '');
+  if (String(cur) !== String(want)) { var patch = {}; patch[col] = want; repoUpdate(table, id, patch, null, actx); }
+}
+
+/**
+ * Avant d'écrire un responsable par l'ancien chemin : il faut pouvoir désigner ce rôle (un niveau strictement supérieur au rôle, sur l'objet ou au-dessus).
+ * chainScope = l'objet lui-même, ou son parent quand l'objet n'existe pas encore.
+ */
+function assertCanSetPrincipal_(ctx, kind, chainScope, oldOwner, newOwner) {
+  if (String(oldOwner || '') === String(newOwner || '')) return;
+  var role = PRINCIPAL_ROLE[kind];
+  if (ctx.isAdmin || bestRankOn_(ctx, chainScope) < ROLE_RANK[role]) return;
+  throw new PpmError('FORBIDDEN', 'Désigner le ' + ROLE_LABELS[role] + ' relève d’un niveau supérieur au vôtre sur cet objet.', { role: role });
+}
+
+/** Après l'écriture de la colonne par l'ancien chemin : le rôle suit (l'ancien principal perd le sien, le nouveau le reçoit). */
+function applyPrincipal_(actx, kind, id, oldOwner, newOwner) {
+  if (String(oldOwner || '') === String(newOwner || '')) return;
+  var role = PRINCIPAL_ROLE[kind], st = PRINCIPAL_SCOPE_TYPE[kind], today = todayStr(), yesterday = addCalendarDays(today, -1);
+  var holders = roleHolders_(role, st, id, today);
+  if (!isBlank(oldOwner)) {
+    holders.filter(function (h) { return h.resource_id === oldOwner; }).forEach(function (h) { repoUpdate('RoleAssignment', h.id, { end_date: yesterday }, null, actx); });
+  }
+  if (!isBlank(newOwner) && !holders.some(function (h) { return h.resource_id === newOwner; })) {
+    repoInsert('RoleAssignment', { resource_id: newOwner, role_code: role, scope_type: st, scope_id: id, start_date: today }, actx);
+  }
+}
+
+/**
+ * Un DPL qui crée un projet en devient le DPL (il est posé sur ses projets, pas sur le programme). Un Program Leader ou un administrateur n'en a pas besoin.
+ */
+function autoAssignCreatorDpl_(ctx, project) {
+  if (ctx.isAdmin || !ctx.resourceId || isBlank(project.program_id)) return;
+  var programScope = { type: 'program', id: project.program_id };
+  var isPl = (ctx.assignments || []).some(function (a) {
+    return effectiveRoleCode_(a, ctx.lookup) === 'PL' && sameScope_(programScope, a.scope_type, a.scope_id);
+  });
+  if (isPl) return;
+  var already = roleHolders_('DPL', 'project', project.id, todayStr()).some(function (h) { return h.resource_id === ctx.resourceId; });
+  if (!already) repoInsert('RoleAssignment', { resource_id: ctx.resourceId, role_code: 'DPL', scope_type: 'project', scope_id: project.id, start_date: todayStr() }, ctx.actx);
+}
+
+/**
+ * Meilleur rang (numéro le plus bas) d'une personne dans un projet : un rôle sur le projet, sur l'un de ses workpackages ou de ses livrables, ou sur son programme ;
+ * le chef de projet de la fiche projet compte pour Chef de projet. 99 si elle n'a aucun rôle dans ce projet. data : { workpackages, planitems, assignments }.
+ */
+function personRankInProject_(data, personId, project, today) {
+  var best = project.manager_resource_id === personId ? ROLE_RANK.CP : 99;
+  var wpById = indexBy_(data.workpackages || []), itemById = indexBy_(data.planitems || []);
+  (data.assignments || []).forEach(function (a) {
+    if (a.resource_id !== personId || !roleActive_(a, today)) return;
+    var pid = a.scope_type === 'project' ? a.scope_id : a.scope_type === 'workpackage' ? (wpById[a.scope_id] || {}).project_id : a.scope_type === 'planitem' ? (itemById[a.scope_id] || {}).project_id : '';
+    var inProgram = a.scope_type === 'program' && !isBlank(project.program_id) && String(a.scope_id) === String(project.program_id);
+    if (pid !== project.id && !inProgram) return;
+    var code = a.role_code === 'RWP' ? ((wpById[a.scope_id] || {}).parent_wp_id ? 'SWPL' : 'WPL') : a.role_code === 'MEMBER' ? 'CONTRIB' : a.role_code;
+    var r = ROLE_RANK[code];
+    if (r !== undefined && r < best) best = r;
+  });
+  return best;
+}
+
+/** Cette personne peut-elle lire budgets, tarifs et comptes rendus de ce projet ? (Workpackage leader et au-dessus.) */
+function personReadsSensitive_(data, personId, project, today) {
+  return personRankInProject_(data, personId, project, today) <= ROLE_RANK[PERMISSION_LEVEL['sensitive.read']];
+}
+
+// ---------------------------------------------------------------- migration
+
+/**
+ * Reprend les rôles et les responsables d'avant la 0.15.3 :
+ *   - DPL posé sur le programme → DPL posé sur chacun de ses projets (l'ancienne ligne est terminée) ;
+ *   - responsable de workpackage (RWP) → Workpackage leader, ou Sub-workpackage leader sur un sous-workpackage (le code change sur place) ;
+ *   - membre (MEMBER) posé sur un projet, un workpackage ou un programme → Contributor sur chaque livrable et jalon de ce périmètre (l'ancienne ligne est terminée) ;
+ *   - responsable d'un élément → Deliverable owner ; d'un workpackage → Workpackage ou Sub-workpackage leader ; chef de projet de la fiche projet → Chef de projet ;
+ *   - personne ayant une ligne budgétaire sur un livrable sans y avoir de rôle → Contributor de ce livrable.
+ * Additive et relançable. dryRun = true : compte seulement, n'écrit rien.
+ */
+function rolesMigrate_(actx, dryRun) {
+  var today = todayStr(), yesterday = addCalendarDays(today, -1);
+  var out = { dpl: 0, wpl: 0, contrib: 0, owners: 0, managers: 0, budget: 0, ended: 0, already: 0, skipped: 0, dryRun: !!dryRun };
+  var projects = repoList('Project'), wps = repoList('WorkPackage'), items = repoList('PlanItem');
+  var wpById = indexBy_(wps), resById = indexBy_(repoList('Resource'));
+  var rows = repoList('RoleAssignment').map(function (a) {
+    return { id: a.id, resource_id: a.resource_id, role_code: a.role_code, scope_type: a.scope_type, scope_id: a.scope_id, end_date: a.end_date, deleted: a.deleted, version: a.version };
+  });
+  function has(resId, code, type, id) {
+    return rows.some(function (a) { return roleActive_(a, today) && a.resource_id === resId && a.role_code === code && a.scope_type === type && String(a.scope_id) === String(id); });
+  }
+  function hasAny(resId, codes, type, id) { return codes.some(function (c) { return has(resId, c, type, id); }); }
+  function add(counter, resId, code, type, id) {
+    if (has(resId, code, type, id)) { out.already++; return; }
+    out[counter]++;
+    var row = { resource_id: resId, role_code: code, scope_type: type, scope_id: id, end_date: '', deleted: false };
+    if (!dryRun) { var rec = repoInsert('RoleAssignment', Object.assign({ start_date: today }, row), actx); row.id = rec.id; row.version = rec.version; }
+    rows.push(row);
+  }
+  function end(a) { out.ended++; a.end_date = yesterday; if (!dryRun) repoUpdate('RoleAssignment', a.id, { end_date: yesterday }, null, actx); }
+  function wpDescendants(wpId) {
+    var ids = {}; ids[wpId] = true;
+    wps.forEach(function (w) { if (w.parent_wp_id === wpId) ids[w.id] = true; });
+    return ids;
+  }
+  var liveItems = items.filter(function (i) { return !isTrue(i.deleted); });
+
+  // 1. DPL posé sur un programme
+  rows.filter(function (a) { return a.role_code === 'DPL' && a.scope_type === 'program' && roleActive_(a, today) && resById[a.resource_id]; }).forEach(function (a) {
+    projects.filter(function (p) { return !isTrue(p.deleted) && String(p.program_id) === String(a.scope_id); }).forEach(function (p) { add('dpl', a.resource_id, 'DPL', 'project', p.id); });
+    end(a);
+  });
+  // 2. responsable de workpackage → Workpackage leader / Sub-workpackage leader
+  rows.filter(function (a) { return a.role_code === 'RWP' && roleActive_(a, today); }).forEach(function (a) {
+    var w = a.scope_type === 'workpackage' ? wpById[a.scope_id] : null;
+    if (!w || isTrue(w.deleted) || !resById[a.resource_id]) { out.skipped++; return; }
+    var code = !isBlank(w.parent_wp_id) ? 'SWPL' : 'WPL';
+    if (has(a.resource_id, code, 'workpackage', w.id)) { out.already++; end(a); return; }
+    out.wpl++; a.role_code = code;
+    if (!dryRun) repoUpdate('RoleAssignment', a.id, { role_code: code }, null, actx);
+  });
+  // 3. membre → Contributor de chaque livrable et jalon du périmètre
+  rows.filter(function (a) { return a.role_code === 'MEMBER' && roleActive_(a, today) && resById[a.resource_id]; }).forEach(function (a) {
+    var inScope;
+    if (a.scope_type === 'project') inScope = function (i) { return i.project_id === a.scope_id; };
+    else if (a.scope_type === 'workpackage') { var ids = wpDescendants(a.scope_id); inScope = function (i) { return !!ids[i.wp_id]; }; }
+    else if (a.scope_type === 'program') { var pids = {}; projects.forEach(function (p) { if (String(p.program_id) === String(a.scope_id)) pids[p.id] = true; }); inScope = function (i) { return !!pids[i.project_id]; }; }
+    else { out.skipped++; return; }
+    liveItems.filter(inScope).forEach(function (i) { if (!hasAny(a.resource_id, ['DO'], 'planitem', i.id)) add('contrib', a.resource_id, 'CONTRIB', 'planitem', i.id); });
+    end(a);
+  });
+  // 4. les responsables d'aujourd'hui deviennent des rôles
+  liveItems.forEach(function (i) {
+    if (!isBlank(i.owner_resource_id) && resById[i.owner_resource_id]) add('owners', i.owner_resource_id, 'DO', 'planitem', i.id);
+  });
+  wps.filter(function (w) { return !isTrue(w.deleted); }).forEach(function (w) {
+    if (!isBlank(w.owner_resource_id) && resById[w.owner_resource_id]) add('owners', w.owner_resource_id, !isBlank(w.parent_wp_id) ? 'SWPL' : 'WPL', 'workpackage', w.id);
+  });
+  projects.filter(function (p) { return !isTrue(p.deleted); }).forEach(function (p) {
+    if (!isBlank(p.manager_resource_id) && resById[p.manager_resource_id]) add('managers', p.manager_resource_id, 'CP', 'project', p.id);
+  });
+  // 5. une ligne budgétaire sur un livrable fait de la personne un contributeur de ce livrable
+  repoList('BudgetLine').forEach(function (b) {
+    if (isBlank(b.resource_id) || isBlank(b.deliverable_id) || !resById[b.resource_id]) return;
+    var it = liveItems.filter(function (i) { return i.id === b.deliverable_id; })[0];
+    if (!it || hasAny(b.resource_id, ['DO', 'CONTRIB'], 'planitem', it.id)) return;
+    add('budget', b.resource_id, 'CONTRIB', 'planitem', it.id);
+  });
+  return out;
+}
+
+function migrerRoles_(dryRun) {
+  var email = ''; try { email = currentUserEmail_(); } catch (e) { /* hors Apps Script (essais) : l'auteur sera « migration » */ }
+  return withLock(function () {
+    var r = rolesMigrate_({ actor: email || 'migration', source: 'migration' }, dryRun);
+    return (dryRun ? 'Simulation (rien n’a été écrit) : ' : 'Migration faite : ') + r.dpl + ' DPL posé(s) sur des projets, ' + r.wpl + ' responsable(s) de workpackage converti(s), '
+      + r.contrib + ' Contributor(s) posé(s) sur des livrables ou jalons, ' + r.owners + ' responsable(s) devenu(s) Deliverable owner ou leader de workpackage, '
+      + r.managers + ' chef(s) de projet, ' + r.budget + ' contributeur(s) d’après le budget ; ' + r.ended + ' ancienne(s) ligne(s) terminée(s), '
+      + r.already + ' déjà en place, ' + r.skipped + ' ignorée(s).';
+  });
+}

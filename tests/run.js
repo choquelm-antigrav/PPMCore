@@ -2,6 +2,7 @@
 const { results } = require('./harness');
 require('./test_calendar_graph')();
 require('./test_rbac')();
+require('./test_roles')();
 require('./test_repo_rules')();
 require('./test_api')();
 require('./test_schedule_views')();

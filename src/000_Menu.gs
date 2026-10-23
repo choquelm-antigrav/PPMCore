@@ -12,6 +12,7 @@
  *   A6_EFFACER_DEMO           supprime la démo (programmes DEMO et NAC) pour la recréer ; deux lancements : le premier montre, le second supprime
  *   A7_TESTER_DANS_APPS_SCRIPT  test de contrôle avec les vrais services Google, en lecture seule (rien n'est écrit)
  *   A8_VERIFIER_ECRITURE        le seul test qui écrit : une feuille temporaire (supprimée) pour vérifier que les textes restent des textes
+ *   A9_MIGRER_ROLES             reprend les rôles et responsables d'avant la 0.15.3 (DPL, responsable de WP, membre…) dans les huit niveaux (additive, relançable ; _SIMULATION : compte seulement)
  * Les implémentations sont dans 20_Setup.gs, 21_LiveTest.gs, 40_Jobs.gs et 47_Demo.gs.
  */
 function A1_INSTALLER_PPM() { return installerPpm_(); }
@@ -22,3 +23,5 @@ function A5_INSTALLER_DECLENCHEURS() { return installTriggers(); }
 function A6_EFFACER_DEMO() { return effacerDemo_(); }
 function A7_TESTER_DANS_APPS_SCRIPT() { return testerDansAppsScript_(); }
 function A8_VERIFIER_ECRITURE() { return verifierEcritureAvecJournal_(); }
+function A9_MIGRER_ROLES() { return migrerRoles_(false); }
+function A9_MIGRER_ROLES_SIMULATION() { return migrerRoles_(true); }

@@ -152,7 +152,7 @@ function projectKpis_(data, project, today, ctx) {
   var hasLine = {}; lines.forEach(function (l) { hasLine[l.deliverable_id] = true; });
   var balance = lines.length || pos.length ? computeBalance_({ project: project, wps: wps, items: deliverables, lines: lines, pos: pos }) : null;
   var lateGr = pos.filter(function (o) { return o.status === 'Lancée' && !isBlank(o.gr_due_date) && String(o.gr_due_date) < today; }).length;
-  var showAmounts = !!ctx && (ctx.isAdmin || can(ctx, 'budget.edit', { type: 'project', id: project.id }));
+  var showAmounts = !!ctx && (ctx.isAdmin || can(ctx, 'budget.edit', { type: 'project', id: project.id })); // les montants du projet : chef de projet et au-dessus ; un Workpackage leader ne voit que le budget de son workpackage (page Budget)
   var time = timeKpi_({ project: project, items: items, deps: deps, baselineEnd: baselineEndOf_(project), today: today, holFor: data.holFor });
   var quality = qualityKpi_({ project: project, risks: data.risks.filter(function (r) { return r.project_id === project.id; }), insights: data.insights.filter(function (x) { return x.project_id === project.id; }), items: items, today: today });
   var cost = costKpi_({ balance: balance, lateGr: lateGr, withoutBudget: lines.length ? deliverables.filter(function (i) { return !hasLine[i.id]; }).length : 0, showAmounts: showAmounts });
@@ -270,6 +270,7 @@ defineAction('projects.save', function (p, ctx) {
       cpn: cpn, cpn_label: cpn ? wbsShortText_(v.cpn_label, 120, 'Désignation du CPN') : ''
     }), ctx.actx);
     if (manager) repoInsert('RoleAssignment', { resource_id: manager, role_code: 'CP', scope_type: 'project', scope_id: rec.id, start_date: todayStr() }, ctx.actx);
+    autoAssignCreatorDpl_(ctx, rec);
     return { id: rec.id, version: rec.version, code: rec.code, name: rec.name, created: true };
   });
 });

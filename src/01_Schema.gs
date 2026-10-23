@@ -88,7 +88,7 @@ var SCHEMA = {
     book: 'data',
     cols: ['id', 'resource_id', 'role_code', 'scope_type', 'scope_id', 'start_date', 'end_date'],
     required: ['resource_id', 'role_code', 'scope_type', 'scope_id'],
-    enums: { role_code: ROLES, scope_type: ['program', 'project', 'workpackage'] }
+    enums: { role_code: ASSIGNABLE_ROLES.concat(LEGACY_ROLE_CODES), scope_type: ['program', 'project', 'workpackage', 'planitem'] }
   },
 
   // ---------- Classeur Données : fil d'actualités du projet (0.12.0) ----------

@@ -125,8 +125,9 @@ function byName_(a, b) {
 // ---------------------------------------------------------------- OBS par rôles
 
 function scopeLabel_(data, type, id) {
-  var rec = ({ program: indexBy_(data.programs), project: indexBy_(data.projects), workpackage: indexBy_(data.workpackages) }[type] || {})[id];
+  var rec = ({ program: indexBy_(data.programs), project: indexBy_(data.projects), workpackage: indexBy_(data.workpackages), planitem: indexBy_(data.planitems || []) }[type] || {})[id];
   if (!rec) return '';
+  if (type === 'planitem') return rec.name;
   if (type === 'workpackage') return (rec.wbs_code ? rec.wbs_code + ' ' : '') + rec.name;
   return rec.code + ' — ' + rec.name;
 }

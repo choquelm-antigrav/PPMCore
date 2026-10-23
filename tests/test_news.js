@@ -93,9 +93,11 @@ module.exports = function () {
   test('Droits : un membre lit, le chef de projet saisit et gère, un étranger au projet ne voit rien', () => {
     const w = lot2World(); zoe(w);
     eq(w.raw(ZOE, 'news.get', { projectId: w.p1.id }).error.code, 'FORBIDDEN', 'sans rôle dans le projet : refusé');
-    const mia = w.call(MEMBER, 'news.get', { projectId: w.p1.id });
-    eq([mia.access.view, mia.access.add, mia.access.manage, mia.people, mia.items], [true, false, false, [], []], 'un membre lit, sans pouvoir saisir ni gérer, et ne reçoit pas l’annuaire');
-    eq(w.call(RWP, 'news.get', { projectId: w.p1.id }).access.view, true, 'un responsable de lot est membre du projet');
+    eq(w.raw(MEMBER, 'news.get', { projectId: w.p1.id }).error.code, 'FORBIDDEN', 'un Contributor ne lit pas les comptes rendus : ils sont ouverts à partir du Workpackage leader');
+    eq(w.call(MEMBER, 'news.summary', { projectId: w.p1.id }), { visible: false }, 'ni leur résumé sur la vue d’ensemble');
+    ok(w.call(MEMBER, 'news.mine', {}).actions.length >= 0, 'mais ses propres actions restent visibles de lui');
+    const remi = w.call(RWP, 'news.get', { projectId: w.p1.id });
+    eq([remi.access.view, remi.access.add, remi.access.manage, remi.people, remi.items], [true, false, false, [], []], 'un Workpackage leader lit, sans pouvoir saisir ni gérer, et ne reçoit pas l’annuaire');
     const carla = w.call(CP, 'news.get', { projectId: w.p1.id });
     eq([carla.access.add, carla.access.manage, carla.people.length > 3, carla.items.map((i) => i.name).sort()], [true, true, true, ['Calcul', 'Essais', 'Spécification']], 'le chef de projet reçoit l’annuaire et les livrables du projet');
     eq(w.call(DPL, 'news.get', { projectId: w.p2.id }).access.manage, true, 'le DPL gère aussi P2');
@@ -192,14 +194,14 @@ module.exports = function () {
     const text = 'Décisions : le plan d’essais est validé (Revue du jour).\nDates qui bougent : rien.\nRisques : retard fournisseur.\nBlocages : aucun.\nActions : Carla — planning — 30/10/2026';
     w.c.SENT_MAILS.length = 0;
     const pub = w.call(CP, 'news.digest.publish', { projectId: w.p1.id, text });
-    eq([pub.date, pub.notified], [today, 4], 'les quatre membres avec adresse, pas Xavier');
-    eq(w.c.SENT_MAILS.map((m) => m.to).sort(), [CP, DPL, MEMBER, RWP].sort());
+    eq([pub.date, pub.notified], [today, 3], 'ceux qui peuvent lire les comptes rendus : chef de projet, DPL, Workpackage leader ; pas Mia (Contributor) ni Xavier (hors domaine)');
+    eq(w.c.SENT_MAILS.map((m) => m.to).sort(), [CP, DPL, RWP].sort());
     ok(/Actualités P1/.test(w.c.SENT_MAILS[0].subject) && /plan d’essais est validé/.test(w.c.SENT_MAILS[0].body), w.c.SENT_MAILS[0].subject);
     // une seule synthèse par jour et par projet : la seconde remplace la première
     w.c.SENT_MAILS.length = 0;
     const again = w.call(CP, 'news.digest.publish', { projectId: w.p1.id, text: text.replace('validé', 'validé et signé'), notify: false });
     eq([again.notified, w.c.SENT_MAILS.length, w.c.repoList('NewsDigest').length], [0, 0, 1], 'sans mail si on le demande ; une seule synthèse vivante');
-    ok(/signé/.test(w.call(MEMBER, 'news.get', { projectId: w.p1.id }).digest.text), 'les membres lisent la dernière');
+    ok(/signé/.test(w.call(RWP, 'news.get', { projectId: w.p1.id }).digest.text), 'ceux qui ont le droit de lire voient la dernière');
     eq(w.raw(MEMBER, 'news.digest.publish', { projectId: w.p1.id, text }).error.code, 'FORBIDDEN');
     eq(w.raw(CP, 'news.digest.publish', { projectId: w.p1.id, text: 'x'.repeat(12001) }).error.code, 'VALIDATION');
   });
@@ -279,7 +281,7 @@ module.exports = function () {
     // le chef de projet voit la réunion dans sa liste, pas dans le fil
     const g = w.call(CP, 'news.get', { projectId: w.p1.id });
     eq([g.meetings.length, g.triage.length], [0, 2]);
-    eq(w.call(MEMBER, 'news.get', { projectId: w.p1.id }).triage, [], 'un membre ne voit pas la liste à trier');
+    eq(w.call(RWP, 'news.get', { projectId: w.p1.id }).triage, [], 'un Workpackage leader ne voit pas la liste à trier');
     // rattachement : les actions suivent, les responsables sont retrouvés parmi les membres du projet
     const first = tri.find((m) => m.event_id === 't1');
     const res = w.call(CP, 'news.triage.assign', { id: first.id, projectId: w.p1.id });
@@ -335,18 +337,19 @@ module.exports = function () {
     const w = lot2World(), c = w.c, today = c.todayStr(); zoe(w);
     w.call(CP, 'news.meeting.add', { projectId: w.p1.id, title: 'Revue du jour', held_on: today, text: NOTES });
     const digestFor = (email) => c.buildDigests(c.loadDigestData_(), today, { baseUrl: 'https://ppm.test/exec' }).filter((d) => d.to === email)[0];
-    let d = digestFor(MEMBER);
-    ok(/ACTUALITÉS P1 \(JOURNAL BRUT : PAS DE SYNTHÈSE PUBLIÉE\)/.test(d.text) && /Revue du jour/.test(d.text), 'sans synthèse : le journal brut des réunions de la veille');
-    ok(/VOS ACTIONS ISSUES DES RÉUNIONS/.test(d.text) && /P1 · relancer le fournisseur \(à accepter ou contester\)/.test(d.text), 'l’action proposée à Mia attend sa réponse');
+    let d = digestFor(RWP);
+    ok(/ACTUALITÉS P1 \(JOURNAL BRUT : PAS DE SYNTHÈSE PUBLIÉE\)/.test(d.text) && /Revue du jour/.test(d.text), 'Rémi (Workpackage leader), sans synthèse : le journal brut des réunions de la veille');
     ok(/view=actualites&project=/.test(d.text), 'avec le lien vers la page');
+    d = digestFor(MEMBER);
+    ok(!/ACTUALITÉS/.test(d.text), 'Mia (Contributor) ne reçoit pas les comptes rendus');
+    ok(/VOS ACTIONS ISSUES DES RÉUNIONS/.test(d.text) && /P1 · relancer le fournisseur \(à accepter ou contester\)/.test(d.text), 'mais l’action proposée à Mia l’attend, avec sa réponse');
     ok(!/ACTUALITÉS/.test((digestFor(ZOE) || { text: '' }).text), 'Zoé, sans rôle dans le projet, ne reçoit rien du projet');
     w.call(CP, 'news.digest.publish', { projectId: w.p1.id, notify: false, text: 'Décisions : plan validé.\nDates qui bougent : rien.\nRisques : aucun risque nouveau.\nBlocages : aucun.\nActions : voir la liste.' });
-    d = digestFor(MEMBER);
+    d = digestFor(RWP);
     ok(/ACTUALITÉS P1\n/.test(d.text) && /Décisions : plan validé/.test(d.text) && !/journal brut/.test(d.text), 'avec une synthèse publiée : c’est elle qui part');
     const miaAction = w.call(MEMBER, 'news.mine', {}).actions[0];
     w.call(MEMBER, 'news.action.decide', { id: miaAction.id, decision: 'accept' });
-    d = digestFor(MEMBER);
-    ok(!/VOS ACTIONS/.test(d.text), 'acceptée et sans échéance proche : plus dans le récapitulatif');
+    ok(!/VOS ACTIONS/.test((digestFor(MEMBER) || { text: '' }).text), 'acceptée et sans échéance proche : plus dans le récapitulatif (Mia n’en reçoit même plus : elle ne lit pas les comptes rendus)');
     const ma = c.repoList('NewsAction').find((a) => a.id === miaAction.id);
     c.repoUpdate('NewsAction', ma.id, { due_date: c.addCalendarDays(today, -2) }, null, w.S);
     d = digestFor(MEMBER);
@@ -357,9 +360,11 @@ module.exports = function () {
     const w = lot2World(), today = w.c.todayStr(); zoe(w);
     w.call(CP, 'news.meeting.add', { projectId: w.p1.id, title: 'Revue du jour', held_on: today, text: NOTES });
     w.call(CP, 'news.digest.publish', { projectId: w.p1.id, notify: false, text: 'Décisions : plan validé.\nDates qui bougent : rien.\nRisques : aucun risque nouveau.\nBlocages : aucun.\nActions : voir la liste.' });
-    const s = w.call(MEMBER, 'news.summary', { projectId: w.p1.id });
-    eq([s.visible, s.meetings.length, s.open_actions, s.mine, s.digest.date], [true, 1, 4, 1, today]);
+    const s = w.call(RWP, 'news.summary', { projectId: w.p1.id });
+    const remiOpen = w.c.repoList('NewsAction').filter((a) => a.owner_resource_id === w.remi.id && ['Proposée', 'Acceptée', 'Contestée'].indexOf(a.status) >= 0).length;
+    eq([s.visible, s.meetings.length, s.open_actions, s.mine, s.digest.date], [true, 1, 4, remiOpen, today]);
     ok(/Décisions : plan validé/.test(s.digest.text));
     eq(w.call(ZOE, 'news.summary', { projectId: w.p1.id }), { visible: false });
+    eq(w.call(MEMBER, 'news.summary', { projectId: w.p1.id }), { visible: false }, 'un Contributor non plus : les comptes rendus s’ouvrent à partir du Workpackage leader');
   });
 };

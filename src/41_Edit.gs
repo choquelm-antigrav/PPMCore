@@ -120,6 +120,7 @@ defineAction('wbs.create', function (p, ctx) {
       };
       applyWpCpn_(ctx, { project_id: projectId, parent_wp_id: parent ? parent.id : '', cpn: '', cpn_label: '', id: '' }, v, newWp);
       var rec = repoInsert('WorkPackage', newWp, ctx.actx);
+      applyPrincipal_(ctx.actx, parent ? 'subworkpackage' : 'workpackage', rec.id, '', owner);
       return { kind: 'wp', id: rec.id, record: rec };
     }
     if (!isBlank(parentId)) {
@@ -135,6 +136,7 @@ defineAction('wbs.create', function (p, ctx) {
       planned_start: dates.planned_start, planned_finish: dates.planned_finish, milestone_category: cat,
       status: 'À faire', progress_pct: 0
     }, ctx.actx);
+    applyPrincipal_(ctx.actx, 'planitem', item.id, '', owner);
     return { kind: 'item', id: item.id, record: item };
   });
 });
@@ -167,7 +169,11 @@ defineAction('wbs.update', function (p, ctx) {
         // un déplacement renumérote, sauf si un code est imposé
         if (!('wbs_code' in patch)) out.wbs_code = nextWbsCode_(wps.filter(function (x) { return x.id !== id; }), np);
       }
-      return { kind: 'wp', id: id, record: repoUpdate('WorkPackage', id, out, p.version, ctx.actx) };
+      var wkind = isBlank(w.parent_wp_id) ? 'workpackage' : 'subworkpackage';
+      if ('owner_resource_id' in out) assertCanSetPrincipal_(ctx, wkind, wbsScope_('workpackage', id), w.owner_resource_id, out.owner_resource_id);
+      var wrec = repoUpdate('WorkPackage', id, out, p.version, ctx.actx);
+      if ('owner_resource_id' in out) applyPrincipal_(ctx.actx, wkind, id, w.owner_resource_id, wrec.owner_resource_id);
+      return { kind: 'wp', id: id, record: wrec };
     }
     var it = mustGet('PlanItem', id);
     requireCan(ctx, 'wbs.edit', wbsScope_('planitem', id));
@@ -193,7 +199,10 @@ defineAction('wbs.update', function (p, ctx) {
       requireCan(ctx, 'wbs.edit', dest ? wbsScope_('workpackage', dest.id) : wbsScope_('project', it.project_id));
       out.wp_id = dest ? dest.id : '';
     }
-    return { kind: 'item', id: id, record: repoUpdate('PlanItem', id, out, p.version, ctx.actx) };
+    if ('owner_resource_id' in out) assertCanSetPrincipal_(ctx, 'planitem', wbsScope_('planitem', id), it.owner_resource_id, out.owner_resource_id);
+    var irec = repoUpdate('PlanItem', id, out, p.version, ctx.actx);
+    if ('owner_resource_id' in out) applyPrincipal_(ctx.actx, 'planitem', id, it.owner_resource_id, irec.owner_resource_id);
+    return { kind: 'item', id: id, record: irec };
   });
 });
 
@@ -233,21 +242,21 @@ defineAction('wbs.delete', function (p, ctx) {
     var add = function (c) { res.deleted.dependencies += c.dependencies; res.deleted.requirements += c.requirements; };
     if (kind === 'item') {
       mustGet('PlanItem', id);
-      requireCan(ctx, 'wbs.edit', wbsScope_('planitem', id));
+      requireCan(ctx, 'wbs.delete', wbsScope_('planitem', id));
       add(detachItem_(id, ctx.actx));
       repoSoftDelete('PlanItem', id, p.version, ctx.actx);
       res.deleted.items = 1;
       return res;
     }
     var w = mustGet('WorkPackage', id);
-    requireCan(ctx, 'wbs.edit', wbsScope_('workpackage', id));
+    requireCan(ctx, 'wbs.delete', wbsScope_('workpackage', id));
     var content = wpContent_(id, w.project_id);
     if ((content.wps.length || content.items.length) && !p.cascade) {
       throw new PpmError('VALIDATION', 'Ce workpackage contient ' + content.wps.length + ' sous-workpackage(s) et ' + content.items.length +
         ' élément(s) : déplacez-les, ou confirmez la suppression avec leur contenu.', { rule: 'NOT_EMPTY', wps: content.wps.length, items: content.items.length });
     }
     content.items.forEach(function (i) {
-      requireCan(ctx, 'wbs.edit', wbsScope_('planitem', i.id));
+      requireCan(ctx, 'wbs.delete', wbsScope_('planitem', i.id));
       add(detachItem_(i.id, ctx.actx));
       repoSoftDelete('PlanItem', i.id, null, ctx.actx);
       res.deleted.items++;

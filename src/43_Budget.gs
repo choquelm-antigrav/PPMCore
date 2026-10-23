@@ -236,7 +236,7 @@ function budgetNumber_(v, label, max) {
 
 function lineView_(l, ctx, phasing, resById, projectId) {
   var res = resById[l.resource_id];
-  var seeRate = ctx.isAdmin || can(ctx, 'ratecard.manage', { type: 'project', id: projectId });
+  var seeRate = ctx.isAdmin || can(ctx, 'sensitive.read', { type: 'project', id: projectId });
   return {
     id: l.id, version: l.version, deliverable_id: l.deliverable_id,
     resource: { id: l.resource_id, name: res ? res.name : '', type: res ? res.resource_type : '' },

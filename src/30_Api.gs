@@ -195,14 +195,22 @@ defineAction('projects.create', function (p, ctx) {
   var v = p.values || {};
   requireCan(ctx, 'project.create', isBlank(v.program_id) ? { type: 'global' } : { type: 'program', id: v.program_id });
   if (!isBlank(v.program_id)) mustGet('Program', v.program_id);
-  return repoInsert('Project', v, ctx.actx);
+  var projRec = repoInsert('Project', v, ctx.actx);
+  applyPrincipal_(ctx.actx, 'project', projRec.id, '', projRec.manager_resource_id);
+  autoAssignCreatorDpl_(ctx, projRec);
+  return projRec;
 });
 
 defineAction('projects.update', function (p, ctx) {
   var id = requireParam(p, 'id');
   mustGet('Project', id);
+  var projBefore = mustGet('Project', id);
   requireCan(ctx, 'wbs.edit', { type: 'project', id: id });
-  return repoUpdate('Project', id, p.patch || {}, p.version, ctx.actx);
+  var projPatch = p.patch || {};
+  if ('manager_resource_id' in projPatch) assertCanSetPrincipal_(ctx, 'project', { type: 'project', id: id }, projBefore.manager_resource_id, projPatch.manager_resource_id);
+  var projAfter = repoUpdate('Project', id, projPatch, p.version, ctx.actx);
+  if ('manager_resource_id' in projPatch) applyPrincipal_(ctx.actx, 'project', id, projBefore.manager_resource_id, projAfter.manager_resource_id);
+  return projAfter;
 });
 
 defineAction('workpackages.list', function (p) {
@@ -219,22 +227,28 @@ defineAction('workpackages.create', function (p, ctx) {
     if (parent.project_id !== v.project_id) throw new PpmError('VALIDATION', 'Le WP parent appartient à un autre projet.');
   }
   requireCan(ctx, 'wbs.edit', isBlank(v.parent_wp_id) ? { type: 'project', id: v.project_id } : { type: 'workpackage', id: v.parent_wp_id });
-  return repoInsert('WorkPackage', v, ctx.actx);
+  var wpRec = repoInsert('WorkPackage', v, ctx.actx);
+  applyPrincipal_(ctx.actx, isBlank(wpRec.parent_wp_id) ? 'workpackage' : 'subworkpackage', wpRec.id, '', wpRec.owner_resource_id);
+  return wpRec;
 });
 
 defineAction('workpackages.update', function (p, ctx) {
   var id = requireParam(p, 'id');
-  mustGet('WorkPackage', id);
+  var wpBefore = mustGet('WorkPackage', id);
   requireCan(ctx, 'wbs.edit', { type: 'workpackage', id: id });
   var patch = Object.assign({}, p.patch || {});
   delete patch.project_id;
-  return repoUpdate('WorkPackage', id, patch, p.version, ctx.actx);
+  var wpKind = isBlank(wpBefore.parent_wp_id) ? 'workpackage' : 'subworkpackage';
+  if ('owner_resource_id' in patch) assertCanSetPrincipal_(ctx, wpKind, { type: 'workpackage', id: id }, wpBefore.owner_resource_id, patch.owner_resource_id);
+  var wpAfter = repoUpdate('WorkPackage', id, patch, p.version, ctx.actx);
+  if ('owner_resource_id' in patch) applyPrincipal_(ctx.actx, wpKind, id, wpBefore.owner_resource_id, wpAfter.owner_resource_id);
+  return wpAfter;
 });
 
 defineAction('workpackages.delete', function (p, ctx) {
   var id = requireParam(p, 'id');
   mustGet('WorkPackage', id);
-  requireCan(ctx, 'wbs.edit', { type: 'workpackage', id: id });
+  requireCan(ctx, 'wbs.delete', { type: 'workpackage', id: id });
   return repoSoftDelete('WorkPackage', id, p.version, ctx.actx);
 });
 
@@ -253,22 +267,27 @@ defineAction('planitems.create', function (p, ctx) {
   }
   requireCan(ctx, 'wbs.edit', isBlank(v.wp_id) ? { type: 'project', id: v.project_id } : { type: 'workpackage', id: v.wp_id });
   var values = Object.assign({ status: 'À faire', progress_pct: 0 }, v);
-  return repoInsert('PlanItem', values, ctx.actx);
+  var itemRec = repoInsert('PlanItem', values, ctx.actx);
+  applyPrincipal_(ctx.actx, 'planitem', itemRec.id, '', itemRec.owner_resource_id);
+  return itemRec;
 });
 
 defineAction('planitems.update', function (p, ctx) {
   var id = requireParam(p, 'id');
-  mustGet('PlanItem', id);
+  var itemBefore = mustGet('PlanItem', id);
   requireCan(ctx, 'wbs.edit', { type: 'planitem', id: id });
   var patch = Object.assign({}, p.patch || {});
   ['project_id', 'progress_pct', 'status', 'last_progress_at'].forEach(function (k) { delete patch[k]; });
-  return repoUpdate('PlanItem', id, patch, p.version, ctx.actx);
+  if ('owner_resource_id' in patch) assertCanSetPrincipal_(ctx, 'planitem', { type: 'planitem', id: id }, itemBefore.owner_resource_id, patch.owner_resource_id);
+  var itemAfter = repoUpdate('PlanItem', id, patch, p.version, ctx.actx);
+  if ('owner_resource_id' in patch) applyPrincipal_(ctx.actx, 'planitem', id, itemBefore.owner_resource_id, itemAfter.owner_resource_id);
+  return itemAfter;
 });
 
 defineAction('planitems.delete', function (p, ctx) {
   var id = requireParam(p, 'id');
   mustGet('PlanItem', id);
-  requireCan(ctx, 'wbs.edit', { type: 'planitem', id: id });
+  requireCan(ctx, 'wbs.delete', { type: 'planitem', id: id });
   return repoSoftDelete('PlanItem', id, p.version, ctx.actx);
 });
 

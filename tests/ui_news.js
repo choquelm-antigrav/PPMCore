@@ -127,7 +127,7 @@ function openPage(user, file, view) {
   p.$('publish-form').dispatchEvent(new p.win.Event('submit', { cancelable: true }));
   await p.until(() => !p.$('publish-dialog').open && p.$('digest-text'));
   check(/Décisions : le plan d’essais est validé/.test(p.text('digest-text')) && /publiée aujourd’hui|pas celle d’aujourd’hui/.test(p.text('panel-digest')), 'la synthèse publiée s’affiche');
-  check(c.SENT_MAILS.length === 4, 'quatre mails partis (les membres du projet) : ' + c.SENT_MAILS.length);
+  check(c.SENT_MAILS.length === 3, 'trois mails partis (chef de projet, DPL, Workpackage leader : ceux qui peuvent lire les comptes rendus) : ' + c.SENT_MAILS.length);
 
   // ---------------------------------------------------------------- repères et journal
   p.$('set-on').checked = true;
@@ -154,30 +154,28 @@ function openPage(user, file, view) {
   check(rows2(p).some((r) => /Aligner les interfaces/.test(r.textContent) && /Mia/.test(r.textContent)), 'le responsable est retrouvé parmi les membres du projet');
   function rows2(pg) { return [...pg.doc.querySelectorAll('#actions-table tbody tr')]; }
 
-  // ---------------------------------------------------------------- un membre : lecture, ses propres actions
-  const m = openPage(MEMBER);
+  // ---------------------------------------------------------------- un Workpackage leader : lecture seule ; un Contributor : les comptes rendus lui sont fermés
+  const m = openPage(RWP);
   await m.until(() => m.$('actions-table'));
-  check(m.$('zone-add').hidden && m.$('zone-settings').hidden && m.$('zone-triage').hidden, 'un membre ne voit ni l’ajout, ni les repères, ni la liste à trier');
+  check(m.$('zone-add').hidden && m.$('zone-settings').hidden && m.$('zone-triage').hidden, 'un Workpackage leader ne voit ni l’ajout, ni les repères, ni la liste à trier');
   check(!m.$('prompt-btn') && !m.$('publish-btn'), 'ni le prompt ni la publication');
   check(!!m.$('digest-text'), 'mais il lit la synthèse');
-  const mineRow = [...m.doc.querySelectorAll('#actions-table tbody tr')].find((r) => /relancer le fournisseur/.test(r.textContent));
-  check(!!mineRow.querySelector('[data-act="accept"]') && !mineRow.querySelector('[data-act="edit"]'), 'sur sa propre action : répondre oui, compléter non');
   const other = [...m.doc.querySelectorAll('#actions-table tbody tr')].find((r) => /Aligner les interfaces/.test(r.textContent) === false && !/Mia/.test(r.textContent));
   check(!other || !other.querySelector('[data-act]'), 'sur l’action d’un autre : aucun bouton');
-  m.click(m.$('mine-only'));
-  check([...m.doc.querySelectorAll('#actions-table tbody tr')].every((r) => /Mia/.test(r.textContent)), '« Seulement les miennes » filtre la liste');
-
-  // ---------------------------------------------------------------- un responsable de lot (membre du projet)
-  const r = openPage(RWP);
-  await r.until(() => r.$('actions-table'));
-  check(r.$('zone-add').hidden, 'un responsable de lot lit sans saisir');
+  const mia = openPage(MEMBER);
+  await mia.until(() => /réservés aux Workpackage leaders/.test(mia.doc.body.textContent));
+  check(/réservés aux Workpackage leaders/.test(mia.doc.body.textContent) && !mia.$('digest-text'), 'un Contributor : message clair, pas de comptes rendus (ses actions restent dans Mon compte)');
 
   // ---------------------------------------------------------------- Overview : la carte « Actualités du projet »
-  const ov = openPage(MEMBER, 'Overview.html', 'overview');
+  const ov = openPage(RWP, 'Overview.html', 'overview');
   await ov.until(() => !ov.$('news-box').hidden);
   check(/Décisions : le plan d’essais est validé/.test(ov.text('news-digest')), 'Overview : la dernière synthèse publiée s’affiche : ' + ov.text('news-digest').slice(0, 60));
-  check(/3 actions ouvertes, dont 2 pour vous/.test(ov.text('news-actions')), 'Overview : les actions ouvertes, dont celles de la personne (Mia en a deux) : ' + ov.text('news-actions'));
+  check(/3 actions ouvertes/.test(ov.text('news-actions')), 'Overview : les actions ouvertes : ' + ov.text('news-actions'));
   check(/view=actualites&project=/.test(ov.$('news-link').getAttribute('href')), 'Overview : lien vers la page Actualités du projet');
+  const ovm = openPage(MEMBER, 'Overview.html', 'overview');
+  await ovm.until(() => ovm.$('kpis') && ovm.$('kpis').children.length > 0);
+  await wait(150);
+  check(ovm.$('news-box').hidden, 'Overview : la carte reste masquée pour un Contributor (comptes rendus à partir du Workpackage leader)');
   c.repoInsert('Resource', { resource_type: 'Interne', name: 'Zoé', email: 'zoe@entreprise.com', country: 'FR' }, w.S);
   const ovz = openPage('zoe@entreprise.com', 'Overview.html', 'overview');
   await ovz.until(() => ovz.$('kpis') && ovz.$('kpis').children.length > 0);

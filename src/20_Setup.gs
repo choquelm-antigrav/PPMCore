@@ -137,10 +137,9 @@ function ensureSheet_(ss, name) {
 var SETUP_ACTX = { actor: 'setup', source: 'setup' };
 
 function seedRoles_() {
-  var levels = { PL: 'program', DPL: 'program', CP: 'project', RWP: 'workpackage', MEMBER: 'project' };
   ROLES.forEach(function (code) {
     if (!repoGet('Role', code)) {
-      repoInsert('Role', { id: code, code: code, label: ROLE_LABELS[code], scope_level: levels[code] }, SETUP_ACTX);
+      repoInsert('Role', { id: code, code: code, label: ROLE_LABELS[code], scope_level: ROLE_OBJECT[code] || '' }, SETUP_ACTX);
     }
   });
 }

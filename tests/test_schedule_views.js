@@ -69,8 +69,7 @@ module.exports = function () {
     const prog = call(A, 'programs.create', { values: { code: 'PG', name: 'Programme' } }).data;
     const p1 = call(A, 'projects.create', { values: { code: 'P1', name: 'Projet 1', program_id: prog.id, status: 'Actif', holiday_country: 'FR', manager_resource_id: alice.id, end_date: '2026-10-16' } }).data;
     const p2 = call(A, 'projects.create', { values: { code: 'P2', name: 'Projet 2', program_id: prog.id, status: 'Actif', holiday_country: 'FR' } }).data;
-    c.repoInsert('RoleAssignment', { resource_id: alice.id, role_code: 'CP', scope_type: 'project', scope_id: p1.id }, S);
-    c.repoInsert('RoleAssignment', { resource_id: dan.id, role_code: 'DPL', scope_type: 'program', scope_id: prog.id }, S);
+    c.repoInsert('RoleAssignment', { resource_id: dan.id, role_code: 'DPL', scope_type: 'project', scope_id: p1.id }, S);
     const wp = (project, name, code, parent) => call(A, 'workpackages.create', { values: { project_id: project.id, name, wbs_code: code, parent_wp_id: parent || '' } }).data;
     const item = (project, name, type, s, f, wpId, extra) => call(A, 'planitems.create', { values: Object.assign({ project_id: project.id, name, item_type: type, planned_start: s, planned_finish: f, wp_id: wpId || '', owner_resource_id: alice.id }, extra || {}) }).data;
     const dep = (a, b, type) => call(A, 'dependencies.create', { values: { predecessor_id: a.id, successor_id: b.id, dep_type: type || 'FS' } }).data;
@@ -181,24 +180,27 @@ module.exports = function () {
     eq(d.projects.find((p) => p.id === p2.id).items, 1);
   });
 
-  test('Organisation : attribution par rang, doublon refusé, fin d’affectation', () => {
+  test('Organisation : attribution par niveau, doublon refusé, fin d’affectation', () => {
     const { call, prog, p1, bob, dan } = world();
     const asAlice = (a, p) => call('alice@entreprise.com', a, p);
-    const r = asAlice('roles.assign', { values: { resource_id: bob.id, role_code: 'MEMBER', scope_type: 'project', scope_id: p1.id } });
+    const asDan = (a, p) => call('dan@entreprise.com', a, p);
+    eq(asAlice('roles.assign', { values: { resource_id: bob.id, role_code: 'CP', scope_type: 'project', scope_id: p1.id } }).error.code, 'FORBIDDEN', 'un chef de projet ne désigne pas un chef de projet');
+    eq(asAlice('roles.assign', { values: { resource_id: bob.id, role_code: 'DPL', scope_type: 'project', scope_id: p1.id } }).error.code, 'FORBIDDEN', 'ni un niveau au-dessus du sien');
+    eq(asAlice('roles.assign', { values: { resource_id: bob.id, role_code: 'CONTRIB', scope_type: 'project', scope_id: p1.id } }).error.code, 'VALIDATION', 'un Contributor se pose sur un livrable, pas sur un projet');
+    eq(asAlice('roles.assign', { values: { resource_id: bob.id, role_code: 'CP', scope_type: 'program', scope_id: prog.id } }).error.code, 'VALIDATION', 'un chef de projet se pose sur un projet, pas sur un programme');
+    const r = asDan('roles.assign', { values: { resource_id: bob.id, role_code: 'CP', scope_type: 'project', scope_id: p1.id } });
     ok(r.ok, JSON.stringify(r.error));
-    eq(asAlice('roles.assign', { values: { resource_id: bob.id, role_code: 'MEMBER', scope_type: 'project', scope_id: p1.id } }).error.code, 'VALIDATION');
-    eq(asAlice('roles.assign', { values: { resource_id: bob.id, role_code: 'DPL', scope_type: 'project', scope_id: p1.id } }).error.code, 'FORBIDDEN');
-    eq(asAlice('roles.assign', { values: { resource_id: bob.id, role_code: 'CP', scope_type: 'program', scope_id: prog.id } }).error.code, 'FORBIDDEN');
-    ok(call('dan@entreprise.com', 'roles.assign', { values: { resource_id: bob.id, role_code: 'CP', scope_type: 'project', scope_id: p1.id } }).ok);
+    eq(asDan('roles.assign', { values: { resource_id: bob.id, role_code: 'CP', scope_type: 'project', scope_id: p1.id } }).error.code, 'VALIDATION', 'doublon refusé');
 
-    const obs = call('bob@entreprise.com', 'obs.list', { scopeType: 'program', scopeId: prog.id }).data;
-    eq(obs.map((o) => o.role_code + ':' + o.resource_name), ['DPL:Dan', 'CP:Alice', 'CP:Bob', 'MEMBER:Bob']);
+    const obs = call('bob@entreprise.com', 'obs.list', { scopeType: 'project', scopeId: p1.id }).data;
+    eq(obs.map((o) => o.role_code + ':' + o.resource_name), ['DPL:Dan', 'CP:Alice', 'CP:Bob']);
 
-    const member = obs.find((o) => o.role_code === 'MEMBER');
-    ok(asAlice('roles.end', { id: member.id, version: member.version }).ok);
+    const bobCp = obs.find((o) => o.role_code === 'CP' && o.resource_name === 'Bob');
+    ok(asDan('roles.end', { id: bobCp.id, version: bobCp.version }).ok, 'le DPL retire le chef de projet qu’il a posé');
     const after = call('bob@entreprise.com', 'obs.list', { scopeType: 'project', scopeId: p1.id }).data;
-    eq(after.map((o) => o.role_code + ':' + o.resource_name), ['CP:Alice', 'CP:Bob']);
-    eq(call('eve@entreprise.com', 'roles.end', { id: after[0].id, version: after[0].version }).error.code, 'FORBIDDEN');
+    eq(after.map((o) => o.role_code + ':' + o.resource_name), ['DPL:Dan', 'CP:Alice']);
+    eq(call('eve@entreprise.com', 'roles.end', { id: after[1].id, version: after[1].version }).error.code, 'FORBIDDEN', 'sans rôle : rien');
+    eq(asAlice('roles.end', { id: after[1].id, version: after[1].version }).error.code, 'FORBIDDEN', 'un chef de projet ne retire pas un chef de projet');
     void dan;
   });
 
@@ -225,14 +227,21 @@ module.exports = function () {
     const { c, prog, p1, alice, bob } = world();
     const tbl = c.getTable('RoleAssignment');
     const add = (vals) => { const id = 'ra-' + Math.random().toString(36).slice(2); tbl.appendRows([Object.assign({ id }, vals)]); return id; };
-    // Alice (CP de P1) se nomme DPL du programme dans AppSheet : annulé.
-    const self = add({ resource_id: alice.id, role_code: 'DPL', scope_type: 'program', scope_id: prog.id });
+    // Alice (CP de P1) se nomme DPL de son projet dans AppSheet : annulé.
+    const self = add({ resource_id: alice.id, role_code: 'DPL', scope_type: 'project', scope_id: p1.id });
     eq(c.onRowChanged('RoleAssignment', self, 'alice@entreprise.com'), 'CREATED');
     ok(c.isTrue(c.repoGet('RoleAssignment', self).deleted), 'auto-nomination annulée');
     ok(c.SENT_MAILS.some((m) => m.to === 'alice@entreprise.com' && /annulée/.test(m.subject)), 'auteur prévenu');
-    // Alice nomme Bob membre de P1 : accepté.
-    const okId = add({ resource_id: bob.id, role_code: 'MEMBER', scope_type: 'project', scope_id: p1.id });
+    // Alice nomme Bob Contributor d'un livrable de P1 : accepté (un chef de projet est au-dessus). Un rôle posé sur le mauvais type d'objet est annulé.
+    const item = c.repoInsert('PlanItem', { project_id: p1.id, name: 'L', item_type: 'Livrable', planned_start: '2026-10-05', planned_finish: '2026-10-09', status: 'À faire', progress_pct: 0 }, { actor: 'setup', source: 'setup' });
+    const okId = add({ resource_id: bob.id, role_code: 'CONTRIB', scope_type: 'planitem', scope_id: item.id });
     c.onRowChanged('RoleAssignment', okId, 'alice@entreprise.com');
     ok(!c.isTrue(c.repoGet('RoleAssignment', okId).deleted), 'attribution légitime conservée');
+    const wrongType = add({ resource_id: bob.id, role_code: 'CP', scope_type: 'planitem', scope_id: item.id });
+    c.onRowChanged('RoleAssignment', wrongType, 'alice@entreprise.com');
+    ok(c.isTrue(c.repoGet('RoleAssignment', wrongType).deleted), 'un chef de projet posé sur un livrable est annulé');
+    const legacy = add({ resource_id: bob.id, role_code: 'MEMBER', scope_type: 'project', scope_id: p1.id });
+    c.onRowChanged('RoleAssignment', legacy, 'alice@entreprise.com');
+    ok(c.isTrue(c.repoGet('RoleAssignment', legacy).deleted), 'les anciens codes ne se saisissent plus dans AppSheet');
   });
 };

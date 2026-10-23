@@ -76,7 +76,7 @@ module.exports = function () {
     const r = x.call(ADMIN, 'roles.assign', { values: { scope_type: 'project', scope_id: x.proj.id, resource_id: x.people.rwp.id, role_code: 'CP' } });
     ok(r.ok, JSON.stringify(r.error));
     eq([x.can('BudgetLine', 'rwp'), x.can('RoleAssignment', 'rwp')], [true, false], 'devenu chef de projet : il peut modifier le budget, pas les rôles, sans rien régler à la main');
-    const dpl = x.call(ADMIN, 'roles.assign', { values: { scope_type: 'program', scope_id: x.prog.id, resource_id: x.people.mia.id, role_code: 'DPL' } });
+    const dpl = x.call(ADMIN, 'roles.assign', { values: { scope_type: 'project', scope_id: x.proj.id, resource_id: x.people.mia.id, role_code: 'DPL' } });
     ok(dpl.ok, JSON.stringify(dpl.error));
     eq([x.can('RoleAssignment', 'mia'), x.can('PurchaseOrder', 'mia')], [true, true], 'devenue DPL : les deux groupes');
     const a = c.repoList('RoleAssignment').find((z) => z.resource_id === x.people.mia.id && z.role_code === 'DPL');

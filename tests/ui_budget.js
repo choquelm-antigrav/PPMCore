@@ -192,7 +192,7 @@ function openPage(user, startTab) {
   await r.until(() => r.zones().length > 0 && r.$('panel-po'));
   check(JSON.stringify(r.zones()) === JSON.stringify(['po', 'budget']), 'un responsable de WP : achats et son budget : ' + r.zones().join(','));
   await r.until(() => r.$('lines-table') || r.$('line-add'));
-  check(/Budget de votre périmètre/.test(r.text('panel-budget')) && !/Taux figé/.test(r.text('panel-budget')), 'budget limité à son périmètre, sans les taux');
+  check(/Budget de votre périmètre/.test(r.text('panel-budget')), 'budget limité à son périmètre (un Workpackage leader ne voit que celui de son workpackage)');
   const n = openPage(NOBODY);
   await n.until(() => /Accès réservé/.test(n.text('panel-bilan')));
   check(n.zones().length === 0, 'sans nomination dans l’équipe : rien d’accessible');

@@ -25,52 +25,90 @@ var THRESHOLDS = {
 /** Conversion probabilité 1–5 → pourcentage (section 5.7). */
 var PROBABILITY_MAP = { 1: 0.1, 2: 0.3, 3: 0.5, 4: 0.7, 5: 0.9 };
 
-/** Rang des rôles : on ne peut attribuer qu'un rôle de rang égal ou inférieur au sien. */
-var ROLE_RANK = { PL: 0, DPL: 1, CP: 2, RWP: 3, MEMBER: 4 };
+/**
+ * Huit niveaux de responsabilité (0.15.3). Le numéro le plus BAS est le niveau le plus haut ; un niveau a les droits de ceux du dessous (règle 2).
+ *   0 Program Leader (programme) · 1 Domain Program Leader (plusieurs projets) · 2 Chef de projet (un projet) · 3 Workpackage leader (un workpackage)
+ *   4 Sub-workpackage leader (un sous-workpackage) · 5 Deliverable owner (un livrable ou un jalon) · 6 Contributor (avancement d'un livrable ou d'un jalon)
+ *   7 Reader : rôle PAR DÉFAUT de toute personne sans autre rôle, jamais enregistré ; lit tout, ne modifie rien.
+ * Les rôles se cumulent (règle 3) : on peut être Contributor d'un livrable et Workpackage leader d'un autre workpackage.
+ */
+var ROLE_RANK = { PL: 0, DPL: 1, CP: 2, WPL: 3, SWPL: 4, DO: 5, CONTRIB: 6, READER: 7 };
 
-/** Rôles (section 7). MEMBER = membre affecté (affectation explicite ou ligne budgétaire). */
-var ROLES = ['PL', 'DPL', 'CP', 'RWP', 'MEMBER'];
+var ROLES = ['PL', 'DPL', 'CP', 'WPL', 'SWPL', 'DO', 'CONTRIB', 'READER'];
+
+/** Rôles qu'on enregistre (READER est implicite). */
+var ASSIGNABLE_ROLES = ['PL', 'DPL', 'CP', 'WPL', 'SWPL', 'DO', 'CONTRIB'];
 
 var ROLE_LABELS = {
   PL: 'Program Leader',
   DPL: 'Domain Program Leader',
   CP: 'Chef de projet',
-  RWP: 'Responsable de workpackage',
-  MEMBER: 'Membre affecté'
+  WPL: 'Workpackage leader',
+  SWPL: 'Sub-workpackage leader',
+  DO: 'Deliverable owner',
+  CONTRIB: 'Contributor',
+  READER: 'Reader'
+};
+
+/** Sur quel type d'objet chaque rôle se pose, et nulle part ailleurs : pas de chef de projet sur un livrable, pas de Deliverable owner sur un workpackage. */
+var ROLE_OBJECT = { PL: 'program', DPL: 'project', CP: 'project', WPL: 'workpackage', SWPL: 'subworkpackage', DO: 'planitem', CONTRIB: 'planitem' };
+var OBJECT_LABELS = { program: 'un programme', project: 'un projet', workpackage: 'un workpackage', subworkpackage: 'un sous-workpackage', planitem: 'un livrable ou un jalon' };
+
+/** Anciens codes (avant 0.15.3), reconnus seulement par la migration. */
+var LEGACY_ROLE_CODES = ['RWP', 'MEMBER'];
+
+/**
+ * Droits d'écriture, exprimés par NIVEAU MINIMAL : le rôle indiqué et tous ceux du dessus l'ont, sur l'objet où le rôle est posé et tout ce qu'il contient.
+ * 'wbs.edit' et 'wbs.delete' ont ici un niveau de base, affiné selon le type d'objet visé (voir wbsLevel_ dans 05_Rbac.gs).
+ * L'administrateur plateforme a tous les droits. Les actions de portée « global » sont accordées si l'on détient le rôle sur n'importe quel périmètre.
+ */
+var PERMISSION_LEVEL = {
+  'program.create':   'PL',
+  'sheet.roles':      'DPL',     // modifier DIRECTEMENT dans le classeur les feuilles Rôles et personnes (la protection du classeur en découle : 51_SheetProtect.gs)
+  'sheet.budget':     'CP',      // idem pour les feuilles Budget et achats
+  'program.view':     'DPL',     // vues consolidées de tous les projets d'un programme (Actualités, Suivi, Budget)
+  'project.create':   'DPL',
+  'wbs.edit':         'DO',      // modifier un objet, ou créer dedans : le niveau exact dépend de l'objet (projet CP, workpackage WPL, sous-workpackage SWPL, livrable DO)
+  'wbs.delete':       'DO',      // supprimer un objet : projet DPL, workpackage CP, sous-workpackage WPL, livrable ou jalon DO
+  'progress.declare': 'CONTRIB',
+  'baseline.manage':  'CP',
+  'baseline.request': 'CONTRIB',
+  'budget.edit':      'WPL',
+  'cpn.edit':         'CP',
+  'po.edit':          'CONTRIB',
+  'ratecard.manage':  'CP',
+  'actuals.manage':   'CP',
+  'roles.assign':     'DO',      // poser un rôle : le niveau exact dépend du rôle posé (voir roleAssignError_ dans 05_Rbac.gs)
+  'resource.edit':    'CP',      // créer et modifier les personnes (page Ressources)
+  'risk.create':      'CONTRIB',
+  'risk.edit':        'CP',
+  'changes.ack':      'CP',
+  'workspace.manage': 'CP',
+  'insight.decide':   'CP',
+  'news.add':         'CP',
+  'news.manage':      'CP',
+  'sensitive.read':   'WPL',     // lire les tarifs journaliers et les comptes rendus de réunion (le budget se lit avec budget.edit, sur son périmètre : un WPL voit celui de son workpackage) ; tout le reste se lit sans rôle
+  'addon.install':    '*'
 };
 
 /**
- * Matrice des droits d'écriture (section 7).
- * '*' = tout utilisateur authentifié. L'administrateur plateforme a tous les droits.
- * Les actions de portée « global » (rate card, création de programme) sont accordées
- * si l'utilisateur détient le rôle sur n'importe quel périmètre.
+ * Droits « en profondeur » : un rôle détenu n'importe où DANS le périmètre visé compte (un Contributor sur un livrable peut demander une baseline pour son projet,
+ * un DPL posé sur des projets voit les vues consolidées de leur programme).
  */
-var PERMISSIONS = {
-  'program.create':   ['PL'],
-  'sheet.roles':      ['PL', 'DPL'],       // modifier DIRECTEMENT dans le classeur les feuilles Rôles et personnes (la protection du classeur en découle : 51_SheetProtect.gs)
-  'sheet.budget':     ['PL', 'DPL', 'CP'], // idem pour les feuilles Budget et achats
-  'program.view':     ['PL', 'DPL'], // vues consolidées de tous les projets d'un programme (Actualités, Suivi, Budget)
-  'project.create':   ['PL', 'DPL'],
-  'wbs.edit':         ['PL', 'DPL', 'CP', 'RWP'],
-  'progress.declare': ['DPL', 'CP', 'RWP', 'MEMBER'],
-  'baseline.manage':  ['DPL', 'CP'],
-  'baseline.request': ['PL', 'DPL', 'CP', 'RWP', 'MEMBER'],
-  'budget.edit':      ['PL', 'DPL', 'CP', 'RWP'],
-  'cpn.edit':         ['PL', 'DPL', 'CP'],
-  'po.edit':          ['PL', 'DPL', 'CP', 'RWP', 'MEMBER'],
-  'ratecard.manage':  ['DPL', 'CP'],
-  'actuals.manage':   ['DPL', 'CP'],
-  'roles.assign':     ['PL', 'DPL', 'CP'],
-  'resource.edit':    ['PL', 'DPL', 'CP'],
-  'risk.create':      ['PL', 'DPL', 'CP', 'RWP', 'MEMBER'],
-  'risk.edit':        ['PL', 'DPL', 'CP'],
-  'changes.ack':      ['DPL', 'CP'],
-  'workspace.manage': ['PL', 'DPL', 'CP'],
-  'insight.decide':   ['PL', 'DPL', 'CP'],
-  'news.add':         ['PL', 'DPL', 'CP'],
-  'news.manage':      ['PL', 'DPL', 'CP'],
-  'addon.install':    ['*']
+var PERMISSION_DEEP = {
+  'baseline.request': true, 'po.edit': true, 'risk.create': true, 'sensitive.read': true,
+  'program.view': true, 'project.create': true
 };
+
+/** Les rôles autorisés par droit, déduits des niveaux (conservé pour la protection du classeur et les libellés). */
+var PERMISSIONS = (function () {
+  var out = {};
+  Object.keys(PERMISSION_LEVEL).forEach(function (action) {
+    var min = PERMISSION_LEVEL[action];
+    out[action] = min === '*' ? ['*'] : ASSIGNABLE_ROLES.filter(function (r) { return ROLE_RANK[r] <= ROLE_RANK[min]; });
+  });
+  return out;
+})();
 
 /** Durée d'une tranche de traitement planifié (plafond Apps Script : 6 min par exécution). */
 var JOB_SLICE_MS = 5 * 60 * 1000;

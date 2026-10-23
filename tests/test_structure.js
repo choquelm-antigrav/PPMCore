@@ -21,14 +21,11 @@ module.exports = function () {
     const p2 = call(A, 'projects.create', { values: { code: 'P2', name: 'Projet 2', program_id: prog.id, status: 'Actif' } }).data;
     const role = (r, code, type, id, extra) => c.repoInsert('RoleAssignment', Object.assign({ resource_id: r.id, role_code: code, scope_type: type, scope_id: id }, extra || {}), S);
     role(anna, 'PL', 'program', prog.id);
-    role(dan, 'DPL', 'program', prog.id);
-    role(alice, 'CP', 'project', p1.id);
-    role(bob, 'CP', 'project', p1.id);
+    role(dan, 'DPL', 'project', p1.id);
+    role(bob, 'CP', 'project', p1.id); // Alice est chef de projet par la fiche du projet (manager_resource_id)
     const w1 = call(A, 'workpackages.create', { values: { project_id: p1.id, name: 'Conception', wbs_code: '1', owner_resource_id: alice.id, charge_code: 'C-1' } }).data;
     const w11 = call(A, 'workpackages.create', { values: { project_id: p1.id, name: 'Structure', wbs_code: '1.1', parent_wp_id: w1.id, owner_resource_id: carl.id } }).data;
-    role(carl, 'RWP', 'workpackage', w11.id);
-    role(eve, 'MEMBER', 'project', p1.id);
-    role(eve, 'MEMBER', 'workpackage', w11.id);
+    // Alice est Workpackage leader du WP 1 et Carl Sub-WP leader du sous-WP 1.1 par leur fiche de workpackage ; Eve n'a aucun rôle (Reader)
     return { c, call, S, A, team, anna, dan, alice, bob, carl, eve, prog, p1, p2, w1, w11 };
   }
 
@@ -100,44 +97,7 @@ module.exports = function () {
     eq(c.repoGet('Resource', bob.id).organization, 'Bureau d’études Sud');
   });
 
-  // ------------------------------------------------------------ OBS par rôles
-  const shape = (t) => t.nodes.map((n) => n.role_code + '@' + n.scope_label.split(' ')[0] + ':' + n.people.map((p) => p.name).join('+') + '<' + (t.nodes.find((x) => x.id === n.parent) || { role_code: '', scope_label: '' }).role_code);
-
-  test('OBS d’un programme : chaque rôle a pour parent le rôle supérieur qui le couvre', () => {
-    const { call, prog } = world();
-    const t = call('alice@entreprise.com', 'obs.tree', { scopeType: 'program', scopeId: prog.id }).data;
-    eq(shape(t), [
-      'PL@PG:Anna<', 'DPL@PG:Dan<PL', 'CP@P1:Alice+Bob<DPL', 'RWP@1.1:Carl<CP', 'MEMBER@1.1:Eve<RWP', 'MEMBER@P1:Eve<CP'
-    ]);
-    eq(t.stats, { nodes: 6, people: 7 });
-    const carl = t.nodes.find((n) => n.role_code === 'RWP').people[0];
-    eq([carl.job_function, carl.organization, carl.resource_type, carl.country, carl.supplier], ['Ingénieur essais', 'Sous-traitant Alpha', 'Externe', 'DE', 'Alpha GmbH']);
-    eq(t.nodes.find((n) => n.role_code === 'DPL').people[0].team, 'Bureau d’études');
-  });
-
-  test('OBS d’un projet ou d’un WP : les rôles au-dessus restent affichés, pas ceux d’à côté', () => {
-    const { c, call, p1, p2, w11, carl } = world();
-    const S = { actor: 's', source: 'setup' };
-    c.repoInsert('RoleAssignment', { resource_id: carl.id, role_code: 'CP', scope_type: 'project', scope_id: p2.id }, S);
-    const t = call('alice@entreprise.com', 'obs.tree', { scopeType: 'project', scopeId: p1.id }).data;
-    eq(shape(t).filter((s) => s.indexOf('@P2') >= 0), [], 'le chef de projet de P2 n’apparaît pas');
-    ok(t.nodes.some((n) => n.role_code === 'PL'), 'le PL du programme apparaît au-dessus');
-    const w = call('alice@entreprise.com', 'obs.tree', { scopeType: 'workpackage', scopeId: w11.id }).data;
-    eq(shape(w), ['PL@PG:Anna<', 'DPL@PG:Dan<PL', 'CP@P1:Alice+Bob<DPL', 'RWP@1.1:Carl<CP', 'MEMBER@1.1:Eve<RWP', 'MEMBER@P1:Eve<CP']);
-    eq(call('alice@entreprise.com', 'obs.tree', { scopeType: 'project', scopeId: 'inconnu' }).error.code, 'NOT_FOUND');
-    eq(call('alice@entreprise.com', 'obs.tree', { scopeType: 'planitem', scopeId: p1.id }).error.code, 'VALIDATION');
-  });
-
-  test('OBS : affectation terminée, périmètre supprimé et personne supprimée ignorés', () => {
-    const { c, call, prog, dan, bob, w11 } = world();
-    const S = { actor: 's', source: 'setup' };
-    const ra = c.repoList('RoleAssignment', (a) => a.resource_id === dan.id)[0];
-    c.repoUpdate('RoleAssignment', ra.id, { end_date: '2026-09-01' }, null, S);
-    c.repoSoftDelete('Resource', bob.id, null, S);
-    c.repoSoftDelete('WorkPackage', w11.id, null, S);
-    const t = call('alice@entreprise.com', 'obs.tree', { scopeType: 'program', scopeId: prog.id }).data;
-    eq(shape(t), ['PL@PG:Anna<', 'CP@P1:Alice<PL', 'MEMBER@P1:Eve<CP']);
-  });
+  // ------------------------------------------------------------ OBS par rôles : les essais de l'organigramme par rôles sont retirés avec l'OBS (0.15.3, phase 3)
 
   // ------------------------------------------------------------ OBS par équipes
   test('OBS par équipes : hiérarchie, responsable à part, sans équipe, branche, cycle toléré', () => {

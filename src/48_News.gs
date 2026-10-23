@@ -31,7 +31,7 @@ function newsAdapter_() { return NEWS_ADAPTER || realNews_(); }
 
 // ---------------------------------------------------------------- droits
 
-/** Qui voit les actualités d'un projet : l'administrateur et toute personne qui y a un rôle. */
+/** Qui est dans l'équipe d'un projet : l'administrateur et toute personne qui y a un rôle (même sur un seul livrable). */
 function newsMember_(ctx, project) {
   if (ctx.isAdmin) return true;
   if (!ctx.resourceId) return false;
@@ -42,12 +42,13 @@ function newsMember_(ctx, project) {
 function newsAccess_(ctx, project) {
   var scope = { type: 'project', id: project.id };
   var member = newsMember_(ctx, project);
-  return { member: member, view: member, add: can(ctx, 'news.add', scope), manage: can(ctx, 'news.manage', scope) };
+  // les comptes rendus de réunion se lisent à partir du Workpackage leader (droit sensitive.read, en profondeur) ; les actions de chacun restent visibles de leur titulaire (news.mine)
+  return { member: member, view: can(ctx, 'sensitive.read', scope), add: can(ctx, 'news.add', scope), manage: can(ctx, 'news.manage', scope) };
 }
 
 function newsMustView_(ctx, project) {
   var a = newsAccess_(ctx, project);
-  if (!a.view) throw new PpmError('FORBIDDEN', 'Les actualités sont réservées aux membres du projet.');
+  if (!a.view) throw new PpmError('FORBIDDEN', 'Les comptes rendus de réunion sont réservés aux Workpackage leaders et aux niveaux au-dessus.');
   return a;
 }
 
@@ -389,7 +390,9 @@ defineAction('news.digest.publish', function (p, ctx) {
     if (p.notify !== false) {
       var base = newsBase_(), members = newsProjectMembers_(project, base);
       var url = getProp(PROP.WEBAPP_URL, '');
-      base.resources.filter(function (r) { return members[r.id] && !isTrue(r.deleted) && !isBlank(r.email) && (!allowedDomains().length || isAllowedEmail_(String(r.email).toLowerCase())); }).slice(0, 150).forEach(function (r) {
+      // la synthèse reprend des comptes rendus : elle ne part qu'à ceux qui peuvent les lire (Workpackage leader et au-dessus)
+      var rolesData = { workpackages: base.wps, planitems: base.items, assignments: repoList('RoleAssignment') };
+      base.resources.filter(function (r) { return members[r.id] && personReadsSensitive_(rolesData, r.id, project, today) && !isTrue(r.deleted) && !isBlank(r.email) && (!allowedDomains().length || isAllowedEmail_(String(r.email).toLowerCase())); }).slice(0, 150).forEach(function (r) {
         var body = 'Bonjour ' + r.name + ',\n\nActualités du projet ' + project.code + ' ' + project.name + ' au ' + frDate_(today) + ' :\n\n' + text + '\n' + (url ? '\nDétail et vos actions : ' + url + '?view=actualites&project=' + project.id + '\n' : '');
         var html = '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1F2A33;max-width:640px"><p>Bonjour ' + escHtml_(r.name) + ',</p><p>Actualités du projet <b>' + escHtml_(project.code + ' ' + project.name) + '</b> au ' + escHtml_(frDate_(today)) + ' :</p>' +
           text.split(/\n+/).map(function (l) { return '<p style="margin:4px 0">' + escHtml_(l) + '</p>'; }).join('') + (url ? '<p style="margin-top:18px"><a href="' + escHtml_(url + '?view=actualites&project=' + project.id) + '">Détail et vos actions</a></p>' : '') + '</div>';
@@ -414,7 +417,7 @@ function newsDigestSections_(data, person, today, windowStart, link) {
   var memberOf = {};
   (data.assignments || []).forEach(function (a) { if (a.resource_id === person.id && scopeOf[a.scope_id]) memberOf[scopeOf[a.scope_id]] = true; });
   data.projects.forEach(function (p) { if (p.manager_resource_id === person.id) memberOf[p.id] = true; });
-  data.projects.filter(function (p) { return memberOf[p.id] && !isTrue(p.deleted) && p.status !== 'Clos'; }).forEach(function (p) {
+  data.projects.filter(function (p) { return memberOf[p.id] && !isTrue(p.deleted) && p.status !== 'Clos' && personReadsSensitive_(data, person.id, p, today); }).forEach(function (p) {
     var digest = n.digests.filter(function (d) { return d.project_id === p.id && !isTrue(d.deleted) && d.digest_date >= windowStart; })
       .sort(function (a, b) { return String(b.digest_date).localeCompare(String(a.digest_date)); })[0];
     var lines = [];

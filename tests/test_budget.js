@@ -87,7 +87,7 @@ module.exports = function () {
     eq(cp.totals.total, 7200 + 5200 + 8000 + 1040, 'total du projet');
     eq([cp.totals.external, cp.totals.internal], [8000, 13440]);
     const rwp = w.call(RWP, 'budget.get', { projectId: w.p1.id });
-    eq([rwp.partial, rwp.lines.map((l) => l.deliverable_id).sort(), rwp.lines.every((l) => l.frozen_rate === null)], [true, [w.a.id, w.b.id].sort(), true], 'Rémi : son WP seulement, sans les taux');
+    eq([rwp.partial, rwp.lines.map((l) => l.deliverable_id).sort(), rwp.lines.some((l) => l.frozen_rate !== null)], [true, [w.a.id, w.b.id].sort(), true], 'Rémi (Workpackage leader) : son WP seulement, avec les taux (tarifs lisibles à partir du Workpackage leader)');
     eq(w.raw(MEMBER, 'budget.get', { projectId: w.p1.id }).error.code, 'FORBIDDEN');
     eq(w.raw(RWP, 'budget.balance', { projectId: w.p1.id }).error.code, 'FORBIDDEN', 'le bilan du projet n’est pas pour un responsable de WP');
     eq(cp.deliverables.find((d) => d.id === w.cc.id).cpn, 'CPN-200', 'le livrable relève du CPN de son sous-projet');

@@ -176,11 +176,12 @@ function projectMemberIds_(data, projectId, today) {
   var people = {};
   if (!isBlank(project.manager_resource_id)) people[project.manager_resource_id] = true;
   data.workpackages.forEach(function (w) { if (wpIds[w.id] && !isBlank(w.owner_resource_id)) people[w.owner_resource_id] = true; });
-  data.planitems.forEach(function (i) { if (i.project_id === projectId && !isBlank(i.owner_resource_id)) people[i.owner_resource_id] = true; });
+  var itemIds = {};
+  data.planitems.forEach(function (i) { if (i.project_id === projectId) { itemIds[i.id] = true; if (!isBlank(i.owner_resource_id)) people[i.owner_resource_id] = true; } });
   (data.assignments || []).forEach(function (a) {
     if (isTrue(a.deleted)) return;
     if (!isBlank(a.end_date) && String(a.end_date) < today) return;
-    var hit = (a.scope_type === 'project' && a.scope_id === projectId) || (a.scope_type === 'workpackage' && wpIds[a.scope_id]) ||
+    var hit = (a.scope_type === 'project' && a.scope_id === projectId) || (a.scope_type === 'workpackage' && wpIds[a.scope_id]) || (a.scope_type === 'planitem' && itemIds[a.scope_id]) ||
       (a.scope_type === 'program' && !isBlank(project.program_id) && a.scope_id === project.program_id);
     if (hit) people[a.resource_id] = true;
   });

@@ -82,23 +82,27 @@ function checkLag_(v) {
 
 // ---------------------------------------------------------------- rôles
 
-/** Ce que l'utilisateur peut attribuer : les périmètres où il a le droit, avec le rang minimal des rôles qu'il peut donner. */
+/** Ce que l'utilisateur peut attribuer : pour chaque objet, les rôles qu'il peut y poser (règles de roleAssignCheck_ : bon type d'objet, niveau strictement supérieur). */
 defineAction('roles.options', function (p, ctx) {
   var out = [];
   var projects = indexBy_(repoList('Project'));
   var push = function (type, id, label) {
     var scope = { type: type, id: id };
-    if (!can(ctx, 'roles.assign', scope)) return;
-    out.push({ type: type, id: id, label: label, min_rank: ctx.isAdmin ? 0 : bestRankOn_(ctx, scope) });
+    var roles = assignableRolesOn_(ctx, scope);
+    if (!roles.length) return;
+    out.push({ type: type, id: id, label: label, roles: roles, min_rank: Math.min.apply(null, roles.map(function (r) { return ROLE_RANK[r]; })) });
   };
   repoList('Program').forEach(function (g) { push('program', g.id, g.code + ' — ' + g.name); });
   repoList('Project').forEach(function (x) { push('project', x.id, x.code + ' — ' + x.name); });
   repoList('WorkPackage').forEach(function (w) {
     push('workpackage', w.id, (w.wbs_code ? w.wbs_code + ' ' : '') + w.name + ' (' + (projects[w.project_id] ? projects[w.project_id].code : '?') + ')');
   });
+  repoList('PlanItem').forEach(function (i) {
+    push('planitem', i.id, i.name + ' (' + (projects[i.project_id] ? projects[i.project_id].code : '?') + ')');
+  });
   return {
-    roles: ROLES.map(function (c) { return { code: c, label: ROLE_LABELS[c] || c, rank: ROLE_RANK[c] }; }),
-    scopes: out.slice(0, 600)
+    roles: ASSIGNABLE_ROLES.map(function (c) { return { code: c, label: ROLE_LABELS[c] || c, rank: ROLE_RANK[c], object: ROLE_OBJECT[c] }; }),
+    scopes: out.slice(0, 900)
   };
 });
 

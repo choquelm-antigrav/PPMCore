@@ -64,7 +64,7 @@ function openPage(file, user, boot) {
   check(p.text('title') === 'Mon compte' && p.doc.getElementById('admin-chip').hidden, 'titre, pas de mention « administrateur »');
   check(/Rémi/.test(p.text('panel-fiche')) && /remi@entreprise\.com/.test(p.text('panel-fiche')), 'nom et adresse');
   const rows = [...p.doc.querySelectorAll('#roles-table tbody tr')].map((r) => r.textContent);
-  check(rows.length === 1 && /Responsable de workpackage/.test(rows[0]) && /1 Conception/.test(rows[0]), 'rôle et périmètre en lecture seule : ' + rows.join('|'));
+  check(rows.length === 2 && /Workpackage leader/.test(rows[0]) && /1 Conception/.test(rows[0]) && /Deliverable owner/.test(rows[1]) && /2 livrables ou jalons/.test(rows[1]), 'rôles et périmètres en lecture seule (leader du WP 1, propriétaire de deux livrables regroupés) : ' + rows.join('|'));
   check(!p.doc.querySelector('#roles-table input, #roles-table button'), 'aucun contrôle de modification sur les rôles');
   check(p.doc.getElementById('edit-function') && !p.doc.getElementById('edit-name'), 'seuls fonction et organisation sont modifiables');
   // 0.14.2 : les suggestions de fonction et d'organisation (jusqu'à 500 personnes) ne se chargent que si l'on touche à ces champs, une seule fois

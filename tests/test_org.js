@@ -43,40 +43,47 @@ module.exports = function () {
     eq(w.call(CP, 'deps.item', { itemId: w.j.id }).predecessors.map((x) => x.other.name), ['Essais']);
   });
 
-  test('Rôles attribuables : périmètres où l’on peut agir, rang minimal, terminer toutes les lignes d’une affectation', () => {
+  test('Rôles attribuables : pour chaque objet, les rôles qu’on peut y poser (bon type d’objet, niveau strictement supérieur)', () => {
     const w = lot2World();
+    const where = (r, type) => r.scopes.filter((s) => s.type === type).map((s) => s.label + ' → ' + s.roles.join('/')).sort();
     const cp = w.call(CP, 'roles.options', {});
-    eq(cp.roles.map((r) => r.code), w.c.ROLES);
-    eq(cp.scopes.map((s) => s.type + ':' + s.label).sort(), ['project:P1 — Projet 1', 'workpackage:1 Conception (P1)', 'workpackage:1.1 Calcul (P1)', 'workpackage:2 Essais (P1)'].sort(), 'un chef de projet : son projet et ses WP, pas le programme');
-    eq([...new Set(cp.scopes.map((s) => s.min_rank))], [w.c.ROLE_RANK.CP], 'il ne donne pas de rôle plus élevé que le sien');
+    eq(cp.roles.map((r) => r.code), w.c.ASSIGNABLE_ROLES, 'les sept rôles qui s’enregistrent (Reader est implicite)');
+    eq(cp.roles.map((r) => r.object), ['program', 'project', 'project', 'workpackage', 'subworkpackage', 'planitem', 'planitem'], 'chaque rôle dit sur quel objet il se pose');
+    eq(where(cp, 'workpackage'), ['1 Conception (P1) → WPL', '1.1 Calcul (P1) → SWPL', '2 Essais (P1) → WPL'].sort(), 'un chef de projet : le Workpackage leader d’un workpackage, le Sub-WP leader d’un sous-workpackage');
+    eq(where(cp, 'planitem').length, 4, 'et le Deliverable owner ou les Contributors de chaque livrable et jalon');
+    ok(cp.scopes.filter((s) => s.type === 'planitem').every((s) => s.roles.join() === 'DO,CONTRIB'), 'Deliverable owner et Contributor');
+    eq([where(cp, 'project'), where(cp, 'program')], [[], []], 'il ne pose rien sur son projet (chef de projet, DPL) ni sur le programme : c’est le niveau du dessus');
     const admin = w.call(ADMIN, 'roles.options', {});
-    ok(admin.scopes.some((s) => s.type === 'program') && admin.scopes.every((s) => s.min_rank === 0), 'l’administrateur : tout, sans limite de rang');
-    eq(w.call(MEMBER, 'roles.options', {}).scopes, [], 'un membre n’attribue rien');
-    eq(w.call(RWP, 'roles.options', {}).scopes, [], 'un responsable de WP non plus');
-    eq(w.call(DPL, 'roles.options', {}).scopes.some((s) => s.type === 'program'), true);
-    // l'organigramme indique droits et identifiants d'affectation
-    w.c.repoInsert('RoleAssignment', { resource_id: w.mia.id, role_code: 'MEMBER', scope_type: 'project', scope_id: w.p1.id }, w.S); // doublon volontaire
-    const tree = w.call(CP, 'obs.tree', { scopeType: 'project', scopeId: w.p1.id });
-    const node = tree.nodes.find((n) => n.role_code === 'MEMBER' && n.scope_type === 'project');
-    eq([node.canAssign, node.min_rank, node.people[0].name, node.people[0].assignment_ids.length], [true, w.c.ROLE_RANK.CP, 'Mia', 2], 'les deux lignes d’une même affectation sont regroupées');
-    ok(tree.nodes.find((n) => n.role_code === 'DPL').canAssign === false, 'le rôle du programme : pas modifiable par un chef de projet');
-    node.people[0].assignment_ids.forEach((id) => w.call(CP, 'roles.end', { id }));
-    ok(!w.call(CP, 'obs.tree', { scopeType: 'project', scopeId: w.p1.id }).nodes.some((n) => n.role_code === 'MEMBER' && n.scope_type === 'project'), 'après les avoir terminées, Mia n’apparaît plus sur ce rôle');
-    const before = w.call(CP, 'roles.assign', { values: { resource_id: w.mia.id, role_code: 'RWP', scope_type: 'workpackage', scope_id: w.w2.id } });
-    eq([before.role_code, before.start_date], ['RWP', w.c.todayStr()]);
+    ok(admin.scopes.some((s) => s.type === 'program' && s.roles.join() === 'PL') && admin.scopes.every((s) => s.roles.length > 0), 'l’administrateur : le Program Leader sur un programme, et tout ailleurs');
+    eq(w.call(MEMBER, 'roles.options', {}).scopes, [], 'un Contributor n’attribue rien');
+    eq(where(w.call(RWP, 'roles.options', {}), 'workpackage'), ['1.1 Calcul (P1) → SWPL'], 'un Workpackage leader : le Sub-WP leader des sous-workpackages de son WP');
+    eq(where(w.call(RWP, 'roles.options', {}), 'planitem').length, 2, 'et les rôles des livrables de son WP (Spécification, Calcul)');
+    const dora = w.call(DPL, 'roles.options', {});
+    eq([where(dora, 'project').length, where(dora, 'program').length], [2, 0], 'un DPL : le chef de projet de ses deux projets, rien sur le programme');
+    // attribuer
+    const a = w.call(CP, 'roles.assign', { values: { resource_id: w.mia.id, role_code: 'WPL', scope_type: 'workpackage', scope_id: w.w2.id } });
+    eq([a.role_code, a.start_date], ['WPL', w.c.todayStr()]);
+    eq(w.c.repoGet('WorkPackage', w.w2.id).owner_resource_id, w.carla.id, 'le responsable principal du workpackage reste le premier titulaire (Carla)');
     eq(w.raw(CP, 'roles.assign', { values: { resource_id: w.mia.id, role_code: 'DPL', scope_type: 'project', scope_id: w.p1.id } }).error.code, 'FORBIDDEN', 'pas de rôle plus haut que le sien');
+    eq(w.raw(CP, 'roles.assign', { values: { resource_id: w.mia.id, role_code: 'CP', scope_type: 'planitem', scope_id: w.a.id } }).error.code, 'VALIDATION', 'pas de chef de projet sur un livrable');
+    eq(w.raw(CP, 'roles.assign', { values: { resource_id: w.mia.id, role_code: 'WPL', scope_type: 'workpackage', scope_id: w.w2.id } }).error.code, 'VALIDATION', 'doublon refusé');
+    eq(w.raw(CP, 'roles.assign', { values: { resource_id: w.mia.id, role_code: 'READER', scope_type: 'project', scope_id: w.p1.id } }).error.code, 'VALIDATION', 'Reader ne se pose pas');
+    // terminer une affectation retire le droit et met à jour le principal
+    const ended = w.call(CP, 'roles.end', { id: a.id });
+    ok(ended.end_date < w.c.todayStr(), 'affectation terminée (date de fin hier)');
+    eq(w.raw(MEMBER, 'roles.end', { id: a.id }).error.code !== undefined, true, 'un Contributor ne retire aucun rôle');
   });
 
   test('Retrait d’une personne : annonce préalable, rôles terminés, responsabilités libérées, droits', () => {
     const w = lot2World();
     w.c.repoUpdate('HierarchicalTeam', w.c.repoInsert('HierarchicalTeam', { name: 'BE' }, w.S).id, { manager_resource_id: w.remi.id }, null, w.S);
     const dry = w.call(CP, 'people.remove', { id: w.remi.id, dryRun: true });
-    eq(dry, { dryRun: true, name: 'Rémi', roles: 1, teams: 1, wps: 1, items: 2 });
+    eq(dry, { dryRun: true, name: 'Rémi', roles: 3, teams: 1, wps: 1, items: 2 }); // Workpackage leader du WP 1 et Deliverable owner de deux livrables, posés par leur responsable
     ok(!w.c.isTrue(w.c.repoGet('Resource', w.remi.id).deleted), 'l’annonce ne change rien');
     eq(w.raw(MEMBER, 'people.remove', { id: w.remi.id }).error.code, 'FORBIDDEN');
     ok(/propre fiche/.test(w.raw(CP, 'people.remove', { id: w.carla.id }).error.message));
     const done = w.call(CP, 'people.remove', { id: w.remi.id });
-    eq([done.dryRun, done.roles, done.teams, done.wps, done.items], [false, 1, 1, 1, 2]);
+    eq([done.dryRun, done.roles, done.teams, done.wps, done.items], [false, 3, 1, 1, 2]);
     ok(w.c.isTrue(w.c.repoGet('Resource', w.remi.id).deleted), 'la fiche n’est plus active');
     eq([w.c.repoGet('WorkPackage', w.w1.id).owner_resource_id, w.c.repoGet('PlanItem', w.a.id).owner_resource_id, w.c.repoGet('PlanItem', w.b.id).owner_resource_id], ['', '', ''], 'responsabilités libérées');
     eq(w.c.repoList('HierarchicalTeam').map((t) => t.manager_resource_id), [''], 'plus responsable d’équipe');
@@ -135,9 +142,8 @@ module.exports = function () {
     w.call(CP, 'resources.update', { id: nina.id, patch: { team_id: team.id } });
     ok(names(roles()).includes('Nina Roux'), 'une personne dans une équipe, sans rôle, reste à positionner');
     // un rôle la positionne
-    const a = w.call(CP, 'roles.assign', { values: { resource_id: nina.id, role_code: 'MEMBER', scope_type: 'project', scope_id: w.p1.id } });
-    ok(!names(roles()).includes('Nina Roux'), 'avec un rôle, elle n’est plus à positionner');
-    ok(roles().nodes.some((n) => n.role_code === 'MEMBER' && n.people.some((x) => x.name === 'Nina Roux')), 'et elle figure sur la carte de son rôle');
+    const a = w.call(CP, 'roles.assign', { values: { resource_id: nina.id, role_code: 'CONTRIB', scope_type: 'planitem', scope_id: w.a.id } });
+    ok(!names(roles()).includes('Nina Roux'), 'avec un rôle (Contributor d’un livrable), elle n’est plus à positionner');
     // un rôle terminé la remet à positionner
     w.call(CP, 'roles.end', { id: a.id });
     ok(names(roles()).includes('Nina Roux'), 'rôle terminé : de nouveau à positionner');

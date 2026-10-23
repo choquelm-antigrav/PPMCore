@@ -49,6 +49,10 @@ function projectIdOf(table, rec) {
           var w = repoGet('WorkPackage', rec.scope_id);
           return w ? w.project_id : '';
         }
+        if (rec.scope_type === 'planitem') {
+          var pi = repoGet('PlanItem', rec.scope_id);
+          return pi ? pi.project_id : '';
+        }
         return '';
       default: return '';
     }
@@ -177,7 +181,7 @@ function runHooks(table, before, rec, actx) {
 
 /**
  * Une attribution de rôle saisie dans AppSheet est revérifiée comme par l'API :
- * droit « roles.assign » sur le périmètre et rang au plus égal au sien (section 7).
+ * bon type d'objet pour le rôle, et niveau strictement supérieur détenu sur l'objet ou au-dessus (roleAssignCheck_, 05_Rbac.gs).
  * Si elle n'est pas permise, elle est annulée et son auteur prévenu.
  */
 function hookRoleAssignmentGuard(before, rec, actx) {
@@ -188,12 +192,12 @@ function hookRoleAssignmentGuard(before, rec, actx) {
   // La ligne contrôlée ne peut pas servir à se donner raison (auto-nomination).
   ctx.assignments = ctx.assignments.filter(function (a) { return a.id !== rec.id; });
   var scope = { type: rec.scope_type, id: rec.scope_id };
-  var allowed = ctx.isAdmin || (can(ctx, 'roles.assign', scope) && ROLE_RANK[rec.role_code] >= bestRankOn_(ctx, scope));
+  var allowed = roleAssignError_(ctx, rec.role_code, scope) === null;
   if (allowed) return true;
   repoUpdate('RoleAssignment', rec.id, { deleted: true }, null, { actor: 'ppm-core', source: 'core' });
   notifyUser(actx.actor, 'Attribution de rôle annulée',
-    'Vous ne pouvez pas attribuer le rôle ' + rec.role_code + ' sur ce périmètre : il faut détenir le droit ' +
-    'd’attribuer les rôles et un rôle au moins aussi élevé. L’attribution a été annulée.');
+    'Vous ne pouvez pas attribuer le rôle ' + rec.role_code + ' sur cet objet : un rôle se pose sur son type d’objet et ' +
+    'depuis un niveau supérieur au sien. L’attribution a été annulée.');
   return false;
 }
 

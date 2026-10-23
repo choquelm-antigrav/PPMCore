@@ -27,12 +27,9 @@ function isInternalUser_(ctx) {
   return !!r && !isTrue(r.deleted) && r.resource_type === 'Interne';
 }
 
-/** Nommé dans l'équipe du projet : un rôle sur le projet (ou au-dessus), ou sur l'un de ses workpackages. */
+/** Nommé dans l'équipe du projet : un rôle sur le projet (ou au-dessus), sur l'un de ses workpackages ou sur l'un de ses livrables ou jalons. */
 function namedInProject_(ctx, projectId) {
-  if (can(ctx, 'po.edit', { type: 'project', id: projectId })) return true;
-  var wpIds = {};
-  repoList('WorkPackage', function (w) { return w.project_id === projectId; }).forEach(function (w) { wpIds[w.id] = true; });
-  return (ctx.assignments || []).some(function (a) { return a.scope_type === 'workpackage' && wpIds[a.scope_id]; });
+  return can(ctx, 'po.edit', { type: 'project', id: projectId }); // droit « en profondeur » : un rôle sur le projet, un de ses workpackages ou un de ses livrables suffit
 }
 
 function canPoEdit_(ctx, projectId) {
