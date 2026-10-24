@@ -33,7 +33,7 @@
   function openImport() {
     imp.report = null; imp.book = '';
     var body = impBody(); clear(body);
-    body.appendChild(el('p', { class: 'note', text: 'Un onglet par objet : Projet, Workpackages, Livrables, Jalons, Budget. Les personnes se désignent par leur e-mail et doivent déjà exister dans Ressources. L’import ne supprime jamais rien et peut être relancé sans risque.' }));
+    body.appendChild(el('p', { class: 'note', text: 'Un onglet par objet : Projet, Workpackages, Livrables, Jalons, Budget. Les personnes se désignent par leur e-mail (à défaut d’adresse sur leur fiche, par leur nom exact) et doivent déjà exister dans Ressources. L’import ne supprime jamais rien et peut être relancé sans risque.' }));
     body.appendChild(el('div', { class: 'imp-step' }, [el('strong', { text: '1. Le classeur modèle' }),
       el('p', { class: 'note', text: 'Créé dans Drive et partagé avec vous, prérempli avec ce que le projet contient déjà : c’est aussi un export.' }),
       el('button', { type: 'button', class: 'btn', id: 'imp-template', text: 'Créer le classeur modèle', onclick: impTemplate }), el('div', { id: 'imp-template-out' })]));

@@ -1,5 +1,5 @@
 /**
- * PPM Core 0.15.4 — fichier unique à installer (fabriqué par tools/build.js, empreinte 74ca767688f6).
+ * PPM Core 0.15.4 — fichier unique à installer (fabriqué par tools/build.js, empreinte df4eacfc3c2f).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
  * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs, 53_Roles.gs, 54_Validation.gs, 55_Envelope.gs, 56_Import.gs.
  */
@@ -11809,12 +11809,20 @@ function importAnalyze_(parsed, existing) {
   var err = function (tab, row, msg) { errors.push({ tab: tab, row: row, message: msg }); };
   var warn = function (tab, row, msg) { warnings.push({ tab: tab, row: row, message: msg }); };
   var norm = function (s) { return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); };
-  var person = function (tab, row, email, label, required) {
-    var e = importText_(email).toLowerCase();
+  // une personne se désigne par son e-mail ; à défaut d'adresse sur sa fiche, par son nom exact (l'export écrit alors le nom)
+  var person = function (tab, row, who, label, required) {
+    var e = importText_(who).toLowerCase();
     if (!e) { if (required) err(tab, row, label + ' obligatoire.'); return null; }
-    var p = existing.people[e];
-    if (!p) { err(tab, row, label + ' : « ' + e + ' » n’est pas dans Ressources. Créez la personne dans la page Ressources, puis relancez l’analyse.'); return null; }
-    return p;
+    if (e.indexOf('@') >= 0) {
+      var p = existing.people[e];
+      if (!p) { err(tab, row, label + ' : « ' + e + ' » n’est pas dans Ressources. Créez la personne dans la page Ressources, puis relancez l’analyse.'); return null; }
+      return p;
+    }
+    var named = (existing.peopleByName || {})[norm(e)] || [];
+    if (named.length === 1) return named[0];
+    if (named.length > 1) { err(tab, row, label + ' : plusieurs personnes s’appellent « ' + importText_(who) + ' » : désignez-la par son adresse e-mail.'); return null; }
+    err(tab, row, label + ' : « ' + importText_(who) + ' » n’est ni une adresse e-mail ni le nom d’une personne de Ressources. Créez la personne dans la page Ressources, puis relancez l’analyse.');
+    return null;
   };
   var plan = { project: null, wps: [], items: [], lines: [], contributors: [] };
 
@@ -12014,12 +12022,15 @@ function importReadBook_(ref) {
 
 function importExisting_(project) {
   var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; });
-  var people = {};
-  repoList('Resource').forEach(function (r) { if (!isBlank(r.email)) people[String(r.email).toLowerCase()] = r; });
+  var people = {}, peopleByName = {};
+  repoList('Resource').forEach(function (r) {
+    if (!isBlank(r.email)) people[String(r.email).toLowerCase()] = r;
+    else { var k = String(r.name || '').toLowerCase().replace(/\s+/g, ' ').trim(); (peopleByName[k] = peopleByName[k] || []).push(r); }
+  });
   var items = repoList('PlanItem', function (i) { return i.project_id === project.id; }), itemIds = {};
   items.forEach(function (i) { itemIds[i.id] = true; });
   return {
-    project: project, wps: wps, items: items, people: people, today: todayStr(),
+    project: project, wps: wps, items: items, people: people, peopleByName: peopleByName, today: todayStr(),
     lines: repoList('BudgetLine', function (l) { return !!itemIds[l.deliverable_id]; }),
     roles: repoList('RoleAssignment', function (a) { return roleActive_(a, todayStr()); }),
     rateOf: function (res) { return dailyRateOf_(res, todayStr()); }
@@ -12046,7 +12057,7 @@ function importRequire_(ctx, projectId) {
 
 function importTemplateRows_(project) {
   var ex = importExisting_(project), byId = indexBy_(ex.wps), resById = indexBy_(repoList('Resource'));
-  var email = function (id) { var r = resById[id]; return r && r.email ? r.email : ''; };
+  var email = function (id) { var r = resById[id]; return r ? (r.email || r.name || '') : ''; };   // à défaut d'adresse sur la fiche, le nom (l'import le comprend)
   var order = function (a, b) { return String(a.wbs_code).localeCompare(String(b.wbs_code), 'fr', { numeric: true }); };
   var wpCode = function (id) { return id && byId[id] ? String(byId[id].wbs_code) : ''; };
   var out = {
@@ -12075,7 +12086,7 @@ var IMPORT_README = [
   ['Un onglet par objet : Projet, Workpackages, Livrables, Jalons, Budget. Une ligne = un objet. Ne changez ni les noms d’onglets ni les en-têtes de colonnes.'],
   ['Ce classeur est prérempli avec ce que le projet contient déjà : modifiez, ajoutez des lignes, puis revenez dans l’outil (page WBS › Importer) pour « Analyser », puis « Importer ».'],
   [''],
-  ['Les personnes se désignent par leur adresse e-mail et doivent déjà exister dans la page Ressources : l’import ne crée jamais de personne.'],
+  ['Les personnes se désignent par leur adresse e-mail (à défaut d’adresse sur leur fiche, par leur nom exact) et doivent déjà exister dans la page Ressources : l’import ne crée jamais de personne.'],
   ['Workpackages : le code WBS (« 1 », « 1.2 ») est la clé ; le leader devient Workpackage leader (ou Sub-workpackage leader pour un sous-workpackage) ; l’enveloppe est facultative (vide : pas de plafond).'],
   ['Livrables et jalons : on les retrouve par leur workpackage et leur nom (changer un nom crée un nouvel objet). L’owner devient Deliverable owner ; les contributors se séparent par « ; ». Dates : aaaa-mm-jj ou jj/mm/aaaa.'],
   ['Budget : une ligne par livrable et par ressource. TJM = jours × taux de la fiche de la personne (le taux doit exister) ; Forfait = montant en euros, ressources externes seulement.'],

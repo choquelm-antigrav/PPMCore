@@ -37,6 +37,35 @@ module.exports = function () {
     ok(rep.ok && rep.data.ok && rep.data.nothing_to_do, 'le modèle non modifié ne change rien : ' + JSON.stringify(rep.data && rep.data.counts));
   });
 
+  test('Une personne sans adresse sur sa fiche se désigne par son nom exact ; l’export écrit son nom ; un nom ambigu est refusé', () => {
+    const w = world();
+    const ana = w.c.repoInsert('Resource', { resource_type: 'Interne', name: 'Ana Sans-Adresse', country: 'FR' }, w.S);
+    w.c.repoInsert('Resource', { resource_type: 'Interne', name: 'Jean Dupont', country: 'FR' }, w.S);
+    w.c.repoInsert('Resource', { resource_type: 'Interne', name: 'jean  dupont', country: 'FR' }, w.S);
+    w.call(CP, 'wbs.update', { kind: 'wp', id: w.w2.id, patch: { owner_resource_id: ana.id } });
+    const t = w.template();
+    eq(w.book(t).getSheetByName('Workpackages').getDataRange().getValues().find((r) => String(r[0]) === '2')[3], 'Ana Sans-Adresse', 'l’export écrit le nom de qui n’a pas d’adresse');
+    ok(w.analyze(t).data.nothing_to_do, 'et le modèle exporté se ré-importe sans erreur ni changement');
+    w.add(t, 'Workpackages', [['3', '', 'Test', 'ana   sans-adresse', '', ''], ['4', '', 'Ambigu', 'Jean Dupont', '', ''], ['5', '', 'Inconnu', 'Personne Inconnue', '', '']]);
+    const m = msgs(w.analyze(t).data).join('\n');
+    ok(!/l\.5/.test(m), 'le nom est reconnu sans tenir compte de la casse ni des espaces en trop');
+    ok(/Workpackages l\.6 : Leader : plusieurs personnes s’appellent « Jean Dupont » : désignez-la par son adresse e-mail/.test(m), 'deux personnes du même nom : refusé, avec la marche à suivre\n' + m);
+    ok(/Workpackages l\.7 : Leader : « Personne Inconnue » n’est ni une adresse e-mail ni le nom d’une personne/.test(m), 'un nom inconnu : refusé');
+  });
+
+  test('Une démo complète exportée se ré-importe telle quelle : aucune erreur, rien à faire', () => {
+    const c = require('./harness').freshCore();
+    c.Session = { getActiveUser: () => ({ getEmail: () => 'admin@entreprise.com' }), getEffectiveUser: () => ({ getEmail: () => 'admin@entreprise.com' }), getScriptTimeZone: () => 'Europe/Paris' };
+    c.SpreadsheetApp = makeFakeSheets(); c.IMPORT_DRIVE = { share() {}, moveToProjectFolder() {} };
+    c.seedDemo_();
+    const call = (a, p) => { const r = c.handleRequest({ action: a, params: p, apiVersion: c.PPM_API_VERSION }, 'admin@entreprise.com'); if (!r.ok) throw new Error(a + ' : ' + JSON.stringify(r.error)); return r.data; };
+    const p1 = c.repoList('Project').find((p) => p.code === 'NAC-1');
+    const t = call('import.template', { projectId: p1.id });
+    ok(t.prefilled.workpackages >= 15 && t.prefilled.livrables >= 40 && t.prefilled.budget >= 30, 'le modèle de la démo : ' + JSON.stringify(t.prefilled));
+    const rep = call('import.analyze', { projectId: p1.id, book: t.id });
+    eq([rep.ok, rep.errors_count, rep.nothing_to_do], [true, 0, true], 'aucune erreur, rien à faire : ' + JSON.stringify(rep.errors.slice(0, 3)));
+  });
+
   test('Droits : chef de projet et au-dessus seulement', () => {
     const w = world(), t = w.template();
     ['import.template'].forEach((a) => eq(w.raw(WPL, a, { projectId: w.p1.id }).error.code, 'FORBIDDEN', 'un Workpackage leader ne génère pas de modèle'));

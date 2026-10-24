@@ -11,6 +11,7 @@ const path = require('path');
 const { freshCore, fakeWorkspace } = require('./harness');
 
 const c = freshCore();
+{ const { makeFakeSheets } = require('./fake_sheets'); c.SpreadsheetApp = makeFakeSheets(); c.IMPORT_DRIVE = { share() {}, moveToProjectFolder() {} }; } // l'import par classeur a besoin d'un Sheets, même simulé
 c.SHEET_DRIVE = { addEditor() {}, removeEditor() {} }; // aperçu : le partage du classeur Données réussit sans toucher à Drive
 const A = 'admin@entreprise.com';
 const S = { actor: 'setup', source: 'setup' };
