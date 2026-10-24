@@ -66,7 +66,7 @@ function buildChangeEvents(table, before, after, actx) {
   var ref = after || before;
   var base = {
     at: at, table_name: table, entity_id: ref.id, project_id: projectIdOf(table, ref),
-    actor: actx.actor, source: actx.source, acknowledged: false
+    actor: actx.actor, source: actx.source, acknowledged: false, actor_level: actx.actor_level !== undefined ? String(actx.actor_level) : actorLevelOf_(actx.actor, table, ref)
   };
   if (!before) return [Object.assign({ id: newId(), field: '*', old_value: '', new_value: '(création)' }, base)];
   if (!after) return [Object.assign({ id: newId(), field: '*', old_value: '(ligne)', new_value: '(suppression)' }, base)];

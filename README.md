@@ -36,7 +36,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `31_Pages.gs` | 0.12.2 : rendu des pages web (tables déduites du registre, données préchargées, assemblage d'une page) |
 | `32_Views.gs` | Gantt projet, vue programme, attribution et fin des rôles |
 | `33_Structure.gs` | Fonction et organisation des personnes, arbre WBS, catalogue des attributs affichables, préférences par utilisateur (l'organigramme OBS n'existe plus depuis la 0.15.3) |
-| `34_Baselines.gs` | Lot 2 : baselines (demande, gel, refus, réactivation), écarts, fil des changements à valider |
+| `34_Baselines.gs` | Lot 2 : baselines (demande, gel, refus, réactivation), écarts, fil des changements à valider ; `54_Validation.gs` : niveau de l'auteur et règle de validation par le niveau du dessus |
 | `35_Workspace.gs` | Lot 2 : agenda Google et dossier Drive par projet, annuaire, import de personnes depuis une feuille |
 | `36_Digest.gs` | Lot 2 : mail récapitulatif (un par personne, quotidien ou hebdomadaire), réglages personnels |
 | `37_Simulation.gs` | Lot 4 : simulation « et si… », synthèse chiffrée d'un projet, signaux faibles (sans IA) |
@@ -228,7 +228,24 @@ Additive et relançable, elle **termine** les anciennes lignes sans les supprime
 
 **Changements de comportement à connaître** : le Program Leader peut maintenant déclarer l'avancement ; un Workpackage leader ne supprime pas son propre workpackage ; la ligne de budget ne donne plus de droit (le Contributor la remplace) ; un chef de projet ne désigne pas son remplaçant ni un autre chef de projet (le DPL le fait).
 
-**Pas encore fait** : la validation par le niveau du dessus dans la page Suivi, le budget par workpackage avec enveloppe autorisée, l'import par classeur Google Sheet. La démo n'est pas adaptée : elle garde ses anciens rôles, qui fonctionnent ; lancez `A9_MIGRER_ROLES` après `A2_SEED_DEMO` pour la passer aux nouveaux niveaux.
+**Pas encore fait** : le budget par workpackage avec enveloppe autorisée, l'import par classeur Google Sheet. La démo n'est pas adaptée : elle garde ses anciens rôles, qui fonctionnent ; lancez `A9_MIGRER_ROLES` après `A2_SEED_DEMO` pour la passer aux nouveaux niveaux.
+
+## Validation par le niveau du dessus (0.15.3)
+
+**Règle.** Une création, une modification ou une suppression d'un objet du WBS part **tout de suite** (comme avant) et reste **à valider** dans la page **Suivi** (zone « Changements à valider ») jusqu'à ce qu'un niveau **strictement supérieur** à celui de son auteur, **sur cet objet**, la valide. **Une seule validation suffit** : l'événement disparaît alors pour tous les niveaux. On ne valide pas ses propres changements, ni ceux d'un niveau égal ou supérieur au sien.
+
+**Ce qui se valide** : les données figées par les baselines (dates, noms, responsables, rattachement, dépendances, lignes de budget, créations et suppressions) **et l'avancement déclaré** d'un livrable.
+
+**Le niveau de l'auteur** est écrit dans chaque événement du journal au moment du changement (colonne `actor_level` du journal des changements) : son meilleur rang sur l'objet ou au-dessus (0 Program Leader … 6 Contributor, 99 sans rôle). Le fil, la validation et les compteurs lisent tous cette même valeur : ils ne peuvent pas se contredire.
+- **Rien à valider** pour un administrateur, un Program Leader et le système (installation, migration, traitements de nuit) : personne n'est au-dessus. Les changements de la démo sont faits « au niveau 5 » pour qu'il en reste à valider.
+- Un événement **d'avant la 0.15.3** n'a pas de niveau : toute personne qui a un rôle sur l'objet peut le valider (on ne sait plus qui était au-dessus de qui). La colonne s'ajoute toute seule à l'installation (`A1_INSTALLER_PPM`, relançable).
+
+**Ce que chacun voit dans Suivi.**
+- **La liste de ce qu'il peut valider**, avec le niveau de l'auteur, et « Valider la sélection » ou « Tout valider (n) » (ce que la personne peut valider, pas plus). Une liste d'identifiants qui en contient un interdit est refusée en entier.
+- **« Vos modifications en attente de validation »** : ses propres changements, avec le niveau qui doit les valider (le niveau présent juste au-dessus dans la chaîne de l'objet : un Contributor attend le Deliverable owner ; un Workpackage leader, le chef de projet ; un chef de projet, le DPL).
+- La zone s'affiche pour **toute personne qui a un rôle dans le projet** ; un Reader (aucun rôle) ne la voit pas. Elle remonte à la baseline active, ou aux **soixante derniers jours** s'il n'y en a pas.
+
+**Mail du matin** : chacun y compte ce qu'il peut valider (section « Changements à valider »), qu'il pilote le projet ou non.
 
 ## Planning : liste de gauche, recherche, filtres, enregistrement immédiat (0.15.2)
 

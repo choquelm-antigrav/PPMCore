@@ -307,47 +307,51 @@ var BOOT = <?!= boot ?>;
     }).catch(function (e) { failed(panel, e); });
   }
   function valueText(v) { return v === '' || v === null || v === undefined ? '(vide)' : isoDate(v) ? frDate(v) : String(v); }
+  var LEVELS = ['Program Leader', 'Domain Program Leader', 'Chef de projet', 'Workpackage leader', 'Sub-workpackage leader', 'Deliverable owner', 'Contributor'];
+  function levelLabel(n) { return n >= 0 && n < LEVELS.length ? LEVELS[n] : 'Sans rôle'; }
+  function changeText(e) {
+    if (e.what === 'modification') return [e.field_label + ' : ', el('span', { class: 'muted', text: valueText(e.old_value) }), ' → ', el('strong', { text: valueText(e.new_value) })];
+    return [e.what === 'ajout' ? 'Ajouté' : e.what === 'suppression' ? 'Supprimé' : 'Rétabli'];
+  }
+  /**
+   * Validation par le niveau du dessus : chacun voit ce qu'un niveau strictement inférieur au sien a fait sur un objet qu'il couvre, et le valide d'un clic (une seule
+   * validation suffit). Plus bas, ses propres changements en attente, avec le niveau qui doit les valider.
+   */
   function renderFeed() {
     var panel = $('panel-changes'), f = state.feed;
     clear(panel);
-    if (!f.baseline) {
-      empty(panel, 'Pas de baseline active.', 'Le fil des changements démarre quand une baseline est figée : chaque modification des dates, responsables, budget ou périmètre y apparaît jusqu’à sa validation.');
-      return;
-    }
-    if (!f.canAck) panel.appendChild(el('p', { class: 'note', text: 'Lecture seule : le chef de projet et le DPL valident.' }));
+    panel.appendChild(el('p', { class: 'note', id: 'feed-rule', text: 'Un changement part tout de suite et reste à valider jusqu’à ce qu’un niveau supérieur à celui de son auteur, sur l’objet concerné, le valide : le Deliverable owner valide les Contributors, le Sub-workpackage leader les Deliverable owners, et ainsi de suite jusqu’au Program Leader. ' +
+      (f.baseline ? 'Depuis la baseline ' + f.baseline.label + '.' : 'Pas de baseline active : les soixante derniers jours.') }));
     var all = el('input', { type: 'checkbox', id: 'show-all' });
     all.checked = state.showAll;
     all.addEventListener('change', function () { state.showAll = all.checked; loadFeed(); });
     var bar = el('div', { class: 'bar' }, [el('label', { class: 'toggle' }, [all, 'Afficher aussi les changements déjà validés'])]);
-    if (f.canAck && f.pending) {
+    if (f.pending) {
       bar.appendChild(el('button', { type: 'button', class: 'btn', id: 'ack-selected', text: 'Valider la sélection', onclick: ackSelected }));
       bar.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'ack-all', text: 'Tout valider (' + f.pending + ')', onclick: ackAll }));
     }
     panel.appendChild(bar);
     if (!f.items.length) {
-      panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Rien à valider.' }), el('span', { text: 'Aucune modification des données figées depuis la dernière validation.' })]));
-      return;
-    }
-    var head = [];
-    if (f.canAck) head.push(el('th', { scope: 'col', class: 'th-check' }, [el('span', { class: 'muted', text: '✓' })]));
-    head = head.concat(['Quand', 'Qui', 'Élément', 'Changement', 'État']);
-    var rows = f.items.map(function (e) {
-      var change;
-      if (e.what === 'modification') change = [e.field_label + ' : ', el('span', { class: 'muted', text: valueText(e.old_value) }), ' → ', el('strong', { text: valueText(e.new_value) })];
-      else change = [e.what === 'ajout' ? 'Ajouté' : e.what === 'suppression' ? 'Supprimé' : 'Rétabli'];
-      var cells = [];
-      if (f.canAck) {
+      panel.appendChild(el('div', { class: 'empty', id: 'feed-empty' }, [el('strong', { text: 'Rien à valider.' }), el('span', { text: 'Aucun changement fait par un niveau inférieur au vôtre n’attend votre validation.' })]));
+    } else {
+      var head = [el('th', { scope: 'col', class: 'th-check' }, [el('span', { class: 'muted', text: '✓' })])].concat(['Quand', 'Qui', 'Niveau', 'Élément', 'Changement', 'État']);
+      var rows = f.items.map(function (e) {
         var box = el('input', { type: 'checkbox', 'data-event': e.id, 'aria-label': 'Sélectionner : ' + e.entity });
         box.checked = !!state.selected[e.id];
         box.disabled = e.acknowledged;
         box.addEventListener('change', function () { if (box.checked) state.selected[e.id] = true; else delete state.selected[e.id]; });
-        cells.push(el('td', {}, [box]));
-      }
-      cells.push(el('td', { text: frDateTime(e.at) }), el('td', { text: e.actor_name || e.actor, title: e.actor }), el('td', { text: e.entity }), el('td', {}, change),
-        el('td', {}, [e.acknowledged ? badge('Validé' + (e.acknowledged_by ? ' par ' + e.acknowledged_by : '')) : badge('À valider', 'pending')]));
-      return el('tr', { 'data-event-row': e.id }, cells);
-    });
-    panel.appendChild(table(head, rows));
+        return el('tr', { 'data-event-row': e.id }, [el('td', {}, [box]), el('td', { text: frDateTime(e.at) }), el('td', { text: e.actor_name || e.actor, title: e.actor }), el('td', { text: levelLabel(e.level) }),
+          el('td', { text: e.entity }), el('td', {}, changeText(e)),
+          el('td', {}, [e.acknowledged ? badge('Validé' + (e.acknowledged_by ? ' par ' + e.acknowledged_by : '')) : badge('À valider', 'pending')])]);
+      });
+      panel.appendChild(table(head, rows));
+    }
+    if (f.mine && f.mine.length) {
+      panel.appendChild(el('h3', { class: 'sub', id: 'feed-mine-title', text: 'Vos modifications en attente de validation (' + f.mine_count + ')' }));
+      panel.appendChild(table(['Quand', 'Élément', 'Changement', 'Attend'], f.mine.map(function (e) {
+        return el('tr', { 'data-mine-row': e.id }, [el('td', { text: frDateTime(e.at) }), el('td', { text: e.entity }), el('td', {}, changeText(e)), el('td', { text: e.validator || 'Un administrateur' })]);
+      })));
+    }
   }
   function ackSelected() {
     var ids = Object.keys(state.selected);

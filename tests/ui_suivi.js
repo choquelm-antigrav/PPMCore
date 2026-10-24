@@ -106,34 +106,53 @@ function openPage(file, user, boot, extraScript) {
   only.checked = false; only.dispatchEvent(new p.win.Event('change'));
   check(p.doc.querySelectorAll('#panel-ecarts tbody tr').length === 5, 'tous les éléments, y compris identiques');
 
-  // ---------------------------------------------------------------- changements à valider
+  // ---------------------------------------------------------------- changements à valider (0.15.3 : par le niveau du dessus)
+  // le chef de projet ne valide que ce que font les niveaux en dessous de lui : ici, les dates de Rémi (Workpackage leader)
   await p.until(() => /\(\d+\)/.test(p.text('tab-changes')));
-  check(p.text('tab-changes') === 'Changements à valider (4)', 'compteur de l’onglet : ' + p.text('tab-changes'));
-  await p.until(() => p.doc.querySelectorAll('#panel-changes tbody tr').length === 4);
-  const feed = [...p.doc.querySelectorAll('#panel-changes tbody tr')].map((r) => r.textContent);
+  check(p.text('tab-changes') === 'Changements à valider (1)', 'compteur de l’onglet du chef de projet : ' + p.text('tab-changes'));
+  await p.until(() => p.doc.querySelectorAll('#panel-changes tbody tr[data-event-row]').length === 1);
+  const cpRows = [...p.doc.querySelectorAll('#panel-changes tbody tr[data-event-row]')].map((r) => r.textContent);
+  check(cpRows.length === 1 && cpRows[0].includes('Calcul') && cpRows[0].includes('fin prévue : 23/10/2026 → 28/10/2026') && cpRows[0].includes('Workpackage leader'), 'sa liste : la date de Rémi, avec le niveau de son auteur : ' + cpRows.join(' | '));
+  check(/Vos modifications en attente de validation \(2\)/.test(p.text('panel-changes')) && /Domain Program Leader/.test(p.text('panel-changes')), 'et ses deux changements à lui, qui attendent le DPL');
+  check(/le Deliverable owner valide les Contributors/.test(p.text('feed-rule')), 'la règle est écrite sur la page');
+  // le DPL valide tout, y compris ce que fait le chef de projet
+  const dp = openPage('Suivi.html', 'dora@entreprise.com');
+  await dp.until(() => /\(3\)/.test(dp.text('tab-changes')));
+  check(dp.text('tab-changes') === 'Changements à valider (3)', 'le DPL : trois changements à valider : ' + dp.text('tab-changes'));
+  await dp.until(() => dp.doc.querySelectorAll('#panel-changes tbody tr[data-event-row]').length === 3);
+  const feed = [...dp.doc.querySelectorAll('#panel-changes tbody tr[data-event-row]')].map((r) => r.textContent);
   check(feed.some((t) => t.includes('Calcul') && t.includes('fin prévue : 23/10/2026 → 28/10/2026')), 'changement de date lisible');
-  check(feed.some((t) => t.includes('responsable : Carla → Rémi')), 'responsable par son nom');
+  check(feed.some((t) => t.includes('responsable : Carla → Rémi') && t.includes('Chef de projet')), 'responsable par son nom, fait au niveau chef de projet');
   check(feed.some((t) => t.includes('Ajouté')), 'ajout de livrable');
-  check(feed.some((t) => t.includes('Budget de Essais') && t.includes('forfait : 1000 → 1200')), 'budget : une seule ligne, sur le montant saisi');
+  check(!feed.some((t) => t.includes('Budget de Essais')), 'la ligne de budget saisie par le système n’a personne au-dessus : elle n’est soumise à personne');
   check(feed.some((t) => t.includes('Carla')), 'auteur affiché par son nom');
-  const box = p.doc.querySelector('#panel-changes tbody input[type=checkbox]');
-  box.checked = true; box.dispatchEvent(new p.win.Event('change'));
-  p.click(p.doc.getElementById('ack-selected'));
-  await p.until(() => p.doc.querySelectorAll('#panel-changes tbody tr').length === 3);
-  check(p.text('tab-changes') === 'Changements à valider (3)', 'une validation : ' + p.text('tab-changes'));
-  p.click(p.doc.getElementById('ack-all'));
-  await p.until(() => p.text('panel-changes').includes('Rien à valider'));
-  check(p.text('tab-changes') === 'Changements à valider', 'plus rien à valider');
-  const all = p.doc.getElementById('show-all');
-  all.checked = true; all.dispatchEvent(new p.win.Event('change'));
-  await p.until(() => p.doc.querySelectorAll('#panel-changes tbody tr').length === 4);
-  check([...p.doc.querySelectorAll('#panel-changes tbody tr')].every((r) => r.textContent.includes('Validé par ' + CP)), 'historique : validés, par qui');
+  const box = dp.doc.querySelector('#panel-changes tbody input[type=checkbox]');
+  box.checked = true; box.dispatchEvent(new dp.win.Event('change'));
+  dp.click(dp.doc.getElementById('ack-selected'));
+  await dp.until(() => dp.doc.querySelectorAll('#panel-changes tbody tr[data-event-row]').length === 2);
+  check(dp.text('tab-changes') === 'Changements à valider (2)', 'une validation : ' + dp.text('tab-changes'));
+  dp.click(dp.doc.getElementById('ack-all'));
+  await dp.until(() => dp.text('panel-changes').includes('Rien à valider'));
+  check(dp.text('tab-changes') === 'Changements à valider', 'plus rien à valider');
+  const all = dp.doc.getElementById('show-all');
+  all.checked = true; all.dispatchEvent(new dp.win.Event('change'));
+  await dp.until(() => dp.doc.querySelectorAll('#panel-changes tbody tr[data-event-row]').length === 3);
+  check([...dp.doc.querySelectorAll('#panel-changes tbody tr[data-event-row]')].every((r) => r.textContent.includes('Validé par dora@entreprise.com')), 'historique : validés, par qui');
+  p.click(p.doc.getElementById('reload'));
+  await p.until(() => !/Vos modifications en attente/.test(p.text('panel-changes')) || p.doc.querySelectorAll('#panel-changes tbody tr[data-event-row]').length === 0);
+  check(!p.doc.querySelector('#feed-mine-title') || p.doc.querySelectorAll('[data-mine-row]').length === 0, 'validés par le DPL, les changements du chef de projet ne sont plus « en attente »');
 
   // ---------------------------------------------------------------- baselines : demande d'un membre, refus, B1, réactivation
   const m = openPage('Suivi.html', MEMBER, { tab: 'baselines' });
   await m.until(() => m.button('Demander une nouvelle baseline'));
   check(!m.button('Figer'), 'un membre ne peut pas figer');
-  check(m.doc.getElementById('zone-changes').hidden && m.doc.getElementById('panel-changes').hidden, 'la zone des changements est masquée à un simple membre');
+  await m.until(() => !m.doc.getElementById('zone-changes').hidden && /Rien à valider/.test(m.text('panel-changes')));
+  check(!m.doc.getElementById('zone-changes').hidden && !m.doc.getElementById('ack-selected') && !m.doc.getElementById('ack-all') && /Rien à valider/.test(m.text('panel-changes')), 'un Contributor voit la zone, mais n’a rien à valider : ni « Valider la sélection » ni « Tout valider »');
+  c.repoInsert('Resource', { resource_type: 'Interne', name: 'Zed', email: 'zed@entreprise.com', country: 'FR' }, w.S);
+  const zed = openPage('Suivi.html', 'zed@entreprise.com', { tab: 'baselines' });
+  await zed.until(() => zed.doc.getElementById('zone-changes') && zed.doc.getElementById('panel-ecarts') && zed.text('title').length > 0);
+  await wait(150);
+  check(zed.doc.getElementById('zone-changes').hidden && zed.doc.getElementById('panel-changes').hidden, 'sans aucun rôle (Reader), la zone des changements est masquée');
   m.click(m.button('Demander une nouvelle baseline'));
   m.fill('form-reason', 'Le fournisseur livre 2 semaines plus tard');
   m.click(m.doc.getElementById('form-ok'));

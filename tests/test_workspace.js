@@ -143,7 +143,8 @@ module.exports = function () {
     w.c.CLOCK = (() => { let t = Date.parse('2026-10-12T05:00:00.000Z'); return () => (t += 1); })();
     w.c.repoUpdate('PlanItem', w.b.id, { progress_pct: 20, status: 'En cours', last_progress_at: '2026-08-20T10:00:00Z', planned_finish: '2026-10-16' }, null, w.S);
     w.call(CP, 'baselines.create', { projectId: w.p1.id, justification: 'Planning initial' });
-    w.call(CP, 'planitems.update', { id: w.cc.id, patch: { planned_finish: '2026-11-10' } });
+    w.call(CP, 'planitems.update', { id: w.cc.id, patch: { planned_finish: '2026-11-10' } });         // fait par le chef de projet : à valider par le DPL
+    w.call(RWP, 'workpackages.update', { id: w.w1.id, patch: { charge_code: 'C-NEW' } });              // fait par un Workpackage leader : à valider par le chef de projet et au-dessus
     w.call(MEMBER, 'baselines.request', { projectId: w.p1.id, justification: 'Décaler les essais' });
     w.c.runRules();
     w.c.repoUpdate('Resource', w.remi.id, { name: 'Rémi <b>R</b>' }, null, w.S);
@@ -162,11 +163,12 @@ module.exports = function () {
     ok(remi.html.indexOf('Rémi &lt;b&gt;R&lt;/b&gt;') > 0 && remi.html.indexOf('<b>R</b>') < 0, 'noms échappés dans le HTML');
     ok(/Votre point du 12\/10\/2026 — 3 éléments/.test(remi.subject), remi.subject);
     const carla = list.find((d) => d.to === CP);
-    ok(/P1 · 1 changement sur des données figées \(à valider\)/.test(carla.text), carla.text);
+    ok(/P1 · 1 changement sur des données figées \(à valider\)/.test(carla.text), 'Carla ne compte que le changement de Rémi (le sien est à valider par le DPL) : ' + carla.text);
     ok(/P1 · demande de baseline de mia@entreprise.com \(Décaler les essais\)/.test(carla.text), carla.text);
     ok(/https:\/\/app.test\/exec\?view=suivi&project=.*&tab=changes/.test(carla.text), 'lien direct vers les changements à valider');
     ok(/Le livrable « Spécification » devait être terminé/.test(carla.text), 'alertes du moteur de règles');
-    ok(list.find((d) => d.to === 'dora@entreprise.com').text.indexOf('changement sur des données figées') > 0, 'le DPL du programme suit aussi');
+    ok(/P1 · 2 changements sur des données figées \(à valider\)/.test(list.find((d) => d.to === 'dora@entreprise.com').text), 'le DPL valide les deux : celui de Rémi et celui de Carla');
+    ok(!/changement/.test(remi.text.split('CHANGEMENTS À VALIDER')[1] || ''), 'Rémi (niveau 3) n’a rien à valider : personne en dessous de lui n’a rien changé');
   });
 
   test('Récapitulatif : fréquence personnelle, week-end, décision sur une demande, aperçu et envoi d’essai', () => {

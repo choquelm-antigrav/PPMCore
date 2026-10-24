@@ -1,7 +1,7 @@
 /**
- * PPM Core 0.15.3 — fichier unique à installer (fabriqué par tools/build.js, empreinte 957589553fc3).
+ * PPM Core 0.15.3 — fichier unique à installer (fabriqué par tools/build.js, empreinte 08df7f67ae7d).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
- * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs, 53_Roles.gs.
+ * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs, 53_Roles.gs, 54_Validation.gs.
  */
 
 // ======================================================================
@@ -510,7 +510,7 @@ var SCHEMA = {
   ChangeEvent: {
     book: 'history', tech: false,
     cols: ['id', 'at', 'table_name', 'entity_id', 'project_id', 'field', 'old_value', 'new_value',
-      'actor', 'source', 'acknowledged', 'acknowledged_by', 'acknowledged_at']
+      'actor', 'source', 'acknowledged', 'acknowledged_by', 'acknowledged_at', 'actor_level']   // actor_level : niveau de l'auteur sur l'objet (54_Validation.gs)
   },
   BaselineItem: {
     book: 'history', tech: false,
@@ -2199,7 +2199,7 @@ function buildChangeEvents(table, before, after, actx) {
   var ref = after || before;
   var base = {
     at: at, table_name: table, entity_id: ref.id, project_id: projectIdOf(table, ref),
-    actor: actx.actor, source: actx.source, acknowledged: false
+    actor: actx.actor, source: actx.source, acknowledged: false, actor_level: actx.actor_level !== undefined ? String(actx.actor_level) : actorLevelOf_(actx.actor, table, ref)
   };
   if (!before) return [Object.assign({ id: newId(), field: '*', old_value: '', new_value: '(création)' }, base)];
   if (!after) return [Object.assign({ id: newId(), field: '*', old_value: '(ligne)', new_value: '(suppression)' }, base)];
@@ -4385,7 +4385,7 @@ var FIELD_LABELS = {
   milestone_category: 'catégorie de jalon', predecessor_id: 'prédécesseur', successor_id: 'successeur',
   dep_type: 'type de lien', lag_days: 'décalage', deliverable_id: 'livrable', resource_id: 'ressource',
   cost_type: 'type de coût', planned_days: 'jours prévus', frozen_rate: 'taux figé', fixed_amount: 'forfait',
-  planned_amount: 'montant prévu', deleted: 'suppression', '*': 'création ou suppression'
+  planned_amount: 'montant prévu', progress_pct: 'avancement', deleted: 'suppression', '*': 'création ou suppression'
 };
 
 // ---------------------------------------------------------------- instantanés
@@ -4569,7 +4569,7 @@ function buildChangeFeed(events, projectId, since, names, opts) {
     return String(v);
   };
   var rows = events.filter(function (e) {
-    return e.project_id === projectId && String(e.at) >= since && isBaselinedEvent_(e) &&
+    return e.project_id === projectId && String(e.at) >= since && (opts.eligible || isBaselinedEvent_)(e) &&
       (opts.all || !isTrue(e.acknowledged));
   }).sort(function (a, b) { return String(b.at).localeCompare(String(a.at)) || String(b.id).localeCompare(String(a.id)); });
   return rows.map(function (e) {
@@ -4582,7 +4582,7 @@ function buildChangeFeed(events, projectId, since, names, opts) {
       entity: label(e.table_name, e.entity_id), what: what, field: e.field,
       field_label: FIELD_LABELS[e.field] || e.field,
       old_value: human(e.field, e.old_value), new_value: human(e.field, e.new_value),
-      acknowledged: isTrue(e.acknowledged), acknowledged_by: e.acknowledged_by || ''
+      acknowledged: isTrue(e.acknowledged), acknowledged_by: e.acknowledged_by || '', level: eventRank_(e)
     };
   });
 }
@@ -4602,17 +4602,17 @@ function feedNames_() {
   return names;
 }
 
-/** Nombre de changements à valider par projet (pour le mail récapitulatif et les compteurs). */
+/**
+ * Nombre de changements à valider par projet (mail récapitulatif, compteurs, Copilote) : ceux qu'un chef de projet peut valider, c'est-à-dire faits par un niveau
+ * en dessous du sien. Mêmes critères que le fil (changes.feed) : mêmes données, même fenêtre, même niveau d'auteur.
+ */
 function pendingChangeCounts_(projects, events) {
   var since = {};
-  projects.forEach(function (p) {
-    if (isBlank(p.active_baseline_id)) return;
-    var b = repoGet('Baseline', p.active_baseline_id);
-    if (b && b.status === 'Active') since[p.id] = String(b.decided_at || '');
-  });
+  projects.forEach(function (p) { since[p.id] = validationSince_(p).since; });
   var counts = {};
   events.forEach(function (e) {
-    if (!(e.project_id in since) || isTrue(e.acknowledged) || String(e.at) < since[e.project_id] || !isBaselinedEvent_(e)) return;
+    if (!(e.project_id in since) || isTrue(e.acknowledged) || String(e.at) < since[e.project_id] || !isValidatableEvent_(e)) return;
+    if (eventRank_(e) <= ROLE_RANK.CP) return;
     counts[e.project_id] = (counts[e.project_id] || 0) + 1;
   });
   return counts;
@@ -4658,7 +4658,7 @@ defineAction('baselines.list', function (p, ctx) {
     canManage: can(ctx, 'baseline.manage', scope),
     canRequest: can(ctx, 'baseline.request', scope),
     canAck: can(ctx, 'changes.ack', scope),
-    canReadFeed: can(ctx, 'changes.ack', scope) || can(ctx, 'wbs.edit', scope),
+    canReadFeed: can(ctx, 'baseline.request', scope),
     canWorkspace: can(ctx, 'workspace.manage', scope),
     seeBudget: can(ctx, 'budget.edit', scope)
   };
@@ -4774,50 +4774,69 @@ defineAction('baselines.diff', function (p, ctx) {
   return d;
 });
 
-/** Fil du chef de projet : changements de données figées depuis la baseline active. */
+/**
+ * Fil de validation (0.15.3) : les changements d'objets du WBS (données figées et avancement) qui attendent la validation d'un niveau supérieur à celui de leur auteur.
+ * Chacun voit ce qu'il peut valider (un niveau strictement supérieur à l'auteur, sur l'objet) ; `mine` : ses propres changements en attente, avec le niveau qui doit les valider.
+ */
 defineAction('changes.feed', function (p, ctx) {
   var projectId = requireParam(p, 'projectId');
   var project = mustGet('Project', projectId);
   var scope = { type: 'project', id: projectId };
-  var canAck = can(ctx, 'changes.ack', scope);
-  if (!canAck && !can(ctx, 'wbs.edit', scope)) {
-    throw new PpmError('FORBIDDEN', 'Le fil des changements est réservé à l’équipe de pilotage du projet.');
-  }
-  var active = !isBlank(project.active_baseline_id) ? repoGet('Baseline', project.active_baseline_id) : null;
-  if (!active || active.status !== 'Active') return { baseline: null, canAck: canAck, items: [], pending: 0 };
+  if (!can(ctx, 'baseline.request', scope)) throw new PpmError('FORBIDDEN', 'Le fil des changements est réservé aux personnes qui ont un rôle dans le projet.');
+  var win = validationSince_(project);
   var events = repoList('ChangeEvent', function (e) { return e.project_id === projectId; });
   var names = feedNames_();
-  var all = buildChangeFeed(events, projectId, String(active.decided_at), names, { all: true });
-  var pending = all.filter(function (e) { return !e.acknowledged; });
+  var all = buildChangeFeed(events, projectId, win.since, names, { all: true, eligible: isValidatableEvent_ });
+  var byId = {}; events.forEach(function (e) { byId[e.id] = e; });
+  var assignments = repoList('RoleAssignment', function (a) { return roleActive_(a, todayStr()); });
+  var scopes = {};
+  var scopeOf = function (id) { return scopes[id] || (scopes[id] = eventScope_(byId[id])); };
+  var viewer = String(ctx.email || '').toLowerCase();
+  var items = [], mine = [], pending = 0;
+  all.forEach(function (it) {
+    var e = byId[it.id], sc = scopeOf(it.id);
+    if (eventRank_(e) <= 0) return;                                  // rien à valider : l'auteur est tout en haut, ou c'est le système
+    it.validator = nominalValidator_(e, sc, assignments, ctx.lookup);
+    it.can_validate = canValidateEvent_(ctx, e, sc);
+    if (!it.acknowledged && String(it.actor).toLowerCase() === viewer && !it.can_validate) mine.push(it);
+    if (!it.can_validate) return;
+    if (!it.acknowledged) pending++;
+    items.push(it);
+  });
   var limit = Math.max(1, Math.min(500, Number(p.limit) || 200));
+  var shown = (p.all ? items : items.filter(function (x) { return !x.acknowledged; })).slice(0, limit);
   return {
-    baseline: baselineView_(active, {}), canAck: canAck, pending: pending.length,
-    items: (p.all ? all : pending).slice(0, limit)
+    baseline: win.baseline ? baselineView_(win.baseline, {}) : null, since: win.since, canAck: pending > 0 || items.length > 0 || ctx.isAdmin,
+    pending: pending, items: shown, mine: mine.slice(0, 50), mine_count: mine.length
   };
 });
 
-/** Acquittement : ids (liste) ou projectId + all = true (tout le fil en attente). */
+/**
+ * Validation : ids (liste), ou projectId + all = true (tout ce que la personne peut valider dans le projet). On ne valide que ce qu'un niveau strictement inférieur
+ * a fait sur l'objet (l'administrateur valide tout) ; une liste d'ids qui en contient un autre est refusée en entier.
+ */
 defineAction('changes.ack', function (p, ctx) {
   var t = getTable('ChangeEvent');
   return withLock(function () {
     var rows = t.readAll();
-    var wanted = {};
+    var wanted = {}, explicit = !p.all;
     if (p.all) {
       var projectId = requireParam(p, 'projectId');
       var project = mustGet('Project', projectId);
-      var active = !isBlank(project.active_baseline_id) ? repoGet('Baseline', project.active_baseline_id) : null;
-      var since = active ? String(active.decided_at) : '9999';
+      var since = validationSince_(project).since;
       rows.forEach(function (e) {
-        if (e.project_id === projectId && !isTrue(e.acknowledged) && String(e.at) >= since && isBaselinedEvent_(e)) wanted[e.id] = true;
+        if (e.project_id === projectId && !isTrue(e.acknowledged) && String(e.at) >= since && isValidatableEvent_(e)) wanted[e.id] = true;
       });
     } else {
       (p.ids || []).slice(0, 1000).forEach(function (id) { wanted[String(id)] = true; });
     }
-    var checked = {}, now = nowIso(), updates = [];
+    var now = nowIso(), updates = [];
     rows.forEach(function (e, i) {
       if (!wanted[e.id] || isTrue(e.acknowledged)) return;
-      if (!(e.project_id in checked)) checked[e.project_id] = !!e.project_id && can(ctx, 'changes.ack', { type: 'project', id: e.project_id });
-      if (!checked[e.project_id]) throw new PpmError('FORBIDDEN', 'Seuls le chef de projet et le DPL valident les changements.');
+      if (!canValidateEvent_(ctx, e, eventScope_(e))) {
+        if (explicit) throw new PpmError('FORBIDDEN', 'On ne valide que ce qu’un niveau inférieur au sien a fait : ici, un changement de ' + (e.actor || 'quelqu’un') + ' que vous n’avez pas le niveau de valider.');
+        return;
+      }
       updates.push({ row: i + 2, obj: Object.assign({}, e, { acknowledged: true, acknowledged_by: ctx.email, acknowledged_at: now }) });
     });
     if (updates.length) t.updateRows(updates);
@@ -5550,8 +5569,6 @@ function buildDigests(data, today, opts) {
     }).sort(function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); });
     var pilotLines = [];
     pilot.forEach(function (p) {
-      var n = (data.pendingChanges || {})[p.id] || 0;
-      if (n) pilotLines.push({ text: p.code + ' · ' + n + (n > 1 ? ' changements' : ' changement') + ' sur des données figées', note: 'à valider', url: link('suivi', p.id, '&tab=changes') });
       (data.baselines || []).filter(function (b) { return live(b) && b.project_id === p.id && b.status === 'Demandée'; }).forEach(function (b) {
         pilotLines.push({ text: p.code + ' · demande de baseline de ' + b.requested_by, note: truncate(b.justification, 140), url: link('suivi', p.id, '&tab=baselines') });
       });
@@ -5562,6 +5579,14 @@ function buildDigests(data, today, opts) {
       if (others > 0) pilotLines.push({ text: p.code + ' · ' + others + (others > 1 ? ' autres constats' : ' autre constat') + ' du moteur de règles', url: link('suivi', p.id) });
     });
     if (pilotLines.length) sections.push({ title: 'Pilotage de vos projets', lines: pilotLines });
+
+    // 2 bis. Changements à valider : chacun compte ce qu'il peut valider (un niveau strictement supérieur à l'auteur), qu'il pilote le projet ou non
+    var validateLines = [];
+    data.projects.filter(function (p) { return activeProject(p.id); }).sort(function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); }).forEach(function (p) {
+      var n = pendingChangesFor_(ctx, data, p);
+      if (n) validateLines.push({ text: p.code + ' · ' + n + (n > 1 ? ' changements' : ' changement') + ' sur des données figées', note: 'à valider', url: link('suivi', p.id, '&tab=changes') });
+    });
+    if (validateLines.length) sections.push({ title: 'Changements à valider', lines: validateLines });
 
     // 3. Mes demandes de baseline tranchées
     var decided = (data.baselines || []).filter(function (b) {
@@ -5633,7 +5658,7 @@ function loadDigestData_() {
     assignments: repoList('RoleAssignment'), settings: repoList('UserSetting'), insights: repoList('Insight'),
     baselines: repoList('Baseline'), workpackages: repoList('WorkPackage'), budgetLines: repoList('BudgetLine'),
     news: { meetings: repoList('Meeting'), actions: repoList('NewsAction'), digests: repoList('NewsDigest') },
-    pendingChanges: pendingChangeCounts_(projects, repoList('ChangeEvent')),
+    pendingChanges: pendingChangeCounts_(projects, repoList('ChangeEvent')), changeEvents: repoList('ChangeEvent'),
     purchaseOrders: repoList('PurchaseOrder', function (o) { return o.status === 'Lancée'; }),
     cpnProject: (function () { var m = {}, idx = cpnIndex_(); Object.keys(idx).forEach(function (k) { m[k] = idx[k].project.id; }); return m; })()
   };
@@ -9226,7 +9251,9 @@ function demoDeps_(d) {
 function demoBaselines_(d) {
   var p1 = d.project('NAC-1').id;
   d.call('baselines.create', { projectId: p1, label: 'B0', justification: 'Planning validé en revue de lancement' });
-  // évolutions après B0
+  // évolutions après B0 : faites à un niveau de Deliverable owner (niveau 5), donc « à valider » par les niveaux du dessus ; l'administrateur qui lance la démo n'a personne au-dessus
+  var adminActx = d.a;
+  d.a = Object.assign({}, adminActx, { actor_level: 5 });
   demoShift_(d, 'NAC-1', 'Essais d’éprouvettes matériaux', 0, 18);
   demoShift_(d, 'NAC-1', 'Maquette soufflerie', 0, 15);
   demoShift_(d, 'NAC-1', 'Note de calcul de fatigue', 0, 10);
@@ -9240,13 +9267,16 @@ function demoBaselines_(d) {
       }, d.a);
     });
   d.call('wbs.delete', { kind: 'item', id: d.item('NAC-1', 'Moyens de contrôle non destructif').id });
+  d.a = adminActx;
   d.call('baselines.create', { projectId: p1, label: 'B1', justification: 'Replanification après le retard des éprouvettes matériaux' });
-  // dérives après B1
+  // dérives après B1 (au même niveau)
+  d.a = Object.assign({}, adminActx, { actor_level: 5 });
   demoShift_(d, 'NAC-1', 'Campagne d’essais statiques', 0, 6);
   demoShift_(d, 'NAC-1', 'Rapport soufflerie', 7, 7);
   demoShift_(d, 'NAC-1', 'Plans de définition structure', 0, 8);
   demoShift_(d, 'NAC-1', 'Optimisation de la lèvre d’entrée d’air', 0, 5);
   demoShift_(d, 'NAC-1', 'Dossier de certification complet', 0, 7);
+  d.a = adminActx;
   d.call('baselines.request', { projectId: p1, label: 'B2', justification: 'Replanifier la revue critique de conception et la campagne soufflerie après le retard de la maquette' });
 }
 
@@ -11398,3 +11428,143 @@ defineAction('roles.of', function (p, ctx) {
       .sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); })
   };
 });
+
+// ======================================================================
+// 54_Validation.gs
+// ======================================================================
+
+/**
+ * PPM Core — 0.15.3 (phase 4) : validation par le niveau du dessus.
+ *
+ * RÈGLE 1 : une création, une modification ou une suppression d'un objet du WBS part tout de suite (comme aujourd'hui) et reste « à valider » dans la page Suivi jusqu'à ce
+ * qu'un niveau STRICTEMENT supérieur à celui de son auteur, sur cet objet, la valide. Une seule validation suffit.
+ *
+ * NIVEAU DE L'AUTEUR. Il est enregistré dans chaque événement du journal au moment du changement (`ChangeEvent.actor_level`) : le meilleur rang que l'auteur détient sur l'objet
+ * ou au-dessus (0 Program Leader … 6 Contributor, 99 sans rôle). Un administrateur ou le système (installation, migration, traitements de nuit) vaut 0 : personne au-dessus,
+ * rien à valider. Un événement antérieur à la 0.15.3 n'a pas de niveau : il compte comme 99, et tout niveau qui a un rôle sur l'objet peut le valider.
+ * Le fil, l'accusé et les compteurs lisent tous cette même valeur : ils ne peuvent pas se contredire.
+ *
+ * QUI VALIDE. Toute personne dont le meilleur rang sur l'objet est strictement inférieur à celui de l'auteur ; le validateur « nominal » affiché est le niveau présent juste
+ * au-dessus dans la chaîne (un Deliverable owner est validé par son Sub-workpackage leader, ou son Workpackage leader s'il n'y en a pas, etc.).
+ *
+ * QU'EST-CE QUI SE VALIDE. Les données figées par les baselines (BASELINE_FIELDS : dates, responsables, noms, dépendances, lignes de budget, créations et suppressions)
+ * et l'avancement déclaré d'un livrable (`PlanItem.progress_pct`).
+ */
+
+var VALIDATION_EXTRA_FIELDS = { PlanItem: ['progress_pct'] };
+var VALIDATION_WINDOW_DAYS = 60;   // sans baseline active, le fil remonte aux 60 derniers jours
+
+/** L'événement porte-t-il sur une donnée à valider ? */
+function isValidatableEvent_(e) {
+  if (isBaselinedEvent_(e)) return true;
+  return (VALIDATION_EXTRA_FIELDS[e.table_name] || []).indexOf(e.field) >= 0;
+}
+
+/** Niveau de l'auteur d'un événement : 0 = rien à valider ; 99 = sans rôle ou événement ancien. */
+function eventRank_(e) {
+  return isBlank(e.actor_level) ? 99 : Number(e.actor_level);
+}
+
+/** Périmètre de l'objet d'un changement : projet, workpackage ou livrable (une dépendance se rattache à son successeur, une ligne de budget à son livrable). */
+function changeScope_(table, rec) {
+  if (!rec) return null;
+  switch (table) {
+    case 'Project': return { type: 'project', id: rec.id };
+    case 'WorkPackage': return { type: 'workpackage', id: rec.id };
+    case 'PlanItem': return { type: 'planitem', id: rec.id };
+    case 'Dependency': return rec.successor_id ? { type: 'planitem', id: rec.successor_id } : null;
+    case 'BudgetLine': return rec.deliverable_id ? { type: 'planitem', id: rec.deliverable_id } : null;
+    default: return null;
+  }
+}
+
+/** Périmètre d'un événement du journal, retrouvé même si l'objet a été supprimé depuis. */
+function eventScope_(e) {
+  var rec = null;
+  try { rec = repoList(e.table_name, function (r) { return r.id === e.entity_id; }, { includeDeleted: true })[0] || null; } catch (err) { rec = null; }
+  return changeScope_(e.table_name, rec) || (e.project_id ? { type: 'project', id: e.project_id } : null);
+}
+
+/**
+ * Niveau avec lequel une personne agit sur un objet, à écrire dans l'événement : 0 pour un administrateur ou le système, sinon son meilleur rang sur l'objet ou au-dessus,
+ * 99 si elle n'a aucun rôle. '' quand la table n'est pas un objet du WBS (rien à valider).
+ */
+function actorLevelOf_(actor, table, rec) {
+  var email = String(actor || '').toLowerCase();
+  if (email.indexOf('@') < 0 || adminEmails().indexOf(email) >= 0) return '0';
+  var scope = changeScope_(table, rec);
+  if (!scope) return '';
+  var person = findResourceByEmail(email);
+  if (!person) return '99';
+  var lookup = repoLookup_(), best = 99;
+  var chain = scopeAncestors(scope, lookup);
+  activeAssignments(person.id, repoList('RoleAssignment'), todayStr()).forEach(function (a) {
+    if (!chain.some(function (s) { return sameScope_(s, a.scope_type, a.scope_id); })) return;
+    var r = ROLE_RANK[effectiveRoleCode_(a, lookup)];
+    if (r !== undefined && r < best) best = r;
+  });
+  return String(best);
+}
+
+/** Meilleur rang (numéro le plus bas) que donnent ces affectations sur une chaîne de périmètres ; 99 sans rôle. Fonction pure. */
+function bestRankIn_(assignments, chain, lookup) {
+  var best = 99;
+  (assignments || []).forEach(function (a) {
+    if (!chain.some(function (s) { return sameScope_(s, a.scope_type, a.scope_id); })) return;
+    var r = ROLE_RANK[effectiveRoleCode_(a, lookup)];
+    if (r !== undefined && r < best) best = r;
+  });
+  return best;
+}
+
+/** Cette personne peut-elle valider cet événement ? (niveau strictement supérieur à celui de l'auteur, sur l'objet) */
+function canValidateEvent_(ctx, e, scope) {
+  var rank = eventRank_(e);
+  if (rank <= 0) return false;                    // un administrateur, un Program Leader ou le système : personne au-dessus
+  if (ctx.isAdmin) return true;
+  if (!scope) return false;
+  return bestRankOn_(ctx, scope) < rank;
+}
+
+/**
+ * Le niveau qui doit valider (validateur nominal) : le niveau présent juste au-dessus de l'auteur dans la chaîne de l'objet. Renvoie son libellé, ou '' si personne
+ * n'est posé au-dessus (seul l'administrateur peut alors valider).
+ */
+function nominalValidator_(e, scope, assignments, lookup) {
+  var rank = eventRank_(e);
+  if (!scope || rank <= 0) return '';
+  var chain = scopeAncestors(scope, lookup), best = -1;
+  assignments.forEach(function (a) {
+    if (!chain.some(function (s) { return sameScope_(s, a.scope_type, a.scope_id); })) return;
+    var r = ROLE_RANK[effectiveRoleCode_(a, lookup)];
+    if (r !== undefined && r < rank && r > best) best = r;
+  });
+  if (best < 0) return '';
+  return ROLES.filter(function (c) { return ROLE_RANK[c] === best; }).map(function (c) { return ROLE_LABELS[c]; })[0] || '';
+}
+
+/** Date de départ du fil d'un projet : la baseline active, ou les soixante derniers jours. */
+function validationSince_(project) {
+  var active = !isBlank(project.active_baseline_id) ? repoGet('Baseline', project.active_baseline_id) : null;
+  if (active && active.status === 'Active') return { baseline: active, since: String(active.decided_at) };
+  return { baseline: null, since: addCalendarDays(todayStr(), -VALIDATION_WINDOW_DAYS) };
+}
+
+/**
+ * Combien de changements cette personne peut-elle valider dans ce projet ? (mail récapitulatif) Mêmes critères que le fil : fenêtre, données à valider, niveau de l'auteur strictement
+ * supérieur au sien sur l'objet. ctx : { resourceId, isAdmin, assignments, lookup } ; data : { changeEvents, planitems, workpackages }. Une dépendance ou une ligne de budget compte au
+ * niveau du projet (le récapitulatif ne charge pas ces tables).
+ */
+function pendingChangesFor_(ctx, data, project) {
+  var since = validationSince_(project).since;
+  var scopeType = { Project: 'project', WorkPackage: 'workpackage', PlanItem: 'planitem' };
+  var n = 0;
+  (data.changeEvents || []).forEach(function (e) {
+    if (e.project_id !== project.id || isTrue(e.acknowledged) || String(e.at) < since || !isValidatableEvent_(e)) return;
+    var rank = eventRank_(e);
+    if (rank <= 0) return;
+    var scope = scopeType[e.table_name] ? { type: scopeType[e.table_name], id: e.entity_id } : { type: 'project', id: project.id };
+    if (ctx.isAdmin || bestRankIn_(ctx.assignments, scopeAncestors(scope, ctx.lookup), ctx.lookup) < rank) n++;
+  });
+  return n;
+}

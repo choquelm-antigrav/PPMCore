@@ -7,7 +7,8 @@
 - **Lecture** : tout ouvert à tous, sauf tarifs et comptes rendus (à partir du Workpackage leader) et budget (sur son workpackage) ; lire les tarifs n'est pas les fixer ; la synthèse par mail suit.
 - **Responsable principal** conservé et tenu par les rôles ; un DPL créateur d'un projet en devient le DPL.
 - **Migration `A9_MIGRER_ROLES`** (et `_SIMULATION`) : additive, relançable, **300 écritures au plus par lancement** (Apps Script coupe à six minutes) ; `A7` signale les anciens rôles restants.
-- Tests : `test_rbac.js` réécrit en matrice des huit niveaux (17), `test_roles.js` (8 : chaîne de désignation, WBS par niveau, DPL créateur, migration, migration interrompue puis reprise, panneau des rôles, lecture), migration de la démo en plusieurs lancements ; `ui_structure.js` réécrit pour le WBS seul (31) ; `ui_org.js` retiré ; 297 tests serveur, seize essais de pages.
+- **Validation par le niveau du dessus** (page Suivi) : chaque événement du journal garde le niveau de son auteur (`actor_level`, `54_Validation.gs`) ; on ne valide que ce qu'un niveau strictement inférieur a fait sur l'objet, une seule validation suffit ; l'avancement déclaré se valide ; « vos modifications en attente » et le validateur nominal ; administrateur, Program Leader et système n'ont rien à valider ; mail du matin par personne. `changes.feed`, `changes.ack` et `pendingChangeCounts_` réécrits sur la même valeur.
+- Tests : `test_rbac.js` réécrit en matrice des huit niveaux (17), `test_roles.js` (8 : chaîne de désignation, WBS par niveau, DPL créateur, migration, migration interrompue puis reprise, panneau des rôles, lecture), migration de la démo en plusieurs lancements, fil de validation par niveau (`test_baselines.js`) ; `ui_structure.js` réécrit pour le WBS seul (31), `ui_suivi.js` (62) ; `ui_org.js` retiré ; 298 tests serveur, seize essais de pages.
 
 ## 0.15.2 — Planning : liste de gauche, filtres, enregistrement immédiat
 

@@ -158,7 +158,9 @@ function demoDeps_(d) {
 function demoBaselines_(d) {
   var p1 = d.project('NAC-1').id;
   d.call('baselines.create', { projectId: p1, label: 'B0', justification: 'Planning validé en revue de lancement' });
-  // évolutions après B0
+  // évolutions après B0 : faites à un niveau de Deliverable owner (niveau 5), donc « à valider » par les niveaux du dessus ; l'administrateur qui lance la démo n'a personne au-dessus
+  var adminActx = d.a;
+  d.a = Object.assign({}, adminActx, { actor_level: 5 });
   demoShift_(d, 'NAC-1', 'Essais d’éprouvettes matériaux', 0, 18);
   demoShift_(d, 'NAC-1', 'Maquette soufflerie', 0, 15);
   demoShift_(d, 'NAC-1', 'Note de calcul de fatigue', 0, 10);
@@ -172,13 +174,16 @@ function demoBaselines_(d) {
       }, d.a);
     });
   d.call('wbs.delete', { kind: 'item', id: d.item('NAC-1', 'Moyens de contrôle non destructif').id });
+  d.a = adminActx;
   d.call('baselines.create', { projectId: p1, label: 'B1', justification: 'Replanification après le retard des éprouvettes matériaux' });
-  // dérives après B1
+  // dérives après B1 (au même niveau)
+  d.a = Object.assign({}, adminActx, { actor_level: 5 });
   demoShift_(d, 'NAC-1', 'Campagne d’essais statiques', 0, 6);
   demoShift_(d, 'NAC-1', 'Rapport soufflerie', 7, 7);
   demoShift_(d, 'NAC-1', 'Plans de définition structure', 0, 8);
   demoShift_(d, 'NAC-1', 'Optimisation de la lèvre d’entrée d’air', 0, 5);
   demoShift_(d, 'NAC-1', 'Dossier de certification complet', 0, 7);
+  d.a = adminActx;
   d.call('baselines.request', { projectId: p1, label: 'B2', justification: 'Replanifier la revue critique de conception et la campagne soufflerie après le retard de la maquette' });
 }
 

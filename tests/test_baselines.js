@@ -129,37 +129,78 @@ module.exports = function () {
     eq(w.c.repoGet('Project', w.p1.id).active_baseline_id, '', 'un refus ne crée pas de baseline');
   });
 
-  test('Fil des changements : seulement les données figées, depuis la baseline active, jusqu’à validation', () => {
+  test('Fil de validation : chacun valide ce que fait un niveau strictement inférieur, une seule validation suffit, depuis la baseline active', () => {
     const w = lot2World();
-    eq(w.call(CP, 'changes.feed', { projectId: w.p1.id }).baseline, null, 'pas de fil sans baseline');
+    const zed = w.c.repoInsert('Resource', { resource_type: 'Interne', name: 'Zed', email: 'zed@entreprise.com', country: 'FR' }, w.S);
+    void zed;
+    const feed = (who, extra) => w.call(who, 'changes.feed', Object.assign({ projectId: w.p1.id }, extra || {}));
+    eq(feed(CP).baseline, null, 'sans baseline, le fil remonte aux soixante derniers jours (il n’y a pas de baseline à afficher)');
     w.call(CP, 'baselines.create', { projectId: w.p1.id, justification: 'Planning initial' });
-    w.call(MEMBER, 'progress.declare', { planItemId: w.a.id, progressPct: 50 });
-    w.call(RWP, 'planitems.update', { id: w.b.id, patch: { planned_start: '2026-10-13', planned_finish: '2026-10-26' } });
-    w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name: 'Rapport', item_type: 'Livrable' } });
-    w.call(RWP, 'workpackages.update', { id: w.w1.id, patch: { name: 'Conception détaillée' } });
-    w.call(CP, 'planitems.update', { id: w.cc.id, patch: { owner_resource_id: w.remi.id } });
-    const feed = w.call(CP, 'changes.feed', { projectId: w.p1.id });
-    eq(feed.pending, 5, 'avancement déclaré exclu : ce n’est pas une donnée figée');
-    const lines = feed.items.map((e) => e.entity + ' | ' + e.what + ' | ' + e.field_label + ' | ' + e.old_value + ' → ' + e.new_value);
-    ok(lines.includes('Essais | modification | responsable | Carla → Rémi'), lines.join('\n'));
-    ok(lines.includes('WP 1 Conception détaillée | modification | nom | Conception → Conception détaillée'), lines.join('\n'));
-    ok(lines.includes('Calcul | modification | fin prévue | 2026-10-23 → 2026-10-26'), lines.join('\n'));
-    ok(lines.some((l) => l.startsWith('Rapport | ajout')), lines.join('\n'));
-    ok(feed.items.every((e) => e.actor), 'auteur de chaque changement');
-    eq(w.raw(MEMBER, 'changes.feed', { projectId: w.p1.id }).error.code, 'FORBIDDEN');
-    eq(w.raw(RWP, 'changes.feed', { projectId: w.p1.id }).error.code, 'FORBIDDEN', 'le fil est l’outil du pilotage du projet');
-    eq(w.raw(RWP, 'changes.ack', { ids: [feed.items[0].id] }).error.code, 'FORBIDDEN');
-    eq(w.call(CP, 'changes.ack', { ids: [feed.items[0].id, feed.items[1].id] }).acknowledged, 2);
-    const after = w.call(CP, 'changes.feed', { projectId: w.p1.id });
-    eq(after.pending, 3);
-    const hist = w.call(CP, 'changes.feed', { projectId: w.p1.id, all: true });
-    eq([hist.items.length, hist.items.filter((e) => e.acknowledged).length], [5, 2]);
-    eq(hist.items.find((e) => e.acknowledged).acknowledged_by, CP);
-    eq(w.call(DPL, 'changes.ack', { projectId: w.p1.id, all: true }).acknowledged, 3, 'le DPL peut tout valider');
-    eq(w.call(CP, 'changes.feed', { projectId: w.p1.id }).pending, 0);
+    w.call(MEMBER, 'progress.declare', { planItemId: w.a.id, progressPct: 50 });                                           // niveau 6
+    w.call(RWP, 'planitems.update', { id: w.b.id, patch: { planned_start: '2026-10-13', planned_finish: '2026-10-26' } });  // niveau 3 (Workpackage leader)
+    w.call(RWP, 'workpackages.update', { id: w.w1.id, patch: { name: 'Conception détaillée' } });                         // niveau 3
+    w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name: 'Rapport', item_type: 'Livrable' } });         // niveau 2
+    w.call(CP, 'planitems.update', { id: w.cc.id, patch: { owner_resource_id: w.remi.id } });                             // niveau 2
+    const lines = (f) => f.items.map((e) => e.entity + ' | ' + e.what + ' | ' + e.field_label + ' | ' + e.old_value + ' → ' + e.new_value);
+
+    // le chef de projet valide ce que font les niveaux en dessous de lui : l'avancement de Mia, les dates de Rémi, le nom du WP
+    const cp = feed(CP);
+    eq(cp.pending, 4, 'quatre changements à valider par le chef de projet');
+    ok(lines(cp).includes('Spécification | modification | avancement | 0 → 50'), 'l’avancement déclaré se valide aussi : ' + lines(cp).join(' ; '));
+    ok(lines(cp).includes('Calcul | modification | fin prévue | 2026-10-23 → 2026-10-26') && lines(cp).includes('WP 1 Conception détaillée | modification | nom | Conception → Conception détaillée'), lines(cp).join('\n'));
+    ok(!lines(cp).some((l) => /^Rapport \| ajout/.test(l) || /^Essais \|/.test(l)), 'ses propres changements ne sont pas à lui de les valider');
+    eq(cp.mine.map((e) => e.entity).sort(), ['Essais', 'Rapport'], 'il les voit dans « vos modifications en attente »');
+    ok(cp.mine.every((e) => e.validator === 'Domain Program Leader'), 'avec le niveau qui doit les valider : le DPL');
+    ok(cp.items.every((e) => e.actor && e.can_validate && typeof e.level === 'number'), 'auteur et niveau de chaque changement');
+    // le DPL valide tout, y compris ce que fait le chef de projet
+    eq(feed(DPL).pending, 6, 'le DPL : les quatre, plus les deux du chef de projet');
+    // un Workpackage leader valide ce que fait un Contributor, pas ce que fait le chef de projet
+    const remi = feed(RWP);
+    eq([remi.pending, lines(remi)], [1, ['Spécification | modification | avancement | 0 → 50']], 'Rémi (niveau 3) valide l’avancement de Mia (niveau 6) — pas ses propres dates ni ce que fait le chef de projet');
+    eq(remi.mine.map((e) => e.validator).sort(), ['Chef de projet', 'Chef de projet', 'Chef de projet'], 'ses trois changements attendent le chef de projet (nominal)');
+    const mia = feed(MEMBER);
+    eq([mia.pending, mia.mine.length, mia.mine[0].validator], [0, 1, 'Deliverable owner'], 'Mia (niveau 6) ne valide rien ; son avancement attend le Deliverable owner du livrable');
+    eq(w.raw('zed@entreprise.com', 'changes.feed', { projectId: w.p1.id }).error.code, 'FORBIDDEN', 'sans rôle dans le projet : pas de fil');
+
+    // droits de valider
+    const ids = (f, re) => f.items.filter((e) => re.test(e.entity + ' | ' + e.field_label)).map((e) => e.id);
+    const progressId = ids(cp, /^Spécification \| avancement/)[0], dateIds = ids(cp, /^Calcul \| (début|fin) prévu/), cpOwn = ids(feed(DPL), /^(Rapport|Essais)/);
+    eq(w.raw(MEMBER, 'changes.ack', { ids: [progressId] }).error.code, 'FORBIDDEN', 'un Contributor ne valide rien');
+    eq(w.raw(RWP, 'changes.ack', { ids: [cpOwn[0]] }).error.code, 'FORBIDDEN', 'un Workpackage leader ne valide pas ce que fait le chef de projet');
+    eq(w.raw(RWP, 'changes.ack', { ids: [dateIds[0]] }).error.code, 'FORBIDDEN', 'ni ses propres dates');
+    eq(w.raw(CP, 'changes.ack', { ids: [cpOwn[0]] }).error.code, 'FORBIDDEN', 'le chef de projet ne valide pas ses propres changements');
+    eq(w.raw(CP, 'changes.ack', { ids: [progressId, cpOwn[0]] }).error.code, 'FORBIDDEN', 'une liste qui en contient un interdit est refusée en entier');
+    eq(feed(CP).pending, 4, 'rien n’a été validé par ces refus');
+    eq(w.call(RWP, 'changes.ack', { ids: [progressId] }).acknowledged, 1, 'Rémi valide l’avancement de Mia');
+    eq([feed(CP).pending, feed(RWP).pending, feed(DPL).pending], [3, 0, 5], 'une seule validation suffit : l’événement disparaît pour tous les niveaux');
+    eq(w.call(CP, 'changes.ack', { ids: dateIds }).acknowledged, dateIds.length, 'le chef de projet valide les dates de Rémi');
+    const hist = feed(CP, { all: true });
+    eq(hist.items.filter((e) => e.acknowledged).map((e) => e.acknowledged_by).sort(), [CP, CP, RWP], 'l’historique garde qui a validé (Rémi, puis le chef de projet deux fois)');
+    eq(w.call(DPL, 'changes.ack', { projectId: w.p1.id, all: true }).acknowledged, 3, 'le DPL valide tout le reste d’un coup : le nom du WP et les deux changements du chef de projet');
+    eq([feed(CP).pending, feed(DPL).pending], [0, 0]);
     w.call(RWP, 'planitems.update', { id: w.b.id, patch: { planned_finish: '2026-10-27' } });
     w.call(CP, 'baselines.create', { projectId: w.p1.id, justification: 'Nouvelle référence' });
-    eq(w.call(CP, 'changes.feed', { projectId: w.p1.id }).pending, 0, 'une nouvelle baseline repart d’un fil vide');
+    eq(feed(CP).pending, 0, 'une nouvelle baseline repart d’un fil vide');
+  });
+
+  test('Niveau de l’auteur : écrit dans le journal, administrateur et système n’ont personne au-dessus, ancien événement valable pour tout niveau', () => {
+    const w = lot2World();
+    w.call(CP, 'baselines.create', { projectId: w.p1.id, justification: 'Planning initial' });
+    const level = (id) => w.c.repoList('ChangeEvent').filter((e) => e.entity_id === id && e.field === 'planned_finish').map((e) => e.actor_level).pop();
+    w.call(RWP, 'planitems.update', { id: w.b.id, patch: { planned_finish: '2026-10-26' } });
+    w.call(MEMBER, 'progress.declare', { planItemId: w.a.id, progressPct: 40 });
+    eq(level(w.b.id), '3', 'Rémi, Workpackage leader : niveau 3 (son meilleur rang sur l’objet)');
+    eq(w.c.repoList('ChangeEvent').filter((e) => e.entity_id === w.a.id && e.field === 'progress_pct').pop().actor_level, '6', 'Mia, Contributor : niveau 6');
+    w.call('admin@entreprise.com', 'planitems.update', { id: w.cc.id, patch: { planned_finish: '2026-11-04' } });
+    eq(level(w.cc.id), '0', 'l’administrateur : niveau 0, rien à valider');
+    w.c.repoUpdate('PlanItem', w.j.id, { planned_finish: '2026-11-30' }, null, w.S);
+    eq(level(w.j.id), '0', 'le système : niveau 0');
+    ok(w.call(CP, 'changes.feed', { projectId: w.p1.id }).items.every((e) => e.level > 0), 'le fil ne montre jamais un changement du niveau 0');
+    // un événement d'avant la 0.15.3 n'a pas de niveau : tout niveau qui a un rôle sur l'objet peut le valider
+    const ev = w.c.repoList('ChangeEvent').find((e) => e.entity_id === w.b.id && e.field === 'planned_finish');
+    w.c.getTable('ChangeEvent').updateRows([{ row: w.c.getTable('ChangeEvent').findRow(ev.id), obj: Object.assign({}, ev, { actor_level: '' }) }]);
+    const sees = (who) => w.call(who, 'changes.feed', { projectId: w.p1.id }).items.some((e) => e.id === ev.id);
+    eq([sees(CP), sees(RWP), sees(MEMBER)], [true, true, true], 'ancien événement sans niveau : toute personne qui a un rôle sur l’objet peut le valider (on ne sait plus qui était au-dessus de qui)');
   });
 
   test('Gantt : dates de la baseline, glissement et éléments ajoutés', () => {

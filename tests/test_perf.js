@@ -46,7 +46,7 @@ module.exports = function () {
     m.reset();
     const g = w.call(CP, 'gantt.project', { projectId: w.p1.id });
     eq(g.rows.find((r) => r.id === w.b.id).finish, '2026-10-28');
-    ok(m.reads.PlanItem === 1 && !m.reads.Project && !m.reads.Resource, 'relu : ' + JSON.stringify(m.reads));
+    ok((m.reads.PlanItem || 0) <= 1 && !m.reads.Project && !m.reads.Resource, 'relu : ' + JSON.stringify(m.reads)); // le niveau de l'auteur (54_Validation.gs) relit déjà PlanItem pendant l'écriture : au plus une relecture ensuite
   });
 
   test('Saisie AppSheet signalée par le bot : le cache est invalidé', () => {

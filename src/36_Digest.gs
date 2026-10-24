@@ -101,8 +101,6 @@ function buildDigests(data, today, opts) {
     }).sort(function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); });
     var pilotLines = [];
     pilot.forEach(function (p) {
-      var n = (data.pendingChanges || {})[p.id] || 0;
-      if (n) pilotLines.push({ text: p.code + ' · ' + n + (n > 1 ? ' changements' : ' changement') + ' sur des données figées', note: 'à valider', url: link('suivi', p.id, '&tab=changes') });
       (data.baselines || []).filter(function (b) { return live(b) && b.project_id === p.id && b.status === 'Demandée'; }).forEach(function (b) {
         pilotLines.push({ text: p.code + ' · demande de baseline de ' + b.requested_by, note: truncate(b.justification, 140), url: link('suivi', p.id, '&tab=baselines') });
       });
@@ -113,6 +111,14 @@ function buildDigests(data, today, opts) {
       if (others > 0) pilotLines.push({ text: p.code + ' · ' + others + (others > 1 ? ' autres constats' : ' autre constat') + ' du moteur de règles', url: link('suivi', p.id) });
     });
     if (pilotLines.length) sections.push({ title: 'Pilotage de vos projets', lines: pilotLines });
+
+    // 2 bis. Changements à valider : chacun compte ce qu'il peut valider (un niveau strictement supérieur à l'auteur), qu'il pilote le projet ou non
+    var validateLines = [];
+    data.projects.filter(function (p) { return activeProject(p.id); }).sort(function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); }).forEach(function (p) {
+      var n = pendingChangesFor_(ctx, data, p);
+      if (n) validateLines.push({ text: p.code + ' · ' + n + (n > 1 ? ' changements' : ' changement') + ' sur des données figées', note: 'à valider', url: link('suivi', p.id, '&tab=changes') });
+    });
+    if (validateLines.length) sections.push({ title: 'Changements à valider', lines: validateLines });
 
     // 3. Mes demandes de baseline tranchées
     var decided = (data.baselines || []).filter(function (b) {
@@ -184,7 +190,7 @@ function loadDigestData_() {
     assignments: repoList('RoleAssignment'), settings: repoList('UserSetting'), insights: repoList('Insight'),
     baselines: repoList('Baseline'), workpackages: repoList('WorkPackage'), budgetLines: repoList('BudgetLine'),
     news: { meetings: repoList('Meeting'), actions: repoList('NewsAction'), digests: repoList('NewsDigest') },
-    pendingChanges: pendingChangeCounts_(projects, repoList('ChangeEvent')),
+    pendingChanges: pendingChangeCounts_(projects, repoList('ChangeEvent')), changeEvents: repoList('ChangeEvent'),
     purchaseOrders: repoList('PurchaseOrder', function (o) { return o.status === 'Lancée'; }),
     cpnProject: (function () { var m = {}, idx = cpnIndex_(); Object.keys(idx).forEach(function (k) { m[k] = idx[k].project.id; }); return m; })()
   };

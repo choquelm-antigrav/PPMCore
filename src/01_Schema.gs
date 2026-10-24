@@ -212,7 +212,7 @@ var SCHEMA = {
   ChangeEvent: {
     book: 'history', tech: false,
     cols: ['id', 'at', 'table_name', 'entity_id', 'project_id', 'field', 'old_value', 'new_value',
-      'actor', 'source', 'acknowledged', 'acknowledged_by', 'acknowledged_at']
+      'actor', 'source', 'acknowledged', 'acknowledged_by', 'acknowledged_at', 'actor_level']   // actor_level : niveau de l'auteur sur l'objet (54_Validation.gs)
   },
   BaselineItem: {
     book: 'history', tech: false,
