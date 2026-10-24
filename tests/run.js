@@ -16,6 +16,7 @@ require('./test_account')();
 require('./test_edit')();
 require('./test_org')();
 require('./test_budget')();
+require('./test_envelope')();
 require('./test_reminders')();
 require('./test_access')();
 require('./test_overview')();

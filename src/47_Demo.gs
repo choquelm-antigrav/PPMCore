@@ -148,6 +148,15 @@ function demoPlan_(d, codes) {
   });
 }
 
+/** Enveloppe du projet : 8 % au-dessus du coût prévu, répartie 10 % au-dessus du coût de chaque workpackage de premier niveau, sauf un (15 % en dessous) pour montrer un dépassement. */
+function demoEnvelope_(d) {
+  var p1 = d.project('NAC-1'), v = d.call('budget.envelope.get', { projectId: p1.id });
+  var top = v.rows.filter(function (r) { return r.depth === 0 && r.cost > 0; });
+  var allocations = top.map(function (r, i) { return { wpId: r.wp_id, amount: Math.round(r.cost * (i === 1 ? 0.85 : 1.1)) }; });
+  var spread = allocations.reduce(function (s, a) { return s + a.amount; }, 0);
+  d.call('budget.envelope.set', { projectId: p1.id, authorized: Math.max(Math.round(v.totals.cost * 1.08), spread), allocations: allocations });
+}
+
 function demoDeps_(d) {
   DEMO_DEPS.forEach(function (x) {
     repoInsert('Dependency', { predecessor_id: d.item(x[0], x[1]).id, successor_id: d.item(x[0], x[2]).id, dep_type: x[3], lag_days: x[4] }, d.a);
@@ -268,6 +277,7 @@ var DEMO_STEPS = [
   { name: 'Risques et opportunités', run: function (d) { demoRisks_(d); } },
   { name: 'Budget de NAC-1 (1/2)', run: function (d) { demoBudget_(d, 0, 20); } },
   { name: 'Budget de NAC-1 (2/2)', run: function (d) { demoBudget_(d, 20, 60); } },
+  { name: 'Enveloppe budgétaire de NAC-1', run: function (d) { demoEnvelope_(d); } },
   { name: 'Commandes d’achat', run: function (d) { demoOrders_(d); } },
   { name: 'Actualités de NAC-1 : réunions', run: function (d) { demoNewsMeetings_(d); } },
   { name: 'Actualités : actions, synthèse du jour, réunions à trier', run: function (d) { demoNewsActions_(d); } },

@@ -236,7 +236,7 @@ function openBook_(book) {
 var SHEET_PARSED_COLS = {};
 ['ac', 'amount', 'bac', 'capacity_days_month', 'cpi', 'daily_rate', 'days', 'eac', 'ev', 'financial_value', 'fixed_amount', 'frozen_rate', 'impact', 'lag_days', 'number',
   'planned_amount', 'planned_days', 'probability', 'progress_pct', 'pv', 'reminder_days', 'score', 'spi', 'version', 'year', 'deleted', 'acknowledged', 'enabled',
-  'is_external', 'news_on', 'reminder_off', 'unverified', 'status_date', 'at'].concat(DATE_COLS).forEach(function (c) { SHEET_PARSED_COLS[c] = true; });
+  'is_external', 'news_on', 'reminder_off', 'unverified', 'status_date', 'at', 'budget_authorized', 'budget_allocated'].concat(DATE_COLS).forEach(function (c) { SHEET_PARSED_COLS[c] = true; });
 
 function sheetParsedCol_(h) { return !!SHEET_PARSED_COLS[h] || /_at$/.test(h) || /_on$/.test(h); }
 

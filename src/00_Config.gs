@@ -74,6 +74,7 @@ var PERMISSION_LEVEL = {
   'baseline.manage':  'CP',
   'baseline.request': 'CONTRIB',
   'budget.edit':      'WPL',
+  'budget.authorize': 'CP',            // fixer l'enveloppe autorisée du projet et la répartir entre les workpackages (un sous-workpackage : par son Workpackage leader)
   'cpn.edit':         'CP',
   'po.edit':          'CONTRIB',
   'ratecard.manage':  'CP',

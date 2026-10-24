@@ -16,7 +16,7 @@
  * et l'avancement déclaré d'un livrable (`PlanItem.progress_pct`).
  */
 
-var VALIDATION_EXTRA_FIELDS = { PlanItem: ['progress_pct'] };
+var VALIDATION_EXTRA_FIELDS = { PlanItem: ['progress_pct'], Project: ['budget_authorized'], WorkPackage: ['budget_allocated'] };
 var VALIDATION_WINDOW_DAYS = 60;   // sans baseline active, le fil remonte aux 60 derniers jours
 
 /** L'événement porte-t-il sur une donnée à valider ? */

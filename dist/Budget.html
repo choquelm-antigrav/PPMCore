@@ -761,6 +761,10 @@
     <div class="zone" id="zone-po" hidden><h2 class="sec">Achats (PO)</h2></div>
     <section class="panel" id="panel-po" aria-label="Achats" hidden></section>
   </div>
+  <div class="cell wide" id="cell-enveloppe">
+    <div class="zone" id="zone-enveloppe" hidden><h2 class="sec">Enveloppe par workpackage</h2></div>
+    <section class="panel" id="panel-enveloppe" aria-label="Enveloppe par workpackage" hidden></section>
+  </div>
   <div class="cell wide" id="cell-budget">
     <div class="zone" id="zone-budget" hidden><h2 class="sec">Budget par livrable</h2></div>
     <section class="panel" id="panel-budget" aria-label="Budget" hidden></section>
@@ -812,9 +816,9 @@ var BOOT = <?!= boot ?>;
   'use strict';
   var el = ppm.el, clear = ppm.clear, uuid = ppm.uuid, plural = ppm.plural, toast = ppm.toast, call = ppm.call, openDialog = ppm.openDialog, closeDialog = ppm.closeDialog, frDate = ppm.frDate;
 
-  var TABS = ['bilan', 'po', 'budget'];
-  var ACCESS_KEY = { bilan: 'all', po: 'po', budget: 'budget' };
-  var state = { projectId: '', catalog: null, access: null, balance: null, po: null, budget: null, rates: null, people: null, outside: null, resources: null, seq: 0 };
+  var TABS = ['bilan', 'po', 'enveloppe', 'budget'];
+  var ACCESS_KEY = { bilan: 'all', po: 'po', enveloppe: 'budget', budget: 'budget' };
+  var state = { projectId: '', catalog: null, access: null, balance: null, po: null, envelope: null, budget: null, rates: null, people: null, outside: null, resources: null, seq: 0 };
   var $ = function (id) { return document.getElementById(id); };
   var STATUS_TONE = { 'À faire': '', 'Lancée': 'warn', 'GR': 'ok', 'Terminée': 'ok' };
   var STATUSES = ['À faire', 'Lancée', 'GR', 'Terminée'];
@@ -855,10 +859,10 @@ var BOOT = <?!= boot ?>;
     var a = state.access || {}, jobs = [];
     if (a.all) jobs.push(loadBalance());
     if (a.po) jobs.push(loadPo());
-    if (a.budget) jobs.push(loadBudget());
+    if (a.budget) { jobs.push(loadEnvelope()); jobs.push(loadBudget()); }
     return Promise.all(jobs);
   }
-  function invalidate() { state.balance = null; state.po = null; state.budget = null; state.outside = null; }
+  function invalidate() { state.balance = null; state.po = null; state.envelope = null; state.budget = null; state.outside = null; }
   function renderHeader() {
     var p = state.access.project;
     $('title').textContent = p.code + ' ' + p.name;
@@ -1081,6 +1085,60 @@ var BOOT = <?!= boot ?>;
   }
 
   // ------------------------------------------------------------ Budget (lignes)
+  // ------------------------------------------------------------ enveloppe par workpackage (0.15.3)
+  /**
+   * Le chef de projet fixe le budget autorisé du projet et le répartit entre les workpackages ; un Workpackage leader répartit le sien entre ses sous-workpackages. Les lignes de
+   * budget des livrables donnent le coût prévu, mis en regard : dépasser est signalé, jamais refusé. Vide = pas de plafond.
+   */
+  function badge(text, tone) { return el('span', { class: 'badge' + (tone ? ' ' + tone : ''), text: text }); }
+  function loadEnvelope() {
+    var panel = $('panel-enveloppe');
+    if (state.envelope) { renderEnvelope(); return Promise.resolve(); }
+    loading(panel);
+    return call('budget.envelope.get', { projectId: state.projectId }).then(function (v) { state.envelope = v; renderEnvelope(); }).catch(function (e) { failed(panel, e); });
+  }
+  function saveEnvelope(params, input, before) {
+    call('budget.envelope.set', Object.assign({ projectId: state.projectId }, params), true).then(function (v) {
+      state.envelope = v; renderEnvelope(); toast(v.changed ? 'Enveloppe enregistrée.' : 'Rien à changer.');
+    }).catch(function (e) { if (input) input.value = before; fail(e); });
+  }
+  function moneyInput(id, value, label, onSave) {
+    var i = el('input', { type: 'number', class: 'inline env-input', id: id, min: '0', step: 'any', placeholder: 'pas de plafond', 'aria-label': label });
+    i.value = value === null || value === undefined ? '' : value;
+    var before = i.value;
+    i.addEventListener('change', function () { onSave(i.value, i, before); });
+    return i;
+  }
+  function renderEnvelope() {
+    var panel = $('panel-enveloppe'), v = state.envelope;
+    clear(panel);
+    var t = v.totals;
+    if (t) {
+      var cards = el('div', { class: 'cards' });
+      cards.appendChild(card('Budget autorisé', t.authorized === null ? 'Non fixé' : eur(t.authorized), t.authorized === null ? 'pas de plafond' : 'enveloppe du projet', t.over ? 'alert' : ''));
+      cards.appendChild(card('Réparti entre les workpackages', eur(t.allocated), t.reserve === null ? '' : 'réserve non répartie : ' + eur(t.reserve)));
+      cards.appendChild(card('Coût prévu des livrables', eur(t.cost), t.remaining === null ? '' : (t.over ? 'dépasse l’enveloppe de ' + eur(-t.remaining) : 'il reste ' + eur(t.remaining) + ' sur l’enveloppe'), t.over ? 'alert' : ''));
+      panel.appendChild(cards);
+      if (v.canSetProject) {
+        panel.appendChild(el('label', { class: 'field env-project' }, ['Budget autorisé du projet (€) ',
+          moneyInput('env-authorized', t.authorized, 'Budget autorisé du projet', function (val, input, before) { saveEnvelope({ authorized: val }, input, before); })]));
+      }
+    } else {
+      panel.appendChild(el('p', { class: 'note', text: 'Vous voyez le budget de votre workpackage. Le budget autorisé du projet et la réserve ne sont visibles que du chef de projet et au-dessus.' }));
+    }
+    if (!v.rows.length) { panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucun workpackage.' }), el('span', { text: 'Créez les workpackages dans la page WBS.' })])); return; }
+    var rows = v.rows.map(function (r) {
+      var name = el('td', {}, [el('span', { class: 'env-indent', style: 'padding-left:' + (r.depth * 18) + 'px', text: (r.code ? r.code + ' ' : '') + r.name })]);
+      var cell = r.canSet ? moneyInput('env-' + r.wp_id, r.allocated, 'Enveloppe de ' + r.name, function (val, input, before) { saveEnvelope({ allocations: [{ wpId: r.wp_id, amount: val }] }, input, before); })
+        : el('span', { text: r.allocated === null ? 'Non fixée' : eur(r.allocated) });
+      var state2 = r.allocated === null ? badge('Pas de plafond') : r.over ? badge('Dépassée de ' + eur(-r.remaining), 'alert') : badge('Dans l’enveloppe', 'ok');
+      var rest = r.unallocated === null ? '' : eur(r.unallocated);
+      return el('tr', { 'data-wp': r.wp_id }, [name, el('td', { class: 'num' }, [cell]), el('td', { class: 'num', text: eur(r.cost) }), el('td', { class: 'num', text: r.remaining === null ? '' : eur(r.remaining) }), el('td', { class: 'num', text: rest }), el('td', {}, [state2])]);
+    });
+    panel.appendChild(table('env-table', ['Workpackage', 'Enveloppe (€)', 'Coût prévu', 'Reste', 'À répartir', 'État'], rows));
+    panel.appendChild(el('p', { class: 'note', text: 'Les sous-workpackages se répartissent l’enveloppe de leur workpackage ; les workpackages, celle du projet. Le coût prévu vient des lignes de budget des livrables, ci-dessous : le dépasser est signalé, jamais refusé. Chaque changement d’enveloppe est un changement à valider par le niveau du dessus (page Suivi).' }));
+  }
+
   function loadBudget() {
     var panel = $('panel-budget');
     if (state.budget) { renderBudget(); return Promise.resolve(); }
@@ -1183,7 +1241,7 @@ var BOOT = <?!= boot ?>;
   // ------------------------------------------------------------ événements et démarrage
   // vue programme (PL et DPL) : une ligne par projet, reprise de leur bilan ; un clic sur un projet ouvre son budget
   var pv = ppm.programView({
-    hide: ['cell-bilan', 'cell-po', 'cell-budget'], zone: 'zone-program', panel: 'panel-program', action: 'budget.program',
+    hide: ['cell-bilan', 'cell-po', 'cell-enveloppe', 'cell-budget'], zone: 'zone-program', panel: 'panel-program', action: 'budget.program',
     render: function (d, host) {
       host.appendChild(el('p', { class: 'program-note', text: 'Programme ' + d.program.code + ' — ' + d.program.name + '. Montants repris du bilan de chaque projet ; cliquez sur un projet pour le détail.' }));
       var open = function (row) { pv.leave(); loadProject(row.id); };

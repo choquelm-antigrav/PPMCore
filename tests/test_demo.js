@@ -140,8 +140,8 @@ module.exports = function () {
     w.runRules = () => { throw new Error('panne simulée'); };
     let err;
     try { w.seedDemo_(); } catch (e) { err = e; }
-    ok(err && /étape 15\/15/.test(err.message) && /panne simulée/.test(err.message) && /relancez/.test(err.message), err && err.message);
-    eq(w.getProp(w.PROP.DEMO_STEP, ''), '14', 'les 14 premières étapes sont conservées');
+    ok(err && /étape 16\/16/.test(err.message) && /panne simulée/.test(err.message) && /relancez/.test(err.message), err && err.message);
+    eq(w.getProp(w.PROP.DEMO_STEP, ''), String(w.DEMO_STEPS.length - 1), 'toutes les étapes avant la dernière sont conservées');
     w.runRules = real;
     ok(/^Démo complète/.test(w.seedDemo_()), 'relancée, elle termine');
     eq(counts(w), counts(demo.c), 'sans doublon');

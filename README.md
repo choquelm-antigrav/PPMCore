@@ -41,6 +41,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `36_Digest.gs` | Lot 2 : mail récapitulatif (un par personne, quotidien ou hebdomadaire), réglages personnels |
 | `37_Simulation.gs` | Lot 4 : simulation « et si… », synthèse chiffrée d'un projet, signaux faibles (sans IA) |
 | `43_Budget.gs` | 0.9.0 : CPN (projet et sous-projet), grille de taux, lignes de budget et étalement, bilan par CPN |
+| `55_Envelope.gs` | 0.15.3 : enveloppe budgétaire par workpackage (budget autorisé, répartition, coût mis en regard) |
 | `45_Overview.gs` | 0.10.0 : page Overview : création et renommage de projet, indicateurs délais, qualité et coût |
 | `46_Resources.gs` | 0.10.0 : page Ressources : personnes, équipes, rôle de projet, taux journalier par personne |
 | `00_Pages.gs` | 0.12.1 : registre des pages, source unique lue par le serveur, la fabrication, les aperçus et les tests |
@@ -228,7 +229,7 @@ Additive et relançable, elle **termine** les anciennes lignes sans les supprime
 
 **Changements de comportement à connaître** : le Program Leader peut maintenant déclarer l'avancement ; un Workpackage leader ne supprime pas son propre workpackage ; la ligne de budget ne donne plus de droit (le Contributor la remplace) ; un chef de projet ne désigne pas son remplaçant ni un autre chef de projet (le DPL le fait).
 
-**Pas encore fait** : le budget par workpackage avec enveloppe autorisée, l'import par classeur Google Sheet. La démo n'est pas adaptée : elle garde ses anciens rôles, qui fonctionnent ; lancez `A9_MIGRER_ROLES` après `A2_SEED_DEMO` pour la passer aux nouveaux niveaux.
+**Pas encore fait** : l'import par classeur Google Sheet. La démo n'est pas adaptée : elle garde ses anciens rôles, qui fonctionnent ; lancez `A9_MIGRER_ROLES` après `A2_SEED_DEMO` pour la passer aux nouveaux niveaux.
 
 ## Validation par le niveau du dessus (0.15.3)
 
@@ -246,6 +247,24 @@ Additive et relançable, elle **termine** les anciennes lignes sans les supprime
 - La zone s'affiche pour **toute personne qui a un rôle dans le projet** ; un Reader (aucun rôle) ne la voit pas. Elle remonte à la baseline active, ou aux **soixante derniers jours** s'il n'y en a pas.
 
 **Mail du matin** : chacun y compte ce qu'il peut valider (section « Changements à valider »), qu'il pilote le projet ou non.
+
+## Budget par workpackage : l'enveloppe, de haut en bas (0.15.3)
+
+**Principe.** Le chef de projet fixe l'**enveloppe autorisée** du projet et la **répartit entre les workpackages** ; un Workpackage leader répartit la sienne entre ses sous-workpackages. Les lignes de budget des livrables (zone « Budget par livrable ») restent la mesure du **coût prévu** : la page les met en regard de l'enveloppe, workpackage par workpackage (le coût d'un workpackage comprend celui de ses sous-workpackages). Où : page **Budget**, zone **Enveloppe par workpackage**.
+
+**Règles.**
+- Les sous-workpackages d'un workpackage ne dépassent pas son enveloppe ; les workpackages de premier niveau ne dépassent pas celle du projet. Un sous-workpackage ne reçoit rien tant que son parent n'a pas d'enveloppe. Tout est vérifié sur l'état final, avant la moindre écriture (tout ou rien).
+- **Dépasser l'enveloppe avec des lignes de budget n'est pas bloqué** : c'est signalé (« Dépassée de … € », cartes en rouge). Le coût d'un livrable est une information vraie qu'on ne refuse pas de saisir.
+- **Vide ne veut pas dire zéro** : une enveloppe vide signifie « pas de plafond ».
+- Le montant se saisit en euros, positif ou nul ; la virgule décimale est comprise ; un montant avec des espaces est refusé plutôt que deviné.
+
+**Qui.** L'enveloppe du projet et celles des workpackages de premier niveau : le chef de projet et au-dessus (droit `budget.authorize`). Celle d'un sous-workpackage : son Workpackage leader et au-dessus. Un Workpackage leader ne fixe donc pas sa propre enveloppe : elle lui est donnée par le niveau du dessus. **Chacun ne voit que son budget** : un Workpackage leader, son workpackage et ses sous-workpackages ; ni le budget autorisé du projet, ni la réserve, ni les autres workpackages. Un Contributor ne voit pas la zone.
+
+**Validation.** Chaque changement d'enveloppe est un **changement à valider** par le niveau du dessus (page Suivi, voir plus haut), avec les libellés « budget autorisé » et « enveloppe budgétaire ».
+
+**Protection.** Les enveloppes ne s'écrivent que par `budget.envelope.set` : les mises à jour ordinaires d'un projet ou d'un workpackage (`projects.update`, `workpackages.*`, `wbs.*`) les ignorent. Actions : `budget.envelope.get` (lecture) et `budget.envelope.set` (`authorized`, `allocations: [{ wpId, amount }]`).
+
+**Limites.** Pas de règle du moteur de constats pour un dépassement d'enveloppe (seulement l'affichage) ; pas de graphique de consommation dans le temps ; l'enveloppe n'est pas figée par les baselines (elle est suivie par la validation). Vérifié sur les faux services et dans un aperçu, pas dans votre Apps Script. La démo reçoit une enveloppe (un workpackage dépassé pour l'illustrer) à l'étape « Enveloppe budgétaire de NAC-1 ».
 
 ## Planning : liste de gauche, recherche, filtres, enregistrement immédiat (0.15.2)
 

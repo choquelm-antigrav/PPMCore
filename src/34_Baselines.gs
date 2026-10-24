@@ -28,7 +28,7 @@ var FIELD_LABELS = {
   milestone_category: 'catégorie de jalon', predecessor_id: 'prédécesseur', successor_id: 'successeur',
   dep_type: 'type de lien', lag_days: 'décalage', deliverable_id: 'livrable', resource_id: 'ressource',
   cost_type: 'type de coût', planned_days: 'jours prévus', frozen_rate: 'taux figé', fixed_amount: 'forfait',
-  planned_amount: 'montant prévu', progress_pct: 'avancement', deleted: 'suppression', '*': 'création ou suppression'
+  planned_amount: 'montant prévu', progress_pct: 'avancement', budget_authorized: 'budget autorisé', budget_allocated: 'enveloppe budgétaire', deleted: 'suppression', '*': 'création ou suppression'
 };
 
 // ---------------------------------------------------------------- instantanés

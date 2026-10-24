@@ -55,7 +55,7 @@ function openPage(user, startTab) {
   const change = (n) => n.dispatchEvent(new win.Event('change', { bubbles: true }));
   const text = (id) => flat(($(id) || { textContent: '' }).textContent);
   // plus d'onglets : les zones auxquelles on a droit sont affichées ensemble
-  const zones = () => ['bilan', 'po', 'budget'].filter((z) => { const n = doc.getElementById('zone-' + z); return n && !n.hidden && !doc.getElementById('panel-' + z).hidden; });
+  const zones = () => ['bilan', 'po', 'enveloppe', 'budget'].filter((z) => { const n = doc.getElementById('zone-' + z); return n && !n.hidden && !doc.getElementById('panel-' + z).hidden; });
   const submitGf = () => $('gf-form').dispatchEvent(new win.Event('submit', { cancelable: true }));
   const submitPo = () => $('po-form').dispatchEvent(new win.Event('submit', { cancelable: true }));
   const set = (id, v) => { $(id).value = v; };
@@ -70,7 +70,7 @@ function openPage(user, startTab) {
   let p = openPage(CP);
   await p.until(() => p.$('bal-table'));
   check(p.text('title') === 'P1 Projet 1' && p.text('cpn-chip') === 'CPN-100 — Nacelle moteur', 'titre et CPN du projet : ' + p.text('cpn-chip'));
-  check(JSON.stringify(p.zones()) === JSON.stringify(['bilan', 'po', 'budget']), 'le chef de projet voit les trois zones d’un coup, sans onglet : bilan, achats, budget');
+  check(JSON.stringify(p.zones()) === JSON.stringify(['bilan', 'po', 'enveloppe', 'budget']), 'le chef de projet voit les quatre zones d’un coup, sans onglet : bilan, achats, enveloppe par workpackage, budget');
   await p.until(() => p.$('po-add') && p.$('lines-table'));
   check(!!p.$('bal-table') && !!p.$('po-table') === false && !!p.$('line-add'), 'bilan, achats et lignes de budget sont chargés ensemble sur la page');
   const bal = [...p.doc.querySelectorAll('#bal-table tbody tr[data-cpn]')].map((r) => r.getAttribute('data-cpn'));
@@ -190,7 +190,7 @@ function openPage(user, startTab) {
   check(!!m.doc.querySelector('#po-table'), 'il voit les PO du projet et peut en créer');
   const r = openPage(RWP);
   await r.until(() => r.zones().length > 0 && r.$('panel-po'));
-  check(JSON.stringify(r.zones()) === JSON.stringify(['po', 'budget']), 'un responsable de WP : achats et son budget : ' + r.zones().join(','));
+  check(JSON.stringify(r.zones()) === JSON.stringify(['po', 'enveloppe', 'budget']), 'un Workpackage leader : achats, l’enveloppe de son workpackage et son budget : ' + r.zones().join(','));
   await r.until(() => r.$('lines-table') || r.$('line-add'));
   check(/Budget de votre périmètre/.test(r.text('panel-budget')), 'budget limité à son périmètre (un Workpackage leader ne voit que celui de son workpackage)');
   const n = openPage(NOBODY);
@@ -224,6 +224,37 @@ function openPage(user, startTab) {
   dp.$('picker').value = w.p2.id; dp.$('picker').dispatchEvent(new dp.win.Event('change'));
   await dp.until(() => dp.$('panel-program').hidden);
   check(dp.$('panel-program').hidden && dp.$('zone-program').hidden, 'revenir à un projet par la liste referme la vue programme');
+
+  // ---------------------------------------------------------------- enveloppe par workpackage (0.15.3)
+  await p.until(() => p.$('env-table'));
+  const envRows = () => [...p.doc.querySelectorAll('#env-table tbody tr')];
+  check(envRows().length === 3 && envRows().map((r) => r.cells[0].textContent.trim()).join('|') === '1 Conception|1.1 Calcul|2 Essais', 'un tableau en arbre : WP 1, son sous-workpackage 1.1, WP 2');
+  check(/Budget autorisé\s*Non fixé/.test(p.text('panel-enveloppe')) && !!p.$('env-authorized'), 'rien n’est fixé : « pas de plafond », et le chef de projet a le champ du budget autorisé');
+  p.set('env-authorized', '20000'); p.change(p.$('env-authorized'));
+  await p.until(() => Number(c.repoGet('Project', w.p1.id).budget_authorized) === 20000);
+  await p.until(() => /Enveloppe enregistrée/.test(p.text('toast')));
+  check(Number(c.repoGet('Project', w.p1.id).budget_authorized) === 20000 && /Enveloppe enregistrée/.test(p.text('toast')), 'le budget autorisé s’enregistre en quittant le champ');
+  await p.until(() => /Budget autorisé\s*20\s?000/.test(p.text('panel-enveloppe')));
+  p.set('env-' + w.w1.id, '3000'); p.change(p.$('env-' + w.w1.id));
+  await p.until(() => Number(c.repoGet('WorkPackage', w.w1.id).budget_allocated) === 3000);
+  p.set('env-' + w.w2.id, '500'); p.change(p.$('env-' + w.w2.id));
+  await p.until(() => Number(c.repoGet('WorkPackage', w.w2.id).budget_allocated) === 500);
+  await p.until(() => /Dépassée de/.test(p.text('panel-enveloppe')));
+  const wp2 = () => p.doc.querySelector('#env-table tr[data-wp="' + w.w2.id + '"]');
+  check(/Dépassée de/.test(wp2().textContent) && /Réparti entre les workpackages\s*3\s?500/.test(p.text('panel-enveloppe')), 'WP 2 : 8 000 € de coût pour 500 € d’enveloppe, signalé « dépassée » sans rien bloquer ; réparti : 3 500 €');
+  const before = p.$('env-' + w.w1.id).value;
+  p.set('env-' + w.w1.id, '30000'); p.change(p.$('env-' + w.w1.id));
+  await p.until(() => p.$('toast').classList.contains('error'));
+  check(/dépassent le budget autorisé/.test(p.text('toast')) && p.$('env-' + w.w1.id).value === before && Number(c.repoGet('WorkPackage', w.w1.id).budget_allocated) === 3000, 'au-delà du budget autorisé : refusé, message clair, le champ revient à sa valeur : ' + p.text('toast'));
+  const wl = openPage(RWP);
+  await wl.until(() => wl.$('env-table'));
+  check(!wl.$('env-authorized') && !wl.$('env-' + w.w1.id) && !!wl.$('env-' + w.w11.id) && [...wl.doc.querySelectorAll('#env-table tbody tr')].length === 2 && /budget de votre workpackage/.test(wl.text('panel-enveloppe')), 'un Workpackage leader : pas le budget du projet, pas l’enveloppe de son propre WP, seulement la répartition de ses sous-workpackages ; il ne voit que son workpackage');
+  wl.set('env-' + w.w11.id, '1200'); wl.change(wl.$('env-' + w.w11.id));
+  await wl.until(() => Number(c.repoGet('WorkPackage', w.w11.id).budget_allocated) === 1200);
+  check(Number(c.repoGet('WorkPackage', w.w11.id).budget_allocated) === 1200, 'il répartit la sienne');
+  const mm = openPage(MEMBER);
+  await wait(250);
+  check(mm.$('zone-enveloppe').hidden && mm.$('panel-enveloppe').hidden, 'un Contributor ne voit pas la zone');
   console.log(failed ? '\n' + failed + ' échec(s).' : '\nPage Budget : tout est conforme.');
   process.exit(failed ? 1 : 0);
 })();

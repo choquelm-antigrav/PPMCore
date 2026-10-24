@@ -1,7 +1,7 @@
 /**
- * PPM Core 0.15.3 — fichier unique à installer (fabriqué par tools/build.js, empreinte 08df7f67ae7d).
+ * PPM Core 0.15.3 — fichier unique à installer (fabriqué par tools/build.js, empreinte 5b61a342f2ed).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
- * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs, 53_Roles.gs, 54_Validation.gs.
+ * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs, 53_Roles.gs, 54_Validation.gs, 55_Envelope.gs.
  */
 
 // ======================================================================
@@ -116,6 +116,7 @@ var PERMISSION_LEVEL = {
   'baseline.manage':  'CP',
   'baseline.request': 'CONTRIB',
   'budget.edit':      'WPL',
+  'budget.authorize': 'CP',            // fixer l'enveloppe autorisée du projet et la répartir entre les workpackages (un sous-workpackage : par son Workpackage leader)
   'cpn.edit':         'CP',
   'po.edit':          'CONTRIB',
   'ratecard.manage':  'CP',
@@ -325,13 +326,13 @@ var SCHEMA = {
     book: 'data',
     cols: ['id', 'code', 'name', 'program_id', 'manager_resource_id', 'status', 'holiday_country',
       'start_date', 'end_date', 'active_baseline_id', 'drive_folder_id', 'calendar_id', 'cpn', 'cpn_label',
-      'news_on', 'news_keywords', 'news_journal_id'],
+      'news_on', 'news_keywords', 'news_journal_id', 'budget_authorized'],   // budget_authorized : enveloppe autorisée (55_Envelope.gs)
     required: ['code', 'name'],
     enums: { status: ['Préparation', 'Actif', 'En pause', 'Clos'], holiday_country: COUNTRIES }
   },
   WorkPackage: {
     book: 'data',
-    cols: ['id', 'project_id', 'parent_wp_id', 'wbs_code', 'name', 'owner_resource_id', 'charge_code', 'cpn', 'cpn_label'],
+    cols: ['id', 'project_id', 'parent_wp_id', 'wbs_code', 'name', 'owner_resource_id', 'charge_code', 'cpn', 'cpn_label', 'budget_allocated'],   // budget_allocated : part de l'enveloppe (55_Envelope.gs)
     required: ['project_id', 'name']
   },
   PlanItem: {
@@ -1930,7 +1931,7 @@ function openBook_(book) {
 var SHEET_PARSED_COLS = {};
 ['ac', 'amount', 'bac', 'capacity_days_month', 'cpi', 'daily_rate', 'days', 'eac', 'ev', 'financial_value', 'fixed_amount', 'frozen_rate', 'impact', 'lag_days', 'number',
   'planned_amount', 'planned_days', 'probability', 'progress_pct', 'pv', 'reminder_days', 'score', 'spi', 'version', 'year', 'deleted', 'acknowledged', 'enabled',
-  'is_external', 'news_on', 'reminder_off', 'unverified', 'status_date', 'at'].concat(DATE_COLS).forEach(function (c) { SHEET_PARSED_COLS[c] = true; });
+  'is_external', 'news_on', 'reminder_off', 'unverified', 'status_date', 'at', 'budget_authorized', 'budget_allocated'].concat(DATE_COLS).forEach(function (c) { SHEET_PARSED_COLS[c] = true; });
 
 function sheetParsedCol_(h) { return !!SHEET_PARSED_COLS[h] || /_at$/.test(h) || /_on$/.test(h); }
 
@@ -3157,7 +3158,7 @@ defineAction('projects.list', function (p) {
 defineAction('projects.get', function (p) { return mustGet('Project', requireParam(p, 'id')); });
 
 defineAction('projects.create', function (p, ctx) {
-  var v = p.values || {};
+  var v = stripEnvelope_(p.values);
   requireCan(ctx, 'project.create', isBlank(v.program_id) ? { type: 'global' } : { type: 'program', id: v.program_id });
   if (!isBlank(v.program_id)) mustGet('Program', v.program_id);
   var projRec = repoInsert('Project', v, ctx.actx);
@@ -3171,7 +3172,7 @@ defineAction('projects.update', function (p, ctx) {
   mustGet('Project', id);
   var projBefore = mustGet('Project', id);
   requireCan(ctx, 'wbs.edit', { type: 'project', id: id });
-  var projPatch = p.patch || {};
+  var projPatch = stripEnvelope_(p.patch);
   if ('manager_resource_id' in projPatch) assertCanSetPrincipal_(ctx, 'project', { type: 'project', id: id }, projBefore.manager_resource_id, projPatch.manager_resource_id);
   var projAfter = repoUpdate('Project', id, projPatch, p.version, ctx.actx);
   if ('manager_resource_id' in projPatch) applyPrincipal_(ctx.actx, 'project', id, projBefore.manager_resource_id, projAfter.manager_resource_id);
@@ -3184,7 +3185,7 @@ defineAction('workpackages.list', function (p) {
 });
 
 defineAction('workpackages.create', function (p, ctx) {
-  var v = p.values || {};
+  var v = stripEnvelope_(p.values);
   mustGet('Project', requireParam(v, 'project_id'));
   if (!isBlank(v.parent_wp_id)) {
     var parent = mustGet('WorkPackage', v.parent_wp_id);
@@ -3201,7 +3202,7 @@ defineAction('workpackages.update', function (p, ctx) {
   var id = requireParam(p, 'id');
   var wpBefore = mustGet('WorkPackage', id);
   requireCan(ctx, 'wbs.edit', { type: 'workpackage', id: id });
-  var patch = Object.assign({}, p.patch || {});
+  var patch = stripEnvelope_(p.patch);
   delete patch.project_id;
   var wpKind = isBlank(wpBefore.parent_wp_id) ? 'workpackage' : 'subworkpackage';
   if ('owner_resource_id' in patch) assertCanSetPrincipal_(ctx, wpKind, { type: 'workpackage', id: id }, wpBefore.owner_resource_id, patch.owner_resource_id);
@@ -4385,7 +4386,7 @@ var FIELD_LABELS = {
   milestone_category: 'catégorie de jalon', predecessor_id: 'prédécesseur', successor_id: 'successeur',
   dep_type: 'type de lien', lag_days: 'décalage', deliverable_id: 'livrable', resource_id: 'ressource',
   cost_type: 'type de coût', planned_days: 'jours prévus', frozen_rate: 'taux figé', fixed_amount: 'forfait',
-  planned_amount: 'montant prévu', progress_pct: 'avancement', deleted: 'suppression', '*': 'création ou suppression'
+  planned_amount: 'montant prévu', progress_pct: 'avancement', budget_authorized: 'budget autorisé', budget_allocated: 'enveloppe budgétaire', deleted: 'suppression', '*': 'création ou suppression'
 };
 
 // ---------------------------------------------------------------- instantanés
@@ -9241,6 +9242,15 @@ function demoPlan_(d, codes) {
   });
 }
 
+/** Enveloppe du projet : 8 % au-dessus du coût prévu, répartie 10 % au-dessus du coût de chaque workpackage de premier niveau, sauf un (15 % en dessous) pour montrer un dépassement. */
+function demoEnvelope_(d) {
+  var p1 = d.project('NAC-1'), v = d.call('budget.envelope.get', { projectId: p1.id });
+  var top = v.rows.filter(function (r) { return r.depth === 0 && r.cost > 0; });
+  var allocations = top.map(function (r, i) { return { wpId: r.wp_id, amount: Math.round(r.cost * (i === 1 ? 0.85 : 1.1)) }; });
+  var spread = allocations.reduce(function (s, a) { return s + a.amount; }, 0);
+  d.call('budget.envelope.set', { projectId: p1.id, authorized: Math.max(Math.round(v.totals.cost * 1.08), spread), allocations: allocations });
+}
+
 function demoDeps_(d) {
   DEMO_DEPS.forEach(function (x) {
     repoInsert('Dependency', { predecessor_id: d.item(x[0], x[1]).id, successor_id: d.item(x[0], x[2]).id, dep_type: x[3], lag_days: x[4] }, d.a);
@@ -9361,6 +9371,7 @@ var DEMO_STEPS = [
   { name: 'Risques et opportunités', run: function (d) { demoRisks_(d); } },
   { name: 'Budget de NAC-1 (1/2)', run: function (d) { demoBudget_(d, 0, 20); } },
   { name: 'Budget de NAC-1 (2/2)', run: function (d) { demoBudget_(d, 20, 60); } },
+  { name: 'Enveloppe budgétaire de NAC-1', run: function (d) { demoEnvelope_(d); } },
   { name: 'Commandes d’achat', run: function (d) { demoOrders_(d); } },
   { name: 'Actualités de NAC-1 : réunions', run: function (d) { demoNewsMeetings_(d); } },
   { name: 'Actualités : actions, synthèse du jour, réunions à trier', run: function (d) { demoNewsActions_(d); } },
@@ -11451,7 +11462,7 @@ defineAction('roles.of', function (p, ctx) {
  * et l'avancement déclaré d'un livrable (`PlanItem.progress_pct`).
  */
 
-var VALIDATION_EXTRA_FIELDS = { PlanItem: ['progress_pct'] };
+var VALIDATION_EXTRA_FIELDS = { PlanItem: ['progress_pct'], Project: ['budget_authorized'], WorkPackage: ['budget_allocated'] };
 var VALIDATION_WINDOW_DAYS = 60;   // sans baseline active, le fil remonte aux 60 derniers jours
 
 /** L'événement porte-t-il sur une donnée à valider ? */
@@ -11568,3 +11579,138 @@ function pendingChangesFor_(ctx, data, project) {
   });
   return n;
 }
+
+// ======================================================================
+// 55_Envelope.gs
+// ======================================================================
+
+/**
+ * PPM Core — 0.15.3 : budget par workpackage, de haut en bas.
+ *
+ * Le chef de projet fixe l'ENVELOPPE AUTORISÉE du projet (`Project.budget_authorized`) et la répartit entre les workpackages (`WorkPackage.budget_allocated`) ; le Workpackage
+ * leader répartit à son tour la sienne entre ses sous-workpackages. Les lignes de budget des livrables (page Budget, « Budget par livrable ») restent la mesure du coût prévu :
+ * la page les met en regard de l'enveloppe, workpackage par workpackage.
+ *
+ * RÈGLES. Les sous-workpackages d'un workpackage ne dépassent pas son enveloppe ; les workpackages de premier niveau ne dépassent pas l'enveloppe du projet (si elle est fixée) ;
+ * un sous-workpackage ne reçoit rien tant que son parent n'a pas d'enveloppe. Dépasser l'enveloppe avec des lignes de budget n'est PAS bloqué : c'est signalé (« dépassé »), parce
+ * que le coût d'un livrable est une information vraie qu'on ne refuse pas de saisir. Une enveloppe non fixée (vide) veut dire « pas de plafond », pas zéro.
+ *
+ * QUI. Fixer l'enveloppe du projet et celles des workpackages de premier niveau : `budget.authorize` (chef de projet et au-dessus). Celle d'un sous-workpackage : un niveau strictement
+ * supérieur au sien sur le workpackage parent (son Workpackage leader, et au-dessus). Chacun ne voit que ce qui relève de son budget : un Workpackage leader, son workpackage seulement.
+ * Toute modification est un changement à valider par le niveau du dessus (54_Validation.gs).
+ */
+
+/** Les enveloppes ne s'écrivent que par budget.envelope.set : on les retire de ce que les écritures génériques reçoivent. */
+function stripEnvelope_(obj) {
+  var out = Object.assign({}, obj || {});
+  delete out.budget_authorized; delete out.budget_allocated;
+  return out;
+}
+
+function envNumber_(v, label) {
+  if (v === '' || v === null || v === undefined) return '';
+  var n = Number(String(v).replace(',', '.'));
+  if (!isFinite(n) || n < 0) throw new PpmError('VALIDATION', label + ' : un montant en euros, positif ou nul (ou vide pour « pas de plafond »).');
+  return round2(n);
+}
+
+/** Peut-on fixer l'enveloppe de ce workpackage ? Un niveau strictement supérieur au sien, sur son parent (le projet pour un workpackage de premier niveau). */
+function canAllocateWp_(ctx, wp) {
+  if (ctx.isAdmin) return true;
+  if (isBlank(wp.parent_wp_id)) return can(ctx, 'budget.authorize', { type: 'project', id: wp.project_id });
+  return bestRankOn_(ctx, { type: 'workpackage', id: wp.parent_wp_id }) < ROLE_RANK.SWPL;
+}
+
+/** Coût prévu par workpackage (lui et tout ce qu'il contient) et hors workpackage, à partir des lignes de budget des livrables du projet. */
+function envelopeCosts_(projectId, wpById) {
+  var cost = {}, none = 0;
+  var items = indexBy_(repoList('PlanItem', function (i) { return i.project_id === projectId && i.item_type === 'Livrable'; }));
+  repoList('BudgetLine', function (l) { return !!items[l.deliverable_id]; }).forEach(function (l) {
+    var amount = Number(l.planned_amount) || 0, w = items[l.deliverable_id].wp_id ? wpById[items[l.deliverable_id].wp_id] : null, guard = 0;
+    if (!w) { none = round2(none + amount); return; }
+    while (w && guard++ < 5) { cost[w.id] = round2((cost[w.id] || 0) + amount); w = w.parent_wp_id ? wpById[w.parent_wp_id] : null; }
+  });
+  return { byWp: cost, none: none };
+}
+
+function envelopeView_(ctx, project) {
+  var access = budgetAccess_(ctx, project.id);
+  if (!access.budget) throw new PpmError('FORBIDDEN', 'Le budget est réservé aux responsables de budget du projet.');
+  var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; });
+  var wpById = indexBy_(wps), costs = envelopeCosts_(project.id, wpById);
+  var visible = function (w) { return access.all || can(ctx, 'budget.edit', { type: 'workpackage', id: w.id }); };
+  var num = function (v) { return isBlank(v) ? null : Number(v); };
+  var kids = {}; wps.forEach(function (w) { if (w.parent_wp_id) (kids[w.parent_wp_id] = kids[w.parent_wp_id] || []).push(w); });
+  var rows = [];
+  var order = function (a, b) { return String(a.wbs_code).localeCompare(String(b.wbs_code), 'fr', { numeric: true }); };
+  var walk = function (w, depth) {
+    if (visible(w)) {
+      var alloc = num(w.budget_allocated), cost = costs.byWp[w.id] || 0;
+      var childSum = round2((kids[w.id] || []).reduce(function (s, k) { return s + (Number(k.budget_allocated) || 0); }, 0));
+      rows.push({
+        wp_id: w.id, version: w.version, code: w.wbs_code || '', name: w.name, parent_id: w.parent_wp_id && visible(wpById[w.parent_wp_id] || {}) ? w.parent_wp_id : '', depth: depth,
+        allocated: alloc, cost: cost, remaining: alloc === null ? null : round2(alloc - cost), over: alloc !== null && cost > alloc,
+        children_allocated: childSum, unallocated: alloc === null || !(kids[w.id] || []).length ? null : round2(alloc - childSum), canSet: canAllocateWp_(ctx, w)
+      });
+    }
+    (kids[w.id] || []).sort(order).forEach(function (k) { walk(k, depth + 1); });
+  };
+  wps.filter(function (w) { return isBlank(w.parent_wp_id) || !wpById[w.parent_wp_id]; }).sort(order).forEach(function (w) { walk(w, 0); });
+  var top = wps.filter(function (w) { return isBlank(w.parent_wp_id); });
+  var authorized = num(project.budget_authorized), allocated = round2(top.reduce(function (s, w) { return s + (Number(w.budget_allocated) || 0); }, 0));
+  var total = 0; Object.keys(costs.byWp).forEach(function (k) { if (!wpById[k].parent_wp_id) total = round2(total + costs.byWp[k]); });
+  total = round2(total + costs.none);
+  var out = { project: { id: project.id, code: project.code, name: project.name, version: project.version }, rows: rows, partial: !access.all, canSetProject: ctx.isAdmin || can(ctx, 'budget.authorize', { type: 'project', id: project.id }) };
+  if (access.all) {
+    out.totals = { authorized: authorized, allocated: allocated, reserve: authorized === null ? null : round2(authorized - allocated), cost: total, cost_without_wp: costs.none,
+      remaining: authorized === null ? null : round2(authorized - total), over: authorized !== null && total > authorized };
+  }
+  return out;
+}
+
+defineAction('budget.envelope.get', function (p, ctx) {
+  return envelopeView_(ctx, mustGet('Project', requireParam(p, 'projectId')));
+});
+
+/**
+ * Fixe l'enveloppe du projet (`authorized`, vide = pas de plafond) et/ou celles de workpackages (`allocations` : [{ wpId, amount }], vide = pas de plafond). Tout ou rien :
+ * les droits et les règles de somme se vérifient sur l'état final avant la moindre écriture.
+ */
+defineAction('budget.envelope.set', function (p, ctx) {
+  var project = mustGet('Project', requireParam(p, 'projectId'));
+  var allocations = Array.isArray(p.allocations) ? p.allocations : [];
+  if (!('authorized' in p) && !allocations.length) throw new PpmError('VALIDATION', 'Rien à enregistrer.');
+  return withLock(function () {
+    var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; }), wpById = indexBy_(wps);
+    var next = {}; wps.forEach(function (w) { next[w.id] = isBlank(w.budget_allocated) ? '' : Number(w.budget_allocated); });
+    var changes = [];
+    var authorized = isBlank(project.budget_authorized) ? '' : Number(project.budget_authorized);
+    if ('authorized' in p) {
+      if (!ctx.isAdmin && !can(ctx, 'budget.authorize', { type: 'project', id: project.id })) throw new PpmError('FORBIDDEN', 'Seul le chef de projet (ou un niveau au-dessus) fixe l’enveloppe du projet.');
+      var a = envNumber_(p.authorized, 'Budget autorisé');
+      if (a !== authorized) { authorized = a; changes.push({ table: 'Project', id: project.id, patch: { budget_authorized: a === '' ? '' : a }, version: project.version }); }
+    }
+    allocations.forEach(function (x) {
+      var w = wpById[String(x.wpId)];
+      if (!w) throw new PpmError('NOT_FOUND', 'Workpackage introuvable dans ce projet : ' + x.wpId);
+      if (!canAllocateWp_(ctx, w)) throw new PpmError('FORBIDDEN', 'L’enveloppe de « ' + w.name + ' » est fixée par ' + (isBlank(w.parent_wp_id) ? 'le chef de projet (ou au-dessus)' : 'son Workpackage leader (ou au-dessus)') + '.');
+      var v = envNumber_(x.amount, 'Enveloppe de « ' + w.name + ' »');
+      if (v !== next[w.id]) { next[w.id] = v; changes.push({ table: 'WorkPackage', id: w.id, patch: { budget_allocated: v === '' ? '' : v }, version: w.version }); }
+    });
+    // sommes : sur l'état final
+    var sumOf = function (list) { return round2(list.reduce(function (s, w) { return s + (next[w.id] === '' ? 0 : next[w.id]); }, 0)); };
+    var top = wps.filter(function (w) { return isBlank(w.parent_wp_id); });
+    if (authorized !== '' && sumOf(top) > authorized) throw new PpmError('VALIDATION', 'Les enveloppes des workpackages (' + sumOf(top) + ' €) dépassent le budget autorisé du projet (' + authorized + ' €).', { rule: 'ENVELOPE_PROJECT', allocated: sumOf(top), authorized: authorized });
+    wps.filter(function (w) { return isBlank(w.parent_wp_id); }).forEach(function (w) {
+      var kids = wps.filter(function (k) { return k.parent_wp_id === w.id; }), s = sumOf(kids);
+      if (!kids.length || s === 0) return;
+      if (next[w.id] === '') throw new PpmError('VALIDATION', 'Fixez d’abord l’enveloppe de « ' + w.name + ' » : ses sous-workpackages ne peuvent pas en recevoir tant qu’elle est vide.', { rule: 'ENVELOPE_PARENT_EMPTY', wp: w.id });
+      if (s > next[w.id]) throw new PpmError('VALIDATION', 'Les enveloppes des sous-workpackages de « ' + w.name + ' » (' + s + ' €) dépassent la sienne (' + next[w.id] + ' €).', { rule: 'ENVELOPE_WP', wp: w.id, allocated: s, envelope: next[w.id] });
+    });
+    changes.forEach(function (c) { repoUpdate(c.table, c.id, c.patch, null, ctx.actx); });
+    var fresh = mustGet('Project', project.id);
+    var view = envelopeView_(ctx, fresh);
+    view.changed = changes.length;
+    return view;
+  });
+});
