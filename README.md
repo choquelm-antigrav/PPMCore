@@ -41,6 +41,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `36_Digest.gs` | Lot 2 : mail récapitulatif (un par personne, quotidien ou hebdomadaire), réglages personnels |
 | `37_Simulation.gs` | Lot 4 : simulation « et si… », synthèse chiffrée d'un projet, signaux faibles (sans IA) |
 | `43_Budget.gs` | 0.9.0 : CPN (projet et sous-projet), grille de taux, lignes de budget et étalement, bilan par CPN |
+| `57_Rights.gs` | 0.15.4 : le tableau des droits par niveau de la page Administration, calculé depuis les règles |
 | `56_Import.gs` | 0.15.4 : import et export du WBS par classeur Google Sheet (modèle, analyse, application par lots) |
 | `55_Envelope.gs` | 0.15.3 : enveloppe budgétaire par workpackage (budget autorisé, répartition, coût mis en regard) |
 | `45_Overview.gs` | 0.10.0 : page Overview : création et renommage de projet, indicateurs délais, qualité et coût |
@@ -294,6 +295,16 @@ Additive et relançable, elle **termine** les anciennes lignes sans les supprime
 **Tout passe par les actions ordinaires** (`wbs.create`, `wbs.update`, `roles.assign`, `budget.line.save`, `budget.envelope.set`) : mêmes droits, mêmes règles, même journal. **Les changements importés restent donc « à valider »** par le niveau du dessus dans la page Suivi, comme s'ils avaient été saisis à la main : un gros import donne un gros lot à valider (le DPL a « Tout valider »).
 
 **Limites.** Pas de dépendances entre livrables dans le classeur (elles se créent depuis le Planning) ; un seul leader ou owner par objet (les autres rôles se posent dans la page WBS) ; un classeur que vous avez fait vous-même doit être **partagé en lecture avec le compte qui exécute l'outil** (le message d'erreur le dit) ; les codes WBS sont écrits en texte brut dans le modèle (sinon Sheets lit « 1.10 » comme le nombre 1,1) ; l'analyse relit tout le classeur à chaque lot. Vérifié sur de faux services et dans un aperçu, **pas dans votre Apps Script** : ni la durée réelle d'un lot, ni la création du fichier dans Drive, ni son partage.
+
+## Tableau des droits dans le panneau de l'administrateur (0.15.4)
+
+**Où.** Page **Administration** (réservée à l'administrateur du site), zone **Droits par niveau** : une ligne par droit, une colonne par niveau (PL, DPL, CP, WPL, SWPL, DO, Contributor, Reader), un ✓ là où le niveau a le droit. Un champ **Filtrer** (budget, supprimer, rôle…) ne garde que les lignes concernées. Dessous : la légende des niveaux (ce sur quoi chacun se pose) et les règles (cumul des rôles, qui pose quoi, validation par le niveau du dessus, lecture, enveloppe).
+
+**Lignes.** Lire (le WBS pour tout le monde ; tarifs et comptes rendus ; budget ; vues de programme) · Structure du projet (modifier un programme, un projet, un workpackage, un sous-workpackage, un livrable ou un jalon, et y créer dedans) · Suppression, par type d'objet · Poser un rôle, rôle par rôle · Planning et avancement · Budget et achats · Personnes · Projets et programmes · Risques, constats, actualités · Classeur et espace de travail. Les droits « en profondeur » (un rôle posé n'importe où dans le projet ou le programme suffit) et les droits limités à son périmètre le disent sous leur libellé.
+
+**Le tableau ne peut pas mentir.** Il n'est jamais écrit à la main : chaque case est calculée à partir des règles que le moteur applique vraiment (`PERMISSION_LEVEL`, `PERMISSION_DEEP`, `WBS_RANK`, `ROLE_RANK`), côté serveur (`admin.rights`, `57_Rights.gs`). Trois garde-fous dans les essais : chaque case est comparée à `can()` lui-même (plus de 150 cases) ; chaque ligne « poser un rôle » à `roleAssignError_` ; et **ajouter un droit à `PERMISSION_LEVEL` sans le décrire dans le tableau fait échouer les essais**. Changer un niveau dans la configuration change donc le tableau tout seul.
+
+**Limites.** Le tableau décrit les niveaux, pas les personnes : pour savoir qui a quel rôle sur quel objet, voir la page WBS (section Rôles) et la page Ressources. Les anciens codes d'avant la migration (`A9_MIGRER_ROLES`) y sont comptés avec leur nouveau niveau. Le contrôle de validation (« un niveau strictement supérieur à l'auteur ») est une règle écrite, pas une ligne du tableau.
 
 ## Planning : liste de gauche, recherche, filtres, enregistrement immédiat (0.15.2)
 

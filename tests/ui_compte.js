@@ -146,7 +146,7 @@ function openPage(file, user, boot) {
   console.log('\nPage Administration (jsdom)');
   const denied = openPage('Admin.html', CP);
   await denied.until(() => /Réservé aux administrateurs/.test(denied.text('panel-reglages')));
-  check(['reglages', 'sante', 'feries', 'journaux'].every((z) => denied.doc.getElementById('zone-' + z).hidden) && !denied.calls.some((a) => a.startsWith('admin.')), 'non-administrateur : message, aucune zone d’administration, aucune demande à l’administration');
+  check(['reglages', 'sante', 'feries', 'droits', 'journaux'].every((z) => denied.doc.getElementById('zone-' + z).hidden) && !denied.calls.some((a) => a.startsWith('admin.')), 'non-administrateur : message, aucune zone d’administration, aucune demande à l’administration');
   check(denied.doc.getElementById('ppm-admin').hidden, 'lien « Administration » absent de sa bannière');
 
   // ---------------------------------------------------------------- Réglages
@@ -226,12 +226,34 @@ function openPage(file, user, boot) {
   a.click(a.doc.getElementById('hol-save'));
   await a.until(() => /Jours fériés enregistrés/.test(a.text('toast')));
   check(c.loadHolidayMap('FR')['2026-10-26'] === true, 'jour ajouté, pris en compte par les projets');
+  await a.until(() => a.doc.querySelector('tr[data-set="FR-2026"] button'));   // le tableau peut être en cours de rechargement
   a.click(a.doc.querySelector('tr[data-set="FR-2026"] button'));
   await a.until(() => a.doc.getElementById('hol-text'));
   a.doc.getElementById('hol-text').value = '2026-02-30 inexistant';
   a.click(a.doc.getElementById('hol-save'));
   await a.until(() => a.doc.getElementById('toast').classList.contains('error'));
   check(/Date invalide/.test(a.text('toast')), 'date inexistante refusée : ' + a.text('toast'));
+
+  // ---------------------------------------------------------------- Droits par niveau (0.15.4)
+  await a.until(() => a.doc.getElementById('rights-table'));
+  const rt = a.doc.getElementById('rights-table');
+  const headRoles = [...rt.querySelectorAll('thead th')].map((th) => th.textContent);
+  check(JSON.stringify(headRoles) === JSON.stringify(['Droit', 'PL', 'DPL', 'CP', 'WPL', 'SWPL', 'DO', 'Contrib.', 'Reader']), 'le tableau a une colonne par niveau, du plus haut au Reader : ' + headRoles.join(' | '));
+  const rrow = (re) => [...rt.querySelectorAll('tr.right')].find((tr) => re.test(tr.cells[0].textContent));
+  const marks = (tr) => [...tr.querySelectorAll('td.lvl')].map((td) => (td.classList.contains('yes') ? '✓' : '—')).join('');
+  check(marks(rrow(/Supprimer un projet/)) === '✓✓——————' && marks(rrow(/Supprimer un livrable ou un jalon/)) === '✓✓✓✓✓✓——' && marks(rrow(/Déclarer l’avancement/)) === '✓✓✓✓✓✓✓—', 'les cases : supprimer un projet (PL, DPL), supprimer un livrable (jusqu’au Deliverable owner), déclarer l’avancement (jusqu’au Contributor)');
+  check(marks(rrow(/Lire le WBS/)) === '✓✓✓✓✓✓✓✓' && /^—+$/.test(marks(rrow(/Poser le rôle « Program Leader »/))), 'seule la lecture est ouverte au Reader ; personne ne pose le Program Leader');
+  check(/Reader/.test(rrow(/Lire le WBS/).cells[0].textContent) && /en profondeur/.test(rrow(/tarifs journaliers/).cells[0].textContent), 'les précisions s’affichent sous le libellé (Reader, en profondeur)');
+  check(!!a.doc.querySelector('#rights-table td.yes .sr') && a.doc.querySelector('#rights-table td.yes .sr').textContent === 'oui', 'chaque case a aussi un texte « oui » ou « non » pour les lecteurs d’écran');
+  check(/strictement supérieur/.test(a.text('rights-rules')) && /administrateur du site a tous les droits/.test(a.text('rights-admin')), 'les règles et la note sur l’administrateur sont affichées');
+  const filt = a.doc.getElementById('rights-filter');
+  filt.value = 'budget'; filt.dispatchEvent(new a.win.Event('input', { bubbles: true }));
+  const visible = [...rt.querySelectorAll('tr.right')].filter((tr) => !tr.hidden), grpVisible = [...rt.querySelectorAll('tr.grp')].filter((tr) => !tr.hidden);
+  check(visible.length >= 3 && visible.length < 15 && visible.every((tr) => /budget/.test(tr.getAttribute('data-search'))) && grpVisible.length >= 1 && grpVisible.length < 5, 'le filtre « budget » ne garde que les lignes concernées et leurs groupes : ' + visible.length + ' lignes, ' + grpVisible.length + ' groupes');
+  filt.value = 'zzzz'; filt.dispatchEvent(new a.win.Event('input', { bubbles: true }));
+  check([...rt.querySelectorAll('tr.right')].every((tr) => tr.hidden) && [...rt.querySelectorAll('tr.grp')].every((tr) => tr.hidden), 'un filtre sans résultat cache tout');
+  filt.value = ''; filt.dispatchEvent(new a.win.Event('input', { bubbles: true }));
+  check([...rt.querySelectorAll('tr.right')].every((tr) => !tr.hidden), 'filtre vidé : tout revient');
 
   // ---------------------------------------------------------------- Journaux
   a.win.__ppm.render();

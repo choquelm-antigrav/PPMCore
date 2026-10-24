@@ -18,6 +18,7 @@ require('./test_org')();
 require('./test_budget')();
 require('./test_envelope')();
 require('./test_import')();
+require('./test_rights_table')();
 require('./test_reminders')();
 require('./test_access')();
 require('./test_overview')();

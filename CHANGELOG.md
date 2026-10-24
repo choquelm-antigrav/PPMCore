@@ -1,12 +1,13 @@
 # Journal des versions
 
-## 0.15.4 — import et export du WBS par classeur Google Sheet
+## 0.15.4 — import et export du WBS par classeur, tableau des droits
 
 - **Page WBS › Importer / exporter** (chef de projet et au-dessus) : classeur modèle créé dans Drive, partagé avec la personne et **prérempli avec le projet** (donc export aussi) ; onglets **Projet, Workpackages, Livrables, Jalons, Budget** ; **Analyser** (rapport sans rien écrire, chaque erreur avec son onglet et sa ligne) puis **Importer** (par lots reprenables, quatre minutes au plus par lot, la page relance jusqu'à « terminé »).
 - Clés : code WBS pour un workpackage ; workpackage et nom pour un livrable ou un jalon ; livrable et ressource pour une ligne de budget. **Idempotent, ne supprime jamais rien**, ne crée jamais de personne (adresse e-mail dans Ressources). Passe par les actions ordinaires : mêmes droits, mêmes règles, même journal, changements « à valider » par le niveau du dessus.
 - Une personne sans adresse sur sa fiche se désigne par son nom exact (l'export l'écrit ainsi ; un nom ambigu est refusé) : trouvé en ouvrant l'export de la démo, dont les 39 lignes de budget sortaient avec une cellule vide ; une démo complète exportée se ré-importe désormais sans erreur ni changement.
+- **Page Administration › Droits par niveau** : tableau des droits (une ligne par droit, une colonne par niveau, filtre, légende des niveaux, règles), calculé par le serveur depuis les règles réelles (`admin.rights`, `57_Rights.gs`, `WBS_RANK`) ; chaque case comparée à `can()` dans les essais, et un droit ajouté sans ligne dans le tableau fait échouer les essais.
 - Actions `import.template`, `import.analyze`, `import.run` ; droit `import.run` (chef de projet) ; `56_Import.gs`, `StructureImport.html`.
-- Tests : `test_import.js` (11), `ui_structure.js` (42, dont le dialogue d'import avec des lots forcés) ; sabotages vérifiés : sans erreur bloquante, sans droit, objets non reconnus, dates inversées, leader non posé, budget de temps ignoré, bouton actif malgré les erreurs, bouton montré à tous, lots non relancés.
+- Tests : `test_rights_table.js` (5), `ui_compte.js` (98 ; l'attente d'une ligne des jours fériés rendue robuste), `test_import.js` (11), `ui_structure.js` (42, dont le dialogue d'import avec des lots forcés) ; sabotages vérifiés : sans erreur bloquante, sans droit, objets non reconnus, dates inversées, leader non posé, budget de temps ignoré, bouton actif malgré les erreurs, bouton montré à tous, lots non relancés.
 
 ## 0.15.3 — rôles par niveau, WBS seul
 

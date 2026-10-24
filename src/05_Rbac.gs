@@ -75,20 +75,19 @@ function objectKindOf_(scope, lookup) {
   return scope.type;
 }
 
+/** Rang minimal par type d'objet pour modifier (ou créer dedans) et pour supprimer : lu par wbsRank_ ET par le tableau des droits de la page Administration (57_Rights.gs). */
+var WBS_RANK = {
+  edit:   { program: 0, project: 2, workpackage: 3, subworkpackage: 4, planitem: 5 },
+  delete: { program: 0, project: 1, workpackage: 2, subworkpackage: 3, planitem: 5 }
+};
+
 /**
  * Rang minimal (numéro le plus haut) qui peut agir sur l'objet visé avec wbs.edit (modifier l'objet, ou créer dedans) ou wbs.delete (le supprimer) :
  * le niveau de l'objet modifie ; le niveau du dessus crée et supprime l'objet (sauf un livrable ou un jalon, que son Deliverable owner supprime aussi).
  */
 function wbsRank_(action, scope, lookup) {
-  var del = action === 'wbs.delete';
-  switch (objectKindOf_(scope, lookup)) {
-    case 'program': return 0;
-    case 'project': return del ? 1 : 2;
-    case 'workpackage': return del ? 2 : 3;
-    case 'subworkpackage': return del ? 3 : 4;
-    case 'planitem': return 5;
-    default: return 2;
-  }
+  var rank = WBS_RANK[action === 'wbs.delete' ? 'delete' : 'edit'][objectKindOf_(scope, lookup)];
+  return rank === undefined ? 2 : rank;
 }
 
 /** Les rôles qui ont ce droit sur ce périmètre. */

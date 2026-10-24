@@ -383,6 +383,24 @@
   .editor { margin-top: 16px; }
   .editor textarea { width: 100%; min-height: 220px; font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; }
   @media (max-width: 700px) { .panel { padding: 8px 12px 24px; } .status .seg { display: grid; grid-template-columns: 1fr 1fr; width: 100%; } }
+  /* tableau des droits par niveau */
+  #cell-droits, #panel-droits { min-width: 0; max-width: 100%; }   /* le tableau défile dans son cadre au lieu d'élargir la page (téléphone) */
+  #panel-droits .table-wrap { max-width: 100%; }
+  @media (max-width: 600px) { #rights-table td.right-name { min-width: 150px; font-size: 13.5px; } #rights-table th.lvl, #rights-table td.lvl { width: 48px; } }
+  #rights-table { border-collapse: separate; border-spacing: 0; min-width: 760px; width: 100%; }
+  #rights-table th.lvl, #rights-table td.lvl { text-align: center; width: 64px; white-space: nowrap; position: relative; }   /* relative : le texte caché « oui/non » reste dans sa cellule, donc dans le cadre qui défile */
+  #rights-table td.right-name { min-width: 280px; }
+  #rights-table td.right-name small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  #rights-table tr.grp th { text-align: left; background: var(--tint); color: var(--ink); font-size: 13px; letter-spacing: .3px; padding: 6px 12px; }
+  #rights-table td.yes { color: var(--ok-ink); background: var(--ok-bg); font-weight: 700; }
+  #rights-table td.no { color: var(--muted); }
+  #rights-table th.right-name, #rights-table td.right-name { position: sticky; left: 0; background: var(--surface); z-index: 1; }
+  #rights-table tr.grp th { position: static; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  #panel-droits .lbl input { display: block; margin-top: 4px; width: min(420px, 100%); padding: 7px 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; }
+  #panel-droits h3.sub { margin: 18px 0 6px; font-size: 15px; }
+  #panel-droits ul.rules { margin: 4px 0 0; padding-left: 20px; font-size: 14px; max-width: 90ch; }
+  #panel-droits ul.rules li { margin: 3px 0; }
 </style>
 </head>
 <body>
@@ -571,6 +589,10 @@
     <div class="zone" id="zone-feries"><h2 class="sec">Jours fériés</h2></div>
     <section class="panel" id="panel-feries" aria-label="Jours fériés"></section>
   </div>
+  <div class="cell wide" id="cell-droits">
+    <div class="zone" id="zone-droits"><h2 class="sec">Droits par niveau</h2></div>
+    <section class="panel" id="panel-droits" aria-label="Droits par niveau"></section>
+  </div>
   <div class="cell wide" id="cell-journaux">
     <div class="zone" id="zone-journaux"><h2 class="sec">Journaux</h2></div>
     <section class="panel" id="panel-journaux" aria-label="Journaux"></section>
@@ -587,7 +609,7 @@ var BOOT = <?!= boot ?>;
   'use strict';
   var el = ppm.el, clear = ppm.clear, uuid = ppm.uuid, plural = ppm.plural, toast = ppm.toast, call = ppm.call, frDate = ppm.frDate;
 
-  var state = { cfg: null, health: null, holidays: null, logs: null, editing: '' };
+  var state = { cfg: null, health: null, holidays: null, logs: null, rights: null, editing: '' };
   var $ = function (id) { return document.getElementById(id); };
   var COUNTRY_NAMES = { FR: 'France', DE: 'Allemagne', UK: 'Royaume-Uni', IN: 'Inde' };
   var STEP_LABELS = { reconcile: 'Réconciliation du journal', rules: 'Moteur de règles', workspace: 'Agenda et Drive', directory: 'Annuaire', backup: 'Sauvegarde des classeurs' };
@@ -618,6 +640,7 @@ var BOOT = <?!= boot ?>;
     renderSettings();
     loadHealth();
     loadHolidays();
+    loadRights();
     loadLogs();
   }
   function failed(p, e) { empty(p, 'Chargement impossible.', (e && e.message) || 'Erreur inconnue.'); }
@@ -755,6 +778,51 @@ var BOOT = <?!= boot ?>;
     panel.appendChild(el('div', { class: 'row', style: 'margin-top:16px' }, [el('button', { type: 'button', class: 'btn', id: 'health-reload', text: 'Vérifier à nouveau', onclick: loadHealth })]));
   }
 
+  // ------------------------------------------------------------ Droits par niveau (0.15.4)
+  /**
+   * Le tableau est calculé par le serveur à partir des règles que le moteur applique vraiment (rien n'est écrit à la main) : un ✓ veut dire que le niveau peut, sur l'objet qu'il
+   * couvre ; pour un droit « en profondeur », un rôle posé n'importe où dans le projet ou le programme suffit. Les colonnes vont du niveau le plus haut au Reader.
+   */
+  var SHORT = { PL: 'PL', DPL: 'DPL', CP: 'CP', WPL: 'WPL', SWPL: 'SWPL', DO: 'DO', CONTRIB: 'Contrib.', READER: 'Reader' };
+  function loadRights() {
+    var panel = $('panel-droits');
+    loading(panel);
+    call('admin.rights', {}).then(function (r) { state.rights = r; renderRights(); }).catch(function (e) { failed(panel, e); });
+  }
+  function renderRights() {
+    var panel = $('panel-droits'), r = state.rights;
+    clear(panel);
+    var filter = el('input', { type: 'search', id: 'rights-filter', placeholder: 'Filtrer les droits (budget, supprimer, rôle…)', 'aria-label': 'Filtrer les droits', autocomplete: 'off' });
+    panel.appendChild(el('label', { class: 'lbl' }, ['Filtrer', filter]));
+    var head = [el('th', { scope: 'col', class: 'right-name', text: 'Droit' })].concat(r.roles.map(function (x) { return el('th', { scope: 'col', class: 'lvl', title: x.label + ' — niveau ' + x.rank + ' — se pose sur : ' + x.object, text: SHORT[x.code] || x.label }); }));
+    var body = [];
+    r.groups.forEach(function (g) {
+      body.push(el('tr', { class: 'grp', 'data-group': g.title }, [el('th', { scope: 'colgroup', colspan: String(r.roles.length + 1), text: g.title })]));
+      g.rows.forEach(function (row) {
+        var tds = [el('td', { class: 'right-name' }, [row.label, row.where ? el('small', { text: row.where }) : null])];
+        r.roles.forEach(function (x) {
+          var yes = !!row.levels[x.code];
+          tds.push(el('td', { class: 'lvl ' + (yes ? 'yes' : 'no'), title: x.label + (yes ? ' : oui' : ' : non') }, [el('span', { 'aria-hidden': 'true', text: yes ? '✓' : '—' }), el('span', { class: 'sr', text: yes ? 'oui' : 'non' })]));
+        });
+        body.push(el('tr', { class: 'right', 'data-search': (row.label + ' ' + (row.where || '') + ' ' + g.title).toLowerCase(), 'data-group-of': g.title }, tds));
+      });
+    });
+    panel.appendChild(el('div', { class: 'table-wrap' }, [el('table', { id: 'rights-table', class: 'rights' }, [el('thead', {}, [el('tr', {}, head)]), el('tbody', {}, body)])]));
+    panel.appendChild(el('p', { class: 'note', id: 'rights-admin', text: 'L’administrateur du site a tous les droits, sans rôle.' }));
+    filter.addEventListener('input', function () {
+      var q = filter.value.trim().toLowerCase(), shown = {};
+      Array.prototype.forEach.call(document.querySelectorAll('#rights-table tr.right'), function (tr) {
+        var hit = !q || tr.getAttribute('data-search').indexOf(q) >= 0;
+        tr.hidden = !hit; if (hit) shown[tr.getAttribute('data-group-of')] = true;
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('#rights-table tr.grp'), function (tr) { tr.hidden = !shown[tr.getAttribute('data-group')]; });
+    });
+    panel.appendChild(el('h3', { class: 'sub', text: 'Les niveaux' }));
+    panel.appendChild(table(['Niveau', 'Rôle', 'Se pose sur'], r.roles.map(function (x) { return el('tr', {}, [el('td', { text: String(x.rank) }), el('td', { text: x.label }), el('td', { text: x.object })]); })));
+    panel.appendChild(el('h3', { class: 'sub', text: 'Les règles' }));
+    panel.appendChild(el('ul', { class: 'rules', id: 'rights-rules' }, r.rules.map(function (t) { return el('li', { text: t }); })));
+  }
+
   // ------------------------------------------------------------ Jours fériés
   function loadHolidays() {
     var panel = $('panel-feries');
@@ -822,7 +890,7 @@ var BOOT = <?!= boot ?>;
 
   // ------------------------------------------------------------ démarrage
   if (!BOOT.isAdmin) {
-    ['sante', 'feries', 'journaux'].forEach(function (t) { $('panel-' + t).hidden = true; $('zone-' + t).hidden = true; });
+    ['sante', 'feries', 'droits', 'journaux'].forEach(function (t) { $('panel-' + t).hidden = true; $('zone-' + t).hidden = true; });
     $('zone-reglages').hidden = true;
     empty($('panel-reglages'), 'Réservé aux administrateurs.', 'Vos réglages personnels sont dans « Mon compte ».');
   } else {
