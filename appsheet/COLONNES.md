@@ -30,6 +30,12 @@ Colonnes techniques de toutes les tables vivantes : `created_at`, `created_by`, 
 | `active_baseline_id` | Ref → Baseline |  |
 | `drive_folder_id` | Text |  |
 | `calendar_id` | Text |  |
+| `cpn` | Text |  |
+| `cpn_label` | Text |  |
+| `news_on` | Text |  |
+| `news_keywords` | Text |  |
+| `news_journal_id` | Text |  |
+| `budget_authorized` | Text |  |
 
 ## WorkPackage
 
@@ -42,6 +48,10 @@ Colonnes techniques de toutes les tables vivantes : `created_at`, `created_by`, 
 | `name` | Text | Require ON ; Label |
 | `owner_resource_id` | Ref → Resource |  |
 | `charge_code` | Text |  |
+| `cpn` | Text |  |
+| `cpn_label` | Text |  |
+| `budget_allocated` | Text |  |
+| `active_baseline_id` | Ref → Baseline |  |
 
 ## PlanItem
 
@@ -96,6 +106,7 @@ Colonnes techniques de toutes les tables vivantes : `created_at`, `created_by`, 
 | `country` | Enum | Valeurs : FR, DE, UK, IN |
 | `job_function` | Enum (Base type Text) | Allow other values ON ; Auto-add new values ON ; Suggested values : `SELECT(Resource[job_function], NOT(ISBLANK([job_function])), TRUE)` (liste sans doublon) |
 | `organization` | Enum (Base type Text) | Allow other values ON ; Auto-add new values ON ; Suggested values : `SELECT(Resource[organization], NOT(ISBLANK([organization])), TRUE)` (liste sans doublon) |
+| `daily_rate` | Price (EUR) |  |
 
 ## HierarchicalTeam
 
@@ -132,11 +143,56 @@ Colonnes techniques de toutes les tables vivantes : `created_at`, `created_by`, 
 | --- | --- | --- |
 | `id` | Text | Clé ; Initial value `UNIQUEID()` ; Masquée ; Lecture seule |
 | `resource_id` | Ref → Resource | Require ON |
-| `role_code` | Enum | Valeurs : PL, DPL, CP, RWP, MEMBER ; Require ON |
-| `scope_type` | Enum | Valeurs : program, project, workpackage ; Require ON |
+| `role_code` | Enum | Valeurs : PL, DPL, CP, WPL, SWPL, DO, CONTRIB, RWP, MEMBER ; Require ON |
+| `scope_type` | Enum | Valeurs : program, project, workpackage, planitem ; Require ON |
 | `scope_id` | Text | Require ON |
 | `start_date` | Date |  |
 | `end_date` | Date |  |
+
+## Meeting
+
+| Colonne | Type AppSheet | Réglages |
+| --- | --- | --- |
+| `id` | Text | Clé ; Initial value `UNIQUEID()` ; Masquée ; Lecture seule |
+| `project_id` | Ref → Project |  |
+| `source` | Enum | Valeurs : Manuel, Agenda |
+| `event_id` | Text |  |
+| `held_on` | Date | Require ON |
+| `title` | Text | Require ON ; Label |
+| `participants` | Text |  |
+| `doc_url` | Text |  |
+| `summary` | Text |  |
+| `decisions` | Text |  |
+| `status` | Enum | Valeurs : Publiée, À trier |
+| `candidates` | Text |  |
+| `dedupe_key` | Text |  |
+| `added_by` | Text |  |
+
+## NewsAction
+
+| Colonne | Type AppSheet | Réglages |
+| --- | --- | --- |
+| `id` | Text | Clé ; Initial value `UNIQUEID()` ; Masquée ; Lecture seule |
+| `meeting_id` | Text |  |
+| `project_id` | Ref → Project |  |
+| `owner_resource_id` | Ref → Resource |  |
+| `owner_label` | Text |  |
+| `text` | Text | Require ON |
+| `due_date` | Date |  |
+| `item_id` | Text |  |
+| `status` | Enum | Valeurs : Proposée, Acceptée, Contestée, Faite |
+| `decided_by` | Email |  |
+| `decided_on` | Date |  |
+
+## NewsDigest
+
+| Colonne | Type AppSheet | Réglages |
+| --- | --- | --- |
+| `id` | Text | Clé ; Initial value `UNIQUEID()` ; Masquée ; Lecture seule |
+| `project_id` | Ref → Project | Require ON |
+| `digest_date` | Date | Require ON |
+| `text` | Text | Require ON |
+| `published_by` | Text |  |
 
 ## RateCard
 
@@ -160,6 +216,36 @@ Colonnes techniques de toutes les tables vivantes : `created_at`, `created_by`, 
 | `frozen_rate` | Text |  |
 | `fixed_amount` | Price (EUR) |  |
 | `planned_amount` | Price (EUR) | Lecture seule (calculé par le Core) |
+| `phasing_mode` | Text |  |
+| `is_external` | Text |  |
+
+## PurchaseOrder
+
+| Colonne | Type AppSheet | Réglages |
+| --- | --- | --- |
+| `id` | Text | Clé ; Initial value `UNIQUEID()` ; Masquée ; Lecture seule |
+| `po_number` | Text | Require ON |
+| `cpn` | Text | Require ON |
+| `resource_id` | Ref → Resource | Require ON |
+| `owner_resource_id` | Ref → Resource |  |
+| `description` | LongText |  |
+| `start_date` | Date |  |
+| `end_date` | Date |  |
+| `amount` | Price (EUR) | Require ON |
+| `status` | Enum | Valeurs : À faire, Lancée, GR, Terminée ; Require ON |
+| `gr_due_date` | Text |  |
+| `launched_on` | Text |  |
+| `gr_on` | Text |  |
+| `closed_on` | Text |  |
+
+## PurchaseOrderLink
+
+| Colonne | Type AppSheet | Réglages |
+| --- | --- | --- |
+| `id` | Text | Clé ; Initial value `UNIQUEID()` ; Masquée ; Lecture seule |
+| `po_id` | Text | Require ON |
+| `deliverable_id` | Ref → PlanItem | Require ON |
+| `amount` | Price (EUR) | Require ON |
 
 ## BudgetPhasing
 
@@ -225,6 +311,8 @@ Colonnes techniques de toutes les tables vivantes : `created_at`, `created_by`, 
 | `status` | Enum | Valeurs : Demandée, Active, Archivée, Refusée |
 | `decided_by` | Email |  |
 | `decided_at` | Text |  |
+| `scope_type` | Text |  |
+| `scope_id` | Text |  |
 
 ## Insight
 
@@ -286,6 +374,8 @@ Colonnes techniques de toutes les tables vivantes : `created_at`, `created_by`, 
 | `notify_frequency` | Enum | Valeurs : Quotidien, Hebdomadaire, Aucun |
 | `view_prefs_json` | LongText | Masquée ; Lecture seule (écrite par la page Structure) |
 | `calendar_invites` | Yes/No | Échéances de mes livrables dans mon agenda (aussi réglable depuis la page Suivi) |
+| `reminder_days` | Text |  |
+| `reminder_off` | Text |  |
 
 ## ChangeEvent (classeur Historique, lecture seule sauf `acknowledged`)
 
@@ -304,4 +394,5 @@ Colonnes techniques de toutes les tables vivantes : `created_at`, `created_by`, 
 | `acknowledged` | Yes/No |  |
 | `acknowledged_by` | Text |  |
 | `acknowledged_at` | Text |  |
+| `actor_level` | Text |  |
 

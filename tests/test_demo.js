@@ -63,9 +63,9 @@ module.exports = function () {
   });
 
   test('Organigramme : des rôles à tous les niveaux et trois personnes à positionner', () => {
-    const roles = c.repoList('RoleAssignment');
-    ['PL', 'DPL', 'CP', 'RWP', 'MEMBER'].forEach((r) => ok(roles.some((a) => a.role_code === r), 'rôle ' + r));
-    ['program', 'project', 'workpackage'].forEach((t) => ok(roles.some((a) => a.scope_type === t), 'périmètre ' + t));
+    const roles = c.repoList('RoleAssignment').filter((a) => !a.end_date || a.end_date >= c.todayStr());
+    ['PL', 'DPL', 'CP', 'WPL', 'SWPL', 'DO', 'CONTRIB'].forEach((r) => ok(roles.some((a) => a.role_code === r), 'rôle actif ' + r + ' (la démo est aux huit niveaux)'));
+    ['program', 'project', 'workpackage', 'planitem'].forEach((t) => ok(roles.some((a) => a.scope_type === t), 'périmètre ' + t));
     ok(roles.length >= 55, roles.length + ' affectations');
     const p1 = c.repoList('Project').find((p) => p.code === 'NAC-1');
     const rolesOf = call(c, 'roles.of', { scopeType: 'project', scopeId: p1.id });
@@ -83,9 +83,23 @@ module.exports = function () {
     ok(ov.projects.filter((p) => p.code === 'NAC-1')[0].kpis.time.facts.some((f) => /après la fin visée/.test(f)), 'la fin du plan dépasse la fin visée');
   });
 
+  test('Baselines de workpackage dans la démo : une référence locale sans validation, une à valider par le niveau du dessus ; la référence du projet n’a pas bougé', () => {
+    const p1 = c.repoList('Project').find((p) => p.code === 'NAC-1');
+    const wpBases = c.repoList('Baseline', (b) => b.project_id === p1.id && b.scope_type === 'workpackage');
+    const wp = (code) => c.repoList('WorkPackage').find((w) => w.project_id === p1.id && String(w.wbs_code) === code);
+    eq(wpBases.map((b) => wp(String(c.repoGet('WorkPackage', b.scope_id).wbs_code)).wbs_code + ':' + b.label + ':' + b.status).sort(), ['1:B0:Active', '2:B0:Active'], 'WP 1 et WP 2 ont chacun leur B0 active');
+    eq([c.repoGet('WorkPackage', wp('1').id).active_baseline_id, c.repoGet('WorkPackage', wp('2').id).active_baseline_id].every(Boolean), true, 'chaque workpackage pointe sur sa baseline');
+    eq(c.repoGet('Project', p1.id).active_baseline_id, c.repoList('Baseline').find((b) => b.project_id === p1.id && b.label === 'B1' && !b.scope_type).id, 'la référence du projet reste B1');
+    const feed = call(c, 'changes.feed', { projectId: p1.id, all: true }).items.filter((e) => e.table === 'Baseline');
+    eq(feed.map((e) => e.entity + ' niveau ' + e.level), ['Baseline B0 · 1 Conception niveau 3'], 'seule celle de WP 1 est à valider (figée à un niveau de Workpackage leader) ; celle de WP 2, figée par l’administrateur, n’a personne au-dessus');
+    const wp2 = call(c, 'baselines.diff', { projectId: p1.id, scopeType: 'workpackage', scopeId: wp('2').id });
+    const wp2vsProject = call(c, 'baselines.diff', { projectId: p1.id, scopeType: 'workpackage', scopeId: wp('2').id, against: 'project' });
+    ok(wp2.totals.compared >= 3 && wp2.totals.slipped >= 1 && wp2vsProject.totals.slipped >= wp2.totals.slipped, 'les dérives des essais se lisent contre la référence locale (' + wp2.totals.slipped + ') et contre celle du projet (' + wp2vsProject.totals.slipped + ')');
+  });
+
   test('Retards, baselines et dérives : de quoi exercer tout l’écran Suivi', () => {
     const p1 = c.repoList('Project').find((p) => p.code === 'NAC-1');
-    eq(c.repoList('Baseline', (b) => b.project_id === p1.id).map((b) => b.label + ':' + b.status).sort(), ['B0:Archivée', 'B1:Active', 'B2:Demandée'], 'NAC-1 : B0 archivée, B1 active, une demande en attente');
+    eq(c.repoList('Baseline', (b) => b.project_id === p1.id && !b.scope_type).map((b) => b.label + ':' + b.status).sort(), ['B0:Archivée', 'B1:Active', 'B2:Demandée'], 'NAC-1 : B0 archivée, B1 active, une demande en attente (baselines du projet)');
     const diff = call(c, 'baselines.diff', { projectId: p1.id, base: c.repoList('Baseline').find((b) => b.project_id === p1.id && b.label === 'B0').id, to: 'current' });
     ok(diff && JSON.stringify(diff).length > 500, 'les écarts B0 → aujourd’hui sont lisibles');
     const feed = call(c, 'changes.feed', { projectId: p1.id, all: true });
@@ -140,7 +154,7 @@ module.exports = function () {
     w.runRules = () => { throw new Error('panne simulée'); };
     let err;
     try { w.seedDemo_(); } catch (e) { err = e; }
-    ok(err && /étape 16\/16/.test(err.message) && /panne simulée/.test(err.message) && /relancez/.test(err.message), err && err.message);
+    ok(err && new RegExp('étape ' + w.DEMO_STEPS.length + '/' + w.DEMO_STEPS.length).test(err.message) && /panne simulée/.test(err.message) && /relancez/.test(err.message), err && err.message);
     eq(w.getProp(w.PROP.DEMO_STEP, ''), String(w.DEMO_STEPS.length - 1), 'toutes les étapes avant la dernière sont conservées');
     w.runRules = real;
     ok(/^Démo complète/.test(w.seedDemo_()), 'relancée, elle termine');
@@ -292,34 +306,31 @@ module.exports = function () {
   test('Chaque projet de la démo a ses contributeurs : des membres affectés à ses workpackages, en plus des responsables (0.14.0)', () => {
     const w = core(); w.DEMO_BUDGET_MS = 1e9; w.seedDemo_();
     const roles = live(w, 'RoleAssignment'), projects = live(w, 'Project').filter((p) => /^NAC-/.test(p.code));
+    const today = w.todayStr(), active = (r) => !r.end_date || r.end_date >= today;
     projects.forEach((p) => {
-      const wps = live(w, 'WorkPackage').filter((x) => x.project_id === p.id), wpIds = new Set(wps.map((x) => x.id));
-      const members = roles.filter((r) => r.role_code === 'MEMBER' && r.scope_type === 'workpackage' && wpIds.has(r.scope_id));
+      const wps = live(w, 'WorkPackage').filter((x) => x.project_id === p.id);
+      const items = live(w, 'PlanItem').filter((x) => x.project_id === p.id), itemIds = new Set(items.map((x) => x.id));
+      const contributors = new Set(roles.filter((r) => active(r) && r.role_code === 'CONTRIB' && r.scope_type === 'planitem' && itemIds.has(r.scope_id)).map((r) => r.resource_id));
       const top = wps.filter((x) => !x.parent_wp_id);
-      ok(members.length >= 2, p.code + ' : ' + members.length + ' contributeurs affectés à des workpackages');
-      ok(top.every((x) => { const kids = wps.filter((y) => y.parent_wp_id === x.id).map((y) => y.id).concat([x.id]); return roles.some((r) => r.scope_type === 'workpackage' && kids.indexOf(r.scope_id) >= 0 && (r.role_code === 'MEMBER' || r.role_code === 'RWP')); }), p.code + ' : chaque workpackage de premier niveau a au moins un responsable ou un membre');
+      ok(contributors.size >= 2, p.code + ' : ' + contributors.size + ' contributeurs affectés à des livrables');
+      ok(top.every((x) => {
+        const kids = wps.filter((y) => y.parent_wp_id === x.id).map((y) => y.id).concat([x.id]);
+        return roles.some((r) => active(r) && r.scope_type === 'workpackage' && kids.indexOf(r.scope_id) >= 0 && (r.role_code === 'WPL' || r.role_code === 'SWPL'));
+      }), p.code + ' : chaque workpackage de premier niveau a au moins un responsable (Workpackage ou Sub-workpackage leader)');
     });
     const get = w.handleRequest({ action: 'ressources.get', params: { projectId: projects.find((p) => p.code === 'NAC-1').id }, apiVersion: w.PPM_API_VERSION }, 'admin@entreprise.com').data;
     ok(get.people.some((x) => x.contributes > 0) && get.people.some((x) => x.deliverables > 0), 'la page Ressources de NAC-1 montre des livrables et des contributions');
   });
 
-  test('Migration des rôles sur la démo : plusieurs lancements, jusqu’à « Migration faite » (27 membres × 50 livrables)', () => {
+  test('Rôles de la démo : semée avec les anciens codes puis migrée par ses propres étapes ; relancer A9 ne fait plus rien', () => {
     const m = core(); m.seedDemo_();
     const today = m.todayStr();
-    const legacy = () => m.repoList('RoleAssignment').filter((a) => ['RWP', 'MEMBER'].includes(a.role_code) && (!a.end_date || a.end_date >= today)).length;
-    const before = legacy();
-    ok(before > 40, before + ' anciennes lignes (responsables de workpackage et membres) avant la migration');
-    ok(/^Simulation/.test(m.migrerRoles_(true)) && legacy() === before, 'la simulation ne change rien');
-    let runs = 0, msg = '';
-    do { msg = m.migrerRoles_(false); runs++; } while (!/^Migration faite/.test(msg) && runs < 20);
-    ok(/^Migration faite/.test(msg), msg);
-    ok(runs >= 3 && runs <= 12, 'en ' + runs + ' lancements : un lancement n’écrit jamais plus de ' + m.MIGRATION_MAX_WRITES + ' lignes (le budget d’Apps Script est de six minutes)');
-    eq(legacy(), 0, 'plus aucun ancien rôle actif');
     const live = (code) => m.repoList('RoleAssignment').filter((a) => a.role_code === code && (!a.end_date || a.end_date >= today));
-    ok(live('CONTRIB').length >= 1000 && live('DO').length >= 40 && live('WPL').length >= 4 && live('SWPL').length >= 10, 'Contributors ' + live('CONTRIB').length + ', Deliverable owners ' + live('DO').length + ', WPL ' + live('WPL').length + ', SWPL ' + live('SWPL').length);
+    eq(['RWP', 'MEMBER'].map((code) => live(code).length), [0, 0], 'plus aucun ancien rôle actif');
+    ok(live('CONTRIB').length >= 150 && live('CONTRIB').length < 500 && live('DO').length >= 40 && live('WPL').length >= 4 && live('SWPL').length >= 10 && live('DPL').some((a) => a.scope_type === 'project') && !live('DPL').some((a) => a.scope_type === 'program'), 'Contributors ' + live('CONTRIB').length + ', Deliverable owners ' + live('DO').length + ', WPL ' + live('WPL').length + ', SWPL ' + live('SWPL').length + ', DPL posé sur le projet');
     const items = m.repoList('PlanItem').filter((i) => !m.isTrue(i.deleted) && i.owner_resource_id);
     ok(items.every((i) => live('DO').some((a) => a.scope_id === i.id && a.resource_id === i.owner_resource_id)), 'chaque élément avec un responsable a son Deliverable owner');
-    const again = m.migrerRoles_(false);
-    ok(/^Migration faite : 0 DPL posé\(s\) sur des projets, 0 responsable\(s\) de workpackage converti\(s\), 0 Contributor\(s\)/.test(again), 'relancée : plus rien à faire');
+    ok(/^Migration faite : 0 DPL posé\(s\) sur des projets, 0 responsable\(s\) de workpackage converti\(s\), 0 Contributor\(s\)/.test(m.migrerRoles_(false)), 'A9 relancé : plus rien à faire');
+    ok(m.DEMO_STEPS.filter((s) => /Rôles aux huit niveaux/.test(s.name)).length >= 3, 'trois étapes de migration, chacune bornée à ' + m.MIGRATION_MAX_WRITES + ' écritures');
   });
 };

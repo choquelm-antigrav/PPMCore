@@ -49,6 +49,8 @@ function demoInventory_() {
   del.Baseline = repoList('Baseline', inProject);
   var scopeIds = {};
   [programIds, projectIds, wpIds, itemIds].forEach(function (m) { Object.keys(m).forEach(function (k) { scopeIds[k] = true; }); });
+  // les livrables et workpackages déjà supprimés (la démo en supprime un exprès) gardent leurs rôles : sans eux, ces rôles orphelins retiendraient des personnes de la démo, donc leurs équipes
+  ['PlanItem', 'WorkPackage'].forEach(function (t) { repoList(t, inProject, { includeDeleted: true }).forEach(function (x) { scopeIds[x.id] = true; }); });
   del.RoleAssignment = repoList('RoleAssignment', function (x) { return scopeIds[x.scope_id]; });
   // actualités : réunions du projet, ou « à trier » dont un projet candidat est effacé ; leurs actions ; synthèses
   del.Meeting = repoList('Meeting', function (m) { return projectIds[m.project_id] || (m.status === 'À trier' && String(m.candidates || '').split(',').some(function (id) { return projectIds[id]; })); });

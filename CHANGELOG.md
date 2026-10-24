@@ -1,5 +1,15 @@
 # Journal des versions
 
+## 0.15.5 — baselines par périmètre, démo aux huit niveaux
+
+- **Baselines par périmètre** (projet, workpackage, sous-workpackage ; jamais un livrable) : une baseline active par périmètre, numérotation et historique par périmètre ; **figer demande de pouvoir modifier l'objet** (un Workpackage leader fige son workpackage et ses sous-workpackages, pas le projet) ; instantané restreint au périmètre (`58_ScopeBaselines.gs`). **Références parallèles** : la baseline du projet n'est jamais remplacée par celle d'un workpackage ; les écarts d'un workpackage se lisent contre sa baseline ou contre celle du projet (`against: 'project'`).
+- **Informer le niveau du dessus** : la baseline figée reste « à valider » (événement `baseline_frozen`, avec son niveau d'auteur et un résumé des écarts) ; le niveau du dessus la valide ou la **refuse** (`changes.reject`) : la précédente du périmètre redevient la référence. Les baselines figées par le chef de projet sont désormais aussi à valider par le DPL. Aucun nouveau mail.
+- **Page Suivi** : liste « Figer une baseline sur », sélecteurs de périmètre et « Écarts contre », périmètre et état de validation dans l'historique, bouton **Refuser** dans les changements à valider ; demandes de baseline par périmètre.
+- **Tableau des droits** : trois lignes « Figer une baseline sur un projet / un workpackage / un sous-workpackage ».
+- **Démo** : deux baselines de workpackage (WP 2 : référence locale ; WP 1 : figée à un niveau de Workpackage leader, donc à valider) ; rôles de workpackage migrés aux huit niveaux par trois étapes de `A2_SEED_DEMO` ; membres posés Contributors de trois livrables ; `A6_EFFACER_DEMO` efface aussi les rôles des livrables supprimés.
+- **Migration des rôles** : la simulation et la migration **avertissent au-delà de 500 Contributors** (un membre de projet devient Contributor de chaque livrable : 1 350 lignes sur l'ancienne démo, près de 600 Ko). Voir le README avant de lancer `A9_MIGRER_ROLES`.
+- Tests : `test_baseline_scopes.js` (9), `ui_suivi.js` (78, périmètres, référence du projet, refus), démo (`test_demo.js`) et cache (`test_speed.js`, rangements groupés quel que soit le volume) adaptés ; 330 tests serveur, seize essais de pages ; douze sabotages du serveur et quatre de la page vérifiés.
+
 ## 0.15.4 — import et export du WBS par classeur, tableau des droits
 
 - **Page WBS › Importer / exporter** (chef de projet et au-dessus) : classeur modèle créé dans Drive, partagé avec la personne et **prérempli avec le projet** (donc export aussi) ; onglets **Projet, Workpackages, Livrables, Jalons, Budget** ; **Analyser** (rapport sans rien écrire, chaque erreur avec son onglet et sa ligne) puis **Importer** (par lots reprenables, quatre minutes au plus par lot, la page relance jusqu'à « terminé »).

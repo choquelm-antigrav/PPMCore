@@ -76,7 +76,9 @@ module.exports = function () {
   test('Le cache : une lecture à froid range toutes les tables en UN appel, sans relire le numéro de génération', () => {
     const w = countingWorld(), c = w.c;
     w.cold(); open(w, 'overview');
-    eq([w.counts['Cache.putAll'] || 0, w.counts['Cache.put'] || 0], [1, 0], 'un seul rangement groupé, aucun rangement table par table');
+    const cacheNow = w.cache(), bytes = Object.keys(cacheNow).reduce((n, k) => n + String(cacheNow[k]).length, 0), keys = Object.keys(cacheNow).length;
+    const minCalls = Math.max(1, Math.ceil(bytes / 800000), Math.ceil(keys / 90));     // flushCache_ : au plus 90 éléments et 800 Ko par appel
+    ok((w.counts['Cache.put'] || 0) === 0 && (w.counts['Cache.putAll'] || 0) >= 1 && (w.counts['Cache.putAll'] || 0) <= minCalls + 1, 'rangements groupés, aucun table par table : ' + (w.counts['Cache.putAll'] || 0) + ' appel(s) pour ' + keys + ' éléments et ' + Math.round(bytes / 1024) + ' Ko (' + minCalls + ' au minimum)');
     ok((w.counts['Cache.get'] || 0) <= 2, 'numéros de génération lus en groupe, pas un par un : ' + (w.counts['Cache.get'] || 0) + ' lecture(s) isolée(s)');
     const cacheKeys = Object.keys(w.cache());
     ok(cacheKeys.filter((k) => /^gen:/.test(k)).length >= 15 && cacheKeys.filter((k) => /^rows:/.test(k)).length >= 15, 'le cache contient les tables lues : ' + cacheKeys.length + ' éléments');

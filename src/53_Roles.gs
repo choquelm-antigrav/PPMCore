@@ -13,6 +13,8 @@
 /** Le rôle que porte le responsable principal de chaque genre d'objet. */
 /** Écritures au plus par lancement de la migration (voir rolesMigrate_). */
 var MIGRATION_MAX_WRITES = 300;
+/** Au-delà de ce nombre de Contributors à écrire, la migration (simulation comprise) avertit : la feuille des rôles grossit d'une ligne par membre et par livrable. */
+var MIGRATION_WARN_CONTRIB = 500;
 
 var PRINCIPAL_ROLE = { project: 'CP', workpackage: 'WPL', subworkpackage: 'SWPL', planitem: 'DO' };
 
@@ -214,7 +216,8 @@ function migrerRoles_(dryRun) {
     return (dryRun ? 'Simulation (rien n’a été écrit) : ' : r.partial ? 'Migration PARTIELLE, relancez A9_MIGRER_ROLES jusqu’à « Migration faite » : ' : 'Migration faite : ') + r.dpl + ' DPL posé(s) sur des projets, ' + r.wpl + ' responsable(s) de workpackage converti(s), '
       + r.contrib + ' Contributor(s) posé(s) sur des livrables ou jalons, ' + r.owners + ' responsable(s) devenu(s) Deliverable owner ou leader de workpackage, '
       + r.managers + ' chef(s) de projet, ' + r.budget + ' contributeur(s) d’après le budget ; ' + r.ended + ' ancienne(s) ligne(s) terminée(s), '
-      + r.already + ' déjà en place, ' + r.skipped + ' ignorée(s).';
+      + r.already + ' déjà en place, ' + r.skipped + ' ignorée(s).'
+      + (r.contrib > MIGRATION_WARN_CONTRIB ? ' ATTENTION : ' + r.contrib + ' lignes de Contributor à écrire : un « membre » d’un projet devient Contributor de CHAQUE livrable et jalon, donc la feuille Rôles grossit d’autant et toutes les pages la relisent. Si ce n’est pas ce que vous voulez, ne lancez pas la migration : voir la section « Rôles par niveau » du README.' : '');
   });
 }
 

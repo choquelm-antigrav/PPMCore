@@ -1,5 +1,5 @@
 /**
- * PPM Core 0.15.5 — fichier unique à installer (fabriqué par tools/build.js, empreinte 231357a2eebd).
+ * PPM Core 0.15.5 — fichier unique à installer (fabriqué par tools/build.js, empreinte 78ca0f53b6e7).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
  * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs, 53_Roles.gs, 54_Validation.gs, 55_Envelope.gs, 56_Import.gs, 57_Rights.gs, 58_ScopeBaselines.gs.
  */
@@ -9205,6 +9205,12 @@ function demoContext_() {
     if (!r.ok) throw new PpmError(r.error.code, 'Démo, ' + action + ' : ' + r.error.message);
     return r.data;
   };
+  /** Comme d.call, mais avec le niveau d'un auteur imposé (la démo est lancée par un administrateur, dont les changements n'ont personne au-dessus et ne sont donc à valider par personne). */
+  d.callAs = function (action, params, level) {
+    var ctx = buildContext(me);
+    ctx.actx = Object.assign({}, ctx.actx, { actor_level: level });
+    return API_ACTIONS[action](params, ctx);
+  };
   return d;
 }
 
@@ -9259,9 +9265,8 @@ function demoRoles_(d) {
     if (r[2] === 'program') add(d.person(r[0]).id, r[1], 'program', prog.id);
     else if (r[2] === 'project') add(d.person(r[0]).id, r[1], 'project', d.project(r[3]).id);
   });
-  DEMO_MEMBERS.forEach(function (m) {
-    for (var i = 1; i < m.length; i++) add(d.person(m[i]).id, 'MEMBER', 'project', d.project(m[0]).id);
-  });
+  // les « membres du projet » ne sont plus posés au niveau du projet : la migration en ferait un Contributor de CHAQUE livrable (27 membres × 50 livrables = 1 350 lignes, 600 Ko
+  // dans la feuille Rôles). Ils sont posés Contributors de quelques livrables, dans demoWpRoles_, une fois le planning créé.
   add(me.id, 'CP', 'project', d.project('NAC-1').id);
 }
 
@@ -9271,6 +9276,22 @@ function demoWpRoles_(d) {
     if (r[2] !== 'wp') return;
     var ref = r[3].split(':');
     repoInsert('RoleAssignment', { resource_id: d.person(r[0]).id, role_code: r[1], scope_type: 'workpackage', scope_id: d.wp(ref[0], ref[1]).id, start_date: d.wd(0) }, d.a);
+  });
+  // les membres de chaque projet : Contributors de trois livrables, répartis sur tout le planning (rôle posé directement au niveau 6 : pas de migration de masse)
+  var k = 0;
+  DEMO_MEMBERS.forEach(function (m) {
+    var project = d.project(m[0]);
+    var items = repoList('PlanItem', function (x) { return x.project_id === project.id && x.item_type === 'Livrable'; })
+      .sort(function (a, b) { return String(a.planned_start).localeCompare(String(b.planned_start)) || String(a.name).localeCompare(String(b.name), 'fr'); });
+    for (var i = 1; i < m.length; i++, k++) {
+      var picked = {};
+      for (var t = 0; t < 3 && items.length; t++) {
+        var item = items[(k * 3 + t * 7) % items.length];
+        if (picked[item.id]) continue;
+        picked[item.id] = true;
+        repoInsert('RoleAssignment', { resource_id: d.person(m[i]).id, role_code: 'CONTRIB', scope_type: 'planitem', scope_id: item.id, start_date: d.wd(0) }, d.a);
+      }
+    }
   });
 }
 
@@ -9306,13 +9327,22 @@ function demoEnvelope_(d) {
   d.call('budget.envelope.set', { projectId: p1.id, authorized: Math.max(Math.round(v.totals.cost * 1.08), spread), allocations: allocations });
 }
 
+/** Une tranche de la migration des rôles (A9_MIGRER_ROLES) sur la démo ; sans effet une fois la migration faite. */
+function demoLevels_(d) {
+  rolesMigrate_(d.a, false);
+}
+
 function demoDeps_(d) {
   DEMO_DEPS.forEach(function (x) {
     repoInsert('Dependency', { predecessor_id: d.item(x[0], x[1]).id, successor_id: d.item(x[0], x[2]).id, dep_type: x[3], lag_days: x[4] }, d.a);
   });
 }
 
-/** B0 figée au lancement ; puis le planning évolue (retards, ajouts, retrait, changement de responsable) ; B1 ; nouvelles dérives ; une demande en attente. */
+/**
+ * B0 figée au lancement ; puis le planning évolue (retards, ajouts, retrait, changement de responsable) ; B1 ; nouvelles dérives ; une demande en attente.
+ * Deux baselines de workpackage (0.15.5) : WP 2 Essais a sa référence locale B0 figée juste après B1, avant que ses dérives n'apparaissent (ses écarts se lisent contre elle ou contre
+ * B1 du projet) ; WP 1 Conception a une B0 figée au niveau d'un Workpackage leader, donc à valider par le chef de projet (elle apparaît dans « Changements à valider »).
+ */
 function demoBaselines_(d) {
   var p1 = d.project('NAC-1').id;
   d.call('baselines.create', { projectId: p1, label: 'B0', justification: 'Planning validé en revue de lancement' });
@@ -9334,6 +9364,7 @@ function demoBaselines_(d) {
   d.call('wbs.delete', { kind: 'item', id: d.item('NAC-1', 'Moyens de contrôle non destructif').id });
   d.a = adminActx;
   d.call('baselines.create', { projectId: p1, label: 'B1', justification: 'Replanification après le retard des éprouvettes matériaux' });
+  d.call('baselines.create', { projectId: p1, scopeType: 'workpackage', scopeId: d.wp('NAC-1', '2').id, label: 'B0', justification: 'Référence locale des essais, figée avec le plan de campagne soufflerie' });
   // dérives après B1 (au même niveau)
   d.a = Object.assign({}, adminActx, { actor_level: 5 });
   demoShift_(d, 'NAC-1', 'Campagne d’essais statiques', 0, 6);
@@ -9342,6 +9373,7 @@ function demoBaselines_(d) {
   demoShift_(d, 'NAC-1', 'Optimisation de la lèvre d’entrée d’air', 0, 5);
   demoShift_(d, 'NAC-1', 'Dossier de certification complet', 0, 7);
   d.a = adminActx;
+  d.callAs('baselines.create', { projectId: p1, scopeType: 'workpackage', scopeId: d.wp('NAC-1', '1').id, label: 'B0', justification: 'Conception : plan de la revue critique figé par le responsable du workpackage' }, 3);
   d.call('baselines.request', { projectId: p1, label: 'B2', justification: 'Replanifier la revue critique de conception et la campagne soufflerie après le retard de la maquette' });
 }
 
@@ -9430,6 +9462,11 @@ var DEMO_STEPS = [
   { name: 'Commandes d’achat', run: function (d) { demoOrders_(d); } },
   { name: 'Actualités de NAC-1 : réunions', run: function (d) { demoNewsMeetings_(d); } },
   { name: 'Actualités : actions, synthèse du jour, réunions à trier', run: function (d) { demoNewsActions_(d); } },
+  // Rôles aux huit niveaux (0.15.5) : les rôles de workpackage sont semés avec les anciens codes puis migrés, ce qui exerce A9_MIGRER_ROLES (responsables de workpackage, Deliverable
+  // owners, Contributors des workpackages). Un lancement écrit au plus MIGRATION_MAX_WRITES lignes ; les étapes en trop ne font rien.
+  { name: 'Rôles aux huit niveaux (1/3)', run: function (d) { demoLevels_(d); } },
+  { name: 'Rôles aux huit niveaux (2/3)', run: function (d) { demoLevels_(d); } },
+  { name: 'Rôles aux huit niveaux (3/3)', run: function (d) { demoLevels_(d); } },
   { name: 'Constats du moteur de règles', run: function (d) { demoFindings_(d); } }
 ];
 
@@ -9460,7 +9497,7 @@ function seedDemo_() {
   }
   var d = demoContext_(), ran = [];
   for (var i = next; i < DEMO_STEPS.length; i++) {
-    if (i > next && Date.now() - t0 > DEMO_BUDGET_MS) break;
+    if (i > next && Date.now() - t0 >= DEMO_BUDGET_MS) break;   // >= : un budget de 0 veut dire « une étape par lancement », même si l'étape a duré moins d'une milliseconde
     try {
       DEMO_STEPS[i].run(d);
     } catch (err) {
@@ -9626,6 +9663,8 @@ function demoInventory_() {
   del.Baseline = repoList('Baseline', inProject);
   var scopeIds = {};
   [programIds, projectIds, wpIds, itemIds].forEach(function (m) { Object.keys(m).forEach(function (k) { scopeIds[k] = true; }); });
+  // les livrables et workpackages déjà supprimés (la démo en supprime un exprès) gardent leurs rôles : sans eux, ces rôles orphelins retiendraient des personnes de la démo, donc leurs équipes
+  ['PlanItem', 'WorkPackage'].forEach(function (t) { repoList(t, inProject, { includeDeleted: true }).forEach(function (x) { scopeIds[x.id] = true; }); });
   del.RoleAssignment = repoList('RoleAssignment', function (x) { return scopeIds[x.scope_id]; });
   // actualités : réunions du projet, ou « à trier » dont un projet candidat est effacé ; leurs actions ; synthèses
   del.Meeting = repoList('Meeting', function (m) { return projectIds[m.project_id] || (m.status === 'À trier' && String(m.candidates || '').split(',').some(function (id) { return projectIds[id]; })); });
@@ -11258,6 +11297,8 @@ defineAction('admin.sheet.protect', function (p, ctx) {
 /** Le rôle que porte le responsable principal de chaque genre d'objet. */
 /** Écritures au plus par lancement de la migration (voir rolesMigrate_). */
 var MIGRATION_MAX_WRITES = 300;
+/** Au-delà de ce nombre de Contributors à écrire, la migration (simulation comprise) avertit : la feuille des rôles grossit d'une ligne par membre et par livrable. */
+var MIGRATION_WARN_CONTRIB = 500;
 
 var PRINCIPAL_ROLE = { project: 'CP', workpackage: 'WPL', subworkpackage: 'SWPL', planitem: 'DO' };
 
@@ -11459,7 +11500,8 @@ function migrerRoles_(dryRun) {
     return (dryRun ? 'Simulation (rien n’a été écrit) : ' : r.partial ? 'Migration PARTIELLE, relancez A9_MIGRER_ROLES jusqu’à « Migration faite » : ' : 'Migration faite : ') + r.dpl + ' DPL posé(s) sur des projets, ' + r.wpl + ' responsable(s) de workpackage converti(s), '
       + r.contrib + ' Contributor(s) posé(s) sur des livrables ou jalons, ' + r.owners + ' responsable(s) devenu(s) Deliverable owner ou leader de workpackage, '
       + r.managers + ' chef(s) de projet, ' + r.budget + ' contributeur(s) d’après le budget ; ' + r.ended + ' ancienne(s) ligne(s) terminée(s), '
-      + r.already + ' déjà en place, ' + r.skipped + ' ignorée(s).';
+      + r.already + ' déjà en place, ' + r.skipped + ' ignorée(s).'
+      + (r.contrib > MIGRATION_WARN_CONTRIB ? ' ATTENTION : ' + r.contrib + ' lignes de Contributor à écrire : un « membre » d’un projet devient Contributor de CHAQUE livrable et jalon, donc la feuille Rôles grossit d’autant et toutes les pages la relisent. Si ce n’est pas ce que vous voulez, ne lancez pas la migration : voir la section « Rôles par niveau » du README.' : '');
   });
 }
 
