@@ -99,86 +99,27 @@ module.exports = function () {
 
   // ------------------------------------------------------------ OBS par rôles : les essais de l'organigramme par rôles sont retirés avec l'OBS (0.15.3, phase 3)
 
-  // ------------------------------------------------------------ OBS par équipes
-  test('OBS par équipes : hiérarchie, responsable à part, sans équipe, branche, cycle toléré', () => {
-    const { c, call, S, team, dan, alice, bob } = world();
-    const t2 = c.repoInsert('HierarchicalTeam', { name: 'Conception', parent_team_id: team.id, manager_resource_id: alice.id, cost_center: 'CC-10' }, S);
-    const t3 = c.repoInsert('HierarchicalTeam', { name: 'Structure', parent_team_id: t2.id }, S);
-    c.repoUpdate('Resource', bob.id, { team_id: t2.id }, null, S);
-    c.repoUpdate('Resource', dan.id, { team_id: team.id }, null, S);
-    c.repoUpdate('HierarchicalTeam', team.id, { manager_resource_id: dan.id }, null, S);
-    const full = call('alice@entreprise.com', 'obs.teams', {}).data;
-    eq(full.nodes.map((n) => n.name + '<' + (full.nodes.find((x) => x.id === n.parent) || { name: '' }).name), [
-      'Bureau d’études<', 'Conception<Bureau d’études', 'Structure<Conception', 'Sans équipe<'
-    ]);
-    const conc = full.nodes.find((n) => n.name === 'Conception');
-    eq([conc.manager.name, conc.members.map((m) => m.name), conc.member_count, conc.cost_center], ['Alice', ['Bob'], 1, 'CC-10']);
-    const root = full.nodes.find((n) => n.name === 'Bureau d’études');
-    eq(root.manager.name, 'Dan');
-    ok(!root.members.some((m) => m.name === 'Dan'), 'le responsable n’est pas compté deux fois');
-    eq(root.members.map((m) => m.name), ['Alice'], 'Alice dirige Conception mais appartient à l’équipe racine');
-    ok(full.nodes.find((n) => n.name === 'Sans équipe').members.length >= 3);
-    eq(full.teams.map((t) => t.depth), [0, 1, 2]);
-    const branch = call('alice@entreprise.com', 'obs.teams', { rootTeamId: t2.id }).data;
-    eq(branch.nodes.map((n) => n.name), ['Conception', 'Structure']);
-    eq(branch.nodes[0].parent, '', 'la racine de la branche n’a pas de parent');
-    // Cycle : Bureau d’études devient enfant de Structure.
-    c.repoUpdate('HierarchicalTeam', team.id, { parent_team_id: t3.id }, null, S);
-    const cyc = call('alice@entreprise.com', 'obs.teams', {}).data;
-    ok(cyc.nodes.filter((n) => n.name !== 'Sans équipe').every((n) => cyc.nodes.some((x) => x.id === n.parent) || n.parent === ''), 'arbre dessinable malgré le cycle');
-    eq(call('alice@entreprise.com', 'obs.teams', { rootTeamId: 'zzz' }).error.code, 'NOT_FOUND');
-  });
-
-  // ------------------------------------------------------------ WBS
-  test('WBS : projet, workpackages, sous-WP, éléments ; synthèses, responsables et organisations', () => {
-    const { c, call, S, p1, w1, w11, alice, carl } = world();
-    const it = (name, type, s, f, wp, owner, extra) => c.repoInsert('PlanItem', Object.assign({ project_id: p1.id, wp_id: wp || '', item_type: type, name, planned_start: s, planned_finish: f, owner_resource_id: owner || '', status: 'À faire', progress_pct: 0 }, extra || {}), S);
-    const a = it('Spécification', 'Livrable', '2026-10-05', '2026-10-09', w1.id, alice.id, { progress_pct: 100, status: 'Terminé' });
-    const b = it('Plans', 'Livrable', '2026-10-12', '2026-10-16', w11.id, carl.id, { progress_pct: 50 });
-    const m = it('Revue', 'Jalon', '2026-10-19', '2026-10-19', '', alice.id);
-    c.repoInsert('Dependency', { predecessor_id: a.id, successor_id: b.id, dep_type: 'FS', lag_days: 0 }, S);
-    c.repoInsert('Dependency', { predecessor_id: b.id, successor_id: m.id, dep_type: 'FS', lag_days: 0 }, S);
-    const t = call('bob@entreprise.com', 'wbs.tree', { projectId: p1.id });
-    ok(t.ok, JSON.stringify(t.error));
-    const n = t.data.nodes, by = (id) => n.find((x) => x.id === id);
-    eq(n.map((x) => x.kind + ':' + x.name), ['project:Projet 1', 'wp:Conception', 'wp:Structure', 'item:Plans', 'item:Spécification', 'item:Revue']);
-    eq(by('wp:' + w11.id).parent, 'wp:' + w1.id);
-    eq(by('wp:' + w1.id).parent, 'project:' + p1.id);
-    eq(by('item:' + m.id).parent, 'project:' + p1.id, 'un élément sans WP se rattache au projet');
-    eq(by('item:' + b.id).parent, 'wp:' + w11.id);
-    const wp1 = by('wp:' + w1.id);
-    eq([wp1.code, wp1.owner, wp1.owner_org, wp1.charge_code, wp1.start, wp1.finish], ['1', 'Alice', 'Bureau d’études', 'C-1', '2026-10-05', '2026-10-16']);
-    eq(by('wp:' + w11.id).owner_org, 'Sous-traitant Alpha');
-    eq(by('item:' + b.id).critical, true);
-    eq(by('project:' + p1.id).critical, true);
-    eq(by('item:' + a.id).float, null, 'un livrable terminé n’a plus de marge');
-    eq(t.data.stats, { wps: 2, items: 3, depth: 2 });
-    eq(call('bob@entreprise.com', 'wbs.tree', { projectId: 'x' }).error.code, 'NOT_FOUND');
-  });
-
   // ------------------------------------------------------------ préférences
   test('Préférences d’affichage : valeurs par défaut, nettoyage, mémorisation par utilisateur', () => {
     const { c, call } = world();
     const cfg = call('eve@entreprise.com', 'views.config', {}).data;
-    eq(cfg.prefs.obs.attrs, ['scope', 'job_function', 'organization']);
-    eq([cfg.prefs.obs.colorBy, cfg.prefs.obs.mode, cfg.prefs.wbs.colorBy, cfg.prefs.wbs.showItems], ['role', 'roles', 'kind', true]);
+    eq([cfg.prefs.obs, Object.keys(cfg.catalog)], [undefined, ['wbs']], 'plus d’affichage d’organigramme : seulement le découpage');
+    eq([cfg.prefs.wbs.colorBy, cfg.prefs.wbs.showItems], ['kind', true]);
     eq(cfg.prefs.wbs.attrs, ['wbs_code', 'owner', 'dates', 'progress']);
-    const saved = call('eve@entreprise.com', 'prefs.set', { view: 'obs', prefs: { attrs: ['email', 'organization', 'inconnu'], colorBy: 'organization', mode: 'teams' } }).data;
-    eq(saved.attrs, ['organization', 'email'], 'clés inconnues écartées, ordre du catalogue');
-    eq([saved.colorBy, saved.mode], ['organization', 'teams']);
-    const bad = call('eve@entreprise.com', 'prefs.set', { view: 'obs', prefs: { attrs: [], colorBy: 'n’importe quoi', mode: 'x' } }).data;
-    eq([bad.attrs, bad.colorBy, bad.mode], [[], 'role', 'roles'], 'liste vide autorisée (nom seul), valeurs invalides ramenées au défaut');
+    const saved = call('eve@entreprise.com', 'prefs.set', { view: 'wbs', prefs: { attrs: ['charge_code', 'dates', 'inconnu'], colorBy: 'n’importe quoi', showItems: 'x' } }).data;
+    eq([saved.attrs, saved.colorBy, saved.showItems], [['dates', 'charge_code'], 'kind', true], 'clés inconnues écartées, ordre du catalogue, valeurs invalides ramenées au défaut');
+    eq(call('eve@entreprise.com', 'prefs.set', { view: 'obs', prefs: {} }).error.code, 'VALIDATION', 'l’organigramme n’existe plus');
     call('eve@entreprise.com', 'prefs.set', { view: 'wbs', prefs: { attrs: ['charge_code'], showItems: false, colorBy: 'organization' } });
     eq(call('eve@entreprise.com', 'prefs.set', { view: 'nope', prefs: {} }).error.code, 'VALIDATION');
     const mine = call('eve@entreprise.com', 'views.config', {}).data.prefs;
-    eq([mine.obs.attrs, mine.wbs.attrs, mine.wbs.showItems, mine.wbs.colorBy], [[], ['charge_code'], false, 'organization']);
+    eq([mine.wbs.attrs, mine.wbs.showItems, mine.wbs.colorBy], [['charge_code'], false, 'organization']);
     eq(call('alice@entreprise.com', 'views.config', {}).data.prefs.wbs.showItems, true, 'les choix d’un autre utilisateur ne sont pas touchés');
     eq(c.repoList('UserSetting').filter((u) => u.user_email === 'eve@entreprise.com').length, 1, 'une seule ligne par utilisateur');
   });
 
   test('Catalogue des attributs : clés uniques, valeurs par défaut cohérentes', () => {
     const c = freshCore();
-    ['obs', 'wbs'].forEach((v) => {
+    ['wbs'].forEach((v) => {
       const keys = c.VIEW_CATALOG[v].attrs.map((a) => a.key);
       eq(new Set(keys).size, keys.length, 'clés uniques dans ' + v);
       ok(c.VIEW_CATALOG[v].colors.some((x) => x.key === c.VIEW_CATALOG[v].defaults.colorBy), 'couleur par défaut connue');

@@ -1,10 +1,6 @@
   // ------------------------------------------------------------ création et édition du WBS
   var KIND_NAMES = { wp: 'workpackage', Livrable: 'livrable', Jalon: 'jalon' };
 
-  function ensurePeople() {
-    if (state.people) return Promise.resolve(state.people);
-    return call('resources.list', { limit: 500 }).then(function (rows) { state.people = rows; return rows; }).catch(function () { return []; });
-  }
   function below(id) {
     var out = [];
     state.data.nodes.forEach(function (n) { if (n.parent === id) { out.push(n); out = out.concat(below(n.id)); } });
@@ -48,6 +44,59 @@
     return box;
   }
 
+  // ---------------------------------------------------------------- rôles d'un objet (0.15.3)
+  /**
+   * Les rôles se posent ici, sur l'objet : chaque objet n'accepte que ses rôles (un chef de projet sur un projet, un Workpackage leader sur un workpackage, un Sub-workpackage
+   * leader sur un sous-workpackage, un Deliverable owner ou des Contributors sur un livrable ou un jalon), posés par un niveau strictement supérieur au rôle posé. Le serveur
+   * (roles.of) dit ce que chaque rôle permet à la personne connectée ; Reader est le rôle par défaut de qui n'en a aucun autre, il ne se pose pas.
+   */
+  function scopeOfNode(n) { return { type: n.kind === 'project' ? 'project' : n.kind === 'wp' ? 'workpackage' : 'planitem', id: n.ref }; }
+  function rolesBlock(n) {
+    var s = scopeOfNode(n);
+    var box = el('div', { class: 'roles-box', id: 'roles-box' }, [el('h3', { text: 'Rôles' }), el('p', { class: 'note', text: 'Chargement…' })]);
+    call('roles.of', { scopeType: s.type, scopeId: s.id }).then(function (d) { renderRoles(box, n, s, d); }).catch(function () { clear(box); });
+    return box;
+  }
+  function renderRoles(box, n, s, d) {
+    clear(box);
+    box.appendChild(el('h3', { text: 'Rôles' }));
+    var after = function () { state.pendingSelect = n.id; return load(true); };
+    var fail = function (e) { toast(window.ppmErrorText ? ppmErrorText(e) : (e.message || 'Impossible.'), true); };
+    d.roles.forEach(function (r) {
+      var ul = el('ul', { class: 'holders' });
+      r.holders.forEach(function (h) {
+        var li = el('li', {}, [el('span', { text: h.name + (h.principal ? ' · principal' : '') })]);
+        if (h.canEnd) li.appendChild(el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retirer le rôle de ' + h.name, title: 'Retirer ce rôle', text: '×', onclick: function () {
+          call('roles.end', { id: h.id, version: h.version }, true).then(function () { toast('Rôle retiré.'); return after(); }).catch(fail);
+        } }));
+        ul.appendChild(li);
+      });
+      box.appendChild(el('div', { class: 'role-row', 'data-role': r.code }, [el('strong', { text: r.label }), r.holders.length ? '' : el('span', { class: 'muted', text: ' — personne' }), ul]));
+    });
+    var assignable = d.roles.filter(function (r) { return r.canAssign; });
+    if (!assignable.length) {
+      box.appendChild(el('p', { class: 'note', id: 'roles-note', text: 'Un rôle est posé par un niveau supérieur au sien. Sans rôle, on est Reader : on lit tout, on ne modifie rien.' }));
+      return;
+    }
+    var role = el('select', { id: 'role-pick', 'aria-label': 'Rôle à poser' }, assignable.map(function (r) { return el('option', { value: r.code, text: r.label }); }));
+    var who = el('select', { id: 'role-person', 'aria-label': 'Personne' });
+    var fillPeople = function () {
+      var code = role.value, current = d.roles.filter(function (r) { return r.code === code; })[0], holding = {};
+      (current ? current.holders : []).forEach(function (h) { holding[h.resource_id] = true; });
+      clear(who);
+      who.appendChild(el('option', { value: '', text: 'Choisir une personne…' }));
+      d.people.filter(function (p) { return !holding[p.id]; }).forEach(function (p) { who.appendChild(el('option', { value: p.id, text: p.name + (p.job_function ? ' — ' + p.job_function : '') })); });
+    };
+    role.addEventListener('change', fillPeople); fillPeople();
+    var go = el('button', { type: 'button', class: 'btn primary', id: 'role-add', text: 'Poser le rôle', onclick: function () {
+      if (!who.value) { toast('Choisissez une personne.', true); return; }
+      go.disabled = true;
+      call('roles.assign', { values: { resource_id: who.value, role_code: role.value, scope_type: s.type, scope_id: s.id } }, true)
+        .then(function () { toast('Rôle posé.'); return after(); }).catch(function (e) { go.disabled = false; fail(e); });
+    } });
+    box.appendChild(el('div', { class: 'role-add' }, [role, who, go]));
+  }
+
   function parentChoices(kind, n) {
     var hasKids = kind === 'wp' && !!n.ref && state.data.nodes.some(function (x) { return x.parent_ref === n.ref; }); // un workpackage qu'on crée n'a pas encore d'enfants
     var out = [{ value: '', label: 'Projet (racine)' }];
@@ -61,7 +110,7 @@
   }
 
   function openEditor(spec) {
-    ensurePeople().then(function (people) {
+    Promise.resolve().then(function () {
       var create = spec.mode === 'create', kind = spec.kind, n = spec.node || {};
       var isSub = create && kind === 'wp' && spec.parent.kind === 'wp';
       $('editor-title').textContent = create ? (isSub ? 'Nouveau sous-workpackage' : 'Nouveau ' + KIND_NAMES[kind]) : 'Modifier ' + (kind === 'wp' ? 'le workpackage' : 'le ' + KIND_NAMES[kind]);
@@ -86,9 +135,6 @@
           row('Date', input('ed-date', 'date', create ? '' : (n.raw_finish || n.raw_start))),
           row('Catégorie', select('ed-cat', [{ value: '', label: '—' }, { value: 'Revue', label: 'Revue' }, { value: 'Client', label: 'Client' }, { value: 'Interne', label: 'Interne' }], create ? '' : n.milestone_category))]));
       }
-      body.appendChild(row('Responsable', select('ed-owner', [{ value: '', label: 'Aucun' }].concat(people.map(function (p) {
-        return { value: p.resource_id, label: p.name + (p.job_function ? ' — ' + p.job_function : '') };
-      })), create ? '' : n.owner_id)));
       if (create && spec.chooseParent) body.appendChild(row('Rattaché à', select('ed-parent', parentChoices(kind, {}), spec.defaultParent || '')));
       if (!create) {
         var choices = parentChoices(kind, n);
@@ -107,7 +153,7 @@
     if (!ed) return;
     var f = ed.fields, spec = ed.spec, n = spec.node || {}, kind = spec.kind, create = spec.mode === 'create';
     var v = function (id) { return f[id] ? f[id].value : undefined; };
-    var values = { name: v('ed-name'), owner_resource_id: v('ed-owner') };
+    var values = { name: v('ed-name') };
     if (kind === 'wp') {
       values.charge_code = v('ed-charge');
       if (create || v('ed-code') !== n.code) values.wbs_code = v('ed-code'); // le code n'est envoyé que s'il a changé : un déplacement renumérote sinon

@@ -68,9 +68,9 @@ module.exports = function () {
     ['program', 'project', 'workpackage'].forEach((t) => ok(roles.some((a) => a.scope_type === t), 'périmètre ' + t));
     ok(roles.length >= 55, roles.length + ' affectations');
     const p1 = c.repoList('Project').find((p) => p.code === 'NAC-1');
-    const tree = call(c, 'obs.tree', { scopeType: 'project', scopeId: p1.id });
-    ok(tree.nodes.length >= 20, 'organigramme de ' + tree.nodes.length + ' cartes');
-    eq(tree.unplaced.people.map((p) => p.name).sort(), ['Brigitte Stahl', 'Julie Fontaine', 'Omar Diallo'], 'personnes sans rôle : à positionner');
+    const rolesOf = call(c, 'roles.of', { scopeType: 'project', scopeId: p1.id });
+    ok(rolesOf.roles.find((r) => r.code === 'CP').holders.length >= 1, 'le projet a son chef de projet');
+    eq(call(c, 'ressources.get', { projectId: p1.id }).people.filter((p) => p.unplaced).map((p) => p.name).sort(), ['Brigitte Stahl', 'Julie Fontaine', 'Omar Diallo'], 'personnes sans rôle (Reader par défaut)');
   });
 
   test('Le projet de la démo est en alerte sur les délais, la qualité et le coût', () => {
@@ -301,5 +301,25 @@ module.exports = function () {
     });
     const get = w.handleRequest({ action: 'ressources.get', params: { projectId: projects.find((p) => p.code === 'NAC-1').id }, apiVersion: w.PPM_API_VERSION }, 'admin@entreprise.com').data;
     ok(get.people.some((x) => x.contributes > 0) && get.people.some((x) => x.deliverables > 0), 'la page Ressources de NAC-1 montre des livrables et des contributions');
+  });
+
+  test('Migration des rôles sur la démo : plusieurs lancements, jusqu’à « Migration faite » (27 membres × 50 livrables)', () => {
+    const m = core(); m.seedDemo_();
+    const today = m.todayStr();
+    const legacy = () => m.repoList('RoleAssignment').filter((a) => ['RWP', 'MEMBER'].includes(a.role_code) && (!a.end_date || a.end_date >= today)).length;
+    const before = legacy();
+    ok(before > 40, before + ' anciennes lignes (responsables de workpackage et membres) avant la migration');
+    ok(/^Simulation/.test(m.migrerRoles_(true)) && legacy() === before, 'la simulation ne change rien');
+    let runs = 0, msg = '';
+    do { msg = m.migrerRoles_(false); runs++; } while (!/^Migration faite/.test(msg) && runs < 20);
+    ok(/^Migration faite/.test(msg), msg);
+    ok(runs >= 3 && runs <= 12, 'en ' + runs + ' lancements : un lancement n’écrit jamais plus de ' + m.MIGRATION_MAX_WRITES + ' lignes (le budget d’Apps Script est de six minutes)');
+    eq(legacy(), 0, 'plus aucun ancien rôle actif');
+    const live = (code) => m.repoList('RoleAssignment').filter((a) => a.role_code === code && (!a.end_date || a.end_date >= today));
+    ok(live('CONTRIB').length >= 1000 && live('DO').length >= 40 && live('WPL').length >= 4 && live('SWPL').length >= 10, 'Contributors ' + live('CONTRIB').length + ', Deliverable owners ' + live('DO').length + ', WPL ' + live('WPL').length + ', SWPL ' + live('SWPL').length);
+    const items = m.repoList('PlanItem').filter((i) => !m.isTrue(i.deleted) && i.owner_resource_id);
+    ok(items.every((i) => live('DO').some((a) => a.scope_id === i.id && a.resource_id === i.owner_resource_id)), 'chaque élément avec un responsable a son Deliverable owner');
+    const again = m.migrerRoles_(false);
+    ok(/^Migration faite : 0 DPL posé\(s\) sur des projets, 0 responsable\(s\) de workpackage converti\(s\), 0 Contributor\(s\)/.test(again), 'relancée : plus rien à faire');
   });
 };

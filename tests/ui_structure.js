@@ -1,5 +1,6 @@
 /**
- * Essai de la page Structure (OBS et WBS) dans un navigateur simulé (jsdom), avec le vrai Core.
+ * Essai de la page WBS (ex-OBS/WBS : l'organigramme a été supprimé en 0.15.3) dans un navigateur simulé (jsdom), avec le vrai Core :
+ * affichage, panneau des rôles à chaque niveau, pose et retrait d'un rôle, lecture seule du Reader, échappement des noms, préférences, repli, vue programme.
  *   npm i --no-save jsdom@24 && node tests/ui_structure.js
  * (variable UI_DEPS = dossier node_modules à utiliser, si les paquets ne sont pas installés ici)
  */
@@ -14,46 +15,43 @@ const S = { actor: 'setup', source: 'setup' };
 const A = 'admin@entreprise.com';
 const call = (email, action, params) => { const r = c.handleRequest({ action, params, apiVersion: '1.0' }, email); if (!r.ok) throw new Error(action + ' : ' + JSON.stringify(r.error)); return r.data; };
 const res = (name, extra) => c.repoInsert('Resource', Object.assign({ resource_type: 'Interne', name, country: 'FR' }, extra || {}), S);
-const team = c.repoInsert('HierarchicalTeam', { name: 'Bureau d’études' }, S);
-const team2 = c.repoInsert('HierarchicalTeam', { name: 'Conception', parent_team_id: team.id }, S);
 const anna = res('Anna', { email: 'anna@entreprise.com', job_function: 'Directrice de programme', organization: 'Maison mère' });
-const dan = res('Dan', { email: 'dan@entreprise.com', job_function: 'Responsable de domaine', organization: 'Maison mère', team_id: team.id });
-const alice = res('Alice', { email: 'alice@entreprise.com', job_function: 'Cheffe de projet', organization: 'Bureau d’études', team_id: team2.id });
-const carl = res('Carl', { resource_type: 'Externe', country: 'DE', job_function: 'Ingénieur essais', organization: 'Sous-traitant Alpha', supplier: 'Alpha GmbH' });
+const dan = res('Dan', { email: 'dan@entreprise.com', job_function: 'Responsable de domaine', organization: 'Maison mère' });
+const alice = res('Alice', { email: 'alice@entreprise.com', job_function: 'Cheffe de projet', organization: 'Bureau d’études' });
+const carl = res('Carl', { email: 'carl@entreprise.com', job_function: 'Ingénieur essais', organization: 'Sous-traitant Alpha' });
 const eve = res('Eve <img src=x onerror=alert(1)>', { email: 'eve@entreprise.com' });
 const prog = call(A, 'programs.create', { values: { code: 'PG', name: 'Programme A' } });
 const p1 = call(A, 'projects.create', { values: { code: 'P1', name: 'Nacelle', program_id: prog.id, status: 'Actif', holiday_country: 'FR', manager_resource_id: alice.id } });
-const role = (r, code, type, id) => c.repoInsert('RoleAssignment', { resource_id: r.id, role_code: code, scope_type: type, scope_id: id }, S);
-role(anna, 'PL', 'program', prog.id); role(dan, 'DPL', 'program', prog.id); role(alice, 'CP', 'project', p1.id);
+const p2 = call(A, 'projects.create', { values: { code: 'P2', name: 'Vide', program_id: prog.id, status: 'Actif', holiday_country: 'FR' } });
+c.repoInsert('RoleAssignment', { resource_id: anna.id, role_code: 'PL', scope_type: 'program', scope_id: prog.id }, S);
+c.repoInsert('RoleAssignment', { resource_id: dan.id, role_code: 'DPL', scope_type: 'project', scope_id: p1.id }, S);
 const w1 = call(A, 'workpackages.create', { values: { project_id: p1.id, name: 'Conception', wbs_code: '1', owner_resource_id: alice.id, charge_code: 'C-1' } });
 const w11 = call(A, 'workpackages.create', { values: { project_id: p1.id, name: 'Structure', wbs_code: '1.1', parent_wp_id: w1.id, owner_resource_id: carl.id } });
-role(carl, 'RWP', 'workpackage', w11.id);
-role(eve, 'MEMBER', 'project', p1.id);
-role(eve, 'MEMBER', 'workpackage', w11.id);
 const it = (name, type, s, f, wp, owner) => call(A, 'planitems.create', { values: { project_id: p1.id, name, item_type: type, planned_start: s, planned_finish: f, wp_id: wp || '', owner_resource_id: owner.id } });
 const spec = it('Spécification', 'Livrable', '2026-10-05', '2026-10-09', w1.id, alice);
 const plans = it('Plans', 'Livrable', '2026-10-12', '2026-10-16', w11.id, carl);
 const rev = it('Revue', 'Jalon', '2026-10-19', '2026-10-19', '', alice);
 call(A, 'dependencies.create', { values: { predecessor_id: spec.id, successor_id: plans.id, dep_type: 'FS' } });
-call(A, 'dependencies.create', { values: { predecessor_id: plans.id, successor_id: rev.id, dep_type: 'FS' } });
 
 const template = fs.readFileSync(path.join(__dirname, '..', 'src', 'Structure.html'), 'utf8')
-  .replace(/<\?!= include\('(?!Style'|Common'|Header')(\w+)'\) \?>/g, (m, n) => require('fs').readFileSync(require('path').join(__dirname, '..', 'src', n + '.html'), 'utf8')).replace("<?!= include('Style') ?>", fs.readFileSync(path.join(__dirname, '..', 'src', 'Style.html'), 'utf8')).replace("<?!= include('Common') ?>", fs.readFileSync(path.join(__dirname, '..', 'src', 'Common.html'), 'utf8')).replace("<?!= include('Header') ?>", fs.readFileSync(path.join(__dirname, '..', 'src', 'Header.html'), 'utf8'));
+  .replace(/<\?!= include\('(?!Style'|Common'|Header')(\w+)'\) \?>/g, (m, n) => fs.readFileSync(path.join(__dirname, '..', 'src', n + '.html'), 'utf8'))
+  .replace("<?!= include('Style') ?>", '<style>' + fs.readFileSync(path.join(__dirname, '..', 'src', 'Style.html'), 'utf8').replace(/<\/?style>/g, '') + '</style>')
+  .replace("<?!= include('Common') ?>", fs.readFileSync(path.join(__dirname, '..', 'src', 'Common.html'), 'utf8'))
+  .replace("<?!= include('Header') ?>", fs.readFileSync(path.join(__dirname, '..', 'src', 'Header.html'), 'utf8'));
 
 let failed = 0;
 const check = (cond, msg) => { if (!cond) { failed++; console.error('✗ ' + msg); } else console.log('  ✓ ' + msg); };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function openPage(user, boot) {
-  const html = template.replace('<?!= boot ?>', JSON.stringify(Object.assign({ project: p1.id, program: '', tab: 'obs', mode: '', baseUrl: 'https://exemple.test/exec', appsheetUrl: '', version: 'test' }, boot || {})));
+  const html = template.replace('<?!= boot ?>', JSON.stringify(Object.assign({ project: p1.id, program: '', baseUrl: 'https://exemple.test/exec', appsheetUrl: '', version: 'test' }, boot || {})));
   const calls = [];
   const dom = new JSDOM(html, {
     runScripts: 'dangerously', pretendToBeVisual: true,
     beforeParse(window) {
       function runner(ok, fail) {
         return {
-          withSuccessHandler: (f) => runner(f, fail),
-          withFailureHandler: (f) => runner(ok, f),
+          withSuccessHandler: (f) => runner(f, fail), withFailureHandler: (f) => runner(ok, f),
           uiCall: (action, params, rid) => {
             calls.push(action);
             c.Session = { getActiveUser: () => ({ getEmail: () => user }) };
@@ -67,199 +65,124 @@ function openPage(user, boot) {
     }
   });
   const w = dom.window, doc = w.document;
+  const $ = (id) => doc.getElementById(id + '-wbs') || doc.getElementById(id);
   const until = async (cond, ms = 3000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (cond()) return true; await wait(10); } return false; };
   const click = (n) => n.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
-  let side = ''; // '' = zone de l'organisation, '-wbs' = zone du découpage
-  const sel = (q) => q.replace(/#(canvas|opt-attrs|opt-colors|details|legend)\b/g, '#$1' + side);
-  const texts = () => [...doc.querySelectorAll(sel('#canvas .node text'))].map((t) => t.textContent);
-  const nodes = () => [...doc.querySelectorAll(sel('#canvas .node'))];
-  const box = (g) => {
-    const m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(g.getAttribute('transform'));
-    const r = g.querySelector('rect.card');
-    return { x: +m[1], y: +m[2], w: +r.getAttribute('width'), h: +r.getAttribute('height') };
-  };
-  const overlaps = () => {
-    const b = nodes().map(box);
-    for (let i = 0; i < b.length; i++) for (let j = i + 1; j < b.length; j++) {
-      if (b[i].x < b[j].x + b[j].w && b[j].x < b[i].x + b[i].w && b[i].y < b[j].y + b[j].h && b[j].y < b[i].y + b[i].h) return [i, j];
-    }
-    return null;
-  };
-  const checkbox = (key) => doc.querySelector(sel('#opt-attrs input[data-attr="' + key + '"]'));
-  const setChecked = (input, v) => { input.checked = v; input.dispatchEvent(new w.Event('change', { bubbles: true })); };
-  return { w, doc, calls, until, click, texts, nodes, box, overlaps, checkbox, setChecked, sel, setSide: (v) => { side = v; } };
+  const nodes = () => [...doc.querySelectorAll('#canvas-wbs .node')];
+  const node = (id) => doc.querySelector('#canvas-wbs [data-id="' + id + '"]');
+  const box = (g) => { const m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(g.getAttribute('transform')); const r = g.querySelector('rect.card'); return { x: +m[1], y: +m[2], w: +r.getAttribute('width'), h: +r.getAttribute('height') }; };
+  const overlaps = () => { const b = nodes().map(box); for (let i = 0; i < b.length; i++) for (let j = i + 1; j < b.length; j++) { if (b[i].x < b[j].x + b[j].w && b[j].x < b[i].x + b[i].w && b[i].y < b[j].y + b[j].h && b[j].y < b[i].y + b[i].h) return [i, j]; } return null; };
+  const open = async (id) => { await until(() => node(id)); click(node(id)); await until(() => { const h = $('details').querySelector('h2'); return !$('details').hidden && h; }); };
+  const rolesReady = async () => { await until(() => $('roles-box') && !/Chargement/.test($('roles-box').textContent)); };
+  const holders = (code) => [...doc.querySelectorAll('#roles-box .role-row[data-role="' + code + '"] ul.holders li span')].map((x) => x.textContent);
+  const flat = (t) => String(t).replace(/\s+/g, ' ').trim();
+  return { w, doc, calls, $, until, click, nodes, node, box, overlaps, open, rolesReady, holders, flat };
 }
 
 (async () => {
-  console.log('\nPage Structure (jsdom)');
+  console.log('\nPage WBS (jsdom)');
 
-  // ---------------------------------------------------------------- OBS par rôles
+  // ---------------------------------------------------------------- une page, un seul découpage, plus d'organigramme
   let p = openPage('alice@entreprise.com');
   await p.until(() => p.nodes().length > 0);
-  // une seule page, sans onglets : l'organisation au-dessus du découpage, les deux affichés ensemble
-  await p.until(() => p.doc.querySelectorAll('#canvas-wbs .node').length > 0);
-  const zoneObs = p.doc.getElementById('zone-obs'), zoneWbs = p.doc.getElementById('zone-wbs');
-  check(!p.doc.querySelector('[data-tab]') && !zoneObs.hidden && !zoneWbs.hidden && !!(zoneObs.compareDocumentPosition(zoneWbs) & p.w.Node.DOCUMENT_POSITION_FOLLOWING), 'plus d’onglets : l’organisation est au-dessus du découpage, les deux zones sont affichées');
-  check(p.doc.querySelectorAll('#canvas .node').length > 0 && p.doc.querySelectorAll('#canvas-wbs .node').length > 0 && p.calls.includes('obs.tree') && p.calls.includes('wbs.tree'), 'les deux schémas sont chargés avec la page');
-  check(p.doc.querySelectorAll('#picker').length === 1 && p.doc.querySelectorAll('.scope-pick').length === 1, 'un seul sélecteur de périmètre, partagé par les deux zones');
-  check(p.doc.getElementById('ztitle').textContent.startsWith('Organisation') && p.doc.getElementById('ztitle-wbs').textContent.startsWith('Découpage'), 'chaque zone a son titre : ' + p.doc.getElementById('ztitle-wbs').textContent);
-  check(p.nodes().length === 6, 'organigramme : 6 rôles (PL, DPL, CP, RWP et deux affectations de membre) — ' + p.nodes().length);
-  check(p.doc.querySelectorAll('#canvas .edge').length === 5, 'cinq liens hiérarchiques');
-  check(!p.overlaps(), 'aucune carte ne recouvre une autre');
-  check(p.doc.getElementById('ztitle').textContent === 'Organisation — P1 — Nacelle', 'titre : ' + p.doc.getElementById('ztitle').textContent);
-  let t = p.texts();
-  check(t.includes('Fonction : Ingénieur essais') && t.includes('Organisation : Sous-traitant Alpha'), 'fonction et organisation affichées par défaut');
-  check(t.includes('Fonction : —'), 'une fonction absente est signalée par un tiret');
-  check(!t.some((x) => x.startsWith('E-mail')), 'e-mail masqué par défaut');
-  check(t.includes('P1 — Nacelle'), 'périmètre dans l’en-tête');
-  check(p.doc.querySelectorAll('img:not(#ppm-logo)').length === 0 && t.some((x) => x.startsWith('Eve <img')), 'un nom contenant du HTML reste du texte');
-  check(p.doc.getElementById('nav-plan').getAttribute('href') === 'https://exemple.test/exec?view=gantt&project=' + p1.id, 'lien vers la page Planning');
+  check(!p.doc.getElementById('zone-obs') && !p.doc.querySelector('[data-mode]') && !p.doc.getElementById('org-role') && !p.doc.getElementById('unplaced'), 'plus d’organigramme OBS : ni zone, ni « Par rôles / Par équipes », ni « Ressources à positionner »');
+  check(p.doc.getElementById('title').textContent === 'WBS' && /WBS/.test(p.doc.getElementById('nav-struct').textContent) && ![...p.doc.querySelectorAll('header, nav, h1, h2, label, button')].some((x) => /OBS/.test(x.textContent)), 'la page et son lien de navigation s’appellent « WBS », plus un seul « OBS » à l’écran : ' + p.doc.getElementById('nav-struct').textContent);
+  check(p.nodes().length === 6 && p.calls.includes('wbs.tree') && !p.calls.some((x) => /^obs\./.test(x)), 'six cartes (projet, deux workpackages, deux livrables, un jalon) ; aucun appel à l’OBS : ' + p.calls.join(','));
+  check(!p.overlaps(), 'aucune carte ne se chevauche');
 
-  // choix des attributs
-  p.click(p.doc.getElementById('options-btn'));
-  check(!p.doc.getElementById('options').hidden, 'panneau « Attributs affichés » ouvert');
-  const boxes = [...p.doc.querySelectorAll('#opt-attrs input')].map((i) => i.getAttribute('data-attr') + ':' + i.checked);
-  check(boxes.includes('job_function:true') && boxes.includes('organization:true') && boxes.includes('email:false'), 'cases cochées = valeurs par défaut');
-  p.setChecked(p.checkbox('organization'), false);
-  t = p.texts();
-  check(!t.some((x) => x.startsWith('Organisation :')) && t.some((x) => x.startsWith('Fonction :')), 'décocher « Organisation » la retire des cartes');
-  p.setChecked(p.checkbox('job_function'), false);
-  p.setChecked(p.checkbox('scope'), false);
-  p.setChecked(p.checkbox('email'), true);
-  t = p.texts();
-  check(!t.some((x) => x.startsWith('Fonction')) && t.includes('E-mail : dan@entreprise.com') && !t.includes('P1 — Nacelle'), 'fonction retirée, e-mail ajouté, périmètre retiré');
-  check(!p.overlaps(), 'toujours aucun chevauchement après changement d’attributs');
-  await wait(800);
-  const saved = JSON.parse(c.repoList('UserSetting').find((u) => u.user_email === 'alice@entreprise.com').view_prefs_json);
-  check(JSON.stringify(saved.obs.attrs) === JSON.stringify(['email']), 'choix mémorisés côté serveur : ' + JSON.stringify(saved.obs.attrs));
-  check(p.doc.getElementById('prefs-state').textContent === 'Choix enregistrés.', 'confirmation « Choix enregistrés »');
+  // ---------------------------------------------------------------- panneau des rôles d'un workpackage (chef de projet)
+  await p.open('wp:' + w1.id);
+  await p.rolesReady();
+  check(p.$('details').querySelector('h2').textContent === '1 Conception' && !!p.$('roles-box') && /Rôles/.test(p.$('roles-box').textContent), 'le détail d’un workpackage a une section « Rôles »');
+  check(JSON.stringify(p.holders('WPL')) === JSON.stringify(['Alice · principal']) && !p.doc.querySelector('#roles-box .role-row[data-role="DO"]') && !p.doc.querySelector('#roles-box .role-row[data-role="CP"]'), 'un workpackage n’a que son rôle : Workpackage leader (Alice, principale) — pas de Deliverable owner ni de chef de projet');
+  const pick = () => p.$('role-pick'), person = () => p.$('role-person');
+  check(!!pick() && [...pick().options].map((o) => o.value).join() === 'WPL' && ![...person().options].some((o) => /Alice/.test(o.text)) && [...person().options].some((o) => /Dan/.test(o.text)), 'le chef de projet peut poser le Workpackage leader ; la liste ne propose pas la personne qui le détient déjà');
+  person().value = dan.id;
+  p.click(p.$('role-add'));
+  await p.until(() => c.repoList('RoleAssignment').some((a) => a.resource_id === dan.id && a.role_code === 'WPL' && a.scope_id === w1.id));
+  await p.rolesReady();
+  await p.until(() => p.holders('WPL').length === 2);
+  check(JSON.stringify(p.holders('WPL')) === JSON.stringify(['Alice · principal', 'Dan']), 'Dan est posé Workpackage leader : deux titulaires, Alice reste la principale (première posée)');
+  check(c.repoGet('WorkPackage', w1.id).owner_resource_id === alice.id, 'dans les données aussi : le responsable principal du workpackage reste Alice');
+  const danX = [...p.doc.querySelectorAll('#roles-box ul.holders li')].find((li) => /Dan/.test(li.textContent)).querySelector('button');
+  check(/Retirer le rôle de Dan/.test(danX.getAttribute('aria-label')), 'chaque titulaire a un bouton « Retirer le rôle de … » accessible');
+  p.click(danX);
+  await p.until(() => !c.repoList('RoleAssignment').some((a) => a.resource_id === dan.id && a.role_code === 'WPL' && a.scope_id === w1.id && (!a.end_date || a.end_date >= c.todayStr())));
+  await p.rolesReady();
+  await p.until(() => p.holders('WPL').length === 1);
+  check(JSON.stringify(p.holders('WPL')) === JSON.stringify(['Alice · principal']), 'retiré : l’affectation est terminée et le panneau se met à jour');
 
-  // couleurs
-  const radio = (v) => p.doc.querySelector('#opt-colors input[value="' + v + '"]');
-  radio('organization').checked = true; radio('organization').dispatchEvent(new p.w.Event('change', { bubbles: true }));
-  let legend = [...p.doc.querySelectorAll(p.sel('#legend li'))].map((l) => l.textContent);
-  check(['Bureau d’études', 'Maison mère', 'Sous-traitant Alpha', 'Non renseignée'].every((x) => legend.includes(x)), 'légende par organisation : ' + legend.join(', '));
-  radio('role').checked = true; radio('role').dispatchEvent(new p.w.Event('change', { bubbles: true }));
-  legend = [...p.doc.querySelectorAll(p.sel('#legend li'))].map((l) => l.textContent);
-  check(legend.includes('Chef de projet') && legend.length === 5, 'légende par rôle');
+  // ---------------------------------------------------------------- un livrable : Deliverable owner et Contributors
+  await p.open('item:' + spec.id);
+  await p.rolesReady();
+  check(JSON.stringify(p.holders('DO')) === JSON.stringify(['Alice · principal']) && !!p.doc.querySelector('#roles-box .role-row[data-role="CONTRIB"]'), 'un livrable : Deliverable owner et Contributors');
+  check([...pick().options].map((o) => o.value).join() === 'DO,CONTRIB', 'le chef de projet peut poser l’un ou l’autre');
+  pick().value = 'CONTRIB'; pick().dispatchEvent(new p.w.Event('change'));
+  person().value = eve.id;
+  p.click(p.$('role-add'));
+  await p.until(() => c.repoList('RoleAssignment').some((a) => a.resource_id === eve.id && a.role_code === 'CONTRIB' && a.scope_id === spec.id));
+  await p.rolesReady();
+  await p.until(() => p.holders('CONTRIB').length === 1);
+  check(/^Eve <img/.test(p.holders('CONTRIB')[0]) && !p.$('details').querySelector('img'), 'un nom qui contient du HTML s’affiche comme du texte, jamais interprété');
+  const cardCount = p.nodes().length;
+  check(cardCount === 6, 'poser un rôle ne change pas le découpage (' + cardCount + ' cartes)');
 
-  // repli d'une branche
-  const dpl = p.nodes().find((g) => g.getAttribute('aria-label').startsWith('Domain Program Leader'));
-  const tog = p.doc.querySelector('.toggle-badge[data-toggle="' + dpl.getAttribute('data-id') + '"]');
-  check(!!tog && tog.textContent === '−', 'bouton de repli sur le DPL');
-  p.click(tog);
-  check(p.nodes().length === 2, 'branche repliée : ne restent que PL et DPL — ' + p.nodes().length);
-  check(p.doc.querySelector('.toggle-badge[data-toggle="' + dpl.getAttribute('data-id') + '"]').textContent === '+4', 'le bouton annonce 4 cartes cachées');
-  p.click(p.doc.querySelector('.toggle-badge[data-toggle="' + dpl.getAttribute('data-id') + '"]'));
-  check(p.nodes().length === 6, 'branche dépliée');
+  // ---------------------------------------------------------------- chaque niveau voit ce qu'il peut poser
+  const k = openPage('carl@entreprise.com');       // Sub-workpackage leader du sous-WP « Structure »
+  await k.until(() => k.nodes().length > 0);
+  await k.open('item:' + plans.id); await k.rolesReady();
+  check(!!k.$('role-add') && [...k.$('role-pick').options].map((o) => o.value).join() === 'DO,CONTRIB', 'Carl (Sub-WP leader) : pose le Deliverable owner et les Contributors d’un livrable de son sous-workpackage');
+  await k.open('wp:' + w11.id); await k.rolesReady();
+  check(!k.$('role-add') && !!k.$('roles-note') && /niveau supérieur/.test(k.$('roles-note').textContent), 'mais pas le Sub-WP leader de son propre sous-workpackage : « un rôle est posé par un niveau supérieur au sien »');
+  check(!k.doc.querySelector('#roles-box ul.holders button'), 'ni retirer son propre rôle');
+  await k.open('item:' + spec.id); await k.rolesReady();
+  check(!k.$('role-add'), 'et rien sur un livrable hors de son sous-workpackage');
 
-  // détail d'une personne et modification
-  p.setChecked(p.checkbox('job_function'), true);
-  p.setChecked(p.checkbox('organization'), true);
-  const carlG = [...p.doc.querySelectorAll('#canvas [data-person]')].find((g) => g.getAttribute('data-person') === carl.id);
-  p.click(carlG);
-  check(p.doc.querySelector('#details h2').textContent === 'Carl', 'détail de Carl');
-  check(p.doc.getElementById('details').textContent.includes('Sous-traitant Alpha') && p.doc.getElementById('details').textContent.includes('Alpha GmbH'), 'tous les attributs dans le détail, même ceux masqués sur la carte');
-  check(!!p.doc.getElementById('person-edit') && !!p.doc.getElementById('person-remove'), 'un chef de projet dispose de « Modifier la fiche » et « Retirer cette personne »');
-  p.click(p.doc.getElementById('person-edit'));
-  await p.until(() => p.doc.getElementById('gf-job_function'));
-  check(p.doc.getElementById('gf-name').value === 'Carl' && p.doc.getElementById('gf-resource_type').value === 'Externe' && p.doc.getElementById('gf-country').value === 'DE', 'formulaire complet prérempli');
-  p.doc.getElementById('gf-job_function').value = 'Ingénieur essais senior';
-  p.doc.getElementById('gf-organization').value = '  Alpha   Test ';
-  p.doc.getElementById('gf-form').dispatchEvent(new p.w.Event('submit', { cancelable: true }));
-  await p.until(() => c.repoGet('Resource', carl.id).job_function === 'Ingénieur essais senior');
-  check(c.repoGet('Resource', carl.id).organization === 'Alpha Test', 'fiche enregistrée, espaces nettoyés');
-  await p.until(() => p.texts().includes('Fonction : Ingénieur essais senior'));
-  check(p.texts().includes('Organisation : Alpha Test'), 'l’organigramme est rechargé avec les nouvelles valeurs');
+  const e = openPage('eve@entreprise.com');        // Reader : lit tout, ne modifie rien
+  await e.until(() => e.nodes().length > 0);
+  check(e.nodes().length === 6, 'un Reader voit tout le WBS (' + e.nodes().length + ' cartes)');
+  await e.open('item:' + spec.id); await e.rolesReady();
+  check(!e.$('role-add') && !e.doc.querySelector('#roles-box ul.holders button') && !e.$('edit-node') && !e.$('delete-node') && /Reader/.test(e.$('roles-note').textContent), 'un Reader : voit les titulaires, aucune pose, aucun retrait, aucun bouton de modification ; la note rappelle qu’il est Reader');
 
-  // ---------------------------------------------------------------- OBS par équipes
-  p.click(p.doc.querySelector('[data-mode="teams"]'));
-  await p.until(() => p.calls.includes('obs.teams') && p.nodes().length > 0);
-  check(!p.doc.getElementById('scope-pick').hidden && !p.doc.getElementById('team-pick').hidden, 'vue par équipes : le sélecteur d’équipe s’ajoute ; le périmètre reste visible pour le découpage');
-  t = p.texts();
-  check(t.includes('Bureau d’études') && t.includes('Conception') && t.includes('Sans équipe'), 'équipes et « Sans équipe » affichées : ' + t.filter((x) => !x.includes(' : ')).join(' | '));
-  check(t.some((x) => /membres?$/.test(x)), 'nombre de membres par défaut');
-  check(!p.overlaps(), 'équipes sans chevauchement');
-  p.setChecked(p.checkbox('members'), true);
-  check(p.texts().some((x) => x.startsWith('Carl')), 'option « Membres de l’équipe » : les personnes sont listées');
-  await wait(800);
+  // ---------------------------------------------------------------- préférences, repli, zoom
+  p = openPage('alice@entreprise.com');
+  await p.until(() => p.nodes().length > 0);
+  p.$('options-btn').dispatchEvent(new p.w.MouseEvent('click', { bubbles: true }));
+  check(!p.$('options').hidden && p.$('options-btn').getAttribute('aria-expanded') === 'true', 'les attributs affichés s’ouvrent');
+  const attr = (key) => p.doc.querySelector('#opt-attrs-wbs input[data-attr="' + key + '"]');
+  const owner = attr('owner');
+  check(!!owner && /Responsable \(leader ou propriétaire\)/.test(owner.parentNode.textContent), 'l’attribut « Responsable » se lit « Responsable (leader ou propriétaire) »');
+  owner.checked = false; owner.dispatchEvent(new p.w.Event('change', { bubbles: true }));
+  await p.until(() => c.loadPrefs_('alice@entreprise.com').wbs.attrs.indexOf('owner') < 0);
+  check(c.loadPrefs_('alice@entreprise.com').wbs.attrs.indexOf('owner') < 0 && c.loadPrefs_('alice@entreprise.com').obs === undefined, 'le choix est mémorisé côté serveur ; il n’y a plus de préférences d’organigramme');
+  const toggle = p.doc.querySelector('#canvas-wbs [data-toggle="wp:' + w1.id + '"]');
+  p.click(toggle);
+  await p.until(() => p.nodes().length === 3);
+  check(p.nodes().length === 3, 'replier « Conception » cache ses trois descendants (' + p.nodes().length + ' cartes restent)');
+  p.click(p.doc.querySelector('#canvas-wbs [data-toggle="wp:' + w1.id + '"]'));
+  await p.until(() => p.nodes().length === 6);
+  check(p.nodes().length === 6 && !p.overlaps(), 'déplier les ramène, sans chevauchement');
+  const width = () => Number(p.doc.querySelector('#canvas-wbs svg').getAttribute('width'));
+  const w0 = width(); p.click(p.$('zoom-in')); const w1z = width(); p.click(p.$('zoom-out')); p.click(p.$('zoom-out'));
+  check(w1z > w0 && width() < w1z, 'le zoom agrandit et réduit le schéma');
 
-  // ---------------------------------------------------------------- WBS
-  p.setSide('-wbs'); // plus d'onglets : le découpage est la seconde zone de la même page, chargée en même temps
-  await p.until(() => p.calls.includes('wbs.tree') && p.nodes().length > 0);
-  check(p.nodes().length === 6, 'WBS : projet, 2 WP, 3 éléments — ' + p.nodes().length);
-  check(p.doc.querySelectorAll(p.sel('#canvas .edge')).length === 5 && !p.overlaps(), 'liens du WBS, sans chevauchement');
-  t = p.texts();
-  check(t.includes('1 Conception') && t.includes('1.1 Structure') && t.includes('Responsable : Alice'), 'code WBS, titre et responsable');
-  check(t.includes('Sous-workpackage') && t.includes('Workpackage') && t.includes('Jalon') && t.includes('Livrable'), 'nature de chaque carte écrite en toutes lettres');
-  check(t.includes('Date : 19/10/2026'), 'jalon : une seule date');
-  check(!t.some((x) => x.startsWith('Imputation')) && !t.some((x) => x.startsWith('Statut')), 'imputation et statut masqués par défaut');
-  p.setChecked(p.checkbox('charge_code'), true);
-  p.setChecked(p.checkbox('float'), true);
-  p.setChecked(p.checkbox('owner_org'), true);
-  t = p.texts();
-  check(t.includes('Imputation : C-1') && t.includes('Organisation : Alpha Test'), 'imputation et organisation du responsable ajoutées');
-  check(t.some((x) => x.startsWith('Sur le chemin critique')), 'marge et chemin critique ajoutés');
-  check(!p.overlaps(), 'pas de chevauchement avec davantage d’attributs');
-  const showItems = p.doc.getElementById('show-items');
-  p.setChecked(showItems, false);
-  check(p.nodes().length === 3 && !p.texts().includes('Livrable'), 'sans les livrables et jalons : projet et 2 WP');
-  p.setChecked(showItems, true);
-  const wp = p.doc.querySelector(p.sel('#opt-colors input[value="organization"]'));
-  wp.checked = true; wp.dispatchEvent(new p.w.Event('change', { bubbles: true }));
-  legend = [...p.doc.querySelectorAll(p.sel('#legend li'))].map((l) => l.textContent);
-  check(legend.includes('Alpha Test') && legend.includes('Bureau d’études'), 'WBS coloré par organisation du responsable');
-  p.click(p.nodes().find((g) => g.getAttribute('aria-label') === 'Sous-workpackage Structure'));
-  check(p.doc.querySelector(p.sel('#details h2')).textContent === '1.1 Structure' && p.doc.getElementById('details-wbs').textContent.includes('Ingénieur essais'), 'détail d’un WP avec fonction du responsable');
-  await wait(800);
-  const saved2 = JSON.parse(c.repoList('UserSetting').find((u) => u.user_email === 'alice@entreprise.com').view_prefs_json);
-  check(saved2.wbs.colorBy === 'organization' && saved2.wbs.attrs.includes('charge_code') && saved2.obs.mode === 'teams', 'choix du WBS et du mode d’organisation mémorisés');
+  // ---------------------------------------------------------------- vue programme : on n'y pose pas de rôle
+  const g = openPage('alice@entreprise.com', { project: '', program: prog.id });
+  await g.until(() => g.nodes().length > 0);
+  check(g.calls.includes('wbs.tree') && !g.calls.some((x) => /^obs\./.test(x)), 'vue programme : le découpage de tous les projets (aucun appel à l’OBS)');
+  await g.open(g.nodes().map((n) => n.getAttribute('data-id')).find((id) => /^project:/.test(id)));
+  check(!!g.$('open-project') && !g.$('roles-box'), 'depuis un projet du programme : « Ouvrir le WBS du projet », sans panneau de rôles (les rôles se posent dans le WBS du projet)');
 
-  // ---------------------------------------------------------------- réouverture : les choix sont retrouvés
-  const p2 = openPage('alice@entreprise.com', {});
-  p2.setSide('-wbs');
-  await p2.until(() => p2.nodes().length > 0);
-  check(p2.texts().includes('Imputation : C-1'), 'à la réouverture, les attributs choisis sont déjà appliqués');
-  check(p2.checkbox('charge_code').checked && !p2.checkbox('status').checked, 'cases cochées cohérentes');
+  // ---------------------------------------------------------------- projet sans rien : on le remplit avec les boutons de la barre
+  const v = openPage(A, { project: p2.id });
+  await v.until(() => v.nodes().length > 0);
+  await v.until(() => !v.$('wbs-add').hidden);
+  check(v.nodes().length === 1 && !v.$('wbs-add').hidden && !v.$('wbs-add-deliverable').hidden && !v.$('wbs-add-milestone').hidden, 'projet vide : seule sa carte, avec les boutons pour ajouter un workpackage, un livrable, un jalon');
+  const none = openPage('alice@entreprise.com', { project: p2.id });
+  await none.until(() => none.nodes().length > 0);
+  await wait(100);
+  check(none.$('wbs-add').hidden, 'qui n’a aucun droit sur ce projet ne voit pas ces boutons');
 
-  // ---------------------------------------------------------------- lecteur sans droit d'édition
-  const p3 = openPage('eve@entreprise.com');
-  await p3.until(() => p3.nodes().length > 0);
-  p3.click([...p3.doc.querySelectorAll('#canvas [data-person]')].find((g) => g.getAttribute('data-person') === carl.id));
-  check(!p3.doc.getElementById('edit-function') && /Seuls la personne elle-même/.test(p3.doc.getElementById('details').textContent), 'un simple membre ne peut pas modifier la fiche d’un autre');
-  p3.click([...p3.doc.querySelectorAll('#canvas [data-person]')].find((g) => g.getAttribute('data-person') === eve.id));
-  check(!!p3.doc.getElementById('edit-function'), 'mais peut compléter sa propre fiche');
-  check(p3.doc.querySelectorAll('img:not(#ppm-logo)').length === 0, 'aucune balise injectée par un nom');
-
-  // ---------------------------------------------------------------- programme et WBS
-  const p4 = openPage('alice@entreprise.com', { project: '', program: prog.id });
-  await p4.until(() => p4.nodes().length > 0);
-  check(p4.doc.getElementById('ztitle').textContent === 'Organisation par équipes', 'le mode « par équipes » choisi plus tôt est retrouvé à la réouverture');
-  p4.click(p4.doc.querySelector('[data-mode="roles"]'));
-  await p4.until(() => p4.doc.getElementById('ztitle').textContent.startsWith('Organisation — '));
-  check(p4.doc.getElementById('ztitle').textContent === 'Organisation — PG — Programme A', 'organisation du programme : ' + p4.doc.getElementById('ztitle').textContent);
-  await p4.until(() => p4.doc.querySelectorAll('#canvas-wbs .node').length > 0);
-  check(p4.doc.getElementById('picker').value === 'program:' + prog.id && !!p4.doc.querySelector('#canvas-wbs .node[data-id^="program:"]') && !!p4.doc.querySelector('#canvas-wbs .node[data-id^="project:"]') && !/Le WBS se lit projet par projet/.test(p4.doc.getElementById('canvas-wbs').textContent), 'périmètre programme : la zone du découpage montre maintenant le programme, ses projets et leurs workpackages (0.14.1)');
-
-  // ---------------------------------------------------------------- 0.14.1 : les personnes d'une boîte de rôle en mosaïque
-  ['Bea', 'Cyril', 'Dina', 'Elio', 'Fanny', 'Gus', 'Hana', 'Ivan', 'Jade'].forEach((n) => role(res(n, { job_function: 'Ingénieur' }), 'MEMBER', 'project', p1.id));
-  const pm = openPage('alice@entreprise.com', { project: p1.id });
-  await pm.until(() => pm.nodes().length > 0);
-  pm.click(pm.doc.querySelector('[data-mode="roles"]')); // la page se souvient du dernier mode choisi : on revient aux rôles
-  await pm.until(() => pm.nodes().some((g) => /Membre/.test(g.textContent) && g.querySelectorAll('.person').length >= 8));
-  const roleCards = pm.nodes();
-  const members = roleCards.find((g) => /Membre/.test(g.textContent) && g.querySelectorAll('.person').length >= 8);
-  check(!!members, 'la boîte « Membre affecté » avec beaucoup de monde existe');
-  const cols = [...members.querySelectorAll('.person')].map((x) => +x.getAttribute('data-col')), rows = [...members.querySelectorAll('.person')].map((x) => +x.getAttribute('data-row'));
-  check(new Set(cols).size >= 3 && Math.max(...rows) <= Math.ceil(cols.length / 3), 'mosaïque : ' + cols.length + ' personnes sur ' + (Math.max(...cols) + 1) + ' colonnes et ' + (Math.max(...rows) + 1) + ' rangées, au lieu d’une pile de ' + cols.length);
-  check(pm.box(members).w >= 3 * 216 && pm.box(members).h < cols.length * 40, 'la boîte s’élargit pour ses colonnes (' + pm.box(members).w + ' px) et reste basse (' + pm.box(members).h + ' px)');
-  const inside = [...members.querySelectorAll('.person rect.person-bg')].every((r) => +r.getAttribute('x') >= 0 && +r.getAttribute('x') + +r.getAttribute('width') <= pm.box(members).w);
-  check(inside, 'chaque personne reste à l’intérieur de la boîte');
-  const small = roleCards.filter((g) => g.querySelectorAll('.person').length > 0 && g.querySelectorAll('.person').length <= 3);
-  check(small.length > 0 && small.every((g) => pm.box(g).w === 272 && [...g.querySelectorAll('.person')].every((x) => x.getAttribute('data-col') === '0')), 'jusqu’à trois personnes : une seule colonne, largeur inchangée');
-  check(pm.overlaps() === null, 'aucune carte ne se chevauche malgré les boîtes élargies');
-  check(/\.canvas svg \{ display: block; margin: 0 auto; \}/.test(fs.readFileSync(path.join(__dirname, '..', 'src', 'Structure.html'), 'utf8')), 'le schéma est centré dans la largeur de la page');
-
-  console.log(failed ? '\n' + failed + ' échec(s) dans la page.' : '\nPage Structure : tout est conforme.');
+  console.log(failed ? '\n' + failed + ' échec(s).' : '\nPage WBS : tout est conforme.');
   process.exit(failed ? 1 : 0);
 })();

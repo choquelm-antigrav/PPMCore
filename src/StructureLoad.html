@@ -20,23 +20,14 @@
     closeDetails();
     remember();
     syncControls();
-    var req;
-    if (state.tab === 'wbs') {
-      // un programme : tous ses projets et leurs workpackages côte à côte (les livrables se lisent projet par projet) ; un projet : son WBS complet
-      req = state.scopeType === 'program' ? call('wbs.tree', { programId: state.scopeId || 'none' }) : call('wbs.tree', { projectId: state.scopeId });
-    } else if (state.mode === 'teams') {
-      req = call('obs.teams', { rootTeamId: state.teamRoot });
-    } else {
-      req = call('obs.tree', { scopeType: state.scopeType, scopeId: state.scopeId });
-    }
+    // un programme : tous ses projets et leurs workpackages côte à côte (les livrables se lisent projet par projet) ; un projet : son WBS complet
+    var req = state.scopeType === 'program' ? call('wbs.tree', { programId: state.scopeId || 'none' }) : call('wbs.tree', { projectId: state.scopeId });
     setLoading();
     return req.then(function (d) {
       if (ticket !== state.seq) return;
       state.data = d;
-      if (d.mode === 'teams') fillTeamPicker(d.teams);
       setSummary();
       draw();
-      renderUnplaced();
       if (scroll) { $('canvas').scrollLeft = scroll.x; $('canvas').scrollTop = scroll.y; } else initialView();
       selectPending();
     }).catch(function (e) { if (ticket === state.seq) showError(e); });
@@ -45,31 +36,17 @@
   function setSummary() {
     var d = state.data, sm = $('summary'), t = $('ztitle'), ctx = $('context');
     clear(ctx);
-    if (state.tab === 'wbs') ['wbs-add', 'wbs-add-deliverable', 'wbs-add-milestone'].forEach(function (id) { $(id).hidden = !(d && d.canCreate); });
-    else {
-      var orgEdit = !!(d && d.canEditAll);
-      $('org-person').hidden = !orgEdit;
-      $('org-role').hidden = !(orgEdit && d.mode === 'roles');
-      $('org-team').hidden = !(orgEdit && d.mode === 'teams');
-    }
+    ['wbs-add', 'wbs-add-deliverable', 'wbs-add-milestone'].forEach(function (id) { $(id).hidden = !(d && d.canCreate); });
     if (!d) { sm.textContent = ''; return; }
-    if (state.tab === 'wbs' && d.scope === 'program') {
+    if (d.scope === 'program') {
       t.textContent = 'Découpage (WBS) — ' + (d.program.code ? d.program.code + ' ' : '') + d.program.name;
       sm.textContent = plural(d.stats.projects, 'projet', 'projets') + ', ' + plural(d.stats.wps, 'workpackage', 'workpackages') + ' ; ' + plural(d.stats.items, 'livrable ou jalon', 'livrables et jalons') + ' à lire projet par projet.';
       ctx.textContent = 'Tous les projets du programme côte à côte. Cliquez sur une carte pour son détail, puis sur « Ouvrir le WBS du projet » pour modifier.';
-    } else if (state.tab === 'wbs') {
+    } else {
       t.textContent = 'Découpage (WBS) — ' + d.project.code + ' ' + d.project.name;
       sm.textContent = plural(d.stats.wps, 'workpackage', 'workpackages') + ', ' + plural(d.stats.items, 'livrable ou jalon', 'livrables et jalons') + '.';
       ctx.textContent = d.project.program_name ? 'Programme ' + d.project.program_name + '. ' : '';
       ctx.appendChild(document.createTextNode('Cliquez sur une carte pour son détail ; le bouton sur une carte replie sa branche.'));
-    } else if (d.mode === 'teams') {
-      t.textContent = 'Organisation par équipes';
-      sm.textContent = plural(d.stats.nodes, 'équipe', 'équipes') + ', ' + plural(d.stats.people, 'personne', 'personnes') + '.';
-      ctx.textContent = 'Cliquez sur une personne pour voir et compléter sa fonction et son organisation.';
-    } else {
-      t.textContent = 'Organisation — ' + d.scope.label;
-      sm.textContent = plural(d.stats.nodes, 'rôle', 'rôles') + ', ' + plural(d.stats.people, 'affectation', 'affectations') + '.';
-      ctx.textContent = 'Chaque carte est un rôle sur un périmètre ; il dépend du rôle supérieur qui le couvre. Cliquez sur une personne pour son détail.';
     }
   }
 
@@ -95,18 +72,5 @@
   function syncControls() {
     var sel = $('picker');
     sel.value = (state.scopeType === 'program' ? 'program:' + (state.scopeId || 'none') : 'project:' + state.scopeId);
-    if (state.tab === 'obs') {
-      Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === state.mode)); });
-      $('team-pick').hidden = !(state.mode === 'teams');
-    }
     renderOptions();
-  }
-  function fillTeamPicker(teams) {
-    var sel = $('team-root'); clear(sel);
-    sel.appendChild(el('option', { value: '', text: 'Toutes les équipes' }));
-    teams.forEach(function (t) {
-      var indent = new Array(t.depth + 1).join('— ');
-      sel.appendChild(el('option', { value: t.id, text: indent + t.name }));
-    });
-    sel.value = state.teamRoot;
   }

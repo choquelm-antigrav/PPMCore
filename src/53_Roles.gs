@@ -11,6 +11,9 @@
  */
 
 /** Le rôle que porte le responsable principal de chaque genre d'objet. */
+/** Écritures au plus par lancement de la migration (voir rolesMigrate_). */
+var MIGRATION_MAX_WRITES = 300;
+
 var PRINCIPAL_ROLE = { project: 'CP', workpackage: 'WPL', subworkpackage: 'SWPL', planitem: 'DO' };
 
 var PRINCIPAL_TABLE = { project: 'Project', workpackage: 'WorkPackage', subworkpackage: 'WorkPackage', planitem: 'PlanItem' };
@@ -118,9 +121,12 @@ function personReadsSensitive_(data, personId, project, today) {
  *   - personne ayant une ligne budgétaire sur un livrable sans y avoir de rôle → Contributor de ce livrable.
  * Additive et relançable. dryRun = true : compte seulement, n'écrit rien.
  */
-function rolesMigrate_(actx, dryRun) {
+function rolesMigrate_(actx, dryRun, opts) {
   var today = todayStr(), yesterday = addCalendarDays(today, -1);
-  var out = { dpl: 0, wpl: 0, contrib: 0, owners: 0, managers: 0, budget: 0, ended: 0, already: 0, skipped: 0, dryRun: !!dryRun };
+  // Un lancement écrit au plus MIGRATION_MAX_WRITES lignes : Apps Script coupe un script au bout de six minutes, et un « membre du projet » devient un Contributor par livrable
+  // (27 membres × 50 livrables = 1 350 écritures sur la démo). Interrompue, la migration se relance : chaque ligne déjà faite est reconnue, l'ancienne n'est terminée qu'une fois tout posé.
+  var budget = opts && opts.maxWrites ? opts.maxWrites : MIGRATION_MAX_WRITES, writes = 0;
+  var out = { dpl: 0, wpl: 0, contrib: 0, owners: 0, managers: 0, budget: 0, ended: 0, already: 0, skipped: 0, dryRun: !!dryRun, partial: false };
   var projects = repoList('Project'), wps = repoList('WorkPackage'), items = repoList('PlanItem');
   var wpById = indexBy_(wps), resById = indexBy_(repoList('Resource'));
   var rows = repoList('RoleAssignment').map(function (a) {
@@ -130,14 +136,23 @@ function rolesMigrate_(actx, dryRun) {
     return rows.some(function (a) { return roleActive_(a, today) && a.resource_id === resId && a.role_code === code && a.scope_type === type && String(a.scope_id) === String(id); });
   }
   function hasAny(resId, codes, type, id) { return codes.some(function (c) { return has(resId, c, type, id); }); }
+  function full() { return !dryRun && writes >= budget; }
+  /** Pose un rôle ; renvoie faux si le budget d'écritures de ce lancement est épuisé (rien n'est alors écrit). */
   function add(counter, resId, code, type, id) {
-    if (has(resId, code, type, id)) { out.already++; return; }
+    if (has(resId, code, type, id)) { out.already++; return true; }
+    if (full()) { out.partial = true; return false; }
     out[counter]++;
     var row = { resource_id: resId, role_code: code, scope_type: type, scope_id: id, end_date: '', deleted: false };
-    if (!dryRun) { var rec = repoInsert('RoleAssignment', Object.assign({ start_date: today }, row), actx); row.id = rec.id; row.version = rec.version; }
+    if (!dryRun) { var rec = repoInsert('RoleAssignment', Object.assign({ start_date: today }, row), actx); row.id = rec.id; row.version = rec.version; writes++; }
     rows.push(row);
+    return true;
   }
-  function end(a) { out.ended++; a.end_date = yesterday; if (!dryRun) repoUpdate('RoleAssignment', a.id, { end_date: yesterday }, null, actx); }
+  function end(a) {
+    if (full()) { out.partial = true; return false; }
+    out.ended++; a.end_date = yesterday;
+    if (!dryRun) { repoUpdate('RoleAssignment', a.id, { end_date: yesterday }, null, actx); writes++; }
+    return true;
+  }
   function wpDescendants(wpId) {
     var ids = {}; ids[wpId] = true;
     wps.forEach(function (w) { if (w.parent_wp_id === wpId) ids[w.id] = true; });
@@ -147,17 +162,19 @@ function rolesMigrate_(actx, dryRun) {
 
   // 1. DPL posé sur un programme
   rows.filter(function (a) { return a.role_code === 'DPL' && a.scope_type === 'program' && roleActive_(a, today) && resById[a.resource_id]; }).forEach(function (a) {
-    projects.filter(function (p) { return !isTrue(p.deleted) && String(p.program_id) === String(a.scope_id); }).forEach(function (p) { add('dpl', a.resource_id, 'DPL', 'project', p.id); });
-    end(a);
+    var all = true;
+    projects.filter(function (p) { return !isTrue(p.deleted) && String(p.program_id) === String(a.scope_id); }).forEach(function (p) { if (!add('dpl', a.resource_id, 'DPL', 'project', p.id)) all = false; });
+    if (all) end(a);
   });
   // 2. responsable de workpackage → Workpackage leader / Sub-workpackage leader
   rows.filter(function (a) { return a.role_code === 'RWP' && roleActive_(a, today); }).forEach(function (a) {
     var w = a.scope_type === 'workpackage' ? wpById[a.scope_id] : null;
     if (!w || isTrue(w.deleted) || !resById[a.resource_id]) { out.skipped++; return; }
     var code = !isBlank(w.parent_wp_id) ? 'SWPL' : 'WPL';
-    if (has(a.resource_id, code, 'workpackage', w.id)) { out.already++; end(a); return; }
+    if (has(a.resource_id, code, 'workpackage', w.id)) { out.already++; if (end(a)) { /* doublon : l'ancienne ligne est terminée */ } return; }
+    if (full()) { out.partial = true; return; }
     out.wpl++; a.role_code = code;
-    if (!dryRun) repoUpdate('RoleAssignment', a.id, { role_code: code }, null, actx);
+    if (!dryRun) { repoUpdate('RoleAssignment', a.id, { role_code: code }, null, actx); writes++; }
   });
   // 3. membre → Contributor de chaque livrable et jalon du périmètre
   rows.filter(function (a) { return a.role_code === 'MEMBER' && roleActive_(a, today) && resById[a.resource_id]; }).forEach(function (a) {
@@ -166,8 +183,9 @@ function rolesMigrate_(actx, dryRun) {
     else if (a.scope_type === 'workpackage') { var ids = wpDescendants(a.scope_id); inScope = function (i) { return !!ids[i.wp_id]; }; }
     else if (a.scope_type === 'program') { var pids = {}; projects.forEach(function (p) { if (String(p.program_id) === String(a.scope_id)) pids[p.id] = true; }); inScope = function (i) { return !!pids[i.project_id]; }; }
     else { out.skipped++; return; }
-    liveItems.filter(inScope).forEach(function (i) { if (!hasAny(a.resource_id, ['DO'], 'planitem', i.id)) add('contrib', a.resource_id, 'CONTRIB', 'planitem', i.id); });
-    end(a);
+    var done = true;
+    liveItems.filter(inScope).forEach(function (i) { if (!hasAny(a.resource_id, ['DO'], 'planitem', i.id) && !add('contrib', a.resource_id, 'CONTRIB', 'planitem', i.id)) done = false; });
+    if (done) end(a);
   });
   // 4. les responsables d'aujourd'hui deviennent des rôles
   liveItems.forEach(function (i) {
@@ -193,9 +211,41 @@ function migrerRoles_(dryRun) {
   var email = ''; try { email = currentUserEmail_(); } catch (e) { /* hors Apps Script (essais) : l'auteur sera « migration » */ }
   return withLock(function () {
     var r = rolesMigrate_({ actor: email || 'migration', source: 'migration' }, dryRun);
-    return (dryRun ? 'Simulation (rien n’a été écrit) : ' : 'Migration faite : ') + r.dpl + ' DPL posé(s) sur des projets, ' + r.wpl + ' responsable(s) de workpackage converti(s), '
+    return (dryRun ? 'Simulation (rien n’a été écrit) : ' : r.partial ? 'Migration PARTIELLE, relancez A9_MIGRER_ROLES jusqu’à « Migration faite » : ' : 'Migration faite : ') + r.dpl + ' DPL posé(s) sur des projets, ' + r.wpl + ' responsable(s) de workpackage converti(s), '
       + r.contrib + ' Contributor(s) posé(s) sur des livrables ou jalons, ' + r.owners + ' responsable(s) devenu(s) Deliverable owner ou leader de workpackage, '
       + r.managers + ' chef(s) de projet, ' + r.budget + ' contributeur(s) d’après le budget ; ' + r.ended + ' ancienne(s) ligne(s) terminée(s), '
       + r.already + ' déjà en place, ' + r.skipped + ' ignorée(s).';
   });
 }
+
+// ---------------------------------------------------------------- panneau « Rôles » du WBS
+
+/**
+ * Les rôles d'un objet (programme, projet, workpackage, sous-workpackage, livrable ou jalon) : pour chaque rôle qui se pose sur ce type d'objet, ses titulaires
+ * actuels, et ce que l'appelant peut y poser ou y retirer. La liste des personnes n'est envoyée qu'à qui peut poser un rôle.
+ */
+defineAction('roles.of', function (p, ctx) {
+  var type = requireParam(p, 'scopeType'), id = requireParam(p, 'scopeId');
+  if (!SCOPE_TABLE[type]) throw new PpmError('VALIDATION', 'Périmètre invalide : ' + type);
+  var rec = mustGet(SCOPE_TABLE[type], id), scope = { type: type, id: id }, today = todayStr();
+  var kind = objectKindOf_(scope, ctx.lookup), assignable = assignableRolesOn_(ctx, scope), people = indexBy_(repoList('Resource'));
+  var principal = type === 'project' ? rec.manager_resource_id : rec.owner_resource_id;
+  var rows = repoList('RoleAssignment', function (a) { return a.scope_type === type && String(a.scope_id) === String(id) && roleActive_(a, today); })
+    .sort(function (a, b) { return String(a.created_at || '').localeCompare(String(b.created_at || '')) || String(a.id).localeCompare(String(b.id)); });
+  var roles = ASSIGNABLE_ROLES.filter(function (c) { return ROLE_OBJECT[c] === kind; }).map(function (code) {
+    return {
+      code: code, label: ROLE_LABELS[code], rank: ROLE_RANK[code], canAssign: assignable.indexOf(code) >= 0,
+      holders: rows.filter(function (a) { return effectiveRoleCode_(a, ctx.lookup) === code; }).map(function (a) {
+        var who = people[a.resource_id];
+        return { id: a.id, version: a.version, resource_id: a.resource_id, name: who ? who.name : '(personne retirée)', since: a.start_date || '',
+          principal: PRINCIPAL_ROLE[kind] === code && a.resource_id === principal, canEnd: assignable.indexOf(code) >= 0 };
+      })
+    };
+  });
+  return {
+    object: { type: type, id: id, kind: kind, name: type === 'program' || type === 'project' ? rec.code + ' ' + rec.name : rec.name },
+    roles: roles,
+    people: !assignable.length ? [] : repoList('Resource').map(function (x) { return { id: x.id, name: x.name, job_function: x.job_function || '', resource_type: x.resource_type }; })
+      .sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); })
+  };
+});

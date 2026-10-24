@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.15.2)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.15.3)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -34,8 +34,8 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `20_Setup.gs` | `installerPpm_()` (installation en une fois), `setupPpm()`, `selfCheck()` (vérifie aussi la version de chaque page), `diagnosticAcces_()` |
 | `30_Api.gs` | Web app `doPost` / `doGet` et actions de base |
 | `31_Pages.gs` | 0.12.2 : rendu des pages web (tables déduites du registre, données préchargées, assemblage d'une page) |
-| `32_Views.gs` | Gantt projet, vue programme, organisation (OBS), attribution des rôles |
-| `33_Structure.gs` | Fonction et organisation des personnes, arbres OBS (rôles, équipes) et WBS, catalogue des attributs affichables, préférences par utilisateur |
+| `32_Views.gs` | Gantt projet, vue programme, attribution et fin des rôles |
+| `33_Structure.gs` | Fonction et organisation des personnes, arbre WBS, catalogue des attributs affichables, préférences par utilisateur (l'organigramme OBS n'existe plus depuis la 0.15.3) |
 | `34_Baselines.gs` | Lot 2 : baselines (demande, gel, refus, réactivation), écarts, fil des changements à valider |
 | `35_Workspace.gs` | Lot 2 : agenda Google et dossier Drive par projet, annuaire, import de personnes depuis une feuille |
 | `36_Digest.gs` | Lot 2 : mail récapitulatif (un par personne, quotidien ou hebdomadaire), réglages personnels |
@@ -56,7 +56,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `38_Copilot.gs` | Lot 4 : copilote (modes off, manual, api), garde-fou des chiffres, journal AiLog, quota, questions, décisions sur les suggestions |
 | `40_Jobs.gs` | Traitement nocturne par tranches (journal, règles, agenda et Drive, annuaire, sauvegardes), récapitulatif de 7 h |
 | `Gantt.html` | Page du planning (Frappe Gantt 0.6.1, chargé depuis jsDelivr) |
-| `Structure.html` | Page OBS/WBS (anciennement Structure) : mise en page, marquage, assemblage des deux schémas (organisation et découpage) dessinés en SVG sans bibliothèque externe. 0.12.2 : le code est coupé en six morceaux inclus dans l'ordre, voir ci-dessous |
+| `Structure.html` | Page WBS (anciennement OBS/WBS, puis Structure) : mise en page, marquage, découpage dessiné en SVG sans bibliothèque externe, panneau des rôles. 0.12.2 : le code est coupé en six morceaux inclus dans l'ordre, voir ci-dessous |
 | `StructureState.html`, `StructureDraw.html`, `StructureLoad.html`, `StructureDetail.html`, `StructureEdit.html`, `StructureOrg.html` | 0.12.2 : morceaux de `Structure.html` (état et choix d'affichage ; mise en page, cartes et dessin ; chargement et sélecteurs ; panneau de détail ; création et édition du WBS ; dépendances, rôles, personnes et équipes). Ils partagent la fermeture de `createStructure` : un morceau n'est pas un module indépendant |
 | `Suivi.html` | Page Suivi : écarts à la baseline, changements à valider, baselines, agenda et Drive, mes notifications |
 | `Overview.html` | Page d'accueil : verdict, indicateurs délais, qualité, coût, portefeuille, création de projet |
@@ -132,7 +132,7 @@ Actions disponibles :
 | Général | `ping`, `me.roles` |
 | Structure | `programs.list/create`, `projects.list/get/create/update`, `workpackages.list/create/update/delete`, `planitems.list/get/create/update/delete`, `dependencies.list/create/delete` |
 | Planning (lot 1) | `planning.catalog`, `gantt.project`, `gantt.program` |
-| Organisation (lot 1) | `obs.list`, `obs.tree`, `obs.teams`, `roles.assign`, `roles.end` |
+| Rôles (0.15.3) | `roles.of` (rôles d'un objet), `roles.options`, `roles.assign`, `roles.end` |
 | Structure (lot 1) | `wbs.tree`, `views.config`, `prefs.set` |
 | Personnes (lot 1) | `resources.list`, `resources.create`, `resources.update` |
 | Avancement et alertes | `progress.declare`, `changes.since`, `insights.list` |
@@ -159,13 +159,12 @@ node tests/gen_appsheet_columns.js   # régénère appsheet/COLONNES.md après u
 # Essai des pages dans un navigateur simulé (demande des paquets npm) :
 npm i --no-save jsdom@24 frappe-gantt@0.6.1
 node tests/ui_smoke.js        # page Gantt
-node tests/ui_structure.js    # page OBS/WBS : organisation et découpage empilés
+node tests/ui_structure.js    # page WBS : découpage, panneau des rôles à chaque niveau, lecture seule du Reader
 node tests/ui_suivi.js        # page Suivi et baseline du Gantt
 node tests/ui_copilote.js     # page Copilote : clé Gemini (coller, enregistrer, tester, supprimer, refus de Google)
 node tests/test_copilot_key.js  # (inclus dans run.js) clé personnelle : empreinte, isolation, jamais renvoyée ni journalisée
 node tests/ui_compte.js       # pages Mon compte et Administration
 node tests/ui_edit.js         # création et édition du WBS dans la page Structure
-node tests/ui_org.js          # dépendances, rôles, personnes et équipes dans la page Structure
 node tests/ui_budget.js       # page Budget : bilan, PO, lignes de budget
 node tests/ui_overview.js     # page Overview : indicateurs, création et renommage de projet
 node tests/ui_ressources.js   # page Ressources : personnes, équipes, rôles, taux, accès
@@ -193,6 +192,43 @@ Les tests chargent les fichiers `.gs` tels quels, avec des tables en mémoire à
 - **Reprise** : chaque étape est enregistrée dans la propriété `PPM_DEMO_STEP`. Si une étape échoue, le message dit laquelle, les précédentes sont conservées, et il suffit de relancer. **Limite** : il n'y a pas de fonction pour effacer la démo ; pour repartir de zéro, installer sur de nouveaux classeurs (les noms de la démo, retrouvés par leur plus récent homonyme, ne se mélangent pas à de vraies fiches).
 - **Aperçu** : `node tests/preview_demo.js 8124` sert toutes les pages sur la démo complète.
 - **Overview, repère « Personnes »** : il compte maintenant les membres du projet (il comptait les adresses joignables, ce qui est trompeur pour des personnes sans adresse). **Indicateur de coût** : un dépassement du budget externe sur un seul CPN le met en alerte, même si le total du projet reste sous son budget (les analyses se font par CPN).
+
+## Rôles par niveau (0.15.3)
+
+**Huit niveaux de responsabilité.** Le numéro le plus bas est le niveau le plus haut ; un niveau a les droits de ceux du dessous (règle 2), et on peut en cumuler plusieurs, chacun là où il est posé (règle 3).
+
+| Niv. | Rôle | Se pose sur | Peut agir sur |
+|---|---|---|---|
+| 0 | Program Leader | un programme | tout le programme |
+| 1 | Domain Program Leader (DPL) | plusieurs projets | ces projets et tout en dessous ; crée et supprime des projets |
+| 2 | Chef de projet (CP) | un projet | le projet et tout en dessous ; crée et supprime workpackages et sous-workpackages ; baselines, CPN, personnes, tarifs |
+| 3 | Workpackage leader (WPL) | un workpackage | ce workpackage, ses sous-workpackages, leurs livrables et jalons ; budget de son périmètre |
+| 4 | Sub-workpackage leader (SWPL) | un sous-workpackage | ce sous-workpackage et ce qu'il contient |
+| 5 | Deliverable owner (DO) | un livrable ou un jalon | dates, avancement, modification, suppression de son livrable |
+| 6 | Contributor | un livrable ou un jalon | l'avancement de ce livrable |
+| 7 | Reader | — (par défaut) | rien : il lit |
+
+**Qui pose quoi.** Chaque objet n'accepte que **ses** rôles : pas de chef de projet sur un livrable, pas de Deliverable owner sur un workpackage. Un rôle est posé par un niveau **strictement supérieur**, détenu sur l'objet ou au-dessus (un livrable reçoit son Deliverable owner d'un Sub-workpackage leader ou au-dessus ; ses Contributors du Deliverable owner ou au-dessus ; le Program Leader est désigné par l'administrateur). Plusieurs personnes peuvent détenir le même rôle sur un objet. **Reader** ne se pose pas : c'est le rôle de toute personne sans autre rôle.
+
+**Création, modification, suppression** : le niveau de l'objet le modifie ; le niveau du dessus le crée et le supprime (un Workpackage leader supprime ses sous-workpackages, pas son propre workpackage ; le Deliverable owner supprime son livrable, mais n'en crée pas : il n'a pas de rôle sur le workpackage qui le contient). Les droits « en profondeur » (demander une baseline, créer un risque, bons de commande, vues consolidées du programme) comptent un rôle détenu n'importe où dans le projet ou le programme.
+
+**Lecture : tout est ouvert à tous, sauf** les **tarifs journaliers** et les **comptes rendus de réunion** (à partir du Workpackage leader, sur son projet) et le **budget** (à partir du Workpackage leader, **sur son workpackage seulement** ; le chef de projet et au-dessus voient tout). La synthèse du matin par mail ne part qu'à ceux qui peuvent lire les comptes rendus ; chacun garde la liste de ses propres actions. Lire les tarifs n'est pas les fixer : fixer reste au chef de projet et au-dessus.
+
+**Où ça se fait.** Les personnes se **créent dans la page Ressources**, et seulement là (équipes comprises) ; ses colonnes de rôles sont en lecture seule. Les rôles se **posent dans la page WBS**, section **Rôles** de chaque carte : les rôles de cet objet avec leurs titulaires, « × » pour retirer, et « Poser le rôle » pour les niveaux autorisés. L'organigramme **OBS est supprimé**.
+
+**Le responsable principal est conservé.** `owner_resource_id` (workpackage, livrable, jalon) et `manager_resource_id` (projet) sont lus partout (synthèse du matin, Copilote, baselines, agenda, constats « sans responsable ») : ils deviennent le « principal » de l'objet, **la première personne qui détient son rôle** (vide s'il n'y en a plus). Poser ou retirer un rôle les met à jour ; écrire la colonne par l'ancien chemin (API, `planitems.update`) pose le rôle, avec les mêmes règles de niveau. Un DPL qui crée un projet en devient le DPL.
+
+**Reprendre l'existant : `A9_MIGRER_ROLES`** (`A9_MIGRER_ROLES_SIMULATION` compte d'abord, sans rien écrire). À lancer **après une copie de sauvegarde des classeurs** :
+- le DPL posé sur le programme est posé sur chacun de ses projets ;
+- un responsable de workpackage (RWP) devient Workpackage leader, ou Sub-workpackage leader sur un sous-workpackage ;
+- un membre (posé sur un projet, un workpackage ou un programme) devient Contributor de chaque livrable et jalon de ce périmètre ;
+- chaque responsable d'élément ou de workpackage devient Deliverable owner ou leader, le chef de projet de la fiche projet devient Chef de projet, et une personne qui a une ligne de budget sur un livrable en devient Contributor.
+
+Additive et relançable, elle **termine** les anciennes lignes sans les supprimer. **Un lancement écrit au plus 300 lignes** (Apps Script coupe un script au bout de six minutes ; sur la démo, 27 membres × 50 livrables font 1 350 écritures) : si elle est partielle, elle le dit, et **il faut la relancer jusqu'à « Migration faite »**. Tant que ce n'est pas fini, les anciens codes gardent leurs droits comme avant, et `A7_TESTER_DANS_APPS_SCRIPT` signale qu'il reste des anciens rôles. On ne peut plus poser les anciens codes (ni par l'outil, ni dans AppSheet : l'ajout est annulé).
+
+**Changements de comportement à connaître** : le Program Leader peut maintenant déclarer l'avancement ; un Workpackage leader ne supprime pas son propre workpackage ; la ligne de budget ne donne plus de droit (le Contributor la remplace) ; un chef de projet ne désigne pas son remplaçant ni un autre chef de projet (le DPL le fait).
+
+**Pas encore fait** : la validation par le niveau du dessus dans la page Suivi, le budget par workpackage avec enveloppe autorisée, l'import par classeur Google Sheet. La démo n'est pas adaptée : elle garde ses anciens rôles, qui fonctionnent ; lancez `A9_MIGRER_ROLES` après `A2_SEED_DEMO` pour la passer aux nouveaux niveaux.
 
 ## Planning : liste de gauche, recherche, filtres, enregistrement immédiat (0.15.2)
 
@@ -429,7 +465,7 @@ Pas encore : le réalisé (import d'actuals) et la valeur acquise (EVM), prochai
 
 ## Dépendances, rôles, personnes et équipes (0.8.0)
 
-Depuis la page **OBS/WBS** (anciennement Structure), sans AppSheet :
+Depuis la page **WBS** (anciennement OBS/WBS), sans AppSheet :
 
 - **Dépendances** : la carte d'un livrable ou d'un jalon liste ses prédécesseurs et ses successeurs, avec le type de lien (fin → début, début → début, fin → fin, début → fin) et le décalage en jours ouvrés. On ajoute un lien avec un élément du projet ou d'un autre projet du même programme, on le retire d'un clic. Le serveur refuse un lien qui fermerait une boucle, un doublon, un lien d'un élément avec lui-même, et vérifie le droit d'écrire sur l'élément successeur.
 - **Rôles** (organigramme par rôles) : sur la carte d'un rôle, « Ajouter une personne à ce rôle » et une croix pour retirer. Le bouton « Attribuer un rôle » de l'en-tête permet de choisir personne, périmètre et rôle. **On ne donne jamais un rôle plus élevé que le sien** sur le périmètre : la liste des rôles proposés s'adapte au périmètre choisi. Retirer un rôle le termine (il reste dans l'historique).
@@ -440,7 +476,7 @@ L'import d'un WBS depuis Google Sheets est abandonné (décision du propriétair
 
 ## Édition du WBS (0.7.0)
 
-Dans la page **OBS/WBS**, zone **Découpage (WBS)** : cliquer une carte ouvre son détail ; selon vos droits, il propose **Ajouter** (sous-workpackage, livrable, jalon), **Modifier** et **Supprimer**. Le bouton **Ajouter un workpackage**, en haut de page, crée un workpackage de premier niveau. Les boutons n'apparaissent que là où le serveur autorise l'action : un simple membre n'en voit aucun ; un responsable de workpackage agit dans son workpackage et ses sous-niveaux ; le chef de projet, le DPL et le Program Leader agissent sur tout le projet.
+Dans la page **WBS** : cliquer une carte ouvre son détail ; selon vos droits, il propose **Ajouter** (sous-workpackage, livrable, jalon), **Modifier** et **Supprimer**, et une section **Rôles** (voir plus bas). Le bouton **Ajouter un workpackage**, en haut de page, crée un workpackage de premier niveau. Les boutons n'apparaissent que là où le serveur autorise l'action, selon le niveau de la personne : un Reader n'en voit aucun ; un Deliverable owner modifie son livrable ; un Sub-workpackage leader son sous-workpackage et ce qu'il contient ; un Workpackage leader son workpackage ; le chef de projet son projet ; le DPL, le Program Leader au-dessus.
 
 Règles appliquées par le serveur (`41_Edit.gs`), donc aussi pour l'API :
 

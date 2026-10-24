@@ -155,6 +155,14 @@ function liveSmokeTest_(opts) {
     return q + ' mails restants aujourd’hui';
   });
 
+  step('Rôles : anciens codes à migrer', function () {
+    var today = todayStr();
+    var legacy = repoList('RoleAssignment', function (a) { return LEGACY_ROLE_CODES.indexOf(a.role_code) >= 0 || (a.role_code === 'DPL' && a.scope_type === 'program'); })
+      .filter(function (a) { return isBlank(a.end_date) || String(a.end_date) >= today; });
+    if (legacy.length) return { warn: legacy.length + ' ancien(s) rôle(s) actif(s) (responsable de workpackage, membre, DPL du programme) : ils gardent leurs droits, mais lancez A9_MIGRER_ROLES (A9_MIGRER_ROLES_SIMULATION pour compter d’abord) pour passer aux huit niveaux' };
+    return 'tous les rôles sont aux huit niveaux';
+  });
+
   // ---- 4. les appels de chaque page, avec ce compte, en lecture seule, chronométrés
   var call = function (action, params) {
     var s = nowMs(), r = handleRequest({ action: action, params: params || {}, apiVersion: PPM_API_VERSION }, me);
@@ -174,7 +182,7 @@ function liveSmokeTest_(opts) {
     return s;
   });
   if (proj) {
-    [['Overview', 'overview.get', { projectId: proj.id }], ['OBS (rôles)', 'obs.tree', { scopeType: 'project', scopeId: proj.id }], ['WBS', 'wbs.tree', { projectId: proj.id }],
+    [['Overview', 'overview.get', { projectId: proj.id }], ['WBS', 'wbs.tree', { projectId: proj.id }],
       ['Ressources', 'ressources.get', { projectId: proj.id }], ['Suivi (baselines)', 'baselines.list', { projectId: proj.id }], ['Suivi (changements)', 'changes.feed', { projectId: proj.id }],
       ['Budget (bilan)', 'budget.balance', { projectId: proj.id }], ['Actualités', 'news.get', { projectId: proj.id }]].forEach(function (c) {
       step('Appel serveur : ' + c[0] + ' (' + proj.code + ')', function () {

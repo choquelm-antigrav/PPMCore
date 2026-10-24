@@ -1,5 +1,14 @@
 # Journal des versions
 
+## 0.15.3 — rôles par niveau, WBS seul
+
+- **Huit niveaux** (PL, DPL, CP, Workpackage leader, Sub-workpackage leader, Deliverable owner, Contributor, Reader implicite), posés chacun sur son type d'objet par un niveau strictement supérieur ; droits par type d'objet, cumul des rôles, droits « en profondeur » ; moteur réécrit (`05_Rbac.gs`, `00_Config.gs`), anciens codes reconnus jusqu'à la migration.
+- **Page WBS** : l'**organigramme OBS est supprimé** (actions `obs.*`, préférences d'affichage, essais) ; section **Rôles** dans le détail de chaque carte (action `roles.of`) ; le champ « Responsable » du formulaire disparaît. **Ressources** : création des personnes et des équipes seulement, colonne des rôles en lecture seule, Reader par défaut ; `people.setProjectRole` supprimée.
+- **Lecture** : tout ouvert à tous, sauf tarifs et comptes rendus (à partir du Workpackage leader) et budget (sur son workpackage) ; lire les tarifs n'est pas les fixer ; la synthèse par mail suit.
+- **Responsable principal** conservé et tenu par les rôles ; un DPL créateur d'un projet en devient le DPL.
+- **Migration `A9_MIGRER_ROLES`** (et `_SIMULATION`) : additive, relançable, **300 écritures au plus par lancement** (Apps Script coupe à six minutes) ; `A7` signale les anciens rôles restants.
+- Tests : `test_rbac.js` réécrit en matrice des huit niveaux (17), `test_roles.js` (8 : chaîne de désignation, WBS par niveau, DPL créateur, migration, migration interrompue puis reprise, panneau des rôles, lecture), migration de la démo en plusieurs lancements ; `ui_structure.js` réécrit pour le WBS seul (31) ; `ui_org.js` retiré ; 297 tests serveur, seize essais de pages.
+
 ## 0.15.2 — Planning : liste de gauche, filtres, enregistrement immédiat
 
 - **Liste de gauche** alignée sur le diagramme (nom indenté, responsable, fin, avancement), **arbre des workpackages repliable**, **recherche** et filtres (en retard, critiques, non respectés, les miens), éléments sans dates listés et ouvrables, survol et sélection liés, entêtes (dates et liste) qui restent en haut, bouton « Liste », fermée au départ sur téléphone. Le serveur indique quels éléments sont « à moi » (`mine`).

@@ -192,13 +192,13 @@ module.exports = function () {
     ok(r.ok, JSON.stringify(r.error));
     eq(asDan('roles.assign', { values: { resource_id: bob.id, role_code: 'CP', scope_type: 'project', scope_id: p1.id } }).error.code, 'VALIDATION', 'doublon refusé');
 
-    const obs = call('bob@entreprise.com', 'obs.list', { scopeType: 'project', scopeId: p1.id }).data;
-    eq(obs.map((o) => o.role_code + ':' + o.resource_name), ['DPL:Dan', 'CP:Alice', 'CP:Bob']);
+    const holders = () => call('bob@entreprise.com', 'roles.of', { scopeType: 'project', scopeId: p1.id }).data.roles.reduce((acc, r) => acc.concat(r.holders.map((h) => Object.assign({ code: r.code }, h))), []);
+    eq(holders().map((o) => o.code + ':' + o.name), ['DPL:Dan', 'CP:Alice', 'CP:Bob']);
 
-    const bobCp = obs.find((o) => o.role_code === 'CP' && o.resource_name === 'Bob');
+    const bobCp = holders().find((o) => o.code === 'CP' && o.name === 'Bob');
     ok(asDan('roles.end', { id: bobCp.id, version: bobCp.version }).ok, 'le DPL retire le chef de projet qu’il a posé');
-    const after = call('bob@entreprise.com', 'obs.list', { scopeType: 'project', scopeId: p1.id }).data;
-    eq(after.map((o) => o.role_code + ':' + o.resource_name), ['DPL:Dan', 'CP:Alice']);
+    const after = holders();
+    eq(after.map((o) => o.code + ':' + o.name), ['DPL:Dan', 'CP:Alice']);
     eq(call('eve@entreprise.com', 'roles.end', { id: after[1].id, version: after[1].version }).error.code, 'FORBIDDEN', 'sans rôle : rien');
     eq(asAlice('roles.end', { id: after[1].id, version: after[1].version }).error.code, 'FORBIDDEN', 'un chef de projet ne retire pas un chef de projet');
     void dan;

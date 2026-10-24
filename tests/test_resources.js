@@ -21,12 +21,12 @@ module.exports = function () {
     w.call(CP, 'resources.update', { id: w.remi.id, patch: { team_id: calc.id } });
     w.call(CP, 'people.setRate', { resourceId: w.remi.id, daily_rate: 520 });
     const cp = w.call(CP, 'ressources.get', { projectId: w.p1.id });
-    eq([cp.project.code, cp.canEdit, cp.canRates, cp.canAssign, cp.roleChoices], ['P1', true, true, false, []], 'un chef de projet ne pose pas un chef de projet : c’est le niveau du dessus');
+    eq([cp.project.code, cp.canEdit, cp.canRates, cp.canAssign, cp.roleChoices], ['P1', true, true, undefined, undefined], 'les rôles ne se posent plus depuis cette page : ils se posent dans le WBS');
     eq(cp.teams.map((t) => [t.name, t.depth, t.members]), [['Bureau d’études', 0, 0], ['Calcul', 1, 1]], 'équipes dans l’ordre de l’arborescence');
     const remi = row(cp, 'Rémi');
     eq([remi.team, remi.team_id === calc.id, remi.daily_rate, remi.rate_source, remi.resource_type], ['Calcul', true, 520, 'fiche', 'Interne']);
     eq(remi.roles.map((r) => r.code + ':' + r.scope), ['WPL:1 Conception', 'DO:2 livrables ou jalons'], 'ses rôles dans le projet : leader du workpackage, propriétaire de deux livrables (regroupés)');
-    eq([row(cp, 'Carla').project_role, row(cp, 'Mia').project_role, remi.project_role], ['CP', '', ''], 'rôle de projet : chef de projet, ou rien (les autres rôles se posent sur leur objet)');
+    eq([row(cp, 'Carla').roles.map((r) => r.code).join(), row(cp, 'Mia').roles.map((r) => r.code).join(), row(cp, 'Xavier').roles.length], ['CP,WPL,DO', 'CONTRIB', 0], 'les rôles de chacun, en lecture seule (Xavier : aucun, donc Reader)');
     eq(row(cp, 'Mia').roles.map((r) => r.code + ':' + r.scope), ['CONTRIB:4 livrables ou jalons'], 'Mia : Contributor de quatre livrables ou jalons, sur une seule ligne');
     eq(row(cp, 'Dora').roles.map((r) => r.code + ':' + r.scope_type), ['DPL:project'], 'DPL posée sur ce projet');
     ok(row(cp, 'Xavier').resource_type === 'Externe', 'les externes sont listés aussi');
@@ -36,35 +36,11 @@ module.exports = function () {
     eq(cp.domains, ['entreprise.com'], 'les domaines autorisés sont fournis à la page');
     void nomail;
     const mia = w.call(MEMBER, 'ressources.get', { projectId: w.p1.id });
-    eq([mia.canEdit, mia.canRates, mia.canAssign, mia.roleChoices], [false, false, false, []]);
+    eq([mia.canEdit, mia.canRates], [false, false], 'un Contributor ne modifie aucune fiche et ne voit pas les tarifs');
     ok(mia.people.every((x) => x.daily_rate === null && x.rate_source === ''), 'un membre ne voit aucun taux');
     eq(w.call(DPL, 'ressources.get', { projectId: w.p1.id }).canRates, true, 'le DPL voit les taux');
     eq(w.call(CP, 'ressources.get', {}).project, null, 'sans projet : la liste des personnes seulement');
     eq(w.raw(CP, 'ressources.get', { projectId: 'inconnu' }).error.code, 'NOT_FOUND');
-  });
-
-  test('Rôle de projet : chef de projet seulement, désigné par le niveau du dessus ; ancien rôle terminé, fiche du projet à jour, droits', () => {
-    const w = world();
-    const set = (who, resourceId, role, projectId) => w.raw(who, 'people.setProjectRole', { projectId: projectId || w.p1.id, resourceId, role });
-    const active = (id, code) => w.c.repoList('RoleAssignment').filter((a) => a.resource_id === id && a.scope_type === 'project' && a.scope_id === w.p1.id && a.role_code === code && (!a.end_date || a.end_date >= w.c.todayStr())).length;
-    eq(set(CP, w.mia.id, 'CP').error.code, 'FORBIDDEN', 'un chef de projet ne désigne pas un chef de projet (même niveau)');
-    const r1 = set(DPL, w.mia.id, 'CP');
-    ok(r1.ok, JSON.stringify(r1.error));
-    eq([active(w.mia.id, 'CP'), r1.data.changed, w.c.repoGet('Project', w.p1.id).manager_resource_id], [1, true, w.carla.id], 'le DPL pose Mia ; le chef de projet de la fiche reste Carla tant qu’elle l’est');
-    eq(set(DPL, w.mia.id, 'CP').data.changed, false, 'sans changement, rien n’est écrit');
-    eq(w.c.repoList('RoleAssignment').filter((a) => a.resource_id === w.mia.id && a.role_code === 'CP').length, 1, 'pas de doublon');
-    ok(set(DPL, w.carla.id, '').ok);
-    eq(w.c.repoGet('Project', w.p1.id).manager_resource_id, w.mia.id, 'Carla n’est plus chef de projet : Mia la remplace dans la fiche du projet');
-    eq(set(DPL, w.mia.id, '').data.manager_id, '', 'plus aucun chef de projet : la fiche du projet est vidée');
-    eq([active(w.mia.id, 'CP'), active(w.carla.id, 'CP')], [0, 0], 'aucun rôle de projet');
-    ok(w.c.repoList('RoleAssignment').some((a) => a.resource_id === w.remi.id && a.role_code === 'WPL'), 'les rôles de workpackage ne bougent pas');
-    ok(/doit être une personne interne/.test(set(DPL, w.xavier.id, 'CP').error.message), 'un externe n’est pas chef de projet');
-    eq(set(DPL, w.mia.id, 'MEMBER').error.code, 'VALIDATION', 'l’ancien rôle de membre n’existe plus : les autres rôles se posent sur leur objet');
-    eq(set(DPL, w.mia.id, 'PL').error.code, 'VALIDATION');
-    eq(set(MEMBER, w.remi.id, 'CP').error.code, 'FORBIDDEN', 'un Contributor ne désigne personne');
-    eq(set(RWP, w.mia.id, 'CP').error.code, 'FORBIDDEN', 'un Workpackage leader non plus');
-    eq(set(CP, w.mia.id, 'CP', w.p2.id).error.code, 'FORBIDDEN', 'pas sur un projet où l’on n’a aucun droit');
-    ok(w.c.repoList('ChangeEvent').some((e) => e.table_name === 'RoleAssignment' && e.field === 'end_date'), 'fin de rôle tracée');
   });
 
   test('Taux journalier par personne : saisie, droits, bornes ; interne ou externe', () => {

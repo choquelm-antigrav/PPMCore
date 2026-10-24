@@ -1,5 +1,5 @@
 /**
- * PPM Core 0.15.2 — fichier unique à installer (fabriqué par tools/build.js, empreinte 9412264fb9f2).
+ * PPM Core 0.15.3 — fichier unique à installer (fabriqué par tools/build.js, empreinte 957589553fc3).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
  * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs, 53_Roles.gs.
  */
@@ -47,7 +47,7 @@ function A9_MIGRER_ROLES_SIMULATION() { return migrerRoles_(true); }
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.15.2';
+var PPM_VERSION = '0.15.3';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -281,7 +281,7 @@ function allowedDomain() {
 var PPM_PAGES = [
   { view: 'overview',   file: 'Overview',   title: 'PPM — Overview projet', eyebrow: 'Overview · Projet',                     tabs: [''], nav: 'bar',  share: true, shared: ['CommonForms'], parts: [] },
   { view: 'gantt',      file: 'Gantt',      title: 'PPM — Planning',        eyebrow: 'Planning · Gantt',                      tabs: [''], nav: 'bar',  share: true, shared: [], parts: [] },
-  { view: 'structure',  file: 'Structure',  title: 'PPM — OBS/WBS',         eyebrow: 'OBS/WBS · Organisation et découpage',   tabs: [''], nav: 'bar',  share: true, shared: ['CommonForms'],
+  { view: 'structure',  file: 'Structure',  title: 'PPM — WBS',             eyebrow: 'WBS · Découpage et rôles',   tabs: [''], nav: 'bar',  share: true, shared: ['CommonForms'],
     parts: ['StructureState', 'StructureDraw', 'StructureLoad', 'StructureDetail', 'StructureEdit', 'StructureOrg'] },
   { view: 'ressources', file: 'Ressources', title: 'PPM — Ressources',      eyebrow: 'Ressources · Équipes et rôles',         tabs: [''], nav: 'bar',  share: true, shared: ['CommonForms'], parts: [] },
   { view: 'suivi',      file: 'Suivi',      title: 'PPM — Suivi',           eyebrow: 'Suivi · Baselines',                     tabs: [''], nav: 'bar',  share: true, shared: ['CommonProgram'], parts: [] },
@@ -2846,6 +2846,14 @@ function liveSmokeTest_(opts) {
     return q + ' mails restants aujourd’hui';
   });
 
+  step('Rôles : anciens codes à migrer', function () {
+    var today = todayStr();
+    var legacy = repoList('RoleAssignment', function (a) { return LEGACY_ROLE_CODES.indexOf(a.role_code) >= 0 || (a.role_code === 'DPL' && a.scope_type === 'program'); })
+      .filter(function (a) { return isBlank(a.end_date) || String(a.end_date) >= today; });
+    if (legacy.length) return { warn: legacy.length + ' ancien(s) rôle(s) actif(s) (responsable de workpackage, membre, DPL du programme) : ils gardent leurs droits, mais lancez A9_MIGRER_ROLES (A9_MIGRER_ROLES_SIMULATION pour compter d’abord) pour passer aux huit niveaux' };
+    return 'tous les rôles sont aux huit niveaux';
+  });
+
   // ---- 4. les appels de chaque page, avec ce compte, en lecture seule, chronométrés
   var call = function (action, params) {
     var s = nowMs(), r = handleRequest({ action: action, params: params || {}, apiVersion: PPM_API_VERSION }, me);
@@ -2865,7 +2873,7 @@ function liveSmokeTest_(opts) {
     return s;
   });
   if (proj) {
-    [['Overview', 'overview.get', { projectId: proj.id }], ['OBS (rôles)', 'obs.tree', { scopeType: 'project', scopeId: proj.id }], ['WBS', 'wbs.tree', { projectId: proj.id }],
+    [['Overview', 'overview.get', { projectId: proj.id }], ['WBS', 'wbs.tree', { projectId: proj.id }],
       ['Ressources', 'ressources.get', { projectId: proj.id }], ['Suivi (baselines)', 'baselines.list', { projectId: proj.id }], ['Suivi (changements)', 'changes.feed', { projectId: proj.id }],
       ['Budget (bilan)', 'budget.balance', { projectId: proj.id }], ['Actualités', 'news.get', { projectId: proj.id }]].forEach(function (c) {
       step('Appel serveur : ' + c[0] + ' (' + proj.code + ')', function () {
@@ -3403,15 +3411,8 @@ function preloadFor_(view, boot, email) {
   } else if (view === 'structure') {
     var cfg = put('views.config', {});
     if (!cfg.ok) return pre;
-    var mode = boot.mode || cfg.data.prefs.obs.mode || 'roles';
-    if (boot.program) {
-      if (mode === 'teams') put('obs.teams', { rootTeamId: '' });
-      else put('obs.tree', { scopeType: 'program', scopeId: boot.program === 'none' ? '' : boot.program });
-    } else if (first) {
-      put('wbs.tree', { projectId: first });
-      if (mode === 'teams') put('obs.teams', { rootTeamId: '' });
-      else put('obs.tree', { scopeType: 'project', scopeId: first });
-    }
+    if (boot.program) put('wbs.tree', { programId: boot.program });
+    else if (first) put('wbs.tree', { projectId: first });
   } else if (view === 'suivi' && first) {
     var list = put('baselines.list', { projectId: first });
     if (list.ok) {
@@ -3450,7 +3451,7 @@ function cleanId_(v) {
 var PAGE_TABLES = {
   overview: ['Baseline', 'BaselineItem', 'BudgetLine', 'Dependency', 'HolidaySet', 'Insight', 'Meeting', 'NewsAction', 'NewsDigest', 'PlanItem', 'Program', 'Project', 'PurchaseOrder', 'PurchaseOrderLink', 'Resource', 'RiskOpportunity', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   gantt: ['Baseline', 'BaselineItem', 'BudgetLine', 'Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
-  structure: ['Dependency', 'HierarchicalTeam', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  structure: ['Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   ressources: ['HierarchicalTeam', 'PlanItem', 'Program', 'Project', 'RateCard', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   suivi: ['Baseline', 'BaselineItem', 'BudgetLine', 'BudgetPhasing', 'ChangeEvent', 'Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   actualites: ['Meeting', 'NewsAction', 'NewsDigest', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
@@ -3529,7 +3530,7 @@ function include(name) {
 // ======================================================================
 
 /**
- * PPM Core — vues du lot 1 : Gantt projet, vue programme, organisation (OBS).
+ * PPM Core — vues du lot 1 : Gantt projet, vue programme, attribution des rôles.
  *
  * Les tables sont lues UNE fois par requête puis traitées en mémoire : une lecture
  * de feuille coûte cher en Apps Script, un appel par élément serait trop lent.
@@ -3869,51 +3870,7 @@ function buildProgramView(data, programId, today) {
   };
 }
 
-// ---------------------------------------------------------------- organisation (OBS)
-
-/** Rôles actifs sur un périmètre et sur ce qu'il contient (programme → projets → WP). */
-function buildObs(data, scopeType, scopeId, today) {
-  var projects = indexBy_(data.projects), wps = indexBy_(data.workpackages), programs = indexBy_(data.programs);
-  var inScope = function (a) {
-    if (a.scope_type === scopeType && String(a.scope_id) === String(scopeId)) return true;
-    if (scopeType === 'program') {
-      if (a.scope_type === 'project') return projects[a.scope_id] && projects[a.scope_id].program_id === scopeId;
-      if (a.scope_type === 'workpackage') {
-        var w = wps[a.scope_id];
-        return w && projects[w.project_id] && projects[w.project_id].program_id === scopeId;
-      }
-    }
-    if (scopeType === 'project' && a.scope_type === 'workpackage') return wps[a.scope_id] && wps[a.scope_id].project_id === scopeId;
-    if (scopeType === 'workpackage' && a.scope_type === 'workpackage') {
-      return wps[a.scope_id] && wps[a.scope_id].parent_wp_id === scopeId;
-    }
-    return false;
-  };
-  var label = function (type, id) {
-    if (type === 'program') return programs[id] ? programs[id].code + ' — ' + programs[id].name : id;
-    if (type === 'project') return projects[id] ? projects[id].code + ' — ' + projects[id].name : id;
-    if (type === 'workpackage') return wps[id] ? ((wps[id].wbs_code ? wps[id].wbs_code + ' ' : '') + wps[id].name) : id;
-    return id;
-  };
-  var rank = { program: 0, project: 1, workpackage: 2 };
-  var roleRank = { PL: 0, DPL: 1, CP: 2, RWP: 3, MEMBER: 4 };
-  return data.assignments.filter(function (a) {
-    if (isTrue(a.deleted)) return false;
-    if (!isBlank(a.start_date) && String(a.start_date) > today) return false;
-    if (!isBlank(a.end_date) && String(a.end_date) < today) return false;
-    return inScope(a);
-  }).map(function (a) {
-    return {
-      id: a.id, version: a.version, role_code: a.role_code, role_label: ROLE_LABELS[a.role_code] || a.role_code,
-      scope_type: a.scope_type, scope_id: a.scope_id, scope_label: label(a.scope_type, a.scope_id),
-      resource_id: a.resource_id, resource_name: resourceName_(data, a.resource_id),
-      start_date: a.start_date || '', end_date: a.end_date || ''
-    };
-  }).sort(function (a, b) {
-    return (rank[a.scope_type] - rank[b.scope_type]) || a.scope_label.localeCompare(b.scope_label) ||
-      (roleRank[a.role_code] - roleRank[b.role_code]) || a.resource_name.localeCompare(b.resource_name);
-  });
-}
+// ---------------------------------------------------------------- rôles
 
 // ---------------------------------------------------------------- actions de l'API
 
@@ -3939,12 +3896,6 @@ defineAction('gantt.project', function (p, ctx) {
 
 defineAction('gantt.program', function (p) {
   return buildProgramView(loadPlanningData_(), p.programId || '', todayStr());
-});
-
-defineAction('obs.list', function (p) {
-  var type = requireParam(p, 'scopeType');
-  if (['program', 'project', 'workpackage'].indexOf(type) < 0) throw new PpmError('VALIDATION', 'Périmètre invalide : ' + type);
-  return buildObs(loadPlanningData_(), type, requireParam(p, 'scopeId'), todayStr());
 });
 
 var SCOPE_TABLE = { program: 'Program', project: 'Project', workpackage: 'WorkPackage', planitem: 'PlanItem' };
@@ -3999,11 +3950,10 @@ defineAction('roles.end', function (p, ctx) {
 // ======================================================================
 
 /**
- * PPM Core — lot 1 (suite) : personnes, OBS et WBS graphiques, préférences d'affichage.
+ * PPM Core — lot 1 (suite) : personnes, WBS graphique, préférences d'affichage.
  *
  *  - Une personne a une fonction (job_function) et une organisation (organization).
- *  - L'OBS se lit de deux façons : par rôles (qui pilote quoi, du Program Leader aux
- *    membres) ou par équipes hiérarchiques (HierarchicalTeam).
+ *  - L'organigramme OBS a été supprimé en 0.15.3 : les personnes se créent dans la page Ressources (équipes comprises), les rôles se posent sur chaque objet du WBS.
  *  - Le WBS se lit projet par projet : projet → workpackages → sous-workpackages → livrables et jalons.
  *  - Le serveur renvoie TOUS les attributs de chaque nœud ; le choix de ce qui est affiché est
  *    fait dans la page et mémorisé par utilisateur (UserSetting.view_prefs_json).
@@ -4014,37 +3964,14 @@ defineAction('roles.end', function (p, ctx) {
 // ---------------------------------------------------------------- catalogue des attributs affichables
 
 /**
- * Pour ajouter un attribut affichable : une ligne ici, la valeur dans build*Tree, et l'affichage
- * dans Structure.html (fonction attrLines). Le nom (personne) et le titre du nœud sont toujours affichés.
+ * Pour ajouter un attribut affichable : une ligne ici, la valeur dans buildWbsTree, et l'affichage
+ * dans Structure.html (fonction attrLines). Le titre du nœud est toujours affiché. (L'organigramme OBS a été supprimé en 0.15.3 : les rôles se posent dans le WBS.)
  */
 var VIEW_CATALOG = {
-  obs: {
-    attrs: [
-      { key: 'scope', label: 'Périmètre du rôle (en-tête)', on: true },
-      { key: 'job_function', label: 'Fonction', on: true },
-      { key: 'organization', label: 'Organisation', on: true },
-      { key: 'email', label: 'E-mail', on: false },
-      { key: 'team', label: 'Équipe hiérarchique', on: false },
-      { key: 'country', label: 'Pays', on: false },
-      { key: 'resource_type', label: 'Interne ou externe', on: false },
-      { key: 'supplier', label: 'Fournisseur', on: false },
-      { key: 'capacity', label: 'Capacité (jours par mois)', on: false },
-      { key: 'cost_center', label: 'Centre de coût (vue par équipes)', on: false },
-      { key: 'members', label: 'Membres de l’équipe (vue par équipes)', on: false }
-    ],
-    colors: [
-      { key: 'role', label: 'Rôle' },
-      { key: 'organization', label: 'Organisation' },
-      { key: 'resource_type', label: 'Interne ou externe' },
-      { key: 'none', label: 'Aucune' }
-    ],
-    modes: ['roles', 'teams'],
-    defaults: { colorBy: 'role', mode: 'roles' }
-  },
   wbs: {
     attrs: [
       { key: 'wbs_code', label: 'Code WBS', on: true },
-      { key: 'owner', label: 'Responsable', on: true },
+      { key: 'owner', label: 'Responsable (leader ou propriétaire)', on: true },
       { key: 'owner_org', label: 'Organisation du responsable', on: false },
       { key: 'dates', label: 'Dates prévues', on: true },
       { key: 'progress', label: 'Avancement', on: true },
@@ -4079,7 +4006,6 @@ function normalizePrefs_(view, raw) {
     out.attrs = cat.attrs.map(function (a) { return a.key; }).filter(function (k) { return wanted[k]; });
   }
   if (cat.colors.some(function (c) { return c.key === raw.colorBy; })) out.colorBy = raw.colorBy;
-  if (view === 'obs' && cat.modes.indexOf(raw.mode) >= 0) out.mode = raw.mode;
   if (view === 'wbs' && typeof raw.showItems === 'boolean') out.showItems = raw.showItems;
   return out;
 }
@@ -4094,7 +4020,7 @@ function loadPrefs_(email) {
   var saved = row ? parseJsonSafe(row.view_prefs_json, {}) : {};
   var theme = saved.ui && ['light', 'dark', 'auto'].indexOf(saved.ui.theme) >= 0 ? saved.ui.theme : 'auto';
   var home = saved.ui && HOME_VIEWS.indexOf(saved.ui.home) >= 0 ? saved.ui.home : 'overview';
-  return { obs: normalizePrefs_('obs', saved.obs), wbs: normalizePrefs_('wbs', saved.wbs), ui: { theme: theme, home: home } };
+  return { wbs: normalizePrefs_('wbs', saved.wbs), ui: { theme: theme, home: home } }; // l'ancien affichage de l'organigramme (obs) n'existe plus : ses choix enregistrés sont ignorés
 }
 
 // ---------------------------------------------------------------- personnes
@@ -4122,7 +4048,6 @@ function byName_(a, b) {
   return String(a.name).localeCompare(String(b.name), 'fr', { sensitivity: 'base' });
 }
 
-// ---------------------------------------------------------------- OBS par rôles
 
 function scopeLabel_(data, type, id) {
   var rec = ({ program: indexBy_(data.programs), project: indexBy_(data.projects), workpackage: indexBy_(data.workpackages), planitem: indexBy_(data.planitems || []) }[type] || {})[id];
@@ -4132,156 +4057,6 @@ function scopeLabel_(data, type, id) {
   return rec.code + ' — ' + rec.name;
 }
 
-/**
- * Arbre des rôles autour d'un périmètre : les rôles du périmètre et de ce qu'il contient,
- * plus ceux des périmètres qui le contiennent (pour que la hiérarchie soit complète).
- * Un nœud = un rôle sur un périmètre, avec ses titulaires. Son parent est le rôle immédiatement
- * supérieur qui couvre son périmètre (par exemple un chef de projet a pour parent le DPL du programme).
- */
-function buildObsTree(data, scopeType, scopeId, today, ctx) {
-  if (!SCOPE_TABLE[scopeType]) throw new PpmError('VALIDATION', 'Périmètre invalide : ' + scopeType);
-  var rootLabel = scopeLabel_(data, scopeType, scopeId);
-  if (!rootLabel) throw new PpmError('NOT_FOUND', 'Périmètre introuvable : ' + scopeId);
-
-  var lookup = memoryLookup(data);
-  var resById = indexBy_(data.resources), teamsById = indexBy_(data.teams);
-  var editAll = canEditResources_(ctx);
-  var mine = {};
-  scopeAncestors({ type: scopeType, id: scopeId }, lookup).forEach(function (s) { mine[s.type + ':' + s.id] = true; });
-
-  var groups = {}, order = [];
-  data.assignments.forEach(function (a) {
-    if (isTrue(a.deleted)) return;
-    if (!isBlank(a.start_date) && String(a.start_date) > today) return;
-    if (!isBlank(a.end_date) && String(a.end_date) < today) return;
-    var res = resById[a.resource_id];
-    if (!res || isTrue(res.deleted)) return;
-    var label = scopeLabel_(data, a.scope_type, a.scope_id);
-    if (!label) return; // périmètre supprimé
-    var chain = scopeAncestors({ type: a.scope_type, id: a.scope_id }, lookup);
-    var below = chain.some(function (s) { return s.type === scopeType && String(s.id) === String(scopeId); });
-    if (!below && !mine[a.scope_type + ':' + a.scope_id]) return;
-
-    var key = a.role_code + '|' + a.scope_type + '|' + a.scope_id;
-    if (!groups[key]) {
-      groups[key] = {
-        id: 'role:' + key, parent: '', role_code: a.role_code, role_label: ROLE_LABELS[a.role_code] || a.role_code,
-        rank: ROLE_RANK[a.role_code], scope_type: a.scope_type, scope_id: a.scope_id, scope_label: label,
-        chain: chain, people: [], seen: {}
-      };
-      order.push(key);
-    }
-    var g = groups[key];
-    if (g.seen[res.id]) { g.seen[res.id].assignment_ids.push(a.id); return; } // la même affectation en double : on garde toutes les lignes pour pouvoir les terminer ensemble
-    var card = personCard_(res, teamsById, ctx, editAll);
-    card.assignment_ids = [a.id];
-    g.seen[res.id] = card;
-    g.people.push(card);
-  });
-
-  var list = order.map(function (k) { return groups[k]; });
-  list.forEach(function (g) {
-    var best = null;
-    list.forEach(function (h) {
-      if (h === g || h.rank >= g.rank) return;
-      var at = -1;
-      g.chain.forEach(function (s, i) { if (at < 0 && s.type === h.scope_type && String(s.id) === String(h.scope_id)) at = i; });
-      if (at < 0) return;
-      if (!best || h.rank > best.h.rank || (h.rank === best.h.rank && at < best.at) ||
-          (h.rank === best.h.rank && at === best.at && h.id < best.h.id)) best = { h: h, at: at };
-    });
-    g.parent = best ? best.h.id : '';
-  });
-
-  list.sort(function (a, b) {
-    return (a.rank - b.rank) || a.scope_label.localeCompare(b.scope_label, 'fr') || 0;
-  });
-  var people = 0;
-  var nodes = list.map(function (g) {
-    g.people.sort(byName_);
-    people += g.people.length;
-    return {
-      id: g.id, parent: g.parent, role_code: g.role_code, role_label: g.role_label,
-      scope_type: g.scope_type, scope_id: g.scope_id, scope_label: g.scope_label, people: g.people,
-      rank: g.rank, canAssign: !!ctx && can(ctx, 'roles.assign', { type: g.scope_type, id: g.scope_id }),
-      min_rank: ctx && !ctx.isAdmin ? bestRankOn_(ctx, { type: g.scope_type, id: g.scope_id }) : 0
-    };
-  });
-  return {
-    mode: 'roles', scope: { type: scopeType, id: scopeId, label: rootLabel }, nodes: nodes,
-    canEditAll: editAll, stats: { nodes: nodes.length, people: people }
-  };
-}
-
-// ---------------------------------------------------------------- OBS par équipes
-
-/**
- * Arbre des équipes hiérarchiques (HierarchicalTeam). rootTeamId limite à une branche.
- * Les personnes sans équipe sont regroupées dans un nœud « Sans équipe » (vue complète seulement).
- */
-function buildTeamTree(data, rootTeamId, ctx) {
-  var teams = data.teams.filter(function (t) { return !isTrue(t.deleted); });
-  var byId = indexBy_(teams);
-  var resources = data.resources.filter(function (r) { return !isTrue(r.deleted); });
-  var resById = indexBy_(resources);
-  var editAll = canEditResources_(ctx);
-
-  // Un cycle dans les parents est traité comme une racine, pour que l'arbre reste dessinable.
-  var parentOf = {};
-  teams.forEach(function (t) {
-    var p = !isBlank(t.parent_team_id) && byId[t.parent_team_id] ? t.parent_team_id : '';
-    var cur = p, guard = 0, cyclic = false;
-    while (cur && guard++ < 100) {
-      if (cur === t.id) { cyclic = true; break; }
-      var up = byId[cur] && !isBlank(byId[cur].parent_team_id) ? byId[cur].parent_team_id : '';
-      cur = byId[up] ? up : '';
-    }
-    parentOf[t.id] = cyclic ? '' : p;
-  });
-
-  var depthOf = function (id) { var d = 0, cur = parentOf[id]; while (cur && d < 100) { d++; cur = parentOf[cur]; } return d; };
-  var pathOf = function (id) { var names = [], cur = id, g = 0; while (cur && g++ < 100) { names.unshift(byId[cur].name); cur = parentOf[cur]; } return names.join(' / '); };
-
-  if (!isBlank(rootTeamId) && !byId[rootTeamId]) throw new PpmError('NOT_FOUND', 'Équipe introuvable : ' + rootTeamId);
-  var inBranch = function (id) {
-    if (isBlank(rootTeamId)) return true;
-    var cur = id, g = 0;
-    while (cur && g++ < 100) { if (cur === rootTeamId) return true; cur = parentOf[cur]; }
-    return false;
-  };
-
-  var membersOf = {}, unassigned = [];
-  resources.forEach(function (r) {
-    if (!isBlank(r.team_id) && byId[r.team_id]) (membersOf[r.team_id] = membersOf[r.team_id] || []).push(r);
-    else unassigned.push(r);
-  });
-  var card = function (r) { return personCard_(r, byId, ctx, editAll); };
-
-  var nodes = teams.filter(function (t) { return inBranch(t.id); }).map(function (t) {
-    var mgr = !isBlank(t.manager_resource_id) ? resById[t.manager_resource_id] : null;
-    var members = (membersOf[t.id] || []).filter(function (r) { return !mgr || r.id !== mgr.id; }).map(card).sort(byName_);
-    return {
-      id: 'team:' + t.id, parent: parentOf[t.id] && inBranch(parentOf[t.id]) && t.id !== rootTeamId ? 'team:' + parentOf[t.id] : '',
-      team_id: t.id, name: t.name, cost_center: t.cost_center || '', manager: mgr ? card(mgr) : null,
-      version: t.version, parent_team_id: parentOf[t.id] || '', manager_id: mgr ? mgr.id : '',
-      members: members, member_count: members.length, sort: pathOf(t.id)
-    };
-  }).sort(function (a, b) { return a.sort.localeCompare(b.sort, 'fr'); });
-  nodes.forEach(function (n) { delete n.sort; });
-
-  if (isBlank(rootTeamId) && unassigned.length) {
-    nodes.push({
-      id: 'team:none', parent: '', team_id: '', name: 'Sans équipe', cost_center: '', manager: null,
-      members: unassigned.map(card).sort(byName_), member_count: unassigned.length
-    });
-  }
-  return {
-    mode: 'teams', root_team_id: rootTeamId || '', nodes: nodes, canEditAll: editAll,
-    teams: teams.map(function (t) { return { id: t.id, name: t.name, depth: depthOf(t.id), path: pathOf(t.id) }; })
-      .sort(function (a, b) { return a.path.localeCompare(b.path, 'fr'); }),
-    stats: { nodes: nodes.length, people: resources.length }
-  };
-}
 
 // ---------------------------------------------------------------- WBS
 
@@ -4448,13 +4223,6 @@ function buildWbsProgramTree_(data, programId, today, ctx) {
 
 // ---------------------------------------------------------------- actions de l'API
 
-function loadObsData_() {
-  return {
-    programs: repoList('Program'), projects: repoList('Project'), workpackages: repoList('WorkPackage'),
-    resources: repoList('Resource'), assignments: repoList('RoleAssignment'), teams: repoList('HierarchicalTeam')
-  };
-}
-
 function loadWbsData_() {
   return {
     programs: repoList('Program'), projects: repoList('Project'), workpackages: repoList('WorkPackage'),
@@ -4493,20 +4261,6 @@ defineAction('ui.set', function (p, ctx) {
   if (row) repoUpdate('UserSetting', row.id, { view_prefs_json: JSON.stringify(saved) }, null, ctx.actx);
   else repoInsert('UserSetting', { user_email: ctx.email, view_prefs_json: JSON.stringify(saved) }, ctx.actx);
   return loadPrefs_(ctx.email).ui;
-});
-
-defineAction('obs.tree', function (p, ctx) {
-  var data = loadObsData_();
-  var out = buildObsTree(data, requireParam(p, 'scopeType'), requireParam(p, 'scopeId'), todayStr(), ctx);
-  out.unplaced = unplacedPeople_(data, ctx, todayStr());
-  return out;
-});
-
-defineAction('obs.teams', function (p, ctx) {
-  var data = loadObsData_();
-  var out = buildTeamTree(data, p.rootTeamId || '', ctx);
-  out.unplaced = unplacedPeople_(data, ctx, todayStr());
-  return out;
 });
 
 defineAction('wbs.tree', function (p, ctx) {
@@ -7921,19 +7675,6 @@ defineAction('roles.options', function (p, ctx) {
 // ---------------------------------------------------------------- personnes
 
 /**
- * Personnes sans aucun rôle en cours, nulle part : celles qu'on vient de créer et qu'il reste à positionner dans l'organigramme.
- * Renvoyées avec l'organigramme (par rôles comme par équipes) pour être proposées à l'attribution d'un rôle.
- */
-function unplacedPeople_(data, ctx, today) {
-  var has = {};
-  (data.assignments || []).forEach(function (a) { if (isBlank(a.end_date) || String(a.end_date) >= today) has[a.resource_id] = true; });
-  var teamsById = indexBy_(data.teams || []), editAll = canEditResources_(ctx);
-  var list = (data.resources || []).filter(function (r) { return !isTrue(r.deleted) && !has[r.id]; })
-    .sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
-  return { total: list.length, people: list.slice(0, 60).map(function (r) { return personCard_(r, teamsById, ctx, editAll); }) };
-}
-
-/**
  * Retire une personne : ses rôles se terminent, elle cesse de diriger une équipe, ses responsabilités sont libérées
  * (les éléments et workpackages qu'elle portait redeviennent « à désigner » et remontent dans les constats).
  * dryRun = true : annonce ce qui se passerait, sans rien changer.
@@ -9210,8 +8951,6 @@ defineAction('projects.save', function (p, ctx) {
  * La création et la modification des personnes et des équipes passent par resources.* et teams.* (42_Org.gs).
  */
 
-var PROJECT_ROLE_CHOICES = [{ code: 'CP', label: 'Chef de projet' }]; // les autres rôles se posent sur leur objet, dans le WBS
-
 /** Les tarifs journaliers se lisent à partir du Workpackage leader ; les fixer reste réservé au chef de projet et au-dessus (ratecard.manage). */
 function canSeeRates_(ctx) { return ctx.isAdmin || can(ctx, 'sensitive.read', { type: 'global' }); }
 function canSetRates_(ctx) { return ctx.isAdmin || can(ctx, 'ratecard.manage', { type: 'global' }); }
@@ -9289,7 +9028,6 @@ defineAction('ressources.get', function (p, ctx) {
   var editAll = canEditResources_(ctx);
   var people = resources.map(function (r) {
     var mine = (roles[r.id] || []).sort(function (a, b) { return a.rank - b.rank; });
-    var projectLevel = mine.filter(function (x) { return x.scope_type === 'project' && x.code === 'CP'; }).map(function (x) { return x.code; });
     return {
       resource_id: r.id, version: r.version, name: r.name, email: r.email || '', job_function: r.job_function || '', organization: r.organization || '',
       unplaced: !placed[r.id],
@@ -9298,46 +9036,16 @@ defineAction('ressources.get', function (p, ctx) {
       resource_type: r.resource_type, supplier: r.supplier || '', country: r.country || '', capacity: isBlank(r.capacity_days_month) ? '' : Number(r.capacity_days_month),
       team_id: r.team_id || '', team: teamById[r.team_id] ? teamById[r.team_id].name : '',
       roles: mine.map(function (x) { return { code: x.code, label: x.label, scope: x.scope, scope_type: x.scope_type }; }),
-      project_role: projectLevel.indexOf('CP') >= 0 ? 'CP' : '',
       daily_rate: canRates && !isBlank(r.daily_rate) ? Number(r.daily_rate) : null,
       rate_source: canRates ? (!isBlank(r.daily_rate) ? 'fiche' : (rateFor_(r.rate_profile, r.country, today) !== null ? 'grille' : '')) : ''
     };
   }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
-  var assignable = scope ? assignableRolesOn_(ctx, scope) : [];
-  var canAssign = assignable.indexOf('CP') >= 0;
   return {
     project: project ? { id: project.id, code: project.code, name: project.name, manager_id: project.manager_resource_id || '' } : null,
     people: people, teams: teamsFlat_(teams, resources),
-    canEdit: editAll, canRates: canRates, canAssign: canAssign,
-    roleChoices: PROJECT_ROLE_CHOICES.filter(function (c) { return assignable.indexOf(c.code) >= 0; }),
+    canEdit: editAll, canRates: canRates, canSetRates: canSetRates_(ctx),
     countries: COUNTRIES, domains: allowedDomains()
   };
-});
-
-/** Rôle de projet d'une personne : 'CP' (chef de projet) ou '' (aucun). Les autres rôles se posent sur leur objet, dans le WBS ; ceux d'un workpackage ou d'un livrable ne bougent pas ici. */
-defineAction('people.setProjectRole', function (p, ctx) {
-  var project = mustGet('Project', requireParam(p, 'projectId'));
-  var person = mustGet('Resource', requireParam(p, 'resourceId'));
-  var role = isBlank(p.role) ? '' : p.role;
-  if (['', 'CP'].indexOf(role) < 0) throw new PpmError('VALIDATION', 'Rôle de projet inconnu : seul le chef de projet se pose sur un projet depuis cette page.');
-  var scope = { type: 'project', id: project.id };
-  var problem = roleAssignCheck_(ctx, 'CP', scope);
-  if (problem) throw new PpmError(problem.code, problem.message);
-  if (role === 'CP' && person.resource_type !== 'Interne') throw new PpmError('VALIDATION', 'Le chef de projet doit être une personne interne.');
-  return withLock(function () {
-    var today = todayStr(), yesterday = addCalendarDays(today, -1);
-    var active = repoList('RoleAssignment', function (a) {
-      return a.resource_id === person.id && a.scope_type === 'project' && a.scope_id === project.id && a.role_code === 'CP' && (isBlank(a.end_date) || String(a.end_date) >= today);
-    });
-    var same = active.length === 1 && role === 'CP';
-    if (!same) {
-      active.forEach(function (a) { repoUpdate('RoleAssignment', a.id, { end_date: yesterday }, null, ctx.actx); });
-      if (role) repoInsert('RoleAssignment', { resource_id: person.id, role_code: role, scope_type: 'project', scope_id: project.id, start_date: today }, ctx.actx);
-    }
-    // le chef de projet de la fiche projet suit les affectations : celui qui n'est plus chef de projet est remplacé par un autre, ou aucun
-    syncPrincipal_('project', project.id, ctx.actx);
-    return { role: role, manager_id: repoGet('Project', project.id).manager_resource_id || '', changed: !same };
-  });
 });
 
 /** Taux journalier d'une personne (vide pour l'effacer). Le chef de projet et le DPL seuls le voient et le fixent. */
@@ -9367,7 +9075,7 @@ defineAction('people.setRate', function (p, ctx) {
  *                                B1 active, une demande en attente), du budget, 3 CPN, des commandes d'achat (GR en retard, dépassement), des risques,
  *                                un fil d'actualités (réunions de l'agenda et saisies, actions à tous les états, synthèse du jour).
  * Autour : 11 équipes en arbre, 38 personnes plus vous (internes et externes, quatre pays) avec leur taux journalier, des rôles à tous les niveaux
- * (programme, projet, workpackage), trois personnes sans aucun rôle (à positionner dans l'OBS).
+ * (programme, projet, workpackage), trois personnes sans aucun rôle (Reader par défaut : sans rôle).
  *
  * Aucune personne fictive n'a d'adresse e-mail : rien n'est envoyé, aucune invitation ne part, personne ne peut s'y connecter.
  * Seul le compte qui lance la démo y figure, avec son adresse.
@@ -11452,6 +11160,9 @@ defineAction('admin.sheet.protect', function (p, ctx) {
  */
 
 /** Le rôle que porte le responsable principal de chaque genre d'objet. */
+/** Écritures au plus par lancement de la migration (voir rolesMigrate_). */
+var MIGRATION_MAX_WRITES = 300;
+
 var PRINCIPAL_ROLE = { project: 'CP', workpackage: 'WPL', subworkpackage: 'SWPL', planitem: 'DO' };
 
 var PRINCIPAL_TABLE = { project: 'Project', workpackage: 'WorkPackage', subworkpackage: 'WorkPackage', planitem: 'PlanItem' };
@@ -11559,9 +11270,12 @@ function personReadsSensitive_(data, personId, project, today) {
  *   - personne ayant une ligne budgétaire sur un livrable sans y avoir de rôle → Contributor de ce livrable.
  * Additive et relançable. dryRun = true : compte seulement, n'écrit rien.
  */
-function rolesMigrate_(actx, dryRun) {
+function rolesMigrate_(actx, dryRun, opts) {
   var today = todayStr(), yesterday = addCalendarDays(today, -1);
-  var out = { dpl: 0, wpl: 0, contrib: 0, owners: 0, managers: 0, budget: 0, ended: 0, already: 0, skipped: 0, dryRun: !!dryRun };
+  // Un lancement écrit au plus MIGRATION_MAX_WRITES lignes : Apps Script coupe un script au bout de six minutes, et un « membre du projet » devient un Contributor par livrable
+  // (27 membres × 50 livrables = 1 350 écritures sur la démo). Interrompue, la migration se relance : chaque ligne déjà faite est reconnue, l'ancienne n'est terminée qu'une fois tout posé.
+  var budget = opts && opts.maxWrites ? opts.maxWrites : MIGRATION_MAX_WRITES, writes = 0;
+  var out = { dpl: 0, wpl: 0, contrib: 0, owners: 0, managers: 0, budget: 0, ended: 0, already: 0, skipped: 0, dryRun: !!dryRun, partial: false };
   var projects = repoList('Project'), wps = repoList('WorkPackage'), items = repoList('PlanItem');
   var wpById = indexBy_(wps), resById = indexBy_(repoList('Resource'));
   var rows = repoList('RoleAssignment').map(function (a) {
@@ -11571,14 +11285,23 @@ function rolesMigrate_(actx, dryRun) {
     return rows.some(function (a) { return roleActive_(a, today) && a.resource_id === resId && a.role_code === code && a.scope_type === type && String(a.scope_id) === String(id); });
   }
   function hasAny(resId, codes, type, id) { return codes.some(function (c) { return has(resId, c, type, id); }); }
+  function full() { return !dryRun && writes >= budget; }
+  /** Pose un rôle ; renvoie faux si le budget d'écritures de ce lancement est épuisé (rien n'est alors écrit). */
   function add(counter, resId, code, type, id) {
-    if (has(resId, code, type, id)) { out.already++; return; }
+    if (has(resId, code, type, id)) { out.already++; return true; }
+    if (full()) { out.partial = true; return false; }
     out[counter]++;
     var row = { resource_id: resId, role_code: code, scope_type: type, scope_id: id, end_date: '', deleted: false };
-    if (!dryRun) { var rec = repoInsert('RoleAssignment', Object.assign({ start_date: today }, row), actx); row.id = rec.id; row.version = rec.version; }
+    if (!dryRun) { var rec = repoInsert('RoleAssignment', Object.assign({ start_date: today }, row), actx); row.id = rec.id; row.version = rec.version; writes++; }
     rows.push(row);
+    return true;
   }
-  function end(a) { out.ended++; a.end_date = yesterday; if (!dryRun) repoUpdate('RoleAssignment', a.id, { end_date: yesterday }, null, actx); }
+  function end(a) {
+    if (full()) { out.partial = true; return false; }
+    out.ended++; a.end_date = yesterday;
+    if (!dryRun) { repoUpdate('RoleAssignment', a.id, { end_date: yesterday }, null, actx); writes++; }
+    return true;
+  }
   function wpDescendants(wpId) {
     var ids = {}; ids[wpId] = true;
     wps.forEach(function (w) { if (w.parent_wp_id === wpId) ids[w.id] = true; });
@@ -11588,17 +11311,19 @@ function rolesMigrate_(actx, dryRun) {
 
   // 1. DPL posé sur un programme
   rows.filter(function (a) { return a.role_code === 'DPL' && a.scope_type === 'program' && roleActive_(a, today) && resById[a.resource_id]; }).forEach(function (a) {
-    projects.filter(function (p) { return !isTrue(p.deleted) && String(p.program_id) === String(a.scope_id); }).forEach(function (p) { add('dpl', a.resource_id, 'DPL', 'project', p.id); });
-    end(a);
+    var all = true;
+    projects.filter(function (p) { return !isTrue(p.deleted) && String(p.program_id) === String(a.scope_id); }).forEach(function (p) { if (!add('dpl', a.resource_id, 'DPL', 'project', p.id)) all = false; });
+    if (all) end(a);
   });
   // 2. responsable de workpackage → Workpackage leader / Sub-workpackage leader
   rows.filter(function (a) { return a.role_code === 'RWP' && roleActive_(a, today); }).forEach(function (a) {
     var w = a.scope_type === 'workpackage' ? wpById[a.scope_id] : null;
     if (!w || isTrue(w.deleted) || !resById[a.resource_id]) { out.skipped++; return; }
     var code = !isBlank(w.parent_wp_id) ? 'SWPL' : 'WPL';
-    if (has(a.resource_id, code, 'workpackage', w.id)) { out.already++; end(a); return; }
+    if (has(a.resource_id, code, 'workpackage', w.id)) { out.already++; if (end(a)) { /* doublon : l'ancienne ligne est terminée */ } return; }
+    if (full()) { out.partial = true; return; }
     out.wpl++; a.role_code = code;
-    if (!dryRun) repoUpdate('RoleAssignment', a.id, { role_code: code }, null, actx);
+    if (!dryRun) { repoUpdate('RoleAssignment', a.id, { role_code: code }, null, actx); writes++; }
   });
   // 3. membre → Contributor de chaque livrable et jalon du périmètre
   rows.filter(function (a) { return a.role_code === 'MEMBER' && roleActive_(a, today) && resById[a.resource_id]; }).forEach(function (a) {
@@ -11607,8 +11332,9 @@ function rolesMigrate_(actx, dryRun) {
     else if (a.scope_type === 'workpackage') { var ids = wpDescendants(a.scope_id); inScope = function (i) { return !!ids[i.wp_id]; }; }
     else if (a.scope_type === 'program') { var pids = {}; projects.forEach(function (p) { if (String(p.program_id) === String(a.scope_id)) pids[p.id] = true; }); inScope = function (i) { return !!pids[i.project_id]; }; }
     else { out.skipped++; return; }
-    liveItems.filter(inScope).forEach(function (i) { if (!hasAny(a.resource_id, ['DO'], 'planitem', i.id)) add('contrib', a.resource_id, 'CONTRIB', 'planitem', i.id); });
-    end(a);
+    var done = true;
+    liveItems.filter(inScope).forEach(function (i) { if (!hasAny(a.resource_id, ['DO'], 'planitem', i.id) && !add('contrib', a.resource_id, 'CONTRIB', 'planitem', i.id)) done = false; });
+    if (done) end(a);
   });
   // 4. les responsables d'aujourd'hui deviennent des rôles
   liveItems.forEach(function (i) {
@@ -11634,9 +11360,41 @@ function migrerRoles_(dryRun) {
   var email = ''; try { email = currentUserEmail_(); } catch (e) { /* hors Apps Script (essais) : l'auteur sera « migration » */ }
   return withLock(function () {
     var r = rolesMigrate_({ actor: email || 'migration', source: 'migration' }, dryRun);
-    return (dryRun ? 'Simulation (rien n’a été écrit) : ' : 'Migration faite : ') + r.dpl + ' DPL posé(s) sur des projets, ' + r.wpl + ' responsable(s) de workpackage converti(s), '
+    return (dryRun ? 'Simulation (rien n’a été écrit) : ' : r.partial ? 'Migration PARTIELLE, relancez A9_MIGRER_ROLES jusqu’à « Migration faite » : ' : 'Migration faite : ') + r.dpl + ' DPL posé(s) sur des projets, ' + r.wpl + ' responsable(s) de workpackage converti(s), '
       + r.contrib + ' Contributor(s) posé(s) sur des livrables ou jalons, ' + r.owners + ' responsable(s) devenu(s) Deliverable owner ou leader de workpackage, '
       + r.managers + ' chef(s) de projet, ' + r.budget + ' contributeur(s) d’après le budget ; ' + r.ended + ' ancienne(s) ligne(s) terminée(s), '
       + r.already + ' déjà en place, ' + r.skipped + ' ignorée(s).';
   });
 }
+
+// ---------------------------------------------------------------- panneau « Rôles » du WBS
+
+/**
+ * Les rôles d'un objet (programme, projet, workpackage, sous-workpackage, livrable ou jalon) : pour chaque rôle qui se pose sur ce type d'objet, ses titulaires
+ * actuels, et ce que l'appelant peut y poser ou y retirer. La liste des personnes n'est envoyée qu'à qui peut poser un rôle.
+ */
+defineAction('roles.of', function (p, ctx) {
+  var type = requireParam(p, 'scopeType'), id = requireParam(p, 'scopeId');
+  if (!SCOPE_TABLE[type]) throw new PpmError('VALIDATION', 'Périmètre invalide : ' + type);
+  var rec = mustGet(SCOPE_TABLE[type], id), scope = { type: type, id: id }, today = todayStr();
+  var kind = objectKindOf_(scope, ctx.lookup), assignable = assignableRolesOn_(ctx, scope), people = indexBy_(repoList('Resource'));
+  var principal = type === 'project' ? rec.manager_resource_id : rec.owner_resource_id;
+  var rows = repoList('RoleAssignment', function (a) { return a.scope_type === type && String(a.scope_id) === String(id) && roleActive_(a, today); })
+    .sort(function (a, b) { return String(a.created_at || '').localeCompare(String(b.created_at || '')) || String(a.id).localeCompare(String(b.id)); });
+  var roles = ASSIGNABLE_ROLES.filter(function (c) { return ROLE_OBJECT[c] === kind; }).map(function (code) {
+    return {
+      code: code, label: ROLE_LABELS[code], rank: ROLE_RANK[code], canAssign: assignable.indexOf(code) >= 0,
+      holders: rows.filter(function (a) { return effectiveRoleCode_(a, ctx.lookup) === code; }).map(function (a) {
+        var who = people[a.resource_id];
+        return { id: a.id, version: a.version, resource_id: a.resource_id, name: who ? who.name : '(personne retirée)', since: a.start_date || '',
+          principal: PRINCIPAL_ROLE[kind] === code && a.resource_id === principal, canEnd: assignable.indexOf(code) >= 0 };
+      })
+    };
+  });
+  return {
+    object: { type: type, id: id, kind: kind, name: type === 'program' || type === 'project' ? rec.code + ' ' + rec.name : rec.name },
+    roles: roles,
+    people: !assignable.length ? [] : repoList('Resource').map(function (x) { return { id: x.id, name: x.name, job_function: x.job_function || '', resource_type: x.resource_type }; })
+      .sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); })
+  };
+});

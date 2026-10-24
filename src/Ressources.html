@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.15.2">
+<meta name="ppm-version" content="0.15.3">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <?!= include('CommonForms') ?>
@@ -21,7 +21,6 @@
   input.rate-input { width: 96px; text-align: right; }
   /* organigramme des équipes : chaque équipe est une carte, reliée à son parent par un tronc et un coude */
   #res-table th, #res-table td { padding-left: 8px; padding-right: 8px; } #res-table th { white-space: normal; }
-  #res-table .role-select { width: 170px; max-width: 100%; }
   /* la colonne des boutons reste visible quand le tableau défile (75 % de la largeur : il peut déborder sur un petit écran) */
   #res-table .sticky-r { position: sticky; right: 0; background: var(--surface); box-shadow: -8px 0 8px -8px rgba(0, 0, 0, .25); }
   .stack { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; } /* statut et accès l'un sous l'autre : une colonne de moins */
@@ -52,7 +51,7 @@
     <span class="context" id="context"></span>
   </div>
   <div class="controls">
-    <label class="field">Rôles dans le projet <select id="picker" aria-label="Projet"></select></label>
+    <label class="field">Projet <select id="picker" aria-label="Projet"></select></label>
     <button type="button" class="btn" id="team-add" hidden>Ajouter une équipe</button>
     <button type="button" class="btn primary" id="person-add" hidden>Ajouter une personne</button>
   </div>
@@ -161,27 +160,17 @@ var BOOT = <?!= boot ?>;
     return el('div', {}, [el('strong', { class: 'deliv-n', text: String(own) }), el('small', { text: detail.join(' · ') })]);
   }
 
-  function roleCell(p) {
-    var d = state.data;
-    if (!state.projectId) return el('span', { class: 'muted', text: '—' });
-    if (d.canAssign) {
-      var sel = el('select', { class: 'inline role-select', 'data-id': p.resource_id, 'aria-label': 'Rôle de ' + p.name + ' dans le projet' });
-      fillSelect(sel, [{ value: '', label: 'Aucun' }].concat(d.roleChoices.map(function (c) { return { value: c.code, label: c.label }; })), p.project_role);
-      // un rôle que l'on ne peut pas attribuer (plus élevé que le sien) reste affiché, sans pouvoir être modifié
-      if (p.project_role && !d.roleChoices.some(function (c) { return c.code === p.project_role; })) { sel.disabled = true; sel.appendChild(el('option', { value: p.project_role, text: p.project_role === 'CP' ? 'Chef de projet' : 'Membre affecté' })); sel.value = p.project_role; }
-      sel.addEventListener('change', function () {
-        call('people.setProjectRole', { projectId: state.projectId, resourceId: p.resource_id, role: sel.value }, true)
-          .then(function () { toast(p.name + ' : ' + (sel.value ? sel.options[sel.selectedIndex].text.toLowerCase() : 'plus de rôle de projet') + '.'); return load(); })
-          .catch(function (e) { fail(e); return load(); });
-      });
-      return sel;
-    }
-    return el('span', { text: p.project_role === 'CP' ? 'Chef de projet' : p.project_role === 'MEMBER' ? 'Membre affecté' : '—' });
+  /** Les rôles d'une personne dans ce projet, en lecture seule : ils se posent sur chaque objet, dans le WBS. Sans aucun rôle : Reader. */
+  function rolesCell(p) {
+    if (!p.roles.length) return el('span', {}, [el('span', { class: 'badge', title: 'Rôle par défaut : lit tout, ne modifie rien. Un rôle se pose dans le WBS, sur l’objet concerné.', text: 'Reader' }), ' ']);
+    return el('span', { text: p.roles.map(function (r) { return r.label + (r.scope ? ' (' + r.scope + ')' : ''); }).join(', ') });
   }
 
   function rateCell(p) {
     var d = state.data;
     if (!d.canRates) return null;
+    // lire les tarifs : à partir du Workpackage leader ; les fixer : chef de projet et au-dessus
+    if (!d.canSetRates) return el('span', { class: 'rate-text', text: p.daily_rate === null ? '—' : String(p.daily_rate) + (p.rate_source === 'grille' ? ' (grille)' : '') });
     var inp = el('input', { type: 'number', class: 'inline rate-input', min: '0', step: 'any', 'data-id': p.resource_id, 'aria-label': 'Taux journalier de ' + p.name, placeholder: '—' });
     inp.value = p.daily_rate === null ? '' : p.daily_rate;
     inp.addEventListener('change', function () {
@@ -204,19 +193,17 @@ var BOOT = <?!= boot ?>;
     var host = $('people'); clear(host);
     if (!rows.length) host.appendChild(el('div', { class: 'empty' }, [el('strong', { text: d.people.length ? 'Aucune personne ne correspond.' : 'Aucune personne pour l’instant.' }), el('span', { text: d.canEdit && !d.people.length ? 'Ajoutez la première avec « Ajouter une personne ».' : '' })]));
     else {
-      var head = ['Nom', 'Statut et accès', 'Équipe', 'Rôle dans le projet', 'Livrables', 'Autres rôles'];
+      var head = ['Nom', 'Statut et accès', 'Équipe', 'Livrables', 'Rôles'];
       if (d.canRates) head.push('Taux journalier (€)');
       if (d.canEdit) head.push('');
       host.appendChild(el('div', { class: 'table-wrap' }, [el('table', { id: 'res-table' }, [
         el('thead', {}, [el('tr', {}, head.map(function (h, i) { return el('th', { scope: 'col', class: (h.indexOf('Taux') === 0 ? 'num' : '') + (h === '' ? ' sticky-r' : ''), text: h }); }))]),
         el('tbody', {}, rows.map(function (p) {
-          var others = p.roles.filter(function (r) { return !(r.scope_type === 'project' && (r.code === 'CP' || r.code === 'MEMBER')); });
           var cells = [
             el('td', {}, [p.name, el('small', { text: [p.job_function, p.resource_type === 'Externe' ? (p.supplier || p.organization) : p.organization].filter(Boolean).join(' · ') || ' ' })]),
             el('td', {}, [el('div', { class: 'stack' }, [el('span', { class: 'badge' + (p.resource_type === 'Externe' ? ' ext' : ''), text: p.resource_type }), accessBadge(p)])]),
-            el('td', { text: p.team || '—' }), el('td', {}, [roleCell(p)]), el('td', { class: 'deliv' }, [deliverablesCell(p)]),
-            el('td', {}, [others.length ? others.map(function (r) { return r.label + (r.scope ? ' (' + r.scope + ')' : ''); }).join(', ') : (p.unplaced ? null : '—'),
-              p.unplaced ? el('a', { class: 'badge warn', href: (BOOT.baseUrl || '') + '?view=structure&project=' + state.projectId, title: 'Aucun rôle pour l’instant : la positionner dans l’organigramme', text: 'À positionner dans l’OBS' }) : null])
+            el('td', { text: p.team || '—' }), el('td', { class: 'deliv' }, [deliverablesCell(p)]),
+            el('td', {}, [rolesCell(p), p.unplaced ? el('a', { href: (BOOT.baseUrl || '') + '?view=structure&project=' + state.projectId, title: 'Aucun rôle pour l’instant : un rôle se pose dans le WBS', text: 'poser un rôle' }) : null])
           ];
           if (d.canRates) cells.push(el('td', { class: 'num' }, [rateCell(p)]));
           if (d.canEdit) cells.push(el('td', { class: 'sticky-r' }, [el('div', { class: 'actions-cell' }, [
@@ -225,7 +212,7 @@ var BOOT = <?!= boot ?>;
           return el('tr', { 'data-id': p.resource_id }, cells);
         }))])]));
     }
-    $('people-note').textContent = 'Pour qu’une personne intervienne : une fiche avec son adresse e-mail professionnelle, puis un rôle. ' + (d.canRates ? 'Le taux journalier de la fiche sert de base au budget, interne ou externe ; il est figé dans chaque ligne de budget à sa création. Seuls le chef de projet et le DPL le voient.' : '');
+    $('people-note').textContent = 'Pour qu’une personne intervienne : une fiche avec son adresse e-mail professionnelle (créée ici, et seulement ici), puis des rôles posés dans la page WBS. ' + (d.canRates ? 'Le taux journalier de la fiche sert de base au budget, interne ou externe ; il est figé dans chaque ligne de budget à sa création. Il est visible à partir du Workpackage leader ; le fixer est réservé au chef de projet et au-dessus.' : '');
     var tl = $('teams-list'); clear(tl);
     if (!d.teams.length) tl.appendChild(el('li', {}, [el('span', { class: 'muted', text: 'Aucune équipe.' })]));
     // arbre imbriqué : l'équipe de profondeur k est rangée sous la dernière équipe de profondeur k − 1 (l'ordre du serveur est celui de l'arborescence)
@@ -267,10 +254,10 @@ var BOOT = <?!= boot ?>;
       { key: 'team_id', label: 'Équipe', type: 'select', value: p.team_id || '', options: teamOptions('Aucune'), half: true }
     ];
     if (create) fields.splice(1, 0, { key: 'email', label: 'Adresse e-mail (facultative)', value: '', maxlength: 120 });
-    if (d.canRates) fields.push({ key: 'daily_rate', label: 'Taux journalier (€, facultatif)', type: 'number', value: p.daily_rate === null || p.daily_rate === undefined ? '' : p.daily_rate });
+    if (d.canSetRates) fields.push({ key: 'daily_rate', label: 'Taux journalier (€, facultatif)', type: 'number', value: p.daily_rate === null || p.daily_rate === undefined ? '' : p.daily_rate });
     openForm({
       title: create ? 'Ajouter une personne' : 'Modifier ' + p.name, ok: create ? 'Ajouter' : 'Enregistrer',
-      note: create ? 'L’adresse e-mail professionnelle (domaine : ' + d.domains.join(', ') + ') donne accès à l’outil. Le rôle dans le projet se choisit ensuite dans le tableau ; la personne apparaît aussi parmi les « Ressources à positionner » de la page OBS/WBS.' : 'L’adresse e-mail ne se modifie que par l’administrateur.',
+      note: create ? 'L’adresse e-mail professionnelle (domaine : ' + d.domains.join(', ') + ') donne accès à l’outil. Sans rôle, la personne est Reader : elle lit tout et ne modifie rien. Ses rôles se posent ensuite dans la page WBS, sur chaque objet.' : 'L’adresse e-mail ne se modifie que par l’administrateur.',
       fields: fields,
       onSubmit: function (v) {
         var values = { name: v.name, resource_type: v.resource_type, country: v.country, job_function: v.job_function, organization: v.organization, supplier: v.supplier, team_id: v.team_id };
@@ -280,7 +267,7 @@ var BOOT = <?!= boot ?>;
         return req.then(function (rec) {
           var id = create ? rec.id : p.resource_id;
           var rate = v.daily_rate === undefined ? null : v.daily_rate;
-          if (d.canRates && rate !== null && String(rate) !== String(p.daily_rate === null || p.daily_rate === undefined ? '' : p.daily_rate)) return call('people.setRate', { resourceId: id, daily_rate: rate }, true);
+          if (d.canSetRates && rate !== null && String(rate) !== String(p.daily_rate === null || p.daily_rate === undefined ? '' : p.daily_rate)) return call('people.setRate', { resourceId: id, daily_rate: rate }, true);
         }).then(function () { toast(create ? 'Personne ajoutée.' : 'Fiche enregistrée.'); return load(); });
       }
     });

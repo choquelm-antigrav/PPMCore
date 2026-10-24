@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.15.2">
+<meta name="ppm-version" content="0.15.3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -389,7 +389,7 @@
   <nav class="ppm-nav" aria-label="Pages de l’outil">
     <a id="nav-overview" data-view="overview" href="#">Overview</a>
     <a id="nav-plan" data-view="gantt" href="#">Planning</a>
-    <a id="nav-struct" data-view="structure" href="#">OBS/WBS</a>
+    <a id="nav-struct" data-view="structure" href="#">WBS</a>
     <a id="nav-res" data-view="ressources" href="#">Ressources</a>
     <a id="nav-suivi" data-view="suivi" href="#">Suivi</a>
     <a id="nav-news" data-view="actualites" href="#">Actualités</a>
@@ -503,7 +503,7 @@
     document.getElementById('ppm-admin').hidden = !B.isAdmin;
     document.getElementById('nav-budget').hidden = !B.canBudget;
     document.getElementById('nav-copilot').hidden = !B.copilot; // copilote en suspens tant que PPM_COPILOT n'est pas « oui »
-    var EYEBROW = { overview: 'Overview · Projet', gantt: 'Planning · Gantt', structure: 'OBS/WBS · Organisation et découpage', ressources: 'Ressources · Équipes et rôles', suivi: 'Suivi · Baselines', actualites: 'Actualités · Réunions et actions', copilote: 'Copilote · Synthèse, simulation, questions et clé Gemini', budget: 'Budget · CPN et achats', compte: 'Mon compte', admin: 'Administration' };
+    var EYEBROW = { overview: 'Overview · Projet', gantt: 'Planning · Gantt', structure: 'WBS · Découpage et rôles', ressources: 'Ressources · Équipes et rôles', suivi: 'Suivi · Baselines', actualites: 'Actualités · Réunions et actions', copilote: 'Copilote · Synthèse, simulation, questions et clé Gemini', budget: 'Budget · CPN et achats', compte: 'Mon compte', admin: 'Administration' };
     var titleBox = document.querySelector('header .title');
     if (titleBox && EYEBROW[B.view] && !titleBox.querySelector('.eyebrow')) {
       var eb = document.createElement('span');
@@ -589,7 +589,7 @@ var BOOT = <?!= boot ?>;
 
   var state = { acct: null, suggestions: null };
   var $ = function (id) { return document.getElementById(id); };
-  var HOMES = [['overview', 'Overview projet'], ['gantt', 'Planning'], ['structure', 'OBS/WBS'], ['ressources', 'Ressources'], ['suivi', 'Suivi']].concat(BOOT.copilot ? [['copilote', 'Copilote']] : []).concat([['budget', 'Budget']]);
+  var HOMES = [['overview', 'Overview projet'], ['gantt', 'Planning'], ['structure', 'WBS'], ['ressources', 'Ressources'], ['suivi', 'Suivi']].concat(BOOT.copilot ? [['copilote', 'Copilote']] : []).concat([['budget', 'Budget']]);
 
   // ------------------------------------------------------------ outils
   function box(title, children) { return el('div', { class: 'box' }, [el('h2', { text: title })].concat(children)); }

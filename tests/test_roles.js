@@ -144,6 +144,28 @@ module.exports = function () {
     ok(/^Migration faite : 0 DPL posé\(s\) sur des projets, 0 responsable\(s\) de workpackage converti\(s\), 0 Contributor\(s\)/.test(again), 'et le compte rendu le dit');
   });
 
+  test('Migration interrompue puis reprise : un budget d’écritures par lancement, aucune ligne en double, l’ancienne ligne terminée seulement quand tout est posé', () => {
+    const w = lot2World();
+    w.c.repoList('RoleAssignment').forEach((a) => w.c.repoSoftDelete('RoleAssignment', a.id, null, w.S));
+    const old = (r, code, type, id) => w.c.repoInsert('RoleAssignment', { resource_id: r.id, role_code: code, scope_type: type, scope_id: id }, w.S);
+    old(w.mia, 'MEMBER', 'project', w.p1.id);                 // 4 livrables ou jalons : quatre Contributors à poser
+    old(w.dora, 'DPL', 'program', w.prog.id);                 // deux projets : deux DPL à poser
+    const active = (code) => w.c.repoList('RoleAssignment').filter((a) => a.role_code === code && (!a.end_date || a.end_date >= w.c.todayStr()));
+    const actx = { actor: 'essai', source: 'migration' };
+    const first = w.c.rolesMigrate_(actx, false, { maxWrites: 2 });
+    eq([first.partial, w.c.repoList('RoleAssignment').filter((a) => a.role_code === 'CONTRIB' || (a.role_code === 'DPL' && a.scope_type === 'project')).length], [true, 2], 'premier lancement : exactement deux écritures (le budget), et il dit qu’il est partiel');
+    ok(active('MEMBER').length === 1 && active('DPL').filter((a) => a.scope_type === 'program').length === 1, 'les anciennes lignes sont encore actives : on ne termine un « membre » qu’une fois tous ses livrables posés');
+    let runs = 1, r = first;
+    while (r.partial && runs < 40) { r = w.c.rolesMigrate_(actx, false, { maxWrites: 2 }); runs++; }
+    ok(!r.partial && runs > 3, 'terminée en ' + runs + ' lancements');
+    const keys = w.c.repoList('RoleAssignment').filter((a) => !a.end_date || a.end_date >= w.c.todayStr()).map((a) => [a.resource_id, a.role_code, a.scope_type, a.scope_id].join('|'));
+    eq(new Set(keys).size, keys.length, 'aucune ligne en double après les reprises');
+    eq([active('MEMBER').length, active('DPL').filter((a) => a.scope_type === 'program').length], [0, 0], 'anciennes lignes terminées');
+    eq(['a', 'b', 'cc', 'j'].filter((k) => w.c.repoList('RoleAssignment').some((x) => x.resource_id === w.mia.id && x.role_code === 'CONTRIB' && x.scope_id === w[k].id && (!x.end_date || x.end_date >= w.c.todayStr()))).length, 4, 'les quatre Contributors de Mia');
+    const same = w.c.rolesMigrate_(actx, false);
+    eq([same.dpl, same.contrib, same.owners, same.ended, same.partial], [0, 0, 0, 0, false], 'relancée : plus rien à faire');
+  });
+
   test('Avant la migration, les anciens codes gardent leurs droits ; on ne peut plus en poser', () => {
     const w = lot2World();
     w.c.repoList('RoleAssignment', (a) => a.resource_id === w.mia.id).forEach((a) => w.c.repoSoftDelete('RoleAssignment', a.id, null, w.S));
@@ -152,6 +174,30 @@ module.exports = function () {
     eq(w.raw(CONTRIB, 'wbs.update', { kind: 'item', id: w.cc.id, patch: { name: 'X' } }).error.code, 'FORBIDDEN', 'sans pouvoir modifier');
     eq(w.raw(CP, 'roles.assign', { values: { resource_id: w.mia.id, role_code: 'MEMBER', scope_type: 'project', scope_id: w.p1.id } }).error.code, 'VALIDATION', 'on ne pose plus d’ancien rôle');
     eq(w.raw(CP, 'roles.assign', { values: { resource_id: w.mia.id, role_code: 'RWP', scope_type: 'workpackage', scope_id: w.w2.id } }).error.code, 'VALIDATION');
+  });
+
+  test('Panneau des rôles d’un objet (roles.of) : les rôles qui s’y posent, leurs titulaires, ce que l’appelant peut poser ou retirer', () => {
+    const w = chain();
+    const of = (who, type, id) => w.call(who, 'roles.of', { scopeType: type, scopeId: id });
+    const codes = (v) => v.roles.map((r) => r.code);
+    eq([codes(of(CP, 'project', w.p1.id)), codes(of(CP, 'workpackage', w.w1.id)), codes(of(CP, 'workpackage', w.w11.id)), codes(of(CP, 'planitem', w.b.id))],
+      [['DPL', 'CP'], ['WPL'], ['SWPL'], ['DO', 'CONTRIB']], 'chaque objet ne propose que ses rôles : pas de Deliverable owner sur un workpackage, pas de chef de projet sur un livrable');
+    eq(codes(of(CP, 'program', w.prog.id)), ['PL']);
+    const b = of(CP, 'planitem', w.b.id);
+    eq(b.roles.map((r) => r.code + ':' + r.holders.map((h) => h.name).join('+')), ['DO:Rémi+Olga', 'CONTRIB:Mia+Paul'], 'les titulaires, dans l’ordre où ils ont été posés (Mia est la Contributor posée par la fixture, puis Paul)');
+    eq(b.roles[0].holders.map((h) => h.principal), [true, false], 'le premier Deliverable owner est le principal');
+    ok(b.roles.every((r) => r.canAssign && r.holders.every((h) => h.canEnd)) && b.people.length >= 6, 'le chef de projet peut tout poser et retirer, et reçoit la liste des personnes');
+    // un niveau voit ce qu'il peut faire, pas plus
+    const asDo = of(login('Olga'), 'planitem', w.b.id);
+    eq(asDo.roles.map((r) => [r.code, r.canAssign]), [['DO', false], ['CONTRIB', true]], 'un Deliverable owner pose des Contributors, pas un Deliverable owner');
+    eq(asDo.roles[0].holders.every((h) => !h.canEnd) && asDo.roles[1].holders.every((h) => h.canEnd), true, 'et ne retire que ceux d’en dessous');
+    const asReader = of(login('Zed'), 'planitem', w.b.id);
+    eq([asReader.roles.every((r) => !r.canAssign && r.holders.every((h) => !h.canEnd)), asReader.people], [true, []], 'un Reader lit les titulaires, ne peut rien poser et ne reçoit pas la liste des personnes');
+    eq(w.raw(CP, 'roles.of', { scopeType: 'planitem', scopeId: 'inconnu' }).error.code, 'NOT_FOUND');
+    eq(w.raw(CP, 'roles.of', { scopeType: 'risque', scopeId: w.b.id }).error.code, 'VALIDATION');
+    // un ancien code se lit sous son nouveau nom
+    w.c.repoInsert('RoleAssignment', { resource_id: w.zed.id, role_code: 'RWP', scope_type: 'workpackage', scope_id: w.w2.id }, w.S);
+    eq(of(CP, 'workpackage', w.w2.id).roles[0].holders.map((h) => h.name).sort(), ['Carla', 'Zed'], 'un ancien responsable de workpackage apparaît comme Workpackage leader, avant la migration');
   });
 
   test('Lecture : tout est ouvert à tous, sauf tarifs et comptes rendus (à partir du Workpackage leader) et budgets (sur son périmètre)', () => {

@@ -63,28 +63,19 @@ function openPage(user) {
   await p.until(() => p.$('res-table'));
   check(p.text('title') === 'Ressources de Projet 1' && !p.$('person-add').hidden && !p.$('team-add').hidden, 'titre et boutons d’ajout pour le chef de projet');
   check(['Carla', 'Dora', 'Mia', 'Rémi', 'Xavier'].every((n) => p.names().includes(n)), 'personnes listées : ' + p.names().join(', '));
-  check(/Rôle dans le projet/.test(p.text('res-table')) && /Taux journalier/.test(p.text('res-table')), 'colonnes du rôle dans le projet et du taux');
-  check(p.row(w.carla.id).querySelector('.role-select').value === 'CP' && p.row(w.mia.id).querySelector('.role-select').value === 'MEMBER' && p.row(w.remi.id).querySelector('.role-select').value === '', 'rôles de projet actuels : Carla chef de projet, Mia membre, Rémi aucun');
-  check(/Responsable de workpackage \(1 Conception\)/.test(flat(p.row(w.remi.id).textContent)), 'les autres rôles (workpackage) sont rappelés');
+  check(/Rôles/.test(p.text('res-table')) && !/Rôle dans le projet/.test(p.text('res-table')) && /Taux journalier/.test(p.text('res-table')), 'colonnes des rôles et du taux');
+  check(!p.doc.querySelector('.role-select'), 'plus de choix de rôle dans le tableau : les rôles se posent dans le WBS');
+  check(/Chef de projet \(P1/.test(flat(p.row(w.carla.id).textContent)) && /Contributor \(4 livrables ou jalons\)/.test(flat(p.row(w.mia.id).textContent)), 'rôles en lecture seule : Carla chef de projet, Mia Contributor de quatre livrables ou jalons');
+  check(/Workpackage leader \(1 Conception\)/.test(flat(p.row(w.remi.id).textContent)) && /Deliverable owner/.test(flat(p.row(w.remi.id).textContent)), 'Rémi : Workpackage leader du WP 1 et Deliverable owner de ses livrables');
+  check(/Reader/.test(flat(p.row(w.xavier.id).textContent)) && !!p.row(w.xavier.id).querySelector('a'), 'Xavier, sans rôle, est Reader, avec un lien pour lui en poser un dans le WBS');
   // 0.14.0 : livrables et jalons de chaque personne
   const deliv = (id) => flat(p.row(id).querySelector('td.deliv').textContent);
   check(/Livrables/.test([...p.doc.querySelectorAll('#res-table th')].map((h) => h.textContent).join('|')), 'colonne « Livrables »');
-  check(deliv(w.remi.id) === '22 livrables' && deliv(w.carla.id) === '21 livrable · 1 jalon' && deliv(w.mia.id) === '—' && deliv(w.dora.id) === '—', 'responsable de : Rémi 2 livrables, Carla 1 livrable et 1 jalon, les autres « — » : ' + [w.remi, w.carla, w.mia].map((x) => deliv(x.id)).join(' ; '));
+  check(deliv(w.remi.id) === '22 livrables' && deliv(w.carla.id) === '21 livrable · 1 jalon' && /contribue à 4/.test(deliv(w.mia.id)) && deliv(w.dora.id) === '—', 'responsable de : Rémi 2 livrables, Carla 1 livrable et 1 jalon, Mia contribue à 4 sans en être responsable, Dora « — » : ' + [w.remi, w.carla, w.mia].map((x) => deliv(x.id)).join(' ; '));
   check(p.row(w.remi.id).querySelector('.deliv-n').textContent === '2' && p.row(w.carla.id).querySelector('.deliv-n').textContent === '2', 'le total (livrables et jalons) est mis en avant : 2 pour Rémi, 2 pour Carla');
   check(p.row(w.xavier.id).querySelector('.badge').textContent === 'Externe', 'les externes sont repérés');
   const access = (id) => [...p.row(id).querySelectorAll('.badge')].map((b) => b.textContent).find((t) => /connecter|domaine|adresse/i.test(t));
   check(access(w.carla.id) === 'Peut se connecter' && access(w.xavier.id) === 'Hors domaine', 'colonne Accès : adresse du domaine = peut se connecter, autre domaine = hors domaine');
-
-  // rôle dans le projet
-  const sel = p.row(w.mia.id).querySelector('.role-select');
-  sel.value = 'CP'; p.change(sel);
-  await p.until(() => c.repoList('RoleAssignment').some((a) => a.resource_id === w.mia.id && a.role_code === 'CP' && a.scope_id === w.p1.id));
-  await p.until(() => /chef de projet/.test(p.text('toast')));
-  check(/chef de projet/.test(p.text('toast')), 'Mia passe chef de projet, la ligne se met à jour : ' + p.text('toast'));
-  const none = p.row(w.mia.id).querySelector('.role-select');
-  none.value = ''; p.change(none);
-  await p.until(() => !c.repoList('RoleAssignment').some((a) => a.resource_id === w.mia.id && a.scope_id === w.p1.id && (!a.end_date || a.end_date >= c.todayStr())));
-  check(true, 'sans rôle de projet : l’affectation est terminée');
 
   // taux journalier
   const rate = () => p.row(w.remi.id).querySelector('.rate-input');
@@ -113,7 +104,7 @@ function openPage(user) {
   await p.until(() => p.row(leo.id));
   check(leo.email === 'leo@entreprise.com' && leo.resource_type === 'Externe' && Number(leo.daily_rate) === 480, 'personne ajoutée avec son statut, son adresse et son taux');
   check(/Alpha Test GmbH/.test(flat(p.row(leo.id).textContent)), 'fournisseur affiché pour un externe');
-  check(!!p.row(leo.id).querySelector('a.badge') && /À positionner dans l’OBS/.test(p.row(leo.id).textContent) && /view=structure&project=/.test(p.row(leo.id).querySelector('a.badge').getAttribute('href')) && !p.row(w.carla.id).querySelector('a.badge'), 'une personne sans rôle porte « À positionner dans l’OBS », avec un lien vers la page OBS/WBS ; celles qui ont un rôle non');
+  check(/Reader/.test(p.row(leo.id).textContent) && /view=structure&project=/.test(p.row(leo.id).querySelector('a').getAttribute('href')) && !/Reader/.test(p.row(w.carla.id).textContent), 'une personne sans rôle est Reader, avec un lien vers le WBS pour lui en poser un ; celles qui ont un rôle ne le sont pas');
   check(access(leo.id) === 'Peut se connecter' && /adresse e-mail professionnelle/.test(p.text('people-note')), 'une adresse du domaine donne l’accès aussitôt ; la page explique comment faire intervenir quelqu’un');
 
   // équipes
@@ -164,14 +155,14 @@ function openPage(user) {
   // droits
   const m = openPage(MEMBER);
   await m.until(() => m.$('res-table'));
-  check(m.$('person-add').hidden && m.$('team-add').hidden && !m.doc.querySelector('.role-select') && !m.doc.querySelector('.rate-input') && !/Taux journalier/.test(m.text('res-table')), 'un membre : liste en lecture seule, ni rôles à choisir, ni taux, ni ajout');
-  check(/Chef de projet/.test(flat(m.row(w.carla.id).textContent)) && /Responsable de workpackage/.test(flat(m.row(w.remi.id).textContent)), 'mais il voit les rôles de chacun');
+  check(m.$('person-add').hidden && m.$('team-add').hidden && !m.doc.querySelector('.rate-input') && !/Taux journalier/.test(m.text('res-table')), 'un membre : liste en lecture seule, ni rôles à choisir, ni taux, ni ajout');
+  check(/Chef de projet/.test(flat(m.row(w.carla.id).textContent)) && /Workpackage leader/.test(flat(m.row(w.remi.id).textContent)), 'mais il voit les rôles de chacun');
   const r = openPage(RWP);
   await r.until(() => r.$('res-table'));
-  check(r.$('person-add').hidden && !r.doc.querySelector('.rate-input') && !r.doc.querySelector('.role-select'), 'un responsable de workpackage : lecture seule');
+  check(r.$('person-add').hidden && !r.doc.querySelector('.rate-input') && /Taux journalier/.test(r.text('res-table')) && !!r.doc.querySelector('.rate-text'), 'un Workpackage leader : voit les tarifs, ne peut pas les modifier, ni ajouter de personne');
   const d = openPage(DPL);
   await d.until(() => d.$('res-table'));
-  check(!!d.doc.querySelector('.role-select') && !!d.doc.querySelector('.rate-input') && !d.$('person-add').hidden, 'le DPL attribue les rôles, fixe les taux et ajoute des personnes');
+  check(!!d.doc.querySelector('.rate-input') && !d.$('person-add').hidden, 'le DPL fixe les taux et ajoute des personnes');
 
   // ---------------------------------------------------------------- 0.14.1 : l'arbre des équipes est un organigramme (25 % de la largeur), la liste des ressources a 75 %
   const team = (values) => w.call(CP, 'teams.create', { values });

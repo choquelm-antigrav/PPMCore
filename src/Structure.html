@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.15.2">
+<meta name="ppm-version" content="0.15.3">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <?!= include('CommonForms') ?>
@@ -61,6 +61,13 @@
   aside .edit label { display: grid; gap: 2px; color: var(--muted); font-size: 13px; }
   aside .edit input { padding: 6px 8px; border: 1px solid var(--rule); border-radius: 4px; color: var(--ink); }
   aside ul.roles { margin: 0 0 16px; padding-left: 18px; font-size: 14px; }
+  .roles-box h3 { margin: 4px 0 8px; font-size: 15px; font-weight: 600; }
+  .role-row { padding: 6px 0; border-bottom: 1px solid var(--rule); font-size: 14px; }
+  .role-row .muted { color: var(--muted); font-size: 13px; }
+  .role-row ul.holders { list-style: none; margin: 4px 0 0; padding: 0; }
+  .role-row ul.holders li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0; }
+  .role-add { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-top: 10px; }
+  .role-add select { flex: 1 1 150px; min-width: 0; padding: 6px 8px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; }
   aside .hint { margin: 12px 0 0; color: var(--muted); font-size: 13px; }
   dialog[id^="editor"] { width: min(520px, calc(100% - 32px)); max-width: none; }
   dialog[id^="confirm"] { width: min(460px, calc(100% - 32px)); }
@@ -79,102 +86,13 @@
 <?!= include('Header') ?>
 <header>
   <div class="title">
-    <h1 id="title">OBS/WBS</h1>
-    <p class="context">L’organisation et le découpage du projet, l’un sous l’autre.</p>
+    <h1 id="title">WBS</h1>
+    <p class="context">Le découpage du projet et ses rôles : qui est responsable de chaque workpackage, livrable et jalon.</p>
   </div>
   <div class="controls">
     <span class="scope-pick" id="scope-pick"><select id="picker" aria-label="Projet ou programme"></select></span>
   </div>
 </header>
-
-<div class="zone" id="zone-obs"><h2 class="sec" id="ztitle">Organisation (OBS)</h2></div>
-<div class="status">
-  <span class="pop-anchor">
-    <button type="button" class="icon-btn" id="info-btn" aria-label="Informations" title="Informations"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.01"/></svg></button>
-    <div class="popover" id="info-pop" hidden>
-      <p id="summary" aria-live="polite"></p>
-      <p class="context" id="context"></p>
-    </div>
-  </span>
-  <div class="seg mode" id="mode" role="group" aria-label="Lecture de l’organisation">
-    <button type="button" data-mode="roles" aria-pressed="true">Par rôles</button>
-    <button type="button" data-mode="teams" aria-pressed="false">Par équipes</button>
-  </div>
-  <span class="team-pick" id="team-pick" hidden><select id="team-root" aria-label="Équipe de départ"></select></span>
-  <div class="controls" style="margin-left:auto">
-    <button type="button" class="btn" id="org-role" hidden>Attribuer un rôle</button>
-    <button type="button" class="btn" id="org-person" hidden>Ajouter une personne</button>
-    <button type="button" class="btn" id="org-team" hidden>Ajouter une équipe</button>
-    <button type="button" class="btn" id="options-btn" aria-expanded="false" aria-controls="options">Attributs affichés</button>
-    <div class="seg" role="group" aria-label="Zoom">
-      <button type="button" id="zoom-out" aria-label="Zoom arrière">−</button>
-      <button type="button" id="zoom-fit">Ajuster</button>
-      <button type="button" id="zoom-in" aria-label="Zoom avant">+</button>
-    </div>
-    <button type="button" class="icon-btn" id="reload" aria-label="Actualiser" title="Actualiser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
-  </div>
-</div>
-
-<section class="options" id="options" hidden aria-label="Attributs affichés">
-  <div class="groups">
-    <fieldset id="opt-attrs"><legend>Afficher sur chaque carte</legend><div class="checks" id="attr-list"></div></fieldset>
-    <fieldset id="opt-colors"><legend>Couleur selon</legend></fieldset>
-    <fieldset id="opt-more" hidden><legend>Contenu</legend></fieldset>
-  </div>
-  <div class="foot">
-    <button type="button" class="btn" id="opt-reset">Rétablir les valeurs par défaut</button>
-    <span id="prefs-state" role="status" aria-live="polite"></span>
-    <span>Le nom et le titre de chaque carte sont toujours affichés. Vos choix sont mémorisés pour votre compte.</span>
-  </div>
-</section>
-
-<main id="main">
-  <div class="chart">
-    <div class="unplaced" id="unplaced" hidden>
-      <p class="k">Ressources à positionner <span id="unplaced-count"></span></p>
-      <p class="hint-line">Personnes sans aucun rôle pour l’instant : cliquez sur l’une d’elles, puis « Positionner dans l’organigramme ».</p>
-      <div id="unplaced-list"></div>
-    </div>
-    <ul class="legend" id="legend" aria-label="Légende des couleurs"></ul>
-    <div class="canvas" id="canvas"><p class="loading">Chargement…</p></div>
-  </div>
-  <aside id="details" hidden aria-live="polite"></aside>
-</main>
-
-<dialog id="editor" aria-labelledby="editor-title">
-  <form id="editor-form" novalidate>
-    <h2 id="editor-title"></h2>
-    <div class="ed-grid" id="editor-body"></div>
-    <p class="ed-error" id="ed-error" role="alert" hidden></p>
-    <div class="actions">
-      <button type="button" class="btn" id="ed-cancel">Annuler</button>
-      <button type="submit" class="btn primary" id="ed-save">Enregistrer</button>
-    </div>
-  </form>
-</dialog>
-
-<dialog id="confirm" aria-labelledby="confirm-title">
-  <h2 id="confirm-title"></h2>
-  <p id="confirm-text"></p>
-  <p class="ed-error" id="confirm-error" role="alert" hidden></p>
-  <div class="actions">
-    <button type="button" class="btn" id="confirm-cancel">Annuler</button>
-    <button type="button" class="btn danger" id="confirm-ok">Supprimer</button>
-  </div>
-</dialog>
-
-<dialog id="genform" aria-labelledby="gf-title">
-  <form id="gf-form" novalidate>
-    <h2 id="gf-title"></h2>
-    <div class="ed-grid" id="gf-body"></div>
-    <p class="ed-error" id="gf-error" role="alert" hidden></p>
-    <div class="actions">
-      <button type="button" class="btn" id="gf-cancel">Annuler</button>
-      <button type="submit" class="btn primary" id="gf-ok">Enregistrer</button>
-    </div>
-  </form>
-</dialog>
-
 
 <div class="zone" id="zone-wbs"><h2 class="sec" id="ztitle-wbs">Découpage du projet (WBS)</h2></div>
 <div class="status">
@@ -265,19 +183,17 @@ var BOOT = <?!= boot ?>;
   'use strict';
   var el = ppm.el, clear = ppm.clear, uuid = ppm.uuid, plural = ppm.plural, toast = ppm.toast, call = ppm.call, openDialog = ppm.openDialog, frDate = ppm.frDate;
 
-  /** Un schéma = une instance. L'organisation garde ses identifiants ; ceux du découpage portent le suffixe « -wbs ». */
+  /** Les identifiants du découpage portent le suffixe « -wbs » (l'organigramme OBS, qui occupait la première moitié de la page, a été supprimé en 0.15.3). */
   function createStructure(TAB, shared) {
 
   var SVGNS = 'http://www.w3.org/2000/svg';
-  var ROLE_COLORS = { PL: '#3B6FE0', DPL: '#00A3E0', CP: '#1F8A85', RWP: '#B7791F', MEMBER: '#8A4F9E' };
   var ORG_PALETTE = ['#2F6DB5', '#1F8A85', '#B7791F', '#8A4F9E', '#4C8C2B', '#B4487A', '#00A3E0', '#8C5A3C', '#5B8FE0', '#A0522D'];
   var NEUTRAL = '#8FB3E3';
   var KIND_COLORS = { program: '#0B2A66', project: '#1E4FB0', wp: '#3F7FE0', item: '#8CB6F0', milestone: '#00A3E0' };
-  var TYPE_COLORS = { Interne: '#2F6DB5', Externe: '#B7791F' };
   var CHAR_PX = 6.7, CHAR_PX_BOLD = 7.6; // largeur moyenne d'un caractère (12 px) et d'un titre gras (13 px)
 
   var state = {
-    tab: TAB, mode: 'roles', scopeType: 'project', scopeId: '', teamRoot: '',
+    tab: TAB, scopeType: 'project', scopeId: '',
     catalog: null, prefs: null, data: null, catalogLists: null, collapsed: {}, zoom: 1,
     layout: null, selected: '', suggestions: null, saveTimer: null, orgColors: {}, seq: 0
   };
@@ -312,13 +228,8 @@ var BOOT = <?!= boot ?>;
     setZoom(fit >= 0.5 ? Math.min(1, fit) : 1); // tout le schéma tient dans la largeur tant qu'il reste lisible (vue programme : tous les projets côte à côte)
     var r = state.layout.root;
     if (!r) return;
-    if (state.tab === 'obs') {
-      canvas.scrollLeft = Math.max(0, (r.x + r.w / 2) * state.zoom - avail / 2);
-      canvas.scrollTop = 0;
-    } else {
-      canvas.scrollLeft = 0;
-      canvas.scrollTop = Math.max(0, (r.y + r.h / 2) * state.zoom - (canvas.clientHeight || 500) / 2);
-    }
+    canvas.scrollLeft = 0;
+    canvas.scrollTop = Math.max(0, (r.y + r.h / 2) * state.zoom - (canvas.clientHeight || 500) / 2);
   }
   function fitZoom() {
     if (!state.layout) return;
@@ -336,8 +247,6 @@ var BOOT = <?!= boot ?>;
     var t = e.target.closest ? e.target : e.target.parentNode;
     var tog = t.closest('[data-toggle]');
     if (tog) { activate(e, function () { var id = tog.getAttribute('data-toggle'); state.collapsed[id] = !state.collapsed[id]; draw(); }); return; }
-    var per = t.closest('[data-person]');
-    if (per) { activate(e, function () { showPerson(per.getAttribute('data-person')); }); return; }
     var node = t.closest('[data-id]');
     if (node) activate(e, function () { showNode(node.getAttribute('data-id')); });
   }
@@ -349,22 +258,13 @@ var BOOT = <?!= boot ?>;
     state.scopeType = v[0]; state.scopeId = v[1] === 'none' ? '' : v[1];
     load();
   });
-  if (state.tab === 'obs') $('team-root').addEventListener('change', function () { state.teamRoot = this.value; load(); });
-  if (state.tab === 'obs') Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (b) {
-    b.addEventListener('click', function () {
-      state.mode = b.getAttribute('data-mode');
-      state.prefs.obs.mode = state.mode;
-      savePrefsSoon();
-      load();
-    });
-  });
   $('options-btn').addEventListener('click', function () {
     var box = $('options'), open = box.hidden;
     box.hidden = !open;
     this.setAttribute('aria-expanded', String(open));
   });
   $('opt-reset').addEventListener('click', resetPrefs);
-  $('reload').addEventListener('click', function () { state.suggestions = null; load(); });
+  $('reload').addEventListener('click', function () { load(); });
   $('zoom-in').addEventListener('click', function () { setZoom(state.zoom + 0.1); });
   $('zoom-out').addEventListener('click', function () { setZoom(state.zoom - 0.1); });
   $('zoom-fit').addEventListener('click', fitZoom);
@@ -378,7 +278,6 @@ var BOOT = <?!= boot ?>;
     state.catalog = r[1].catalog;
     state.prefs = r[1].prefs;
     if (!$('picker').options.length) fillPicker(r[0]);
-    state.mode = BOOT.mode || state.prefs.obs.mode || 'roles';
     if (BOOT.program) { state.scopeType = 'program'; state.scopeId = BOOT.program === 'none' ? '' : BOOT.program; }
     else {
       var first = BOOT.project || (r[0].projects.filter(function (p) { return p.status !== 'Clos'; })[0] || r[0].projects[0] || {}).id;
@@ -396,9 +295,8 @@ var BOOT = <?!= boot ?>;
   }
 
   var shared = {};
-  var obs = createStructure('obs', shared);
   var wbs = shared.wbs = createStructure('wbs', shared);
-  window.__ppm = Object.assign({}, obs, { obs: obs, wbs: wbs });
+  window.__ppm = Object.assign({}, wbs, { wbs: wbs });
 })();
 </script>
 </body>

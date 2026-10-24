@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.15.2">
+<meta name="ppm-version" content="0.15.3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -502,6 +502,13 @@
   aside .edit label { display: grid; gap: 2px; color: var(--muted); font-size: 13px; }
   aside .edit input { padding: 6px 8px; border: 1px solid var(--rule); border-radius: 4px; color: var(--ink); }
   aside ul.roles { margin: 0 0 16px; padding-left: 18px; font-size: 14px; }
+  .roles-box h3 { margin: 4px 0 8px; font-size: 15px; font-weight: 600; }
+  .role-row { padding: 6px 0; border-bottom: 1px solid var(--rule); font-size: 14px; }
+  .role-row .muted { color: var(--muted); font-size: 13px; }
+  .role-row ul.holders { list-style: none; margin: 4px 0 0; padding: 0; }
+  .role-row ul.holders li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0; }
+  .role-add { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-top: 10px; }
+  .role-add select { flex: 1 1 150px; min-width: 0; padding: 6px 8px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; }
   aside .hint { margin: 12px 0 0; color: var(--muted); font-size: 13px; }
   dialog[id^="editor"] { width: min(520px, calc(100% - 32px)); max-width: none; }
   dialog[id^="confirm"] { width: min(460px, calc(100% - 32px)); }
@@ -525,7 +532,7 @@
   <nav class="ppm-nav" aria-label="Pages de l’outil">
     <a id="nav-overview" data-view="overview" href="#">Overview</a>
     <a id="nav-plan" data-view="gantt" href="#">Planning</a>
-    <a id="nav-struct" data-view="structure" href="#">OBS/WBS</a>
+    <a id="nav-struct" data-view="structure" href="#">WBS</a>
     <a id="nav-res" data-view="ressources" href="#">Ressources</a>
     <a id="nav-suivi" data-view="suivi" href="#">Suivi</a>
     <a id="nav-news" data-view="actualites" href="#">Actualités</a>
@@ -639,7 +646,7 @@
     document.getElementById('ppm-admin').hidden = !B.isAdmin;
     document.getElementById('nav-budget').hidden = !B.canBudget;
     document.getElementById('nav-copilot').hidden = !B.copilot; // copilote en suspens tant que PPM_COPILOT n'est pas « oui »
-    var EYEBROW = { overview: 'Overview · Projet', gantt: 'Planning · Gantt', structure: 'OBS/WBS · Organisation et découpage', ressources: 'Ressources · Équipes et rôles', suivi: 'Suivi · Baselines', actualites: 'Actualités · Réunions et actions', copilote: 'Copilote · Synthèse, simulation, questions et clé Gemini', budget: 'Budget · CPN et achats', compte: 'Mon compte', admin: 'Administration' };
+    var EYEBROW = { overview: 'Overview · Projet', gantt: 'Planning · Gantt', structure: 'WBS · Découpage et rôles', ressources: 'Ressources · Équipes et rôles', suivi: 'Suivi · Baselines', actualites: 'Actualités · Réunions et actions', copilote: 'Copilote · Synthèse, simulation, questions et clé Gemini', budget: 'Budget · CPN et achats', compte: 'Mon compte', admin: 'Administration' };
     var titleBox = document.querySelector('header .title');
     if (titleBox && EYEBROW[B.view] && !titleBox.querySelector('.eyebrow')) {
       var eb = document.createElement('span');
@@ -687,102 +694,13 @@
 </script>
 <header>
   <div class="title">
-    <h1 id="title">OBS/WBS</h1>
-    <p class="context">L’organisation et le découpage du projet, l’un sous l’autre.</p>
+    <h1 id="title">WBS</h1>
+    <p class="context">Le découpage du projet et ses rôles : qui est responsable de chaque workpackage, livrable et jalon.</p>
   </div>
   <div class="controls">
     <span class="scope-pick" id="scope-pick"><select id="picker" aria-label="Projet ou programme"></select></span>
   </div>
 </header>
-
-<div class="zone" id="zone-obs"><h2 class="sec" id="ztitle">Organisation (OBS)</h2></div>
-<div class="status">
-  <span class="pop-anchor">
-    <button type="button" class="icon-btn" id="info-btn" aria-label="Informations" title="Informations"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.01"/></svg></button>
-    <div class="popover" id="info-pop" hidden>
-      <p id="summary" aria-live="polite"></p>
-      <p class="context" id="context"></p>
-    </div>
-  </span>
-  <div class="seg mode" id="mode" role="group" aria-label="Lecture de l’organisation">
-    <button type="button" data-mode="roles" aria-pressed="true">Par rôles</button>
-    <button type="button" data-mode="teams" aria-pressed="false">Par équipes</button>
-  </div>
-  <span class="team-pick" id="team-pick" hidden><select id="team-root" aria-label="Équipe de départ"></select></span>
-  <div class="controls" style="margin-left:auto">
-    <button type="button" class="btn" id="org-role" hidden>Attribuer un rôle</button>
-    <button type="button" class="btn" id="org-person" hidden>Ajouter une personne</button>
-    <button type="button" class="btn" id="org-team" hidden>Ajouter une équipe</button>
-    <button type="button" class="btn" id="options-btn" aria-expanded="false" aria-controls="options">Attributs affichés</button>
-    <div class="seg" role="group" aria-label="Zoom">
-      <button type="button" id="zoom-out" aria-label="Zoom arrière">−</button>
-      <button type="button" id="zoom-fit">Ajuster</button>
-      <button type="button" id="zoom-in" aria-label="Zoom avant">+</button>
-    </div>
-    <button type="button" class="icon-btn" id="reload" aria-label="Actualiser" title="Actualiser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
-  </div>
-</div>
-
-<section class="options" id="options" hidden aria-label="Attributs affichés">
-  <div class="groups">
-    <fieldset id="opt-attrs"><legend>Afficher sur chaque carte</legend><div class="checks" id="attr-list"></div></fieldset>
-    <fieldset id="opt-colors"><legend>Couleur selon</legend></fieldset>
-    <fieldset id="opt-more" hidden><legend>Contenu</legend></fieldset>
-  </div>
-  <div class="foot">
-    <button type="button" class="btn" id="opt-reset">Rétablir les valeurs par défaut</button>
-    <span id="prefs-state" role="status" aria-live="polite"></span>
-    <span>Le nom et le titre de chaque carte sont toujours affichés. Vos choix sont mémorisés pour votre compte.</span>
-  </div>
-</section>
-
-<main id="main">
-  <div class="chart">
-    <div class="unplaced" id="unplaced" hidden>
-      <p class="k">Ressources à positionner <span id="unplaced-count"></span></p>
-      <p class="hint-line">Personnes sans aucun rôle pour l’instant : cliquez sur l’une d’elles, puis « Positionner dans l’organigramme ».</p>
-      <div id="unplaced-list"></div>
-    </div>
-    <ul class="legend" id="legend" aria-label="Légende des couleurs"></ul>
-    <div class="canvas" id="canvas"><p class="loading">Chargement…</p></div>
-  </div>
-  <aside id="details" hidden aria-live="polite"></aside>
-</main>
-
-<dialog id="editor" aria-labelledby="editor-title">
-  <form id="editor-form" novalidate>
-    <h2 id="editor-title"></h2>
-    <div class="ed-grid" id="editor-body"></div>
-    <p class="ed-error" id="ed-error" role="alert" hidden></p>
-    <div class="actions">
-      <button type="button" class="btn" id="ed-cancel">Annuler</button>
-      <button type="submit" class="btn primary" id="ed-save">Enregistrer</button>
-    </div>
-  </form>
-</dialog>
-
-<dialog id="confirm" aria-labelledby="confirm-title">
-  <h2 id="confirm-title"></h2>
-  <p id="confirm-text"></p>
-  <p class="ed-error" id="confirm-error" role="alert" hidden></p>
-  <div class="actions">
-    <button type="button" class="btn" id="confirm-cancel">Annuler</button>
-    <button type="button" class="btn danger" id="confirm-ok">Supprimer</button>
-  </div>
-</dialog>
-
-<dialog id="genform" aria-labelledby="gf-title">
-  <form id="gf-form" novalidate>
-    <h2 id="gf-title"></h2>
-    <div class="ed-grid" id="gf-body"></div>
-    <p class="ed-error" id="gf-error" role="alert" hidden></p>
-    <div class="actions">
-      <button type="button" class="btn" id="gf-cancel">Annuler</button>
-      <button type="submit" class="btn primary" id="gf-ok">Enregistrer</button>
-    </div>
-  </form>
-</dialog>
-
 
 <div class="zone" id="zone-wbs"><h2 class="sec" id="ztitle-wbs">Découpage du projet (WBS)</h2></div>
 <div class="status">
@@ -873,19 +791,17 @@ var BOOT = <?!= boot ?>;
   'use strict';
   var el = ppm.el, clear = ppm.clear, uuid = ppm.uuid, plural = ppm.plural, toast = ppm.toast, call = ppm.call, openDialog = ppm.openDialog, frDate = ppm.frDate;
 
-  /** Un schéma = une instance. L'organisation garde ses identifiants ; ceux du découpage portent le suffixe « -wbs ». */
+  /** Les identifiants du découpage portent le suffixe « -wbs » (l'organigramme OBS, qui occupait la première moitié de la page, a été supprimé en 0.15.3). */
   function createStructure(TAB, shared) {
 
   var SVGNS = 'http://www.w3.org/2000/svg';
-  var ROLE_COLORS = { PL: '#3B6FE0', DPL: '#00A3E0', CP: '#1F8A85', RWP: '#B7791F', MEMBER: '#8A4F9E' };
   var ORG_PALETTE = ['#2F6DB5', '#1F8A85', '#B7791F', '#8A4F9E', '#4C8C2B', '#B4487A', '#00A3E0', '#8C5A3C', '#5B8FE0', '#A0522D'];
   var NEUTRAL = '#8FB3E3';
   var KIND_COLORS = { program: '#0B2A66', project: '#1E4FB0', wp: '#3F7FE0', item: '#8CB6F0', milestone: '#00A3E0' };
-  var TYPE_COLORS = { Interne: '#2F6DB5', Externe: '#B7791F' };
   var CHAR_PX = 6.7, CHAR_PX_BOLD = 7.6; // largeur moyenne d'un caractère (12 px) et d'un titre gras (13 px)
 
   var state = {
-    tab: TAB, mode: 'roles', scopeType: 'project', scopeId: '', teamRoot: '',
+    tab: TAB, scopeType: 'project', scopeId: '',
     catalog: null, prefs: null, data: null, catalogLists: null, collapsed: {}, zoom: 1,
     layout: null, selected: '', suggestions: null, saveTimer: null, orgColors: {}, seq: 0
   };
@@ -909,8 +825,6 @@ var BOOT = <?!= boot ?>;
   }
   function has(list, k) { return list.indexOf(k) >= 0; }
 
-
-
   // ------------------------------------------------------------ adresse et navigation
   function scopeParams() {
     return state.scopeType === 'program' ? (state.scopeId ? '&program=' + state.scopeId : '') : '&project=' + state.scopeId;
@@ -921,12 +835,6 @@ var BOOT = <?!= boot ?>;
     $('nav-struct').setAttribute('href', base + '?view=structure' + scopeParams());
     $('nav-suivi').setAttribute('href', base + '?view=suivi' + (state.scopeType === 'project' ? '&project=' + state.scopeId : ''));
     $('nav-copilot').setAttribute('href', base + '?view=copilote' + (state.scopeType === 'project' ? '&project=' + state.scopeId : ''));
-    if (state.tab !== 'obs') return;
-    try {
-      var p = { view: 'structure', mode: state.mode };
-      if (state.scopeType === 'program') p.program = state.scopeId || 'none'; else p.project = state.scopeId;
-      google.script.history.replace(null, p);
-    } catch (e) { /* hors web app */ }
   }
 
   // ------------------------------------------------------------ choix d'affichage
@@ -1003,14 +911,6 @@ var BOOT = <?!= boot ?>;
   }
   function orgColor(o) { return o ? state.orgColors[o] || NEUTRAL : NEUTRAL; }
 
-  function personColor(p, node) {
-    switch (prefs().colorBy) {
-      case 'role': return ROLE_COLORS[node.role_code] || '#C5CFD8';
-      case 'organization': return orgColor(p.organization);
-      case 'resource_type': return TYPE_COLORS[p.resource_type] || NEUTRAL;
-      default: return '#B7CDEB';
-    }
-  }
   function wbsColor(n) {
     switch (prefs().colorBy) {
       case 'kind': return n.kind === 'item' ? (n.item_type === 'Jalon' ? KIND_COLORS.milestone : KIND_COLORS.item) : KIND_COLORS[n.kind];
@@ -1025,12 +925,7 @@ var BOOT = <?!= boot ?>;
       box.appendChild(el('li', {}, [el('span', { class: 'swatch dot', style: 'background:' + color }), label]));
     };
     var by = prefs().colorBy;
-    if (state.tab === 'obs') {
-      if (by === 'role' && state.data && state.data.mode !== 'teams') Object.keys(ROLE_COLORS).forEach(function (k) { add(roleLabel(k), ROLE_COLORS[k]); });
-      if (by === 'role' && state.data && state.data.mode === 'teams') box.appendChild(el('li', { text: 'Les rôles n’existent que dans la vue par rôles : choisissez « Organisation » ou « Interne ou externe » pour colorer les personnes.' }));
-      if (by === 'resource_type') { add('Interne', TYPE_COLORS.Interne); add('Externe', TYPE_COLORS.Externe); }
-      if (by === 'organization') orgLegend(add);
-    } else {
+    {
       if (by === 'kind') { add('Projet', KIND_COLORS.project); add('Workpackage', KIND_COLORS.wp); add('Livrable', KIND_COLORS.item); add('Jalon', KIND_COLORS.milestone); }
       if (by === 'organization') orgLegend(add);
     }
@@ -1038,10 +933,6 @@ var BOOT = <?!= boot ?>;
   function orgLegend(add) {
     Object.keys(state.orgColors).sort(function (a, b) { return a.localeCompare(b, 'fr'); }).forEach(function (o) { add(o, state.orgColors[o]); });
     add('Non renseignée', NEUTRAL);
-  }
-  function roleLabel(code) {
-    var labels = { PL: 'Program Leader', DPL: 'Domain Program Leader', CP: 'Chef de projet', RWP: 'Responsable de workpackage', MEMBER: 'Membre affecté' };
-    return labels[code] || code;
   }
 
   // ------------------------------------------------------------ mise en page d'un arbre
@@ -1118,68 +1009,7 @@ var BOOT = <?!= boot ?>;
   // ------------------------------------------------------------ contenu des cartes
   var NONE = '—';
 
-  /** Lignes d'attributs d'une personne selon les attributs choisis. muted = valeur absente. */
-  function personLines(p, attrs) {
-    var out = [];
-    var line = function (label, value, always) {
-      if (value === '' || value === null || value === undefined) { if (always) out.push({ text: label + ' : ' + NONE, muted: true }); return; }
-      out.push({ text: label + ' : ' + value });
-    };
-    if (has(attrs, 'job_function')) line('Fonction', p.job_function, true);
-    if (has(attrs, 'organization')) line('Organisation', p.organization, true);
-    if (has(attrs, 'team')) line('Équipe', p.team);
-    if (has(attrs, 'country')) line('Pays', p.country);
-    if (has(attrs, 'resource_type')) line('Type', p.resource_type);
-    if (has(attrs, 'supplier')) line('Fournisseur', p.supplier);
-    if (has(attrs, 'capacity')) line('Capacité', p.capacity === '' ? '' : p.capacity + ' j/mois');
-    if (has(attrs, 'email')) line('E-mail', p.email);
-    return out;
-  }
-
-  var OBS_W = 272, WBS_W = 288, LINE = 16;
-  var MOSAIC_COL = 232; // largeur d'une colonne de personnes dans une boîte de rôle
-  /** Nombre de colonnes de la mosaïque d'une boîte de rôle selon son effectif : 1 jusqu'à 3 personnes, puis 2, 3 et 4 colonnes. */
-  function mosaicCols(n) { return n <= 3 ? 1 : n <= 8 ? 2 : n <= 15 ? 3 : 4; }
-
-  /** Carte d'un rôle (vue par rôles) ou d'une équipe (vue par équipes). */
-  function obsSpec(n) {
-    var attrs = prefs().attrs;
-    var s = { id: n.id, parent: n.parent, w: OBS_W, blocks: [], head: [], node: n };
-    if (state.data.mode === 'teams') {
-      if (has(attrs, 'members')) s.w = OBS_W + 72;
-      s.head.push({ cls: 't-title', text: n.name });
-      if (has(attrs, 'cost_center') && n.cost_center) s.head.push({ cls: 't-caption', text: 'Centre de coût : ' + n.cost_center });
-      if (n.manager) s.blocks.push({ person: n.manager, title: n.manager.name + ' (responsable)', lines: personLines(n.manager, attrs) });
-      if (has(attrs, 'members')) {
-        var shown = n.members.slice(0, 12);
-        shown.forEach(function (m) {
-          var lines = [];
-          var l = personLines(m, attrs);
-          if (l.length) lines = [{ text: l.map(function (x) { return x.text.replace(/^[^:]+ : /, ''); }).join(' · '), muted: l.every(function (x) { return x.muted; }) }];
-          s.blocks.push({ person: m, title: m.name, lines: lines });
-        });
-        if (n.members.length > shown.length) s.foot = '+ ' + (n.members.length - shown.length) + ' autres membres';
-      } else if (n.member_count) {
-        s.foot = plural(n.member_count, 'membre', 'membres');
-      }
-    } else {
-      s.head.push({ cls: 't-title', text: n.role_label });
-      if (has(attrs, 'scope')) s.head.push({ cls: 't-caption', text: n.scope_label });
-      n.people.forEach(function (p) { s.blocks.push({ person: p, title: p.name, lines: personLines(p, attrs) }); });
-    }
-    // les personnes d'une boîte de rôle se rangent en mosaïque (colonnes) au lieu d'une pile verticale ; les boîtes d'équipes restent en pile
-    s.blocks.forEach(function (b) { b.h = 26 + b.lines.length * LINE; });
-    s.cols = state.data.mode === 'teams' ? 1 : mosaicCols(s.blocks.length);
-    if (s.cols > 1) s.w = Math.max(OBS_W, s.cols * MOSAIC_COL + 8);
-    s.colW = s.cols > 1 ? MOSAIC_COL : s.w;
-    s.rowH = [];
-    s.blocks.forEach(function (b, i) { b.col = i % s.cols; b.row = Math.floor(i / s.cols); s.rowH[b.row] = Math.max(s.rowH[b.row] || 0, b.h); });
-    var h = 10 + s.head.length * 18;
-    s.rowH.forEach(function (rh) { h += rh; });
-    if (s.foot) h += 22;
-    s.h = Math.max(h + 8, 44);
-    return s;
-  }
+  var WBS_W = 288, LINE = 16;
 
   function wbsSpec(n, levelOf) {
     var attrs = prefs().attrs;
@@ -1210,33 +1040,6 @@ var BOOT = <?!= boot ?>;
     var t = sv('text', { class: cls, x: x, y: y, text: shown });
     if (full && full !== shown) t.appendChild(sv('title', { text: full }));
     return t;
-  }
-
-  function drawObsCard(s, pos) {
-    var g = sv('g', { class: 'node', transform: 'translate(' + pos.x + ',' + pos.y + ')', tabindex: '0', role: 'button',
-      'data-id': s.id, 'aria-label': (s.node.role_label || s.node.name) + (s.node.scope_label ? ', ' + s.node.scope_label : '') });
-    g.appendChild(sv('rect', { class: 'card', width: s.w, height: s.h, rx: 6 }));
-    var y = 22;
-    s.head.forEach(function (h, i) {
-      g.appendChild(textNode(h.cls, 12, y, h.text, s.w - 24, h.text));
-      y += i === 0 ? 18 : 18;
-    });
-    var y0 = 10 + s.head.length * 18, rowTop = [], acc = 0;
-    s.rowH.forEach(function (rh, i) { rowTop[i] = acc; acc += rh; });
-    s.blocks.forEach(function (b) {
-      var bx = b.col * s.colW, y = y0 + rowTop[b.row];
-      var pg = sv('g', { class: 'person', tabindex: '0', role: 'button', 'data-person': b.person.resource_id, 'data-col': b.col, 'data-row': b.row,
-        'aria-label': b.person.name + (b.person.job_function ? ', ' + b.person.job_function : '') });
-      pg.appendChild(sv('rect', { class: 'person-bg', x: bx + 4, y: y, width: s.colW - 8, height: s.rowH[b.row], rx: 3 }));
-      pg.appendChild(sv('rect', { x: bx + 8, y: y + 4, width: 4, height: s.rowH[b.row] - 8, rx: 2, fill: personColor(b.person, s.node) }));
-      pg.appendChild(textNode('t-title', bx + 20, y + 18, b.title, s.colW - 32, b.title));
-      b.lines.forEach(function (l, i) {
-        pg.appendChild(textNode(l.muted ? 't-muted' : 't-line', bx + 20, y + 18 + LINE * (i + 1), l.text, s.colW - 32, l.text));
-      });
-      g.appendChild(pg);
-    });
-    if (s.foot) g.appendChild(textNode('t-muted', 12, y0 + acc + 16, s.foot, s.w - 24, s.foot));
-    return g;
   }
 
   function drawWbsCard(s, pos) {
@@ -1272,15 +1075,12 @@ var BOOT = <?!= boot ?>;
     // couleurs par organisation : calculées sur toutes les personnes, pas seulement les cartes visibles
     if (prefs().colorBy === 'organization') {
       var orgs = [];
-      if (state.tab === 'wbs') nodes.forEach(function (n) { orgs.push(n.owner_org); });
-      else nodes.forEach(function (n) {
-        (n.people || []).concat(n.members || [], n.manager ? [n.manager] : []).forEach(function (p) { orgs.push(p.organization); });
-      });
+      nodes.forEach(function (n) { orgs.push(n.owner_org); });
       buildOrgColors(orgs);
     }
     renderLegend();
 
-    var vis = state.tab === 'wbs' && !prefs().showItems
+    var vis = !prefs().showItems
       ? nodes.filter(function (n) { return n.kind !== 'item'; }) : nodes;
     var shown = visibleNodes(vis);
     var levelOf = {};
@@ -1288,30 +1088,24 @@ var BOOT = <?!= boot ?>;
     vis.forEach(function (n) { byId[n.id] = n; });
     vis.forEach(function (n) { var d = 0, c = n; while (c && c.parent && byId[c.parent] && d < 20) { d++; c = byId[c.parent]; } levelOf[n.id] = d; });
 
-    var specs = shown.list.map(function (n) { return state.tab === 'obs' ? obsSpec(n) : wbsSpec(n, levelOf); });
-    var lay = layoutTree(specs, state.tab === 'obs' ? 'down' : 'right', state.tab === 'obs' ? 24 : 12, state.tab === 'obs' ? 44 : 56);
+    var specs = shown.list.map(function (n) { return wbsSpec(n, levelOf); });
+    var lay = layoutTree(specs, 'right', 12, 56);
     var pad = 24, W = Math.ceil(lay.width + pad * 2), H = Math.ceil(lay.height + pad * 2 + 12);
     state.layout = { width: W, height: H, root: specs.length ? { x: pad + lay.pos[specs[0].id].x, y: pad + 6 + lay.pos[specs[0].id].y, w: specs[0].w, h: specs[0].h } : null };
 
     var svg = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, width: Math.round(W * state.zoom), height: Math.round(H * state.zoom),
-      role: 'group', 'aria-label': state.tab === 'obs' ? 'Organigramme' : 'Découpage du projet (WBS)' });
+      role: 'group', 'aria-label': 'Découpage du projet (WBS)' });
     var root = sv('g', { transform: 'translate(' + pad + ',' + (pad + 6) + ')' });
     svg.appendChild(root);
 
-    var down = state.tab === 'obs';
     lay.edges.forEach(function (e) {
-      var a = lay.byId[e.from], b = lay.byId[e.to], pa = lay.pos[e.from], pb = lay.pos[e.to], d;
-      if (down) {
-        var mid = pb.y - 22;
-        d = 'M' + (pa.x + a.w / 2) + ' ' + (pa.y + a.h) + 'V' + mid + 'H' + (pb.x + b.w / 2) + 'V' + pb.y;
-      } else {
-        var mx = pb.x - 28;
-        d = 'M' + (pa.x + a.w) + ' ' + (pa.y + a.h / 2) + 'H' + mx + 'V' + (pb.y + b.h / 2) + 'H' + pb.x;
-      }
+      var a = lay.byId[e.from], b = lay.byId[e.to], pa = lay.pos[e.from], pb = lay.pos[e.to];
+      var mx = pb.x - 28;
+      var d = 'M' + (pa.x + a.w) + ' ' + (pa.y + a.h / 2) + 'H' + mx + 'V' + (pb.y + b.h / 2) + 'H' + pb.x;
       root.appendChild(sv('path', { class: 'edge', d: d }));
     });
     specs.forEach(function (s) {
-      var g = state.tab === 'obs' ? drawObsCard(s, lay.pos[s.id]) : drawWbsCard(s, lay.pos[s.id]);
+      var g = drawWbsCard(s, lay.pos[s.id]);
       if (state.selected === s.id) g.classList.add('selected');
       root.appendChild(g);
     });
@@ -1323,9 +1117,7 @@ var BOOT = <?!= boot ?>;
       }
       if (!kidsCount && !state.collapsed[s.id]) return;
       var p = lay.pos[s.id];
-      var name = s.node.name || s.node.role_label;
-      var t = down ? drawToggle(s.id, p.x + s.w / 2, p.y + s.h, !!state.collapsed[s.id], totalBelow, name)
-        : drawToggle(s.id, p.x + s.w, p.y + s.h / 2, !!state.collapsed[s.id], totalBelow, name);
+      var t = drawToggle(s.id, p.x + s.w, p.y + s.h / 2, !!state.collapsed[s.id], totalBelow, s.node.name);
       root.appendChild(t);
     });
     canvas.appendChild(svg);
@@ -1341,10 +1133,7 @@ var BOOT = <?!= boot ?>;
 
   function showEmptyFor(data) {
     var canvas = $('canvas');
-    var msg;
-    if (state.tab === 'wbs') msg = ['Ce projet n’a pas encore de workpackage ni d’élément.', 'Ajoutez-les dans l’application AppSheet, puis cliquez sur Actualiser.'];
-    else if (data.mode === 'teams') msg = ['Aucune équipe hiérarchique.', 'Créez les équipes dans l’application AppSheet (table Équipes), puis cliquez sur Actualiser.'];
-    else msg = ['Aucun rôle attribué sur ce périmètre.', 'Attribuez des rôles dans l’application AppSheet (Organisation), puis cliquez sur Actualiser.'];
+    var msg = ['Ce projet n’a pas encore de workpackage ni d’élément.', 'Ajoutez-les avec les boutons de la barre (Ajouter un workpackage, un livrable, un jalon), ou dans l’application AppSheet.'];
     canvas.appendChild(el('div', { class: 'empty' }, [el('strong', { text: msg[0] }), el('span', { text: msg[1] })]));
   }
 
@@ -1370,23 +1159,14 @@ var BOOT = <?!= boot ?>;
     closeDetails();
     remember();
     syncControls();
-    var req;
-    if (state.tab === 'wbs') {
-      // un programme : tous ses projets et leurs workpackages côte à côte (les livrables se lisent projet par projet) ; un projet : son WBS complet
-      req = state.scopeType === 'program' ? call('wbs.tree', { programId: state.scopeId || 'none' }) : call('wbs.tree', { projectId: state.scopeId });
-    } else if (state.mode === 'teams') {
-      req = call('obs.teams', { rootTeamId: state.teamRoot });
-    } else {
-      req = call('obs.tree', { scopeType: state.scopeType, scopeId: state.scopeId });
-    }
+    // un programme : tous ses projets et leurs workpackages côte à côte (les livrables se lisent projet par projet) ; un projet : son WBS complet
+    var req = state.scopeType === 'program' ? call('wbs.tree', { programId: state.scopeId || 'none' }) : call('wbs.tree', { projectId: state.scopeId });
     setLoading();
     return req.then(function (d) {
       if (ticket !== state.seq) return;
       state.data = d;
-      if (d.mode === 'teams') fillTeamPicker(d.teams);
       setSummary();
       draw();
-      renderUnplaced();
       if (scroll) { $('canvas').scrollLeft = scroll.x; $('canvas').scrollTop = scroll.y; } else initialView();
       selectPending();
     }).catch(function (e) { if (ticket === state.seq) showError(e); });
@@ -1395,31 +1175,17 @@ var BOOT = <?!= boot ?>;
   function setSummary() {
     var d = state.data, sm = $('summary'), t = $('ztitle'), ctx = $('context');
     clear(ctx);
-    if (state.tab === 'wbs') ['wbs-add', 'wbs-add-deliverable', 'wbs-add-milestone'].forEach(function (id) { $(id).hidden = !(d && d.canCreate); });
-    else {
-      var orgEdit = !!(d && d.canEditAll);
-      $('org-person').hidden = !orgEdit;
-      $('org-role').hidden = !(orgEdit && d.mode === 'roles');
-      $('org-team').hidden = !(orgEdit && d.mode === 'teams');
-    }
+    ['wbs-add', 'wbs-add-deliverable', 'wbs-add-milestone'].forEach(function (id) { $(id).hidden = !(d && d.canCreate); });
     if (!d) { sm.textContent = ''; return; }
-    if (state.tab === 'wbs' && d.scope === 'program') {
+    if (d.scope === 'program') {
       t.textContent = 'Découpage (WBS) — ' + (d.program.code ? d.program.code + ' ' : '') + d.program.name;
       sm.textContent = plural(d.stats.projects, 'projet', 'projets') + ', ' + plural(d.stats.wps, 'workpackage', 'workpackages') + ' ; ' + plural(d.stats.items, 'livrable ou jalon', 'livrables et jalons') + ' à lire projet par projet.';
       ctx.textContent = 'Tous les projets du programme côte à côte. Cliquez sur une carte pour son détail, puis sur « Ouvrir le WBS du projet » pour modifier.';
-    } else if (state.tab === 'wbs') {
+    } else {
       t.textContent = 'Découpage (WBS) — ' + d.project.code + ' ' + d.project.name;
       sm.textContent = plural(d.stats.wps, 'workpackage', 'workpackages') + ', ' + plural(d.stats.items, 'livrable ou jalon', 'livrables et jalons') + '.';
       ctx.textContent = d.project.program_name ? 'Programme ' + d.project.program_name + '. ' : '';
       ctx.appendChild(document.createTextNode('Cliquez sur une carte pour son détail ; le bouton sur une carte replie sa branche.'));
-    } else if (d.mode === 'teams') {
-      t.textContent = 'Organisation par équipes';
-      sm.textContent = plural(d.stats.nodes, 'équipe', 'équipes') + ', ' + plural(d.stats.people, 'personne', 'personnes') + '.';
-      ctx.textContent = 'Cliquez sur une personne pour voir et compléter sa fonction et son organisation.';
-    } else {
-      t.textContent = 'Organisation — ' + d.scope.label;
-      sm.textContent = plural(d.stats.nodes, 'rôle', 'rôles') + ', ' + plural(d.stats.people, 'affectation', 'affectations') + '.';
-      ctx.textContent = 'Chaque carte est un rôle sur un périmètre ; il dépend du rôle supérieur qui le couvre. Cliquez sur une personne pour son détail.';
     }
   }
 
@@ -1445,20 +1211,7 @@ var BOOT = <?!= boot ?>;
   function syncControls() {
     var sel = $('picker');
     sel.value = (state.scopeType === 'program' ? 'program:' + (state.scopeId || 'none') : 'project:' + state.scopeId);
-    if (state.tab === 'obs') {
-      Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === state.mode)); });
-      $('team-pick').hidden = !(state.mode === 'teams');
-    }
     renderOptions();
-  }
-  function fillTeamPicker(teams) {
-    var sel = $('team-root'); clear(sel);
-    sel.appendChild(el('option', { value: '', text: 'Toutes les équipes' }));
-    teams.forEach(function (t) {
-      var indent = new Array(t.depth + 1).join('— ');
-      sel.appendChild(el('option', { value: t.id, text: indent + t.name }));
-    });
-    sel.value = state.teamRoot;
   }
 
   // ------------------------------------------------------------ détail
@@ -1492,123 +1245,27 @@ var BOOT = <?!= boot ?>;
   }
   function cssEscape(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&'); }
 
-  function allPeople() {
-    var out = [];
-    state.data.nodes.forEach(function (n) {
-      (n.people || []).concat(n.members || [], n.manager ? [n.manager] : []).forEach(function (p) { out.push({ p: p, node: n }); });
-    });
-    // les personnes sans aucun rôle ne sont sur aucune carte : on les retrouve dans la zone « Ressources à positionner »
-    ((state.data.unplaced && state.data.unplaced.people) || []).forEach(function (p) { out.push({ p: p, node: { unplaced: true } }); });
-    return out;
-  }
-  function isUnplaced(id) {
-    return ((state.data && state.data.unplaced && state.data.unplaced.people) || []).some(function (p) { return p.resource_id === id; });
-  }
-  /** Zone des personnes sans rôle (organigramme seulement) : une pastille par personne. */
-  function renderUnplaced() {
-    if (TAB !== 'obs') return;
-    var box = $('unplaced'), list = $('unplaced-list'), u = state.data && state.data.unplaced;
-    clear(list);
-    if (!u || !u.total) { box.hidden = true; return; }
-    box.hidden = false;
-    $('unplaced-count').textContent = '(' + u.total + ')';
-    u.people.forEach(function (p) {
-      list.appendChild(el('button', { type: 'button', class: 'chip-person', 'data-unplaced': p.resource_id, 'aria-pressed': String(state.selected === 'person:' + p.resource_id),
-        title: p.resource_type === 'Externe' ? 'Ressource externe' : 'Ressource interne', text: p.name + (p.resource_type === 'Externe' ? ' · externe' : ''),
-        onclick: function () { state.selected = 'person:' + p.resource_id; showPerson(p.resource_id); renderUnplaced(); } }));
-    });
-    if (u.total > u.people.length) list.appendChild(el('span', { class: 'muted', text: '… et ' + (u.total - u.people.length) + ' autres' }));
-  }
-
-  function showPerson(personId) {
-    var hits = allPeople().filter(function (x) { return x.p.resource_id === personId; });
-    if (!hits.length) return;
-    var p = hits[0].p;
-    var nodes = [el('h2', { text: p.name }), el('p', { class: 'kind', text: p.job_function || 'Fonction non renseignée' })];
-    nodes.push(facts([
-      ['Organisation', p.organization || 'Non renseignée'], ['Fonction', p.job_function || 'Non renseignée'],
-      ['E-mail', p.email], ['Équipe', p.team], ['Pays', p.country], ['Type', p.resource_type], ['Fournisseur', p.supplier],
-      ['Capacité', p.capacity === '' ? '' : p.capacity + ' jours par mois']
-    ]));
-    var unplaced = isUnplaced(personId);
-    if (unplaced) {
-      nodes.push(el('p', { class: 'hint' , text: 'Aucun rôle pour l’instant : cette personne n’est pas encore positionnée dans l’organigramme.' }));
-      if (state.data.canEditAll) nodes.push(el('div', { class: 'links' }, [el('button', { type: 'button', class: 'btn primary', id: 'person-place', text: 'Positionner dans l’organigramme', onclick: function () { assignRoleGeneral(personId); } })]));
-    } else if (state.data.mode === 'roles') {
-      var seen = {};
-      var roles = hits.map(function (h) { return h.node.role_label + ', ' + h.node.scope_label; }).filter(function (t) { if (seen[t]) return false; seen[t] = true; return true; });
-      nodes.push(el('h3', { text: 'Rôles dans cette vue', style: 'font-size:15px;margin:0 0 6px' }));
-      nodes.push(el('ul', { class: 'roles' }, roles.map(function (t) { return el('li', { text: t }); })));
-    }
-    if (state.data.canEditAll) nodes.push(personActions(p));
-    else if (p.canEdit) nodes.push(editForm(p));
-    else nodes.push(el('p', { class: 'hint', text: 'Seuls la personne elle-même, un chef de projet, un DPL ou un Program Leader peuvent modifier cette fiche.' }));
-    openDetails(nodes);
-  }
-
-  function ensureSuggestions() {
-    if (state.suggestions) return Promise.resolve(state.suggestions);
-    return call('resources.list', { limit: 500 }).then(function (rows) {
-      var f = {}, o = {};
-      rows.forEach(function (r) { if (r.job_function) f[r.job_function] = true; if (r.organization) o[r.organization] = true; });
-      state.suggestions = { functions: Object.keys(f).sort(), organizations: Object.keys(o).sort() };
-      return state.suggestions;
-    }).catch(function () { return { functions: [], organizations: [] }; });
-  }
-
-  function editForm(p) {
-    var fn = el('input', { type: 'text', id: 'edit-function', maxlength: '80', list: 'dl-functions', value: p.job_function });
-    var org = el('input', { type: 'text', id: 'edit-org', maxlength: '80', list: 'dl-orgs', value: p.organization });
-    var dlF = el('datalist', { id: 'dl-functions' }), dlO = el('datalist', { id: 'dl-orgs' });
-    ensureSuggestions().then(function (s) {
-      s.functions.forEach(function (v) { dlF.appendChild(el('option', { value: v })); });
-      s.organizations.forEach(function (v) { dlO.appendChild(el('option', { value: v })); });
-    });
-    var submit = el('button', { type: 'submit', class: 'btn primary', text: 'Enregistrer' });
-    return el('form', { class: 'edit', onsubmit: function (e) {
-      e.preventDefault();
-      submit.disabled = true;
-      call('resources.update', { id: p.resource_id, version: p.version, patch: { job_function: fn.value, organization: org.value } }, true)
-        .then(function () { state.suggestions = null; toast('Fiche de ' + p.name + ' enregistrée.'); return load(); })
-        .catch(function (err) {
-          submit.disabled = false;
-          toast(err.code === 'CONFLICT' ? 'Cette fiche a été modifiée entre-temps : rechargez puis recommencez.' : (window.ppmErrorText ? ppmErrorText(err) : (err.message || 'Enregistrement impossible.')), true);
-        });
-    } }, [
-      el('h3', { text: 'Compléter la fiche' }),
-      el('label', {}, ['Fonction', fn]), el('label', {}, ['Organisation', org]), dlF, dlO, submit
-    ]);
-  }
-
   function showNode(id) {
     var n = state.data.nodes.filter(function (x) { return x.id === id; })[0];
     if (!n) return;
     markSelected(id);
     var nodes = [];
-    if (state.tab === 'wbs') {
-      var kind = n.kind === 'program' ? 'Programme' : n.kind === 'project' ? 'Projet' : n.kind === 'wp' ? (n.parent_ref ? 'Sous-workpackage' : 'Workpackage') : n.item_type;
-      nodes.push(el('h2', { text: (n.code ? n.code + ' ' : '') + n.name }), el('p', { class: 'kind', text: kind }));
-      var flt = n.float === null || n.float === undefined ? '' : (n.float < 0 ? 'Décale un successeur de ' + plural(-n.float, 'jour ouvré', 'jours ouvrés') : n.float === 0 ? 'Aucune : chemin critique' : plural(n.float, 'jour ouvré', 'jours ouvrés'));
-      nodes.push(facts([
-        ['Responsable', n.owner], ['Organisation', n.owner ? (n.owner_org || 'Non renseignée') : ''], ['Fonction', n.owner_function],
-        ['Début', frDate(n.start)], ['Fin', frDate(n.finish)],
-        ['Avancement', n.kind === 'item' && n.item_type === 'Jalon' ? '' : n.progress + ' %'],
-        ['Statut', n.status], ['Imputation', n.charge_code], ['Marge', flt]
-      ]));
-      if (n.late) nodes.push(el('p', { class: 'flag alert', text: 'Au moins un élément est en retard sur sa date de fin prévue.' }));
-      if (state.data.scope === 'program') { if (n.kind !== 'program') nodes.push(openProjectActions(n)); }
-      else if (n.canEdit) nodes.push(wbsActions(n));
-      if (n.kind === 'item') nodes.push(depsBlock(n));
-    } else if (state.data.mode === 'teams') {
-      nodes.push(el('h2', { text: n.name }), el('p', { class: 'kind', text: 'Équipe hiérarchique' }));
-      nodes.push(facts([['Centre de coût', n.cost_center], ['Responsable', n.manager ? n.manager.name : 'Non désigné'], ['Membres', n.member_count]]));
-      nodes.push(teamMembers(n));
-      if (state.data.canEditAll && n.team_id) nodes.push(teamActions(n));
-    } else {
-      nodes.push(el('h2', { text: n.role_label }), el('p', { class: 'kind', text: n.scope_label }));
-      nodes.push(roleMembers(n));
-      if (n.canAssign) nodes.push(roleActions(n));
+    var kind = n.kind === 'program' ? 'Programme' : n.kind === 'project' ? 'Projet' : n.kind === 'wp' ? (n.parent_ref ? 'Sous-workpackage' : 'Workpackage') : n.item_type;
+    nodes.push(el('h2', { text: (n.code ? n.code + ' ' : '') + n.name }), el('p', { class: 'kind', text: kind }));
+    var flt = n.float === null || n.float === undefined ? '' : (n.float < 0 ? 'Décale un successeur de ' + plural(-n.float, 'jour ouvré', 'jours ouvrés') : n.float === 0 ? 'Aucune : chemin critique' : plural(n.float, 'jour ouvré', 'jours ouvrés'));
+    nodes.push(facts([
+      ['Responsable', n.owner], ['Organisation', n.owner ? (n.owner_org || 'Non renseignée') : ''], ['Fonction', n.owner_function],
+      ['Début', frDate(n.start)], ['Fin', frDate(n.finish)],
+      ['Avancement', n.kind === 'item' && n.item_type === 'Jalon' ? '' : n.progress + ' %'],
+      ['Statut', n.status], ['Imputation', n.charge_code], ['Marge', flt]
+    ]));
+    if (n.late) nodes.push(el('p', { class: 'flag alert', text: 'Au moins un élément est en retard sur sa date de fin prévue.' }));
+    if (state.data.scope === 'program') { if (n.kind !== 'program') nodes.push(openProjectActions(n)); }
+    else {
+      if (n.kind === 'project' || n.kind === 'wp' || n.kind === 'item') nodes.push(rolesBlock(n));
+      if (n.canEdit) nodes.push(wbsActions(n));
     }
+    if (n.kind === 'item' && state.data.scope !== 'program') nodes.push(depsBlock(n));
     if (BOOT.appsheetUrl) nodes.push(el('div', { class: 'links' }, [el('a', { class: 'btn', href: BOOT.appsheetUrl, target: '_blank', rel: 'noopener', text: 'Modifier dans AppSheet' })]));
     openDetails(nodes);
   }
@@ -1616,10 +1273,6 @@ var BOOT = <?!= boot ?>;
   // ------------------------------------------------------------ création et édition du WBS
   var KIND_NAMES = { wp: 'workpackage', Livrable: 'livrable', Jalon: 'jalon' };
 
-  function ensurePeople() {
-    if (state.people) return Promise.resolve(state.people);
-    return call('resources.list', { limit: 500 }).then(function (rows) { state.people = rows; return rows; }).catch(function () { return []; });
-  }
   function below(id) {
     var out = [];
     state.data.nodes.forEach(function (n) { if (n.parent === id) { out.push(n); out = out.concat(below(n.id)); } });
@@ -1663,6 +1316,59 @@ var BOOT = <?!= boot ?>;
     return box;
   }
 
+  // ---------------------------------------------------------------- rôles d'un objet (0.15.3)
+  /**
+   * Les rôles se posent ici, sur l'objet : chaque objet n'accepte que ses rôles (un chef de projet sur un projet, un Workpackage leader sur un workpackage, un Sub-workpackage
+   * leader sur un sous-workpackage, un Deliverable owner ou des Contributors sur un livrable ou un jalon), posés par un niveau strictement supérieur au rôle posé. Le serveur
+   * (roles.of) dit ce que chaque rôle permet à la personne connectée ; Reader est le rôle par défaut de qui n'en a aucun autre, il ne se pose pas.
+   */
+  function scopeOfNode(n) { return { type: n.kind === 'project' ? 'project' : n.kind === 'wp' ? 'workpackage' : 'planitem', id: n.ref }; }
+  function rolesBlock(n) {
+    var s = scopeOfNode(n);
+    var box = el('div', { class: 'roles-box', id: 'roles-box' }, [el('h3', { text: 'Rôles' }), el('p', { class: 'note', text: 'Chargement…' })]);
+    call('roles.of', { scopeType: s.type, scopeId: s.id }).then(function (d) { renderRoles(box, n, s, d); }).catch(function () { clear(box); });
+    return box;
+  }
+  function renderRoles(box, n, s, d) {
+    clear(box);
+    box.appendChild(el('h3', { text: 'Rôles' }));
+    var after = function () { state.pendingSelect = n.id; return load(true); };
+    var fail = function (e) { toast(window.ppmErrorText ? ppmErrorText(e) : (e.message || 'Impossible.'), true); };
+    d.roles.forEach(function (r) {
+      var ul = el('ul', { class: 'holders' });
+      r.holders.forEach(function (h) {
+        var li = el('li', {}, [el('span', { text: h.name + (h.principal ? ' · principal' : '') })]);
+        if (h.canEnd) li.appendChild(el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retirer le rôle de ' + h.name, title: 'Retirer ce rôle', text: '×', onclick: function () {
+          call('roles.end', { id: h.id, version: h.version }, true).then(function () { toast('Rôle retiré.'); return after(); }).catch(fail);
+        } }));
+        ul.appendChild(li);
+      });
+      box.appendChild(el('div', { class: 'role-row', 'data-role': r.code }, [el('strong', { text: r.label }), r.holders.length ? '' : el('span', { class: 'muted', text: ' — personne' }), ul]));
+    });
+    var assignable = d.roles.filter(function (r) { return r.canAssign; });
+    if (!assignable.length) {
+      box.appendChild(el('p', { class: 'note', id: 'roles-note', text: 'Un rôle est posé par un niveau supérieur au sien. Sans rôle, on est Reader : on lit tout, on ne modifie rien.' }));
+      return;
+    }
+    var role = el('select', { id: 'role-pick', 'aria-label': 'Rôle à poser' }, assignable.map(function (r) { return el('option', { value: r.code, text: r.label }); }));
+    var who = el('select', { id: 'role-person', 'aria-label': 'Personne' });
+    var fillPeople = function () {
+      var code = role.value, current = d.roles.filter(function (r) { return r.code === code; })[0], holding = {};
+      (current ? current.holders : []).forEach(function (h) { holding[h.resource_id] = true; });
+      clear(who);
+      who.appendChild(el('option', { value: '', text: 'Choisir une personne…' }));
+      d.people.filter(function (p) { return !holding[p.id]; }).forEach(function (p) { who.appendChild(el('option', { value: p.id, text: p.name + (p.job_function ? ' — ' + p.job_function : '') })); });
+    };
+    role.addEventListener('change', fillPeople); fillPeople();
+    var go = el('button', { type: 'button', class: 'btn primary', id: 'role-add', text: 'Poser le rôle', onclick: function () {
+      if (!who.value) { toast('Choisissez une personne.', true); return; }
+      go.disabled = true;
+      call('roles.assign', { values: { resource_id: who.value, role_code: role.value, scope_type: s.type, scope_id: s.id } }, true)
+        .then(function () { toast('Rôle posé.'); return after(); }).catch(function (e) { go.disabled = false; fail(e); });
+    } });
+    box.appendChild(el('div', { class: 'role-add' }, [role, who, go]));
+  }
+
   function parentChoices(kind, n) {
     var hasKids = kind === 'wp' && !!n.ref && state.data.nodes.some(function (x) { return x.parent_ref === n.ref; }); // un workpackage qu'on crée n'a pas encore d'enfants
     var out = [{ value: '', label: 'Projet (racine)' }];
@@ -1676,7 +1382,7 @@ var BOOT = <?!= boot ?>;
   }
 
   function openEditor(spec) {
-    ensurePeople().then(function (people) {
+    Promise.resolve().then(function () {
       var create = spec.mode === 'create', kind = spec.kind, n = spec.node || {};
       var isSub = create && kind === 'wp' && spec.parent.kind === 'wp';
       $('editor-title').textContent = create ? (isSub ? 'Nouveau sous-workpackage' : 'Nouveau ' + KIND_NAMES[kind]) : 'Modifier ' + (kind === 'wp' ? 'le workpackage' : 'le ' + KIND_NAMES[kind]);
@@ -1701,9 +1407,6 @@ var BOOT = <?!= boot ?>;
           row('Date', input('ed-date', 'date', create ? '' : (n.raw_finish || n.raw_start))),
           row('Catégorie', select('ed-cat', [{ value: '', label: '—' }, { value: 'Revue', label: 'Revue' }, { value: 'Client', label: 'Client' }, { value: 'Interne', label: 'Interne' }], create ? '' : n.milestone_category))]));
       }
-      body.appendChild(row('Responsable', select('ed-owner', [{ value: '', label: 'Aucun' }].concat(people.map(function (p) {
-        return { value: p.resource_id, label: p.name + (p.job_function ? ' — ' + p.job_function : '') };
-      })), create ? '' : n.owner_id)));
       if (create && spec.chooseParent) body.appendChild(row('Rattaché à', select('ed-parent', parentChoices(kind, {}), spec.defaultParent || '')));
       if (!create) {
         var choices = parentChoices(kind, n);
@@ -1722,7 +1425,7 @@ var BOOT = <?!= boot ?>;
     if (!ed) return;
     var f = ed.fields, spec = ed.spec, n = spec.node || {}, kind = spec.kind, create = spec.mode === 'create';
     var v = function (id) { return f[id] ? f[id].value : undefined; };
-    var values = { name: v('ed-name'), owner_resource_id: v('ed-owner') };
+    var values = { name: v('ed-name') };
     if (kind === 'wp') {
       values.charge_code = v('ed-charge');
       if (create || v('ed-code') !== n.code) values.wbs_code = v('ed-code'); // le code n'est envoyé que s'il a changé : un déplacement renumérote sinon
@@ -1814,28 +1517,15 @@ var BOOT = <?!= boot ?>;
     $('wbs-add-milestone').addEventListener('click', function () { addFromBar('Jalon'); });
   }
 
-  // ------------------------------------------------------------ 0.8.0 : dépendances, rôles, personnes, équipes
-  var COUNTRY_LIST = [['FR', 'France'], ['DE', 'Allemagne'], ['UK', 'Royaume-Uni'], ['IN', 'Inde']];
-  var DEP_TYPES = { FS: 'Fin → début', SS: 'Début → début', FF: 'Fin → fin', SF: 'Début → fin' };
+  // ------------------------------------------------------------ dépendances (les rôles : StructureEdit.html ; les personnes et les équipes : page Ressources)
+    var DEP_TYPES = { FS: 'Fin → début', SS: 'Début → début', FF: 'Fin → fin', SF: 'Début → fin' };
 
-  function ensureTeams() {
-    if (state.teamsList) return Promise.resolve(state.teamsList);
-    return call('obs.teams', {}).then(function (d) { state.teamsList = d.teams; return d.teams; }).catch(function () { return []; });
-  }
-  function personOptions(people) {
-    return [{ value: '', label: '—' }].concat(people.map(function (p) { return { value: p.resource_id, label: p.name + (p.job_function ? ' — ' + p.job_function : '') }; }));
-  }
-  function teamOptions(teams, emptyLabel) {
-    return [{ value: '', label: emptyLabel || 'Aucune' }].concat(teams.map(function (t) { return { value: t.id, label: new Array(t.depth + 1).join('— ') + t.name }; }));
-  }
   var forms = ppm.forms({ $: $, state: state, closeDialog: closeDialog, confirmClass: 'btn danger', onConfirm: function () { state.deleting = null; } });
   var fillSelect = forms.fillSelect, openForm = forms.openForm, submitForm = forms.submitForm, openConfirm = forms.openConfirm;
 
   function refreshAfter(id) {
-    state.people = null; state.teamsList = null;
+    state.people = null;
     if (id) state.pendingSelect = id;
-    // le découpage montre l'organisation de chaque responsable : il se recharge quand on modifie une personne, un rôle ou une équipe
-    if (TAB === 'obs' && shared.wbs) shared.wbs.load(true);
     return load(true);
   }
 
@@ -1895,170 +1585,6 @@ var BOOT = <?!= boot ?>;
     }
   }
 
-  // ---- rôles (carte d'un rôle)
-  function roleMembers(n) {
-    var canEnd = n.canAssign && n.rank >= n.min_rank;
-    return el('ul', { class: 'roles member-list' }, n.people.map(function (p) {
-      var li = el('li', {}, [el('span', { text: p.name + (p.job_function ? ', ' + p.job_function : '') })]);
-      if (canEnd) li.appendChild(el('button', { type: 'button', class: 'icon-btn', title: 'Retirer ' + p.name + ' de ce rôle', 'aria-label': 'Retirer ' + p.name + ' de ce rôle', text: '×', onclick: function () {
-        openConfirm('Retirer ' + p.name + ' ?', p.name + ' ne sera plus « ' + n.role_label + ' » sur ' + n.scope_label + '. L’affectation reste dans l’historique.', 'Retirer', function () {
-          return p.assignment_ids.reduce(function (chain, id) { return chain.then(function () { return call('roles.end', { id: id }, true); }); }, Promise.resolve())
-            .then(function () { toast(p.name + ' retiré(e) du rôle.'); return refreshAfter(n.id); });
-        });
-      } }));
-      return li;
-    }));
-  }
-  function roleActions(n) {
-    return el('div', { class: 'links', id: 'role-actions' }, [el('button', { type: 'button', class: 'btn primary', id: 'role-add', text: 'Ajouter une personne à ce rôle', onclick: function () {
-      ensurePeople().then(function (people) {
-        var here = {}; n.people.forEach(function (p) { here[p.resource_id] = true; });
-        openForm({
-          title: 'Ajouter à « ' + n.role_label + ' »', note: n.scope_label, ok: 'Ajouter',
-          fields: [
-            { key: 'resource_id', label: 'Personne', type: 'select', value: '', options: personOptions(people.filter(function (p) { return !here[p.resource_id]; })) },
-            { key: 'start_date', label: 'Depuis le (facultatif)', type: 'date', half: true }, { key: 'end_date', label: 'Jusqu’au (facultatif)', type: 'date', half: true }
-          ],
-          onSubmit: function (v) {
-            if (!v.resource_id) return Promise.reject({ message: 'Choisissez une personne.' });
-            return call('roles.assign', { values: { resource_id: v.resource_id, role_code: n.role_code, scope_type: n.scope_type, scope_id: n.scope_id, start_date: v.start_date, end_date: v.end_date } }, true)
-              .then(function () { toast('Rôle attribué.'); return refreshAfter(n.id); });
-          }
-        });
-      });
-    } })]);
-  }
-  function assignRoleGeneral(presetId) {
-    Promise.all([ensurePeople(), call('roles.options', {})]).then(function (r) {
-      var people = r[0], opt = r[1];
-      if (!opt.scopes.length) { toast('Vous ne pouvez attribuer de rôle sur aucun périmètre.', true); return; }
-      var byKey = {};
-      var scopes = opt.scopes.map(function (s) { var k = s.type + ':' + s.id; byKey[k] = s; return { value: k, label: s.label + (s.type === 'program' ? ' (programme)' : s.type === 'project' ? ' (projet)' : '') }; });
-      var roleOptions = function (key) { return opt.roles.filter(function (x) { return x.rank >= byKey[key].min_rank; }).map(function (x) { return { value: x.code, label: x.label }; }); };
-      var here = state.scopeType + ':' + state.scopeId, startScope = byKey[here] ? here : scopes[0].value; // le périmètre qu'on regarde, s'il est permis
-      openForm({
-        title: 'Attribuer un rôle', ok: 'Attribuer', note: 'Vous ne pouvez pas attribuer un rôle plus élevé que le vôtre sur le périmètre choisi.',
-        fields: [
-          { key: 'resource_id', label: 'Personne', type: 'select', value: typeof presetId === 'string' ? presetId : '', options: personOptions(people) },
-          { key: 'scope', label: 'Périmètre', type: 'select', value: startScope, options: scopes },
-          { key: 'role_code', label: 'Rôle', type: 'select', options: roleOptions(startScope) }
-        ],
-        after: function (inputs) { inputs.scope.addEventListener('change', function () { fillSelect(inputs.role_code, roleOptions(inputs.scope.value)); }); },
-        onSubmit: function (v) {
-          if (!v.resource_id) return Promise.reject({ message: 'Choisissez une personne.' });
-          var i = v.scope.indexOf(':');
-          return call('roles.assign', { values: { resource_id: v.resource_id, role_code: v.role_code, scope_type: v.scope.slice(0, i), scope_id: v.scope.slice(i + 1) } }, true)
-            .then(function () { toast('Rôle attribué.'); return refreshAfter(''); });
-        }
-      });
-    }).catch(function (e) { toast(ppmErrorText(e), true); });
-  }
-
-  // ---- personnes
-  function openPersonForm(p) {
-    ensureTeams().then(function (teams) {
-      var create = !p; p = p || {};
-      var fields = [
-        { key: 'name', label: 'Nom', value: p.name, maxlength: 120 },
-        { key: 'resource_type', label: 'Statut', type: 'select', value: p.resource_type || 'Interne', options: [{ value: 'Interne', label: 'Interne' }, { value: 'Externe', label: 'Externe' }], half: true },
-        { key: 'country', label: 'Pays', type: 'select', value: p.country || '', options: [{ value: '', label: '—' }].concat(COUNTRY_LIST.map(function (c) { return { value: c[0], label: c[1] }; })), half: true },
-        { key: 'job_function', label: 'Fonction', value: p.job_function, maxlength: 80, half: true },
-        { key: 'organization', label: 'Organisation', value: p.organization, maxlength: 80, half: true },
-        { key: 'supplier', label: 'Fournisseur (si externe)', value: p.supplier, maxlength: 80, half: true },
-        { key: 'capacity', label: 'Capacité (jours par mois)', type: 'number', value: p.capacity, half: true },
-        { key: 'team_id', label: 'Équipe', type: 'select', value: p.team_id || '', options: teamOptions(teams) }
-      ];
-      if (create) fields.splice(1, 0, { key: 'email', label: 'Adresse e-mail (facultative)', value: '', maxlength: 120 });
-      openForm({
-        title: create ? 'Ajouter une personne' : 'Modifier la fiche de ' + p.name, ok: create ? 'Ajouter' : 'Enregistrer', fields: fields,
-        note: create ? '' : 'L’adresse e-mail ne se modifie que par l’administrateur.',
-        onSubmit: function (v) {
-          var values = { name: v.name, resource_type: v.resource_type, country: v.country, job_function: v.job_function, organization: v.organization,
-            supplier: v.supplier, team_id: v.team_id, capacity_days_month: v.capacity === '' ? '' : Number(v.capacity) };
-          var req;
-          if (create) { if (v.email.trim()) values.email = v.email.trim(); req = call('resources.create', { values: values }, true); }
-          else req = call('resources.update', { id: p.resource_id, version: p.version, patch: values }, true);
-          return req.then(function () { toast(create ? 'Personne ajoutée.' : 'Fiche enregistrée.'); closeDetails(); return refreshAfter(''); });
-        }
-      });
-    });
-  }
-  function personActions(p) {
-    return el('div', { class: 'links', id: 'person-actions' }, [
-      el('button', { type: 'button', class: 'btn primary', id: 'person-edit', text: 'Modifier la fiche', onclick: function () { openPersonForm(p); } }),
-      el('button', { type: 'button', class: 'btn', id: 'person-remove', text: 'Retirer cette personne', onclick: function () {
-        call('people.remove', { id: p.resource_id, dryRun: true }).then(function (s) {
-          var parts = [];
-          if (s.roles) parts.push(plural(s.roles, 'rôle terminé', 'rôles terminés'));
-          if (s.teams) parts.push(plural(s.teams, 'équipe sans responsable', 'équipes sans responsable'));
-          if (s.wps) parts.push(plural(s.wps, 'workpackage', 'workpackages') + ' à réattribuer');
-          if (s.items) parts.push(plural(s.items, 'livrable ou jalon', 'livrables et jalons') + ' à réattribuer');
-          openConfirm('Retirer ' + s.name + ' ?', s.name + ' ne sera plus dans les listes' + (parts.length ? ' : ' + parts.join(', ') : '') + '. La fiche reste dans l’historique.', 'Retirer', function () {
-            return call('people.remove', { id: p.resource_id, version: p.version }, true).then(function () { toast(s.name + ' retiré(e).'); closeDetails(); return refreshAfter(''); });
-          });
-        }).catch(function (e) { toast(ppmErrorText(e), true); });
-      } })
-    ]);
-  }
-
-  // ---- équipes
-  function teamMembers(n) {
-    var ul = el('ul', { class: 'roles member-list' });
-    if (n.manager) ul.appendChild(el('li', {}, [el('span', { text: n.manager.name + ' (responsable)' })]));
-    n.members.forEach(function (m) {
-      var li = el('li', {}, [el('span', { text: m.name + (m.job_function ? ', ' + m.job_function : '') })]);
-      if (state.data.canEditAll && n.team_id) li.appendChild(el('button', { type: 'button', class: 'icon-btn', title: 'Retirer ' + m.name + ' de l’équipe', 'aria-label': 'Retirer ' + m.name + ' de l’équipe', text: '×', onclick: function () {
-        call('resources.update', { id: m.resource_id, patch: { team_id: '' } }, true).then(function () { toast(m.name + ' retiré(e) de l’équipe.'); return refreshAfter(n.id); }).catch(function (e) { toast(ppmErrorText(e), true); });
-      } }));
-      ul.appendChild(li);
-    });
-    return ul;
-  }
-  function openTeamForm(team, parent) {
-    Promise.all([ensureTeams(), ensurePeople()]).then(function (r) {
-      var create = !team;
-      openForm({
-        title: create ? (parent ? 'Nouvelle sous-équipe de « ' + parent.name + ' »' : 'Nouvelle équipe') : 'Modifier l’équipe', ok: create ? 'Créer' : 'Enregistrer',
-        fields: [
-          { key: 'name', label: 'Nom', value: team ? team.name : '', maxlength: 80 },
-          { key: 'parent_team_id', label: 'Équipe parente', type: 'select', value: team ? team.parent_team_id : (parent ? parent.team_id : ''),
-            options: teamOptions(r[0].filter(function (t) { return !team || t.id !== team.team_id; }), 'Aucune (racine)') },
-          { key: 'manager_resource_id', label: 'Responsable', type: 'select', value: team ? team.manager_id : '', options: personOptions(r[1]) },
-          { key: 'cost_center', label: 'Centre de coût', value: team ? team.cost_center : '', maxlength: 40 }
-        ],
-        onSubmit: function (v) {
-          var values = { name: v.name, parent_team_id: v.parent_team_id, manager_resource_id: v.manager_resource_id, cost_center: v.cost_center };
-          var req = create ? call('teams.create', { values: values }, true) : call('teams.update', { id: team.team_id, version: team.version, patch: values }, true);
-          return req.then(function (rec) { toast(create ? 'Équipe créée.' : 'Équipe enregistrée.'); return refreshAfter('team:' + (create ? rec.id : team.team_id)); });
-        }
-      });
-    });
-  }
-  function teamActions(n) {
-    return el('div', { class: 'links', id: 'team-actions' }, [
-      el('button', { type: 'button', class: 'btn', id: 'team-add-member', text: 'Ajouter un membre', onclick: function () {
-        ensurePeople().then(function (people) {
-          var here = {}; n.members.forEach(function (m) { here[m.resource_id] = true; }); if (n.manager) here[n.manager.resource_id] = true;
-          openForm({
-            title: 'Ajouter un membre à « ' + n.name + ' »', ok: 'Ajouter', note: 'Une personne n’appartient qu’à une équipe : elle quitte la précédente.',
-            fields: [{ key: 'resource_id', label: 'Personne', type: 'select', value: '', options: personOptions(people.filter(function (p) { return !here[p.resource_id]; })) }],
-            onSubmit: function (v) {
-              if (!v.resource_id) return Promise.reject({ message: 'Choisissez une personne.' });
-              return call('resources.update', { id: v.resource_id, patch: { team_id: n.team_id } }, true).then(function () { toast('Membre ajouté.'); return refreshAfter(n.id); });
-            }
-          });
-        });
-      } }),
-      el('button', { type: 'button', class: 'btn', id: 'team-add-sub', text: 'Ajouter une sous-équipe', onclick: function () { openTeamForm(null, n); } }),
-      el('button', { type: 'button', class: 'btn primary', id: 'team-edit', text: 'Modifier l’équipe', onclick: function () { openTeamForm(n, null); } }),
-      el('button', { type: 'button', class: 'btn', id: 'team-delete', text: 'Supprimer l’équipe', onclick: function () {
-        openConfirm('Supprimer l’équipe ?', 'L’équipe « ' + n.name + ' » sera supprimée. Elle doit être vide : ni membres ni sous-équipes.', 'Supprimer', function () {
-          return call('teams.delete', { id: n.team_id, version: n.version }, true).then(function () { toast('Équipe supprimée.'); closeDetails(); return refreshAfter(''); });
-        });
-      } })
-    ]);
-  }
-
   $('gf-form').addEventListener('submit', function (e) { e.preventDefault(); submitForm(); });
   $('gf-cancel').addEventListener('click', function () { closeDialog($('genform')); });
   if (state.tab === 'obs') {
@@ -2083,13 +1609,8 @@ var BOOT = <?!= boot ?>;
     setZoom(fit >= 0.5 ? Math.min(1, fit) : 1); // tout le schéma tient dans la largeur tant qu'il reste lisible (vue programme : tous les projets côte à côte)
     var r = state.layout.root;
     if (!r) return;
-    if (state.tab === 'obs') {
-      canvas.scrollLeft = Math.max(0, (r.x + r.w / 2) * state.zoom - avail / 2);
-      canvas.scrollTop = 0;
-    } else {
-      canvas.scrollLeft = 0;
-      canvas.scrollTop = Math.max(0, (r.y + r.h / 2) * state.zoom - (canvas.clientHeight || 500) / 2);
-    }
+    canvas.scrollLeft = 0;
+    canvas.scrollTop = Math.max(0, (r.y + r.h / 2) * state.zoom - (canvas.clientHeight || 500) / 2);
   }
   function fitZoom() {
     if (!state.layout) return;
@@ -2107,8 +1628,6 @@ var BOOT = <?!= boot ?>;
     var t = e.target.closest ? e.target : e.target.parentNode;
     var tog = t.closest('[data-toggle]');
     if (tog) { activate(e, function () { var id = tog.getAttribute('data-toggle'); state.collapsed[id] = !state.collapsed[id]; draw(); }); return; }
-    var per = t.closest('[data-person]');
-    if (per) { activate(e, function () { showPerson(per.getAttribute('data-person')); }); return; }
     var node = t.closest('[data-id]');
     if (node) activate(e, function () { showNode(node.getAttribute('data-id')); });
   }
@@ -2120,22 +1639,13 @@ var BOOT = <?!= boot ?>;
     state.scopeType = v[0]; state.scopeId = v[1] === 'none' ? '' : v[1];
     load();
   });
-  if (state.tab === 'obs') $('team-root').addEventListener('change', function () { state.teamRoot = this.value; load(); });
-  if (state.tab === 'obs') Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (b) {
-    b.addEventListener('click', function () {
-      state.mode = b.getAttribute('data-mode');
-      state.prefs.obs.mode = state.mode;
-      savePrefsSoon();
-      load();
-    });
-  });
   $('options-btn').addEventListener('click', function () {
     var box = $('options'), open = box.hidden;
     box.hidden = !open;
     this.setAttribute('aria-expanded', String(open));
   });
   $('opt-reset').addEventListener('click', resetPrefs);
-  $('reload').addEventListener('click', function () { state.suggestions = null; load(); });
+  $('reload').addEventListener('click', function () { load(); });
   $('zoom-in').addEventListener('click', function () { setZoom(state.zoom + 0.1); });
   $('zoom-out').addEventListener('click', function () { setZoom(state.zoom - 0.1); });
   $('zoom-fit').addEventListener('click', fitZoom);
@@ -2149,7 +1659,6 @@ var BOOT = <?!= boot ?>;
     state.catalog = r[1].catalog;
     state.prefs = r[1].prefs;
     if (!$('picker').options.length) fillPicker(r[0]);
-    state.mode = BOOT.mode || state.prefs.obs.mode || 'roles';
     if (BOOT.program) { state.scopeType = 'program'; state.scopeId = BOOT.program === 'none' ? '' : BOOT.program; }
     else {
       var first = BOOT.project || (r[0].projects.filter(function (p) { return p.status !== 'Clos'; })[0] || r[0].projects[0] || {}).id;
@@ -2167,9 +1676,8 @@ var BOOT = <?!= boot ?>;
   }
 
   var shared = {};
-  var obs = createStructure('obs', shared);
   var wbs = shared.wbs = createStructure('wbs', shared);
-  window.__ppm = Object.assign({}, obs, { obs: obs, wbs: wbs });
+  window.__ppm = Object.assign({}, wbs, { wbs: wbs });
 })();
 </script>
 </body>

@@ -21,6 +21,16 @@ module.exports = function () {
     eq(res.counts.OK + res.counts.ATTENTION + res.counts['ÉCHEC'], res.rows.length, 'les compteurs recoupent les lignes');
   });
 
+  test('A7 : signale les anciens rôles à migrer, puis plus rien une fois la migration faite', () => {
+    const w = installed(lot2World()); as(w, ADMIN);
+    const row = () => w.c.liveSmokeTest_().rows.find((r) => r.name === 'Rôles : anciens codes à migrer');
+    eq(row().status, 'OK', 'rien à migrer au départ');
+    w.c.repoInsert('RoleAssignment', { resource_id: w.mia.id, role_code: 'MEMBER', scope_type: 'project', scope_id: w.p1.id }, w.S);
+    ok(row().status === 'ATTENTION' && /A9_MIGRER_ROLES/.test(row().detail), 'un ancien rôle actif : attention, avec la fonction à lancer : ' + row().detail.slice(0, 70));
+    w.c.migrerRoles_(false);
+    eq(row().status, 'OK', 'après la migration : plus d’avertissement');
+  });
+
   test('A7 : lecture seule, il n’écrit aucune ligne et n’envoie aucun mail', () => {
     const w = installed(lot2World()); as(w, ADMIN);
     const propsOf = (c) => JSON.stringify(Object.keys(c.PROP).sort().map((k) => [k, c.getProp(c.PROP[k], null)]));

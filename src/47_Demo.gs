@@ -7,7 +7,7 @@
  *                                B1 active, une demande en attente), du budget, 3 CPN, des commandes d'achat (GR en retard, dépassement), des risques,
  *                                un fil d'actualités (réunions de l'agenda et saisies, actions à tous les états, synthèse du jour).
  * Autour : 11 équipes en arbre, 38 personnes plus vous (internes et externes, quatre pays) avec leur taux journalier, des rôles à tous les niveaux
- * (programme, projet, workpackage), trois personnes sans aucun rôle (à positionner dans l'OBS).
+ * (programme, projet, workpackage), trois personnes sans aucun rôle (Reader par défaut : sans rôle).
  *
  * Aucune personne fictive n'a d'adresse e-mail : rien n'est envoyé, aucune invitation ne part, personne ne peut s'y connecter.
  * Seul le compte qui lance la démo y figure, avec son adresse.

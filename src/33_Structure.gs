@@ -1,9 +1,8 @@
 /**
- * PPM Core — lot 1 (suite) : personnes, OBS et WBS graphiques, préférences d'affichage.
+ * PPM Core — lot 1 (suite) : personnes, WBS graphique, préférences d'affichage.
  *
  *  - Une personne a une fonction (job_function) et une organisation (organization).
- *  - L'OBS se lit de deux façons : par rôles (qui pilote quoi, du Program Leader aux
- *    membres) ou par équipes hiérarchiques (HierarchicalTeam).
+ *  - L'organigramme OBS a été supprimé en 0.15.3 : les personnes se créent dans la page Ressources (équipes comprises), les rôles se posent sur chaque objet du WBS.
  *  - Le WBS se lit projet par projet : projet → workpackages → sous-workpackages → livrables et jalons.
  *  - Le serveur renvoie TOUS les attributs de chaque nœud ; le choix de ce qui est affiché est
  *    fait dans la page et mémorisé par utilisateur (UserSetting.view_prefs_json).
@@ -14,37 +13,14 @@
 // ---------------------------------------------------------------- catalogue des attributs affichables
 
 /**
- * Pour ajouter un attribut affichable : une ligne ici, la valeur dans build*Tree, et l'affichage
- * dans Structure.html (fonction attrLines). Le nom (personne) et le titre du nœud sont toujours affichés.
+ * Pour ajouter un attribut affichable : une ligne ici, la valeur dans buildWbsTree, et l'affichage
+ * dans Structure.html (fonction attrLines). Le titre du nœud est toujours affiché. (L'organigramme OBS a été supprimé en 0.15.3 : les rôles se posent dans le WBS.)
  */
 var VIEW_CATALOG = {
-  obs: {
-    attrs: [
-      { key: 'scope', label: 'Périmètre du rôle (en-tête)', on: true },
-      { key: 'job_function', label: 'Fonction', on: true },
-      { key: 'organization', label: 'Organisation', on: true },
-      { key: 'email', label: 'E-mail', on: false },
-      { key: 'team', label: 'Équipe hiérarchique', on: false },
-      { key: 'country', label: 'Pays', on: false },
-      { key: 'resource_type', label: 'Interne ou externe', on: false },
-      { key: 'supplier', label: 'Fournisseur', on: false },
-      { key: 'capacity', label: 'Capacité (jours par mois)', on: false },
-      { key: 'cost_center', label: 'Centre de coût (vue par équipes)', on: false },
-      { key: 'members', label: 'Membres de l’équipe (vue par équipes)', on: false }
-    ],
-    colors: [
-      { key: 'role', label: 'Rôle' },
-      { key: 'organization', label: 'Organisation' },
-      { key: 'resource_type', label: 'Interne ou externe' },
-      { key: 'none', label: 'Aucune' }
-    ],
-    modes: ['roles', 'teams'],
-    defaults: { colorBy: 'role', mode: 'roles' }
-  },
   wbs: {
     attrs: [
       { key: 'wbs_code', label: 'Code WBS', on: true },
-      { key: 'owner', label: 'Responsable', on: true },
+      { key: 'owner', label: 'Responsable (leader ou propriétaire)', on: true },
       { key: 'owner_org', label: 'Organisation du responsable', on: false },
       { key: 'dates', label: 'Dates prévues', on: true },
       { key: 'progress', label: 'Avancement', on: true },
@@ -79,7 +55,6 @@ function normalizePrefs_(view, raw) {
     out.attrs = cat.attrs.map(function (a) { return a.key; }).filter(function (k) { return wanted[k]; });
   }
   if (cat.colors.some(function (c) { return c.key === raw.colorBy; })) out.colorBy = raw.colorBy;
-  if (view === 'obs' && cat.modes.indexOf(raw.mode) >= 0) out.mode = raw.mode;
   if (view === 'wbs' && typeof raw.showItems === 'boolean') out.showItems = raw.showItems;
   return out;
 }
@@ -94,7 +69,7 @@ function loadPrefs_(email) {
   var saved = row ? parseJsonSafe(row.view_prefs_json, {}) : {};
   var theme = saved.ui && ['light', 'dark', 'auto'].indexOf(saved.ui.theme) >= 0 ? saved.ui.theme : 'auto';
   var home = saved.ui && HOME_VIEWS.indexOf(saved.ui.home) >= 0 ? saved.ui.home : 'overview';
-  return { obs: normalizePrefs_('obs', saved.obs), wbs: normalizePrefs_('wbs', saved.wbs), ui: { theme: theme, home: home } };
+  return { wbs: normalizePrefs_('wbs', saved.wbs), ui: { theme: theme, home: home } }; // l'ancien affichage de l'organigramme (obs) n'existe plus : ses choix enregistrés sont ignorés
 }
 
 // ---------------------------------------------------------------- personnes
@@ -122,7 +97,6 @@ function byName_(a, b) {
   return String(a.name).localeCompare(String(b.name), 'fr', { sensitivity: 'base' });
 }
 
-// ---------------------------------------------------------------- OBS par rôles
 
 function scopeLabel_(data, type, id) {
   var rec = ({ program: indexBy_(data.programs), project: indexBy_(data.projects), workpackage: indexBy_(data.workpackages), planitem: indexBy_(data.planitems || []) }[type] || {})[id];
@@ -132,156 +106,6 @@ function scopeLabel_(data, type, id) {
   return rec.code + ' — ' + rec.name;
 }
 
-/**
- * Arbre des rôles autour d'un périmètre : les rôles du périmètre et de ce qu'il contient,
- * plus ceux des périmètres qui le contiennent (pour que la hiérarchie soit complète).
- * Un nœud = un rôle sur un périmètre, avec ses titulaires. Son parent est le rôle immédiatement
- * supérieur qui couvre son périmètre (par exemple un chef de projet a pour parent le DPL du programme).
- */
-function buildObsTree(data, scopeType, scopeId, today, ctx) {
-  if (!SCOPE_TABLE[scopeType]) throw new PpmError('VALIDATION', 'Périmètre invalide : ' + scopeType);
-  var rootLabel = scopeLabel_(data, scopeType, scopeId);
-  if (!rootLabel) throw new PpmError('NOT_FOUND', 'Périmètre introuvable : ' + scopeId);
-
-  var lookup = memoryLookup(data);
-  var resById = indexBy_(data.resources), teamsById = indexBy_(data.teams);
-  var editAll = canEditResources_(ctx);
-  var mine = {};
-  scopeAncestors({ type: scopeType, id: scopeId }, lookup).forEach(function (s) { mine[s.type + ':' + s.id] = true; });
-
-  var groups = {}, order = [];
-  data.assignments.forEach(function (a) {
-    if (isTrue(a.deleted)) return;
-    if (!isBlank(a.start_date) && String(a.start_date) > today) return;
-    if (!isBlank(a.end_date) && String(a.end_date) < today) return;
-    var res = resById[a.resource_id];
-    if (!res || isTrue(res.deleted)) return;
-    var label = scopeLabel_(data, a.scope_type, a.scope_id);
-    if (!label) return; // périmètre supprimé
-    var chain = scopeAncestors({ type: a.scope_type, id: a.scope_id }, lookup);
-    var below = chain.some(function (s) { return s.type === scopeType && String(s.id) === String(scopeId); });
-    if (!below && !mine[a.scope_type + ':' + a.scope_id]) return;
-
-    var key = a.role_code + '|' + a.scope_type + '|' + a.scope_id;
-    if (!groups[key]) {
-      groups[key] = {
-        id: 'role:' + key, parent: '', role_code: a.role_code, role_label: ROLE_LABELS[a.role_code] || a.role_code,
-        rank: ROLE_RANK[a.role_code], scope_type: a.scope_type, scope_id: a.scope_id, scope_label: label,
-        chain: chain, people: [], seen: {}
-      };
-      order.push(key);
-    }
-    var g = groups[key];
-    if (g.seen[res.id]) { g.seen[res.id].assignment_ids.push(a.id); return; } // la même affectation en double : on garde toutes les lignes pour pouvoir les terminer ensemble
-    var card = personCard_(res, teamsById, ctx, editAll);
-    card.assignment_ids = [a.id];
-    g.seen[res.id] = card;
-    g.people.push(card);
-  });
-
-  var list = order.map(function (k) { return groups[k]; });
-  list.forEach(function (g) {
-    var best = null;
-    list.forEach(function (h) {
-      if (h === g || h.rank >= g.rank) return;
-      var at = -1;
-      g.chain.forEach(function (s, i) { if (at < 0 && s.type === h.scope_type && String(s.id) === String(h.scope_id)) at = i; });
-      if (at < 0) return;
-      if (!best || h.rank > best.h.rank || (h.rank === best.h.rank && at < best.at) ||
-          (h.rank === best.h.rank && at === best.at && h.id < best.h.id)) best = { h: h, at: at };
-    });
-    g.parent = best ? best.h.id : '';
-  });
-
-  list.sort(function (a, b) {
-    return (a.rank - b.rank) || a.scope_label.localeCompare(b.scope_label, 'fr') || 0;
-  });
-  var people = 0;
-  var nodes = list.map(function (g) {
-    g.people.sort(byName_);
-    people += g.people.length;
-    return {
-      id: g.id, parent: g.parent, role_code: g.role_code, role_label: g.role_label,
-      scope_type: g.scope_type, scope_id: g.scope_id, scope_label: g.scope_label, people: g.people,
-      rank: g.rank, canAssign: !!ctx && can(ctx, 'roles.assign', { type: g.scope_type, id: g.scope_id }),
-      min_rank: ctx && !ctx.isAdmin ? bestRankOn_(ctx, { type: g.scope_type, id: g.scope_id }) : 0
-    };
-  });
-  return {
-    mode: 'roles', scope: { type: scopeType, id: scopeId, label: rootLabel }, nodes: nodes,
-    canEditAll: editAll, stats: { nodes: nodes.length, people: people }
-  };
-}
-
-// ---------------------------------------------------------------- OBS par équipes
-
-/**
- * Arbre des équipes hiérarchiques (HierarchicalTeam). rootTeamId limite à une branche.
- * Les personnes sans équipe sont regroupées dans un nœud « Sans équipe » (vue complète seulement).
- */
-function buildTeamTree(data, rootTeamId, ctx) {
-  var teams = data.teams.filter(function (t) { return !isTrue(t.deleted); });
-  var byId = indexBy_(teams);
-  var resources = data.resources.filter(function (r) { return !isTrue(r.deleted); });
-  var resById = indexBy_(resources);
-  var editAll = canEditResources_(ctx);
-
-  // Un cycle dans les parents est traité comme une racine, pour que l'arbre reste dessinable.
-  var parentOf = {};
-  teams.forEach(function (t) {
-    var p = !isBlank(t.parent_team_id) && byId[t.parent_team_id] ? t.parent_team_id : '';
-    var cur = p, guard = 0, cyclic = false;
-    while (cur && guard++ < 100) {
-      if (cur === t.id) { cyclic = true; break; }
-      var up = byId[cur] && !isBlank(byId[cur].parent_team_id) ? byId[cur].parent_team_id : '';
-      cur = byId[up] ? up : '';
-    }
-    parentOf[t.id] = cyclic ? '' : p;
-  });
-
-  var depthOf = function (id) { var d = 0, cur = parentOf[id]; while (cur && d < 100) { d++; cur = parentOf[cur]; } return d; };
-  var pathOf = function (id) { var names = [], cur = id, g = 0; while (cur && g++ < 100) { names.unshift(byId[cur].name); cur = parentOf[cur]; } return names.join(' / '); };
-
-  if (!isBlank(rootTeamId) && !byId[rootTeamId]) throw new PpmError('NOT_FOUND', 'Équipe introuvable : ' + rootTeamId);
-  var inBranch = function (id) {
-    if (isBlank(rootTeamId)) return true;
-    var cur = id, g = 0;
-    while (cur && g++ < 100) { if (cur === rootTeamId) return true; cur = parentOf[cur]; }
-    return false;
-  };
-
-  var membersOf = {}, unassigned = [];
-  resources.forEach(function (r) {
-    if (!isBlank(r.team_id) && byId[r.team_id]) (membersOf[r.team_id] = membersOf[r.team_id] || []).push(r);
-    else unassigned.push(r);
-  });
-  var card = function (r) { return personCard_(r, byId, ctx, editAll); };
-
-  var nodes = teams.filter(function (t) { return inBranch(t.id); }).map(function (t) {
-    var mgr = !isBlank(t.manager_resource_id) ? resById[t.manager_resource_id] : null;
-    var members = (membersOf[t.id] || []).filter(function (r) { return !mgr || r.id !== mgr.id; }).map(card).sort(byName_);
-    return {
-      id: 'team:' + t.id, parent: parentOf[t.id] && inBranch(parentOf[t.id]) && t.id !== rootTeamId ? 'team:' + parentOf[t.id] : '',
-      team_id: t.id, name: t.name, cost_center: t.cost_center || '', manager: mgr ? card(mgr) : null,
-      version: t.version, parent_team_id: parentOf[t.id] || '', manager_id: mgr ? mgr.id : '',
-      members: members, member_count: members.length, sort: pathOf(t.id)
-    };
-  }).sort(function (a, b) { return a.sort.localeCompare(b.sort, 'fr'); });
-  nodes.forEach(function (n) { delete n.sort; });
-
-  if (isBlank(rootTeamId) && unassigned.length) {
-    nodes.push({
-      id: 'team:none', parent: '', team_id: '', name: 'Sans équipe', cost_center: '', manager: null,
-      members: unassigned.map(card).sort(byName_), member_count: unassigned.length
-    });
-  }
-  return {
-    mode: 'teams', root_team_id: rootTeamId || '', nodes: nodes, canEditAll: editAll,
-    teams: teams.map(function (t) { return { id: t.id, name: t.name, depth: depthOf(t.id), path: pathOf(t.id) }; })
-      .sort(function (a, b) { return a.path.localeCompare(b.path, 'fr'); }),
-    stats: { nodes: nodes.length, people: resources.length }
-  };
-}
 
 // ---------------------------------------------------------------- WBS
 
@@ -448,13 +272,6 @@ function buildWbsProgramTree_(data, programId, today, ctx) {
 
 // ---------------------------------------------------------------- actions de l'API
 
-function loadObsData_() {
-  return {
-    programs: repoList('Program'), projects: repoList('Project'), workpackages: repoList('WorkPackage'),
-    resources: repoList('Resource'), assignments: repoList('RoleAssignment'), teams: repoList('HierarchicalTeam')
-  };
-}
-
 function loadWbsData_() {
   return {
     programs: repoList('Program'), projects: repoList('Project'), workpackages: repoList('WorkPackage'),
@@ -493,20 +310,6 @@ defineAction('ui.set', function (p, ctx) {
   if (row) repoUpdate('UserSetting', row.id, { view_prefs_json: JSON.stringify(saved) }, null, ctx.actx);
   else repoInsert('UserSetting', { user_email: ctx.email, view_prefs_json: JSON.stringify(saved) }, ctx.actx);
   return loadPrefs_(ctx.email).ui;
-});
-
-defineAction('obs.tree', function (p, ctx) {
-  var data = loadObsData_();
-  var out = buildObsTree(data, requireParam(p, 'scopeType'), requireParam(p, 'scopeId'), todayStr(), ctx);
-  out.unplaced = unplacedPeople_(data, ctx, todayStr());
-  return out;
-});
-
-defineAction('obs.teams', function (p, ctx) {
-  var data = loadObsData_();
-  var out = buildTeamTree(data, p.rootTeamId || '', ctx);
-  out.unplaced = unplacedPeople_(data, ctx, todayStr());
-  return out;
 });
 
 defineAction('wbs.tree', function (p, ctx) {

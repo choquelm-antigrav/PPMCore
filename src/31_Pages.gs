@@ -68,15 +68,8 @@ function preloadFor_(view, boot, email) {
   } else if (view === 'structure') {
     var cfg = put('views.config', {});
     if (!cfg.ok) return pre;
-    var mode = boot.mode || cfg.data.prefs.obs.mode || 'roles';
-    if (boot.program) {
-      if (mode === 'teams') put('obs.teams', { rootTeamId: '' });
-      else put('obs.tree', { scopeType: 'program', scopeId: boot.program === 'none' ? '' : boot.program });
-    } else if (first) {
-      put('wbs.tree', { projectId: first });
-      if (mode === 'teams') put('obs.teams', { rootTeamId: '' });
-      else put('obs.tree', { scopeType: 'project', scopeId: first });
-    }
+    if (boot.program) put('wbs.tree', { programId: boot.program });
+    else if (first) put('wbs.tree', { projectId: first });
   } else if (view === 'suivi' && first) {
     var list = put('baselines.list', { projectId: first });
     if (list.ok) {
@@ -115,7 +108,7 @@ function cleanId_(v) {
 var PAGE_TABLES = {
   overview: ['Baseline', 'BaselineItem', 'BudgetLine', 'Dependency', 'HolidaySet', 'Insight', 'Meeting', 'NewsAction', 'NewsDigest', 'PlanItem', 'Program', 'Project', 'PurchaseOrder', 'PurchaseOrderLink', 'Resource', 'RiskOpportunity', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   gantt: ['Baseline', 'BaselineItem', 'BudgetLine', 'Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
-  structure: ['Dependency', 'HierarchicalTeam', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  structure: ['Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   ressources: ['HierarchicalTeam', 'PlanItem', 'Program', 'Project', 'RateCard', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   suivi: ['Baseline', 'BaselineItem', 'BudgetLine', 'BudgetPhasing', 'ChangeEvent', 'Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   actualites: ['Meeting', 'NewsAction', 'NewsDigest', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],

@@ -15,8 +15,6 @@
   }
   function has(list, k) { return list.indexOf(k) >= 0; }
 
-
-
   // ------------------------------------------------------------ adresse et navigation
   function scopeParams() {
     return state.scopeType === 'program' ? (state.scopeId ? '&program=' + state.scopeId : '') : '&project=' + state.scopeId;
@@ -27,12 +25,6 @@
     $('nav-struct').setAttribute('href', base + '?view=structure' + scopeParams());
     $('nav-suivi').setAttribute('href', base + '?view=suivi' + (state.scopeType === 'project' ? '&project=' + state.scopeId : ''));
     $('nav-copilot').setAttribute('href', base + '?view=copilote' + (state.scopeType === 'project' ? '&project=' + state.scopeId : ''));
-    if (state.tab !== 'obs') return;
-    try {
-      var p = { view: 'structure', mode: state.mode };
-      if (state.scopeType === 'program') p.program = state.scopeId || 'none'; else p.project = state.scopeId;
-      google.script.history.replace(null, p);
-    } catch (e) { /* hors web app */ }
   }
 
   // ------------------------------------------------------------ choix d'affichage
@@ -109,14 +101,6 @@
   }
   function orgColor(o) { return o ? state.orgColors[o] || NEUTRAL : NEUTRAL; }
 
-  function personColor(p, node) {
-    switch (prefs().colorBy) {
-      case 'role': return ROLE_COLORS[node.role_code] || '#C5CFD8';
-      case 'organization': return orgColor(p.organization);
-      case 'resource_type': return TYPE_COLORS[p.resource_type] || NEUTRAL;
-      default: return '#B7CDEB';
-    }
-  }
   function wbsColor(n) {
     switch (prefs().colorBy) {
       case 'kind': return n.kind === 'item' ? (n.item_type === 'Jalon' ? KIND_COLORS.milestone : KIND_COLORS.item) : KIND_COLORS[n.kind];
@@ -131,12 +115,7 @@
       box.appendChild(el('li', {}, [el('span', { class: 'swatch dot', style: 'background:' + color }), label]));
     };
     var by = prefs().colorBy;
-    if (state.tab === 'obs') {
-      if (by === 'role' && state.data && state.data.mode !== 'teams') Object.keys(ROLE_COLORS).forEach(function (k) { add(roleLabel(k), ROLE_COLORS[k]); });
-      if (by === 'role' && state.data && state.data.mode === 'teams') box.appendChild(el('li', { text: 'Les rôles n’existent que dans la vue par rôles : choisissez « Organisation » ou « Interne ou externe » pour colorer les personnes.' }));
-      if (by === 'resource_type') { add('Interne', TYPE_COLORS.Interne); add('Externe', TYPE_COLORS.Externe); }
-      if (by === 'organization') orgLegend(add);
-    } else {
+    {
       if (by === 'kind') { add('Projet', KIND_COLORS.project); add('Workpackage', KIND_COLORS.wp); add('Livrable', KIND_COLORS.item); add('Jalon', KIND_COLORS.milestone); }
       if (by === 'organization') orgLegend(add);
     }
@@ -144,8 +123,4 @@
   function orgLegend(add) {
     Object.keys(state.orgColors).sort(function (a, b) { return a.localeCompare(b, 'fr'); }).forEach(function (o) { add(o, state.orgColors[o]); });
     add('Non renseignée', NEUTRAL);
-  }
-  function roleLabel(code) {
-    var labels = { PL: 'Program Leader', DPL: 'Domain Program Leader', CP: 'Chef de projet', RWP: 'Responsable de workpackage', MEMBER: 'Membre affecté' };
-    return labels[code] || code;
   }

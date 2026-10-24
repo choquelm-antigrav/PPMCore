@@ -40,8 +40,8 @@ module.exports = function () {
     eq(w.raw(MEMBER, 'ui.set', { home: 'admin' }).error.code, 'VALIDATION');
     eq(w.raw(MEMBER, 'ui.set', { theme: 'rose' }).error.code, 'VALIDATION');
     eq(w.raw(MEMBER, 'ui.set', {}).error.code, 'VALIDATION');
-    w.call(MEMBER, 'prefs.set', { view: 'obs', prefs: { attrs: ['email'] } });
-    eq(w.c.loadPrefs_(MEMBER).ui, { theme: 'dark', home: 'suivi' }, 'les choix d’organigramme ne touchent pas l’affichage');
+    w.call(MEMBER, 'prefs.set', { view: 'wbs', prefs: { attrs: ['dates'] } });
+    eq(w.c.loadPrefs_(MEMBER).ui, { theme: 'dark', home: 'suivi' }, 'les choix d’affichage du WBS ne touchent pas le thème ni la page d’accueil');
   });
 
   // ------------------------------------------------------------ Administration : accès et réglages

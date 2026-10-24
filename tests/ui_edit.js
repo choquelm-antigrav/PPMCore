@@ -83,11 +83,11 @@ function openPage(user) {
   p.click(p.$('wbs-add'));
   await p.until(() => p.$('editor').open);
   check(p.text('editor-title') === 'Nouveau workpackage' && p.$('ed-code').placeholder === 'automatique', 'boîte de création, code WBS automatique');
-  p.fill('ed-name', '  Industrialisation '); p.fill('ed-owner', w.mia.id);
+  p.fill('ed-name', '  Industrialisation ');
   p.submit();
   await p.until(() => c.repoList('WorkPackage').some((x) => x.name === 'Industrialisation'));
   const ind = c.repoList('WorkPackage').find((x) => x.name === 'Industrialisation');
-  check(ind.wbs_code === '3' && ind.owner_resource_id === w.mia.id && ind.project_id === w.p1.id, 'workpackage créé : code 3, responsable enregistré');
+  check(ind.wbs_code === '3' && ind.owner_resource_id === '' && ind.project_id === w.p1.id && !p.$('ed-owner'), 'workpackage créé : code 3, sans champ « Responsable » (le Workpackage leader se pose ensuite dans le panneau des rôles)');
   await p.until(() => /3 Industrialisation/.test(p.text('details')) && p.nodes() === 9);
   check(!p.$('editor').open && /Créé : Industrialisation/.test(p.text('toast')), 'boîte fermée, confirmation, la nouvelle carte est sélectionnée');
 
@@ -103,7 +103,7 @@ function openPage(user) {
   p.click(p.$('add-deliverable'));
   await p.until(() => p.$('editor').open);
   check(p.text('editor-title') === 'Nouveau livrable' && p.$('ed-start').type === 'date', 'livrable : dates de début et de fin');
-  p.fill('ed-name', 'Outillage'); p.fill('ed-start', '2026-11-02'); p.fill('ed-finish', '2026-11-27'); p.fill('ed-owner', w.remi.id);
+  p.fill('ed-name', 'Outillage'); p.fill('ed-start', '2026-11-02'); p.fill('ed-finish', '2026-11-27');
   p.submit();
   await p.until(() => /Outillage/.test(p.text('details')) && p.$('edit-node'));
   const outil = c.repoList('PlanItem').find((x) => x.name === 'Outillage');
@@ -174,7 +174,7 @@ function openPage(user) {
   p.click(p.$('edit-node'));
   await p.until(() => p.$('editor').open);
   check(p.text('editor-title') === 'Modifier le livrable' && p.$('ed-name').value === 'Spécification' && p.$('ed-start').value === '2026-10-05' && p.$('ed-finish').value === '2026-10-09', 'formulaire prérempli');
-  check(p.$('ed-owner').value === w.remi.id && p.$('ed-parent').value === w.w1.id, 'responsable et rattachement actuels');
+  check(!p.$('ed-owner') && p.$('ed-parent').value === w.w1.id, 'plus de champ « Responsable » ; rattachement actuel');
   p.fill('ed-name', 'Spécification v2'); p.fill('ed-finish', '2026-10-13'); p.fill('ed-parent', w.w2.id); p.submit();
   await p.until(() => c.repoGet('PlanItem', w.a.id).wp_id === w.w2.id);
   const a2 = c.repoGet('PlanItem', w.a.id);

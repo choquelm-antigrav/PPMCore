@@ -114,10 +114,11 @@ module.exports = function () {
     w.call(CP, 'resources.update', { id: w.remi.id, patch: { team_id: calc.id } });
     eq(w.raw(CP, 'resources.update', { id: w.remi.id, patch: { team_id: 'zzz' } }).error.message, 'Équipe introuvable.');
     eq(w.raw(CP, 'resources.create', { values: { name: 'Nouveau', resource_type: 'Interne', team_id: 'zzz' } }).error.code, 'VALIDATION');
-    const tree = w.call(CP, 'obs.teams', {});
-    const nCalc = tree.nodes.find((n) => n.name === 'Calcul');
-    eq([nCalc.parent_team_id, nCalc.version >= 1, nCalc.members.map((m) => m.name)], [be.id, true, ['Rémi']]);
-    eq(tree.nodes.find((n) => n.name === 'Bureau d’études').manager_id, w.carla.id);
+    const nCalc = w.c.repoList('HierarchicalTeam').find((t) => t.name === 'Calcul');
+    eq([nCalc.parent_team_id, nCalc.version >= 1], [be.id, true]);
+    const rg0 = w.call(CP, 'ressources.get', {});
+    eq(rg0.people.filter((p) => p.team === 'Calcul').map((p) => p.name), ['Rémi'], 'ses membres, vus par la page Ressources');
+    eq(rg0.teams.find((n) => n.name === 'Bureau d’études').manager_id, w.carla.id);
     const refused = w.raw(CP, 'teams.delete', { id: calc.id });
     eq([refused.error.code, refused.error.details], ['VALIDATION', { rule: 'NOT_EMPTY', members: 1, teams: 0 }]);
     w.call(CP, 'resources.update', { id: w.remi.id, patch: { team_id: '' } });
@@ -126,37 +127,28 @@ module.exports = function () {
     eq(w.raw(CP, 'teams.delete', { id: 'zzz' }).error.code, 'NOT_FOUND');
   });
 
-  test('Ressources à positionner : une personne créée sans rôle apparaît dans l’organigramme, jusqu’à ce qu’on lui en donne un', () => {
+  test('Personnes sans rôle : Reader par défaut, signalées dans la page Ressources jusqu’à ce qu’on leur en donne un', () => {
     const w = lot2World();
-    const names = (r) => r.unplaced.people.map((p) => p.name);
+    const unplaced = () => w.call(CP, 'ressources.get', { projectId: w.p1.id }).people.filter((p) => p.unplaced).map((p) => p.name);
     const nina = w.call(CP, 'resources.create', { values: { name: 'Nina Roux', resource_type: 'Interne', email: 'nina@entreprise.com' } });
-    const roles = () => w.call(CP, 'obs.tree', { scopeType: 'project', scopeId: w.p1.id });
-    ok(names(roles()).includes('Nina Roux'), 'une personne créée est proposée dans l’organigramme par rôles');
-    ok(names(w.call(CP, 'obs.teams', {})).includes('Nina Roux'), 'et dans la vue par équipes');
-    ok(!names(roles()).includes('Mia') && !names(roles()).includes('Rémi'), 'celles qui ont un rôle n’y sont pas');
-    const card = roles().unplaced.people.find((p) => p.name === 'Nina Roux');
-    eq([card.resource_type, card.canEdit, card.email, card.team_id], ['Interne', true, 'nina@entreprise.com', ''], 'carte complète, modifiable par le pilotage');
-    eq(roles().unplaced.total, roles().unplaced.people.length, 'le total compte toutes les personnes sans rôle');
+    ok(unplaced().includes('Nina Roux'), 'une personne créée dans Ressources n’a aucun rôle : elle est Reader');
+    ok(!unplaced().includes('Mia') && !unplaced().includes('Rémi'), 'celles qui ont un rôle n’y sont pas');
     // avoir une équipe ne suffit pas : il faut un rôle
     const team = w.call(CP, 'teams.create', { values: { name: 'Calcul' } });
     w.call(CP, 'resources.update', { id: nina.id, patch: { team_id: team.id } });
-    ok(names(roles()).includes('Nina Roux'), 'une personne dans une équipe, sans rôle, reste à positionner');
-    // un rôle la positionne
+    ok(unplaced().includes('Nina Roux'), 'une personne dans une équipe, sans rôle, reste Reader');
+    // un rôle (posé dans le WBS) lui en donne un
     const a = w.call(CP, 'roles.assign', { values: { resource_id: nina.id, role_code: 'CONTRIB', scope_type: 'planitem', scope_id: w.a.id } });
-    ok(!names(roles()).includes('Nina Roux'), 'avec un rôle (Contributor d’un livrable), elle n’est plus à positionner');
-    // un rôle terminé la remet à positionner
+    ok(!unplaced().includes('Nina Roux'), 'avec un rôle (Contributor d’un livrable), elle n’est plus Reader par défaut');
+    // un rôle terminé la remet Reader
     w.call(CP, 'roles.end', { id: a.id });
-    ok(names(roles()).includes('Nina Roux'), 'rôle terminé : de nouveau à positionner');
-    // retirée : plus proposée
+    ok(unplaced().includes('Nina Roux'), 'rôle terminé : de nouveau Reader');
+    // retirée : plus listée
     w.call(CP, 'people.remove', { id: nina.id });
-    ok(!names(roles()).includes('Nina Roux'), 'une personne retirée n’est plus proposée');
-    // un membre voit la liste sans pouvoir modifier
-    const other = w.call(CP, 'resources.create', { values: { name: 'Paul Roy', resource_type: 'Externe' } });
-    const mia = w.call(MEMBER, 'obs.tree', { scopeType: 'project', scopeId: w.p1.id });
-    eq([names(mia).includes('Paul Roy'), mia.unplaced.people.find((p) => p.name === 'Paul Roy').canEdit], [true, false], 'un membre la voit, sans pouvoir la modifier');
-    // la page Ressources les signale aussi
-    const rg = w.call(CP, 'ressources.get', { projectId: w.p1.id });
-    eq([rg.people.find((p) => p.name === 'Paul Roy').unplaced, rg.people.find((p) => p.name === 'Rémi').unplaced], [true, false], 'Ressources : « à positionner » pour qui n’a aucun rôle');
-    void other;
+    ok(!unplaced().includes('Nina Roux'), 'une personne retirée n’est plus listée');
+    // un Contributor voit la liste sans pouvoir modifier
+    w.call(CP, 'resources.create', { values: { name: 'Paul Roy', resource_type: 'Externe' } });
+    const mia = w.call(MEMBER, 'ressources.get', { projectId: w.p1.id });
+    eq([mia.people.find((p) => p.name === 'Paul Roy').unplaced, mia.canEdit], [true, false], 'un Contributor la voit, sans pouvoir modifier les fiches');
   });
 };

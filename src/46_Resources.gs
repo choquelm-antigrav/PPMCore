@@ -9,8 +9,6 @@
  * La création et la modification des personnes et des équipes passent par resources.* et teams.* (42_Org.gs).
  */
 
-var PROJECT_ROLE_CHOICES = [{ code: 'CP', label: 'Chef de projet' }]; // les autres rôles se posent sur leur objet, dans le WBS
-
 /** Les tarifs journaliers se lisent à partir du Workpackage leader ; les fixer reste réservé au chef de projet et au-dessus (ratecard.manage). */
 function canSeeRates_(ctx) { return ctx.isAdmin || can(ctx, 'sensitive.read', { type: 'global' }); }
 function canSetRates_(ctx) { return ctx.isAdmin || can(ctx, 'ratecard.manage', { type: 'global' }); }
@@ -88,7 +86,6 @@ defineAction('ressources.get', function (p, ctx) {
   var editAll = canEditResources_(ctx);
   var people = resources.map(function (r) {
     var mine = (roles[r.id] || []).sort(function (a, b) { return a.rank - b.rank; });
-    var projectLevel = mine.filter(function (x) { return x.scope_type === 'project' && x.code === 'CP'; }).map(function (x) { return x.code; });
     return {
       resource_id: r.id, version: r.version, name: r.name, email: r.email || '', job_function: r.job_function || '', organization: r.organization || '',
       unplaced: !placed[r.id],
@@ -97,46 +94,16 @@ defineAction('ressources.get', function (p, ctx) {
       resource_type: r.resource_type, supplier: r.supplier || '', country: r.country || '', capacity: isBlank(r.capacity_days_month) ? '' : Number(r.capacity_days_month),
       team_id: r.team_id || '', team: teamById[r.team_id] ? teamById[r.team_id].name : '',
       roles: mine.map(function (x) { return { code: x.code, label: x.label, scope: x.scope, scope_type: x.scope_type }; }),
-      project_role: projectLevel.indexOf('CP') >= 0 ? 'CP' : '',
       daily_rate: canRates && !isBlank(r.daily_rate) ? Number(r.daily_rate) : null,
       rate_source: canRates ? (!isBlank(r.daily_rate) ? 'fiche' : (rateFor_(r.rate_profile, r.country, today) !== null ? 'grille' : '')) : ''
     };
   }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
-  var assignable = scope ? assignableRolesOn_(ctx, scope) : [];
-  var canAssign = assignable.indexOf('CP') >= 0;
   return {
     project: project ? { id: project.id, code: project.code, name: project.name, manager_id: project.manager_resource_id || '' } : null,
     people: people, teams: teamsFlat_(teams, resources),
-    canEdit: editAll, canRates: canRates, canAssign: canAssign,
-    roleChoices: PROJECT_ROLE_CHOICES.filter(function (c) { return assignable.indexOf(c.code) >= 0; }),
+    canEdit: editAll, canRates: canRates, canSetRates: canSetRates_(ctx),
     countries: COUNTRIES, domains: allowedDomains()
   };
-});
-
-/** Rôle de projet d'une personne : 'CP' (chef de projet) ou '' (aucun). Les autres rôles se posent sur leur objet, dans le WBS ; ceux d'un workpackage ou d'un livrable ne bougent pas ici. */
-defineAction('people.setProjectRole', function (p, ctx) {
-  var project = mustGet('Project', requireParam(p, 'projectId'));
-  var person = mustGet('Resource', requireParam(p, 'resourceId'));
-  var role = isBlank(p.role) ? '' : p.role;
-  if (['', 'CP'].indexOf(role) < 0) throw new PpmError('VALIDATION', 'Rôle de projet inconnu : seul le chef de projet se pose sur un projet depuis cette page.');
-  var scope = { type: 'project', id: project.id };
-  var problem = roleAssignCheck_(ctx, 'CP', scope);
-  if (problem) throw new PpmError(problem.code, problem.message);
-  if (role === 'CP' && person.resource_type !== 'Interne') throw new PpmError('VALIDATION', 'Le chef de projet doit être une personne interne.');
-  return withLock(function () {
-    var today = todayStr(), yesterday = addCalendarDays(today, -1);
-    var active = repoList('RoleAssignment', function (a) {
-      return a.resource_id === person.id && a.scope_type === 'project' && a.scope_id === project.id && a.role_code === 'CP' && (isBlank(a.end_date) || String(a.end_date) >= today);
-    });
-    var same = active.length === 1 && role === 'CP';
-    if (!same) {
-      active.forEach(function (a) { repoUpdate('RoleAssignment', a.id, { end_date: yesterday }, null, ctx.actx); });
-      if (role) repoInsert('RoleAssignment', { resource_id: person.id, role_code: role, scope_type: 'project', scope_id: project.id, start_date: today }, ctx.actx);
-    }
-    // le chef de projet de la fiche projet suit les affectations : celui qui n'est plus chef de projet est remplacé par un autre, ou aucun
-    syncPrincipal_('project', project.id, ctx.actx);
-    return { role: role, manager_id: repoGet('Project', project.id).manager_resource_id || '', changed: !same };
-  });
 });
 
 /** Taux journalier d'une personne (vide pour l'effacer). Le chef de projet et le DPL seuls le voient et le fixent. */

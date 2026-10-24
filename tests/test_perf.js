@@ -34,8 +34,8 @@ module.exports = function () {
     m.reset();
     const g2 = w.call(CP, 'gantt.project', { projectId: w.p1.id });
     eq([m.total(), JSON.stringify(g2.rows)], [0, JSON.stringify(g1.rows)], 'second affichage servi par le cache, identique');
-    const obs = w.call(CP, 'obs.tree', { scopeType: 'project', scopeId: w.p1.id });
-    ok(obs.nodes.length > 0 && m.total() <= 1, 'l’organigramme profite du même cache (' + m.total() + ' lecture)');
+    const wbs = w.call(CP, 'wbs.tree', { projectId: w.p1.id });
+    ok(wbs.nodes.length > 0 && m.total() <= 1, 'le découpage profite du même cache (' + m.total() + ' lecture)');
   });
 
   test('Une écriture est visible aussitôt ; seule la table modifiée est relue', () => {
@@ -100,7 +100,7 @@ module.exports = function () {
     };
     const id = w.p1.id;
     eq(keys('gantt'), ['planning.catalog|{}', 'gantt.project|{"projectId":"' + id + '"}']);
-    eq(keys('structure'), ['planning.catalog|{}', 'views.config|{}', 'wbs.tree|{"projectId":"' + id + '"}', 'obs.tree|{"scopeId":"' + id + '","scopeType":"project"}'], 'plus d’onglets : l’organisation et le découpage se chargent ensemble');
+    eq(keys('structure'), ['planning.catalog|{}', 'views.config|{}', 'wbs.tree|{"projectId":"' + id + '"}'], 'le découpage se charge avec la page (l’organigramme OBS n’existe plus)');
     eq(keys('suivi'), ['planning.catalog|{}', 'baselines.list|{"projectId":"' + id + '"}', 'changes.feed|{"limit":1,"projectId":"' + id + '"}', 'changes.feed|{"all":false,"projectId":"' + id + '"}', 'baselines.diff|{"projectId":"' + id + '"}', 'workspace.status|{"projectId":"' + id + '"}'], 'plus d’onglets : toutes les zones de Suivi sont préparées avec la page');
     const ov = keys('overview', { project: id });
     eq(ov, ['overview.get|{"projectId":"' + id + '"}', 'news.summary|{"projectId":"' + id + '"}'], 'Overview : la carte Actualités du projet affiché part avec la page, sans aller-retour de plus (0.14.2)');

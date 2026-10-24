@@ -1,5 +1,5 @@
 /**
- * PPM Core — vues du lot 1 : Gantt projet, vue programme, organisation (OBS).
+ * PPM Core — vues du lot 1 : Gantt projet, vue programme, attribution des rôles.
  *
  * Les tables sont lues UNE fois par requête puis traitées en mémoire : une lecture
  * de feuille coûte cher en Apps Script, un appel par élément serait trop lent.
@@ -339,51 +339,7 @@ function buildProgramView(data, programId, today) {
   };
 }
 
-// ---------------------------------------------------------------- organisation (OBS)
-
-/** Rôles actifs sur un périmètre et sur ce qu'il contient (programme → projets → WP). */
-function buildObs(data, scopeType, scopeId, today) {
-  var projects = indexBy_(data.projects), wps = indexBy_(data.workpackages), programs = indexBy_(data.programs);
-  var inScope = function (a) {
-    if (a.scope_type === scopeType && String(a.scope_id) === String(scopeId)) return true;
-    if (scopeType === 'program') {
-      if (a.scope_type === 'project') return projects[a.scope_id] && projects[a.scope_id].program_id === scopeId;
-      if (a.scope_type === 'workpackage') {
-        var w = wps[a.scope_id];
-        return w && projects[w.project_id] && projects[w.project_id].program_id === scopeId;
-      }
-    }
-    if (scopeType === 'project' && a.scope_type === 'workpackage') return wps[a.scope_id] && wps[a.scope_id].project_id === scopeId;
-    if (scopeType === 'workpackage' && a.scope_type === 'workpackage') {
-      return wps[a.scope_id] && wps[a.scope_id].parent_wp_id === scopeId;
-    }
-    return false;
-  };
-  var label = function (type, id) {
-    if (type === 'program') return programs[id] ? programs[id].code + ' — ' + programs[id].name : id;
-    if (type === 'project') return projects[id] ? projects[id].code + ' — ' + projects[id].name : id;
-    if (type === 'workpackage') return wps[id] ? ((wps[id].wbs_code ? wps[id].wbs_code + ' ' : '') + wps[id].name) : id;
-    return id;
-  };
-  var rank = { program: 0, project: 1, workpackage: 2 };
-  var roleRank = { PL: 0, DPL: 1, CP: 2, RWP: 3, MEMBER: 4 };
-  return data.assignments.filter(function (a) {
-    if (isTrue(a.deleted)) return false;
-    if (!isBlank(a.start_date) && String(a.start_date) > today) return false;
-    if (!isBlank(a.end_date) && String(a.end_date) < today) return false;
-    return inScope(a);
-  }).map(function (a) {
-    return {
-      id: a.id, version: a.version, role_code: a.role_code, role_label: ROLE_LABELS[a.role_code] || a.role_code,
-      scope_type: a.scope_type, scope_id: a.scope_id, scope_label: label(a.scope_type, a.scope_id),
-      resource_id: a.resource_id, resource_name: resourceName_(data, a.resource_id),
-      start_date: a.start_date || '', end_date: a.end_date || ''
-    };
-  }).sort(function (a, b) {
-    return (rank[a.scope_type] - rank[b.scope_type]) || a.scope_label.localeCompare(b.scope_label) ||
-      (roleRank[a.role_code] - roleRank[b.role_code]) || a.resource_name.localeCompare(b.resource_name);
-  });
-}
+// ---------------------------------------------------------------- rôles
 
 // ---------------------------------------------------------------- actions de l'API
 
@@ -409,12 +365,6 @@ defineAction('gantt.project', function (p, ctx) {
 
 defineAction('gantt.program', function (p) {
   return buildProgramView(loadPlanningData_(), p.programId || '', todayStr());
-});
-
-defineAction('obs.list', function (p) {
-  var type = requireParam(p, 'scopeType');
-  if (['program', 'project', 'workpackage'].indexOf(type) < 0) throw new PpmError('VALIDATION', 'Périmètre invalide : ' + type);
-  return buildObs(loadPlanningData_(), type, requireParam(p, 'scopeId'), todayStr());
 });
 
 var SCOPE_TABLE = { program: 'Program', project: 'Project', workpackage: 'WorkPackage', planitem: 'PlanItem' };
