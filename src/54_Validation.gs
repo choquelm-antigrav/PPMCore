@@ -16,7 +16,7 @@
  * et l'avancement déclaré d'un livrable (`PlanItem.progress_pct`).
  */
 
-var VALIDATION_EXTRA_FIELDS = { PlanItem: ['progress_pct'], Project: ['budget_authorized'], WorkPackage: ['budget_allocated'] };
+var VALIDATION_EXTRA_FIELDS = { PlanItem: ['progress_pct'], Project: ['budget_authorized'], WorkPackage: ['budget_allocated'], Baseline: ['baseline_frozen'] };
 var VALIDATION_WINDOW_DAYS = 60;   // sans baseline active, le fil remonte aux 60 derniers jours
 
 /** L'événement porte-t-il sur une donnée à valider ? */
@@ -39,6 +39,7 @@ function changeScope_(table, rec) {
     case 'PlanItem': return { type: 'planitem', id: rec.id };
     case 'Dependency': return rec.successor_id ? { type: 'planitem', id: rec.successor_id } : null;
     case 'BudgetLine': return rec.deliverable_id ? { type: 'planitem', id: rec.deliverable_id } : null;
+    case 'Baseline': return rec.scope_type === 'workpackage' && rec.scope_id ? { type: 'workpackage', id: rec.scope_id } : { type: 'project', id: rec.project_id };
     default: return null;
   }
 }
@@ -129,6 +130,10 @@ function pendingChangesFor_(ctx, data, project) {
     var rank = eventRank_(e);
     if (rank <= 0) return;
     var scope = scopeType[e.table_name] ? { type: scopeType[e.table_name], id: e.entity_id } : { type: 'project', id: project.id };
+    if (e.table_name === 'Baseline') {
+      var bl = (data.baselines || []).filter(function (x) { return x.id === e.entity_id; })[0];
+      if (bl) scope = baselineScope_(bl);
+    }
     if (ctx.isAdmin || bestRankIn_(ctx.assignments, scopeAncestors(scope, ctx.lookup), ctx.lookup) < rank) n++;
   });
   return n;

@@ -149,11 +149,11 @@ module.exports = function () {
     ok(lines(cp).includes('Spécification | modification | avancement | 0 → 50'), 'l’avancement déclaré se valide aussi : ' + lines(cp).join(' ; '));
     ok(lines(cp).includes('Calcul | modification | fin prévue | 2026-10-23 → 2026-10-26') && lines(cp).includes('WP 1 Conception détaillée | modification | nom | Conception → Conception détaillée'), lines(cp).join('\n'));
     ok(!lines(cp).some((l) => /^Rapport \| ajout/.test(l) || /^Essais \|/.test(l)), 'ses propres changements ne sont pas à lui de les valider');
-    eq(cp.mine.map((e) => e.entity).sort(), ['Essais', 'Rapport'], 'il les voit dans « vos modifications en attente »');
+    eq(cp.mine.map((e) => e.entity).sort(), ['Baseline B0 · Projet P1', 'Essais', 'Rapport'], 'il les voit dans « vos modifications en attente » : la baseline qu’il a figée en fait partie');
     ok(cp.mine.every((e) => e.validator === 'Domain Program Leader'), 'avec le niveau qui doit les valider : le DPL');
     ok(cp.items.every((e) => e.actor && e.can_validate && typeof e.level === 'number'), 'auteur et niveau de chaque changement');
     // le DPL valide tout, y compris ce que fait le chef de projet
-    eq(feed(DPL).pending, 6, 'le DPL : les quatre, plus les deux du chef de projet');
+    eq(feed(DPL).pending, 7, 'le DPL : les quatre, plus les deux du chef de projet, plus la baseline que le chef de projet a figée');
     // un Workpackage leader valide ce que fait un Contributor, pas ce que fait le chef de projet
     const remi = feed(RWP);
     eq([remi.pending, lines(remi)], [1, ['Spécification | modification | avancement | 0 → 50']], 'Rémi (niveau 3) valide l’avancement de Mia (niveau 6) — pas ses propres dates ni ce que fait le chef de projet');
@@ -172,11 +172,11 @@ module.exports = function () {
     eq(w.raw(CP, 'changes.ack', { ids: [progressId, cpOwn[0]] }).error.code, 'FORBIDDEN', 'une liste qui en contient un interdit est refusée en entier');
     eq(feed(CP).pending, 4, 'rien n’a été validé par ces refus');
     eq(w.call(RWP, 'changes.ack', { ids: [progressId] }).acknowledged, 1, 'Rémi valide l’avancement de Mia');
-    eq([feed(CP).pending, feed(RWP).pending, feed(DPL).pending], [3, 0, 5], 'une seule validation suffit : l’événement disparaît pour tous les niveaux');
+    eq([feed(CP).pending, feed(RWP).pending, feed(DPL).pending], [3, 0, 6], 'une seule validation suffit : l’événement disparaît pour tous les niveaux');
     eq(w.call(CP, 'changes.ack', { ids: dateIds }).acknowledged, dateIds.length, 'le chef de projet valide les dates de Rémi');
     const hist = feed(CP, { all: true });
     eq(hist.items.filter((e) => e.acknowledged).map((e) => e.acknowledged_by).sort(), [CP, CP, RWP], 'l’historique garde qui a validé (Rémi, puis le chef de projet deux fois)');
-    eq(w.call(DPL, 'changes.ack', { projectId: w.p1.id, all: true }).acknowledged, 3, 'le DPL valide tout le reste d’un coup : le nom du WP et les deux changements du chef de projet');
+    eq(w.call(DPL, 'changes.ack', { projectId: w.p1.id, all: true }).acknowledged, 4, 'le DPL valide tout le reste d’un coup : le nom du WP, les deux changements du chef de projet et sa baseline');
     eq([feed(CP).pending, feed(DPL).pending], [0, 0]);
     w.call(RWP, 'planitems.update', { id: w.b.id, patch: { planned_finish: '2026-10-27' } });
     w.call(CP, 'baselines.create', { projectId: w.p1.id, justification: 'Nouvelle référence' });

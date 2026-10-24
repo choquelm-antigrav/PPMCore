@@ -340,9 +340,11 @@ defineAction('baselines.request', function (p, ctx) {
   var projectId = requireParam(p, 'projectId');
   mustGet('Project', projectId);
   requireCan(ctx, 'baseline.request', { type: 'project', id: projectId });
+  var scope = scopeFromParams_(p, projectId);
   var rec = repoInsert('Baseline', {
     project_id: projectId, justification: requireParam(p, 'justification'),
-    label: p.label || '', requested_by: ctx.email, status: 'Demandée'
+    label: p.label || '', requested_by: ctx.email, status: 'Demandée',
+    scope_type: scope.type === 'project' ? '' : 'workpackage', scope_id: scope.type === 'project' ? '' : scope.id
   }, ctx.actx);
   return rec;
 });

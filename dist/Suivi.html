@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.15.4">
+<meta name="ppm-version" content="0.15.5">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -486,6 +486,9 @@
   dialog legend { margin: 0 0 4px; font-weight: 600; }
   dialog .opt { display: flex; align-items: flex-start; gap: 8px; margin: 4px 0; cursor: pointer; }
   .th-check { width: 32px; }
+  .scope-tag { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .baseline-text { font-size: 13.5px; }
+  td button[data-reject] { display: block; margin-top: 6px; padding: 4px 10px; font-size: 13px; }
   @media (max-width: 700px) {
     .panel { padding: 12px; }
     .status .seg { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
@@ -715,7 +718,7 @@ var BOOT = <?!= boot ?>;
   var el = ppm.el, clear = ppm.clear, uuid = ppm.uuid, plural = ppm.plural, toast = ppm.toast, call = ppm.call, frDate = ppm.frDate;
 
   var state = { tab: 'ecarts', projectId: '', catalog: null, list: null, diff: null, compare: { base: '', to: '' },
-    onlyChanges: true, feed: null, showAll: false, selected: {}, ws: null, wsReport: null, form: null, seq: 0 };
+    onlyChanges: true, feed: null, showAll: false, selected: {}, ws: null, wsReport: null, form: null, seq: 0, scope: null, ref: 'scope' };
   var $ = function (id) { return document.getElementById(id); };
 
   // ------------------------------------------------------------ outils
@@ -794,7 +797,7 @@ var BOOT = <?!= boot ?>;
   }
   // ------------------------------------------------------------ chargement
   function loadProject(id) {
-    state.projectId = id; state.selected = {}; state.compare = { base: '', to: '' }; state.wsReport = null;
+    state.projectId = id; state.selected = {}; state.compare = { base: '', to: '' }; state.wsReport = null; state.scope = null; state.ref = 'scope';
     $('picker').value = id;
     remember();
     var ticket = ++state.seq;
@@ -818,12 +821,43 @@ var BOOT = <?!= boot ?>;
     if (state.list.canReadFeed) jobs.push(loadFeed());
     return Promise.all(jobs);
   }
-  function activeBaseline() { return (state.list.baselines || []).filter(function (b) { return b.status === 'Active'; })[0] || null; }
+  // ------------------------------------------------------------ périmètres (0.15.5)
+  /**
+   * Une baseline porte sur un périmètre : le projet, un workpackage ou un sous-workpackage, jamais un livrable. Il y en a une active par périmètre, en parallèle : celle du projet
+   * n'est jamais remplacée par celle d'un workpackage. Les écarts d'un workpackage se lisent contre sa baseline ou contre celle du projet.
+   */
+  function sameScope(b, s) { return b.scope_type === s.type && String(b.scope_id) === String(s.id); }
+  function viewScope() { return state.scope || { type: 'project', id: state.list.project.id }; }
+  function scopeInfo(s) { return (state.list.scopes || []).filter(function (x) { return x.type === s.type && String(x.id) === String(s.id); })[0] || null; }
+  function scopeCan(b) { var s = scopeInfo({ type: b.scope_type, id: b.scope_id }); return !!(s && s.canCreate); }
+  function indent(s) { return new Array(s.depth + 1).join('\u00a0\u00a0'); }
+  function activeIn(scope) { return (state.list.baselines || []).filter(function (b) { return b.status === 'Active' && sameScope(b, scope); })[0] || null; }
+  function activeBaseline() { return activeIn(viewScope()); }
+  function projectBaseline() { return activeIn({ type: 'project', id: state.list.project.id }); }
+  function pickScope(v) { var i = v.indexOf(':'); state.scope = { type: v.slice(0, i), id: v.slice(i + 1) }; state.compare = { base: '', to: '' }; state.ref = 'scope'; }
+  /** Le choix du périmètre des écarts (et de la référence, pour un workpackage) ; absent d'un projet sans workpackage. */
+  function scopeBar() {
+    var l = state.list, cur = viewScope();
+    if ((l.scopes || []).length < 2) return null;
+    var sel = el('select', { id: 'view-scope', 'aria-label': 'Périmètre' });
+    l.scopes.forEach(function (s) { sel.appendChild(el('option', { value: s.type + ':' + s.id, text: indent(s) + s.label + (s.active ? ' · ' + s.active.label : ' · sans baseline') })); });
+    sel.value = cur.type + ':' + cur.id;
+    sel.addEventListener('change', function () { pickScope(sel.value); renderBaselines(); loadDiff(); });
+    var kids = [el('label', { class: 'field' }, ['Périmètre', sel])];
+    var pb = projectBaseline();
+    if (cur.type === 'workpackage' && pb) {
+      var ref = el('select', { id: 'view-ref', 'aria-label': 'Référence des écarts' }, [el('option', { value: 'scope', text: 'la baseline de ce périmètre' }), el('option', { value: 'project', text: 'la baseline du projet (' + pb.label + ')' })]);
+      ref.value = state.ref;
+      ref.addEventListener('change', function () { state.ref = ref.value; state.compare = { base: '', to: '' }; loadDiff(); });
+      kids.push(el('label', { class: 'field' }, ['Écarts contre', ref]));
+    }
+    return el('div', { class: 'bar', id: 'scope-bar' }, kids);
+  }
 
   function renderHeader() {
     var l = state.list, p = l.project;
     $('title').textContent = p.code + ' ' + p.name;
-    var a = activeBaseline();
+    var a = projectBaseline();
     var pending = l.baselines.filter(function (b) { return b.status === 'Demandée'; }).length;
     var ctx = $('context'); clear(ctx);
     ctx.appendChild(el('span', { class: 'chip' + (a ? '' : ' warn'), text: a ? a.label + ' active' : 'Pas de baseline',
@@ -839,25 +873,30 @@ var BOOT = <?!= boot ?>;
   // ------------------------------------------------------------ écarts
   function loadDiff() {
     var panel = $('panel-ecarts');
-    var a = activeBaseline();
+    var cur = viewScope(), vsProject = state.ref === 'project' && cur.type === 'workpackage';
+    var a = vsProject ? projectBaseline() : activeBaseline();
     if (!a && !state.compare.base) { renderNoBaseline(panel); return Promise.resolve(); }
     loading(panel);
     var params = { projectId: state.projectId };
-    if (state.compare.base) params.baselineId = state.compare.base;
-    if (state.compare.to) params.compareTo = state.compare.to;
+    if (cur.type === 'workpackage') { params.scopeType = 'workpackage'; params.scopeId = cur.id; if (vsProject) params.against = 'project'; }
+    if (state.compare.base && !vsProject) params.baselineId = state.compare.base;
+    if (state.compare.to && !vsProject) params.compareTo = state.compare.to;
     return call('baselines.diff', params).then(function (d) { state.diff = d; renderDiff(); }).catch(function (e) { failed(panel, e); });
   }
   function renderNoBaseline(panel) {
-    var l = state.list, extra = null;
-    if (l.canManage) extra = el('p', {}, [el('button', { type: 'button', class: 'btn primary', text: 'Figer la baseline B0', onclick: function () { openCreate(null); } })]);
-    else if (l.canRequest) extra = el('p', {}, [el('button', { type: 'button', class: 'btn', text: 'Demander une baseline', onclick: openRequest })]);
-    empty(panel, 'Pas encore de baseline pour ce projet.',
-      'Une baseline fige les dates, les responsables, le budget et le périmètre du projet ; les écarts se mesurent ensuite par rapport à elle.', extra);
+    var l = state.list, extra = null, cur = viewScope(), info = scopeInfo(cur), isWp = cur.type === 'workpackage';
+    if (info && info.canCreate && !(state.ref === 'project' && isWp)) extra = el('p', {}, [el('button', { type: 'button', class: 'btn primary', text: isWp ? 'Figer la baseline B0 de ce périmètre' : 'Figer la baseline B0', onclick: function () { openCreate(null, cur); } })]);
+    else if (l.canRequest) extra = el('p', {}, [el('button', { type: 'button', class: 'btn', text: 'Demander une baseline', onclick: function () { openRequest(cur); } })]);
+    empty(panel, isWp ? (state.ref === 'project' ? 'Le projet n’a pas encore de baseline.' : 'Pas encore de baseline pour ce périmètre.') : 'Pas encore de baseline pour ce projet.',
+      isWp ? 'Une baseline de workpackage fige ses dates, ses responsables et son budget : c’est sa référence locale, sans toucher à celle du projet.' : 'Une baseline fige les dates, les responsables, le budget et le périmètre du projet ; les écarts se mesurent ensuite par rapport à elle.', extra);
+    var sb = scopeBar();
+    if (sb) panel.insertBefore(sb, panel.firstChild);
   }
   function renderDiff() {
     var panel = $('panel-ecarts'), d = state.diff, t = d.totals;
     clear(panel);
-    var frozen = state.list.baselines.filter(function (b) { return b.status === 'Active' || b.status === 'Archivée'; });
+    var cur = viewScope(), vsProject = state.ref === 'project' && cur.type === 'workpackage';
+    var frozen = state.list.baselines.filter(function (b) { return (b.status === 'Active' || b.status === 'Archivée') && sameScope(b, cur); });
     var baseSel = el('select', { id: 'cmp-base', 'aria-label': 'Baseline de référence' });
     frozen.forEach(function (b) { baseSel.appendChild(el('option', { value: b.id, text: b.label + (b.status === 'Active' ? ' (active)' : '') + ' — ' + frDate(b.decided_at) })); });
     baseSel.value = d.baseline.id;
@@ -870,10 +909,13 @@ var BOOT = <?!= boot ?>;
     var only = el('input', { type: 'checkbox', id: 'only-changes' });
     only.checked = state.onlyChanges;
     only.addEventListener('change', function () { state.onlyChanges = only.checked; renderDiff(); });
-    panel.appendChild(el('div', { class: 'bar' }, [
-      el('label', { class: 'field' }, ['Référence', baseSel]), el('label', { class: 'field' }, ['Comparée à', toSel]),
-      el('label', { class: 'toggle' }, [only, 'Seulement les éléments qui ont changé'])
-    ]));
+    var sb = scopeBar();
+    if (sb) panel.appendChild(sb);
+    var barKids = vsProject
+      ? [el('span', { class: 'note', id: 'ref-project-note', 'data-against': d.against || '', 'data-baseline-scope': d.baseline.scope_type, text: 'Écarts de « ' + d.scope.label + ' » contre la baseline ' + d.baseline.label + ' du projet, restreinte à ce périmètre.' })]
+      : [el('label', { class: 'field' }, ['Référence', baseSel]), el('label', { class: 'field' }, ['Comparée à', toSel])];
+    barKids.push(el('label', { class: 'toggle' }, [only, 'Seulement les éléments qui ont changé']));
+    panel.appendChild(el('div', { class: 'bar' }, barKids));
 
     var cards = el('div', { class: 'cards' });
     cards.appendChild(card('Fin du plan', t.end ? frDate(t.end) : '—',
@@ -926,6 +968,7 @@ var BOOT = <?!= boot ?>;
   var LEVELS = ['Program Leader', 'Domain Program Leader', 'Chef de projet', 'Workpackage leader', 'Sub-workpackage leader', 'Deliverable owner', 'Contributor'];
   function levelLabel(n) { return n >= 0 && n < LEVELS.length ? LEVELS[n] : 'Sans rôle'; }
   function changeText(e) {
+    if (e.what === 'baseline') return [el('span', { class: 'baseline-text', text: e.new_value })];
     if (e.what === 'modification') return [e.field_label + ' : ', el('span', { class: 'muted', text: valueText(e.old_value) }), ' → ', el('strong', { text: valueText(e.new_value) })];
     return [e.what === 'ajout' ? 'Ajouté' : e.what === 'suppression' ? 'Supprimé' : 'Rétabli'];
   }
@@ -958,7 +1001,8 @@ var BOOT = <?!= boot ?>;
         box.addEventListener('change', function () { if (box.checked) state.selected[e.id] = true; else delete state.selected[e.id]; });
         return el('tr', { 'data-event-row': e.id }, [el('td', {}, [box]), el('td', { text: frDateTime(e.at) }), el('td', { text: e.actor_name || e.actor, title: e.actor }), el('td', { text: levelLabel(e.level) }),
           el('td', { text: e.entity }), el('td', {}, changeText(e)),
-          el('td', {}, [e.acknowledged ? badge('Validé' + (e.acknowledged_by ? ' par ' + e.acknowledged_by : '')) : badge('À valider', 'pending')])]);
+          el('td', {}, [e.acknowledged ? badge('Validé' + (e.acknowledged_by ? ' par ' + e.acknowledged_by : '')) : badge('À valider', 'pending'),
+            !e.acknowledged && e.what === 'baseline' && e.can_validate ? el('button', { type: 'button', class: 'btn', 'data-reject': e.id, text: 'Refuser', onclick: function () { openReject(e); } }) : null])]);
       });
       panel.appendChild(table(head, rows));
     }
@@ -988,8 +1032,24 @@ var BOOT = <?!= boot ?>;
     var panel = $('panel-baselines'), l = state.list;
     clear(panel);
     var bar = el('div', { class: 'bar' });
-    if (l.canManage) bar.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'create-btn', text: activeBaseline() ? 'Figer une nouvelle baseline' : 'Figer la baseline B0', onclick: function () { openCreate(null); } }));
-    else if (l.canRequest) bar.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'request-btn', text: 'Demander une nouvelle baseline', onclick: openRequest }));
+    var creatable = (l.scopes || []).filter(function (x) { return x.canCreate; });
+    if (creatable.length) {
+      // figer : on choisit le périmètre (le projet, un workpackage, un sous-workpackage) parmi ceux dont on peut modifier les objets
+      var cur = viewScope(), pick = null;
+      var chosen = function () { return pick ? { type: pick.value.slice(0, pick.value.indexOf(':')), id: pick.value.slice(pick.value.indexOf(':') + 1) } : { type: creatable[0].type, id: creatable[0].id }; };
+      var btn = el('button', { type: 'button', class: 'btn primary', id: 'create-btn', onclick: function () { openCreate(null, chosen()); } });
+      var label = function () { var c = chosen(); btn.textContent = activeIn(c) ? 'Figer une nouvelle baseline' : 'Figer la baseline B0'; };
+      if (creatable.length > 1) {
+        pick = el('select', { id: 'create-scope', 'aria-label': 'Périmètre à figer' });
+        creatable.forEach(function (x) { pick.appendChild(el('option', { value: x.type + ':' + x.id, text: indent(x) + x.label + (x.active ? ' · ' + x.active.label : ' · sans baseline') })); });
+        var want = creatable.filter(function (x) { return x.type === cur.type && String(x.id) === String(cur.id); })[0] || creatable.filter(function (x) { return x.type === 'project'; })[0] || creatable[0];
+        pick.value = want.type + ':' + want.id;
+        pick.addEventListener('change', label);
+        bar.appendChild(el('label', { class: 'field' }, ['Figer une baseline sur', pick]));
+      }
+      label();
+      bar.appendChild(btn);
+    } else if (l.canRequest) bar.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'request-btn', text: 'Demander une nouvelle baseline', onclick: function () { openRequest(viewScope()); } }));
     panel.appendChild(bar);
     if (!l.baselines.length) {
       panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucune baseline ni demande.' })]));
@@ -997,22 +1057,24 @@ var BOOT = <?!= boot ?>;
     }
     var rows = l.baselines.map(function (b) {
       var actions = el('div', { class: 'actions' });
-      if (b.status === 'Demandée' && l.canManage) {
-        actions.appendChild(el('button', { type: 'button', class: 'btn primary', text: 'Figer', onclick: function () { openCreate(b); } }));
+      if (b.status === 'Demandée' && scopeCan(b)) {
+        actions.appendChild(el('button', { type: 'button', class: 'btn primary', text: 'Figer', onclick: function () { openCreate(b, { type: b.scope_type, id: b.scope_id }); } }));
         actions.appendChild(el('button', { type: 'button', class: 'btn', text: 'Refuser', onclick: function () { openRefuse(b); } }));
       }
-      if (b.status === 'Archivée' && l.canManage) actions.appendChild(el('button', { type: 'button', class: 'btn', text: 'Réactiver', onclick: function () { openActivate(b); } }));
+      if (b.status === 'Archivée' && scopeCan(b)) actions.appendChild(el('button', { type: 'button', class: 'btn', text: 'Réactiver', onclick: function () { openActivate(b); } }));
       if (b.status === 'Active' || b.status === 'Archivée') {
         actions.appendChild(el('button', { type: 'button', class: 'btn', text: 'Voir les écarts', onclick: function () {
+          state.scope = { type: b.scope_type, id: b.scope_id }; state.ref = 'scope';
           state.compare = { base: b.id, to: '' };
+          renderBaselines();
           showDiff();
         } }));
       }
       var who = b.status === 'Demandée' ? 'Demandée par ' + b.requested_by + ' le ' + frDate(b.created_at)
         : (b.decided_by ? (b.status === 'Refusée' ? 'Refusée' : 'Figée') + ' par ' + b.decided_by + ' le ' + frDate(b.decided_at) : '');
       return el('tr', { 'data-baseline': b.id }, [
-        el('td', {}, [el('strong', { text: b.label || 'Demande' }), b.items ? el('div', { class: 'muted', text: plural(b.items, 'élément figé', 'éléments figés') }) : null]),
-        el('td', {}, [badge(b.status, STATUS[b.status])]),
+        el('td', {}, [el('strong', { text: b.label || 'Demande' }), b.scope_type === 'workpackage' ? el('div', { class: 'scope-tag', text: b.scope_label }) : null, b.items ? el('div', { class: 'muted', text: plural(b.items, 'élément figé', 'éléments figés') }) : null]),
+        el('td', {}, [badge(b.status, STATUS[b.status]), b.validation === 'pending' ? badge('À valider', 'pending') : b.validation === 'validated' ? badge('Validée', 'ok') : null]),
         el('td', { text: b.justification }),
         el('td', { text: who }),
         el('td', {}, [actions])
@@ -1048,33 +1110,44 @@ var BOOT = <?!= boot ?>;
       return reloadList().then(loadAll).then(function () { if (state.list.canReadFeed) refreshPending(); });
     }).catch(function (e) { $('form-ok').disabled = false; toast(e.message || 'Opération impossible.', true); });
   }
-  function nextLabel() {
-    var nums = state.list.baselines.filter(function (b) { return b.number !== null && (b.status === 'Active' || b.status === 'Archivée'); }).map(function (b) { return b.number; });
+  function nextLabel(scope) {
+    var nums = state.list.baselines.filter(function (b) { return b.number !== null && (b.status === 'Active' || b.status === 'Archivée') && sameScope(b, scope); }).map(function (b) { return b.number; });
     return 'B' + (nums.length ? Math.max.apply(null, nums) + 1 : 0);
   }
-  function openCreate(request) {
-    var label = nextLabel();
+  function scopeParams(scope) { return scope.type === 'workpackage' ? { scopeType: 'workpackage', scopeId: scope.id } : {}; }
+  function openCreate(request, scope) {
+    scope = scope || { type: 'project', id: state.list.project.id };
+    var label = nextLabel(scope), info = scopeInfo(scope), isWp = scope.type === 'workpackage';
     openForm({
-      title: 'Figer la baseline ' + label,
+      title: 'Figer la baseline ' + label + (isWp && info ? ' — ' + info.label : ''),
       text: request ? 'Demande de ' + request.requested_by + ' : « ' + request.justification + ' ». ' : '',
       label: true, labelValue: label, reasonValue: request ? request.justification : '',
       ok: 'Figer ' + label,
       submit: function (reason, lbl) {
-        var params = { projectId: state.projectId, justification: reason, label: lbl };
+        var params = Object.assign({ projectId: state.projectId, justification: reason, label: lbl }, scopeParams(scope));
         if (request) { params.requestId = request.id; params.version = request.version; }
         return call('baselines.create', params, true).then(function (b) {
-          state.compare = { base: '', to: '' };
-          return 'Baseline ' + b.label + ' figée : ' + plural(b.items, 'élément', 'éléments') + '.';
+          state.scope = { type: b.scope_type, id: b.scope_id }; state.ref = 'scope'; state.compare = { base: '', to: '' };
+          return 'Baseline ' + b.label + ' figée : ' + plural(b.items, 'élément', 'éléments') + '.' + (isWp ? ' Elle est à valider par le niveau du dessus.' : '');
         });
       }
     });
-    $('form-text').textContent += 'Les dates, responsables, budget et périmètre actuels deviennent la référence ; la baseline active actuelle sera archivée.';
+    $('form-text').textContent += isWp
+      ? 'Les dates, responsables et budget actuels de ce périmètre (sous-workpackages compris) deviennent sa référence locale ; la baseline du projet n’est pas modifiée. Le niveau du dessus sera informé et pourra la valider ou la refuser.'
+      : 'Les dates, responsables, budget et périmètre actuels deviennent la référence ; la baseline active actuelle sera archivée.';
   }
-  function openRequest() {
-    openForm({ title: 'Demander une nouvelle baseline', text: 'Le chef de projet recevra votre demande et décidera de figer ou non une nouvelle référence.',
+  function openRequest(scope) {
+    scope = scope || { type: 'project', id: state.list.project.id };
+    var info = scopeInfo(scope);
+    openForm({ title: 'Demander une nouvelle baseline' + (scope.type === 'workpackage' && info ? ' — ' + info.label : ''),
+      text: scope.type === 'workpackage' ? 'Le responsable de ce périmètre recevra votre demande et décidera de figer ou non une nouvelle référence.' : 'Le chef de projet recevra votre demande et décidera de figer ou non une nouvelle référence.',
       ok: 'Envoyer la demande', submit: function (reason) {
-        return call('baselines.request', { projectId: state.projectId, justification: reason }, true).then(function () { return 'Demande envoyée.'; });
+        return call('baselines.request', Object.assign({ projectId: state.projectId, justification: reason }, scopeParams(scope)), true).then(function () { return 'Demande envoyée.'; });
       } });
+  }
+  function openReject(e) {
+    openForm({ title: 'Refuser la baseline', text: e.entity + ' — ' + e.new_value, reasonLabel: 'Motif du refus', ok: 'Refuser la baseline',
+      submit: function (reason) { return call('changes.reject', { id: e.id, reason: reason }, true).then(function () { return 'Baseline refusée : la précédente redevient la référence de ce périmètre.'; }); } });
   }
   function openRefuse(b) {
     openForm({ title: 'Refuser la demande', text: 'Demande de ' + b.requested_by + ' : « ' + b.justification + ' ».', reasonLabel: 'Motif du refus', ok: 'Refuser',

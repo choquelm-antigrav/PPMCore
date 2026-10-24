@@ -167,7 +167,7 @@ module.exports = function () {
     ok(/P1 · demande de baseline de mia@entreprise.com \(Décaler les essais\)/.test(carla.text), carla.text);
     ok(/https:\/\/app.test\/exec\?view=suivi&project=.*&tab=changes/.test(carla.text), 'lien direct vers les changements à valider');
     ok(/Le livrable « Spécification » devait être terminé/.test(carla.text), 'alertes du moteur de règles');
-    ok(/P1 · 2 changements sur des données figées \(à valider\)/.test(list.find((d) => d.to === 'dora@entreprise.com').text), 'le DPL valide les deux : celui de Rémi et celui de Carla');
+    ok(/P1 · 3 changements sur des données figées \(à valider\)/.test(list.find((d) => d.to === 'dora@entreprise.com').text), 'le DPL valide les trois : celui de Rémi, celui de Carla et la baseline que Carla a figée');
     ok(!/changement/.test(remi.text.split('CHANGEMENTS À VALIDER')[1] || ''), 'Rémi (niveau 3) n’a rien à valider : personne en dessous de lui n’a rien changé');
   });
 

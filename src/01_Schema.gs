@@ -33,7 +33,7 @@ var SCHEMA = {
   },
   WorkPackage: {
     book: 'data',
-    cols: ['id', 'project_id', 'parent_wp_id', 'wbs_code', 'name', 'owner_resource_id', 'charge_code', 'cpn', 'cpn_label', 'budget_allocated'],   // budget_allocated : part de l'enveloppe (55_Envelope.gs)
+    cols: ['id', 'project_id', 'parent_wp_id', 'wbs_code', 'name', 'owner_resource_id', 'charge_code', 'cpn', 'cpn_label', 'budget_allocated', 'active_baseline_id'],   // budget_allocated : part de l'enveloppe (55_Envelope.gs)
     required: ['project_id', 'name']
   },
   PlanItem: {
@@ -173,7 +173,7 @@ var SCHEMA = {
   Baseline: {
     book: 'data',
     cols: ['id', 'project_id', 'number', 'label', 'justification', 'requested_by', 'status',
-      'decided_by', 'decided_at'],
+      'decided_by', 'decided_at', 'scope_type', 'scope_id'],   // scope_type : vide = le projet, 'workpackage' = un workpackage ou sous-workpackage (58_ScopeBaselines.gs)
     required: ['project_id', 'justification'],
     enums: { status: ['Demandée', 'Active', 'Archivée', 'Refusée'] }
   },

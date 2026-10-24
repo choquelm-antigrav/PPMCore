@@ -57,7 +57,7 @@ module.exports = function () {
     const r1 = d.projects.find((p) => p.code === 'P1'), direct = w.call(CP, 'baselines.diff', { projectId: w.p1.id }).totals;
     eq([r1.baseline, r1.compared, r1.slipped, r1.max_slip, r1.end_slip, r1.end], [ 'B0', direct.compared, direct.slipped, direct.max_slip, direct.end_slip, direct.end], 'la ligne du projet reprend exactement baselines.diff');
     ok(r1.slipped >= 1 && r1.max_slip >= 1, 'une dérive est comptée : ' + r1.slipped + ' élément(s), jusqu’à ' + r1.max_slip + ' jours');
-    eq(r1.pending_changes, w.call(CP, 'changes.feed', { projectId: w.p1.id }).pending, 'changements en attente : ceux du fil du projet');
+    eq(r1.pending_changes, w.call(DPL, 'changes.feed', { projectId: w.p1.id }).pending, 'changements en attente : ceux du fil du projet, vu par le DPL qui consulte le programme (la baseline figée par le chef de projet en fait partie)');
     eq([d.totals.without_baseline, d.totals.slipped], [1, r1.slipped], 'totaux : 1 projet sans baseline');
     const req = w.call(CP, 'baselines.request', { projectId: w.p1.id, justification: 'Replanifier après le retard de calcul' });
     d = w.call(DPL, 'suivi.program', { programId: w.prog.id });

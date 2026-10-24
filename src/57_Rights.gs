@@ -29,7 +29,7 @@ var RIGHTS_ROWS = [
   { group: 'Lire', perm: 'program.view', label: 'Vues consolidées d’un programme (Actualités, Suivi, Budget)' },
   { group: 'Planning et avancement', perm: 'progress.declare', label: 'Déclarer l’avancement d’un livrable' },
   { group: 'Planning et avancement', perm: 'baseline.request', label: 'Demander une baseline' },
-  { group: 'Planning et avancement', perm: 'baseline.manage', label: 'Figer ou refuser une baseline' },
+  { group: 'Planning et avancement', perm: 'baseline.manage', label: 'Réactiver une baseline du projet, refuser une demande de baseline du projet' },
   { group: 'Planning et avancement', perm: 'import.run', label: 'Importer ou exporter le WBS par classeur Google Sheet' },
   { group: 'Budget et achats', perm: 'budget.authorize', label: 'Fixer l’enveloppe budgétaire du projet et des workpackages', where: 'celle d’un sous-workpackage : son Workpackage leader et au-dessus' },
   { group: 'Budget et achats', perm: 'ratecard.manage', label: 'Fixer les tarifs journaliers (grille et fiches)' },
@@ -85,6 +85,11 @@ function rightsTable_() {
         where: kind === 'delete' && k === 'planitem' ? 'le Deliverable owner supprime son livrable mais n’en crée pas' : ''
       });
     });
+  });
+  // figer une baseline : il faut pouvoir MODIFIER l'objet visé (même rang que wbs.edit), jamais un livrable ni un jalon
+  ['project', 'workpackage', 'subworkpackage'].forEach(function (k) {
+    add('Planning et avancement', { perm: 'wbs.edit', kind: k, deep: false, levels: rightsLevels_(WBS_RANK.edit[k], false),
+      label: 'Figer une baseline sur ' + WBS_KIND_LABELS[k], where: k === 'project' ? 'jamais sur un livrable ou un jalon ; une baseline de workpackage reste « à valider » par le niveau du dessus' : '' });
   });
   ASSIGNABLE_ROLES.forEach(function (code) {
     var rank = ROLE_RANK[code];

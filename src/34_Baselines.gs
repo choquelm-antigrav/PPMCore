@@ -28,13 +28,13 @@ var FIELD_LABELS = {
   milestone_category: 'catégorie de jalon', predecessor_id: 'prédécesseur', successor_id: 'successeur',
   dep_type: 'type de lien', lag_days: 'décalage', deliverable_id: 'livrable', resource_id: 'ressource',
   cost_type: 'type de coût', planned_days: 'jours prévus', frozen_rate: 'taux figé', fixed_amount: 'forfait',
-  planned_amount: 'montant prévu', progress_pct: 'avancement', budget_authorized: 'budget autorisé', budget_allocated: 'enveloppe budgétaire', deleted: 'suppression', '*': 'création ou suppression'
+  planned_amount: 'montant prévu', progress_pct: 'avancement', baseline_frozen: 'baseline figée', budget_authorized: 'budget autorisé', budget_allocated: 'enveloppe budgétaire', deleted: 'suppression', '*': 'création ou suppression'
 };
 
 // ---------------------------------------------------------------- instantanés
 
 /** data : { projects, workpackages, planitems, dependencies, budgetLines, phasing } (lignes vivantes). */
-function projectSnapshot_(data, projectId) {
+function projectSnapshot_(data, projectId, scope) {
   var snap = { Project: {}, WorkPackage: {}, PlanItem: {}, Dependency: {}, BudgetLine: {} };
   var project = indexBy_(data.projects)[projectId];
   if (project) snap.Project[project.id] = pickFields(project, BASELINE_FIELDS.Project);
@@ -57,6 +57,9 @@ function projectSnapshot_(data, projectId) {
     rec.phasing = (phasing[b.id] || []).sort(function (x, y) { return String(x.month) < String(y.month) ? -1 : 1; });
     snap.BudgetLine[b.id] = rec;
   });
+  if (scope && scope.type === 'workpackage') {
+    return restrictSnapshotToWps_(snap, wpSubtreeIds_(data.workpackages.filter(function (w) { return w.project_id === projectId; }), scope.id));
+  }
   return snap;
 }
 
@@ -201,6 +204,7 @@ function buildChangeFeed(events, projectId, since, names, opts) {
     if (table === 'Project') return 'Projet';
     if (table === 'Dependency') return names.dep[id] || 'Dépendance';
     if (table === 'BudgetLine') return names.budget[id] ? 'Budget de ' + names.budget[id] : 'Ligne budgétaire';
+    if (table === 'Baseline') return names.baseline[id] || 'Baseline';
     return table;
   };
   var human = function (field, v) {
@@ -217,7 +221,8 @@ function buildChangeFeed(events, projectId, since, names, opts) {
   }).sort(function (a, b) { return String(b.at).localeCompare(String(a.at)) || String(b.id).localeCompare(String(a.id)); });
   return rows.map(function (e) {
     var what;
-    if (e.field === '*') what = e.new_value === '(création)' ? 'ajout' : 'suppression';
+    if (e.field === 'baseline_frozen') what = 'baseline';
+    else if (e.field === '*') what = e.new_value === '(création)' ? 'ajout' : 'suppression';
     else if (e.field === 'deleted') what = isTrue(e.new_value) ? 'suppression' : 'rétablissement';
     else what = 'modification';
     return {
@@ -230,8 +235,9 @@ function buildChangeFeed(events, projectId, since, names, opts) {
   });
 }
 
-function feedNames_() {
-  var names = { resource: {}, item: {}, wp: {}, dep: {}, budget: {}, byEmail: {} };
+/** Noms lisibles pour le fil et les journaux. Les noms de baselines (qui lisent trois tables de plus) ne sont chargés que si on les demande : le fil de validation, pas les journaux de l'administration. */
+function feedNames_(withBaselines) {
+  var names = { resource: {}, item: {}, wp: {}, dep: {}, budget: {}, byEmail: {}, baseline: {} };
   repoList('Resource', null, { includeDeleted: true }).forEach(function (r) {
     names.resource[r.id] = r.name;
     if (!isBlank(r.email)) names.byEmail[String(r.email).toLowerCase()] = r.name;
@@ -242,6 +248,12 @@ function feedNames_() {
     names.dep[d.id] = (names.item[d.predecessor_id] || '?') + ' → ' + (names.item[d.successor_id] || '?');
   });
   repoList('BudgetLine', null, { includeDeleted: true }).forEach(function (b) { names.budget[b.id] = names.item[b.deliverable_id] || ''; });
+  if (withBaselines) {
+    var projectsById = indexBy_(repoList('Project', null, { includeDeleted: true })), wpsById = indexBy_(repoList('WorkPackage', null, { includeDeleted: true }));
+    repoList('Baseline', null, { includeDeleted: true }).forEach(function (bl) {
+      names.baseline[bl.id] = 'Baseline ' + (bl.label || (bl.number !== '' ? 'B' + bl.number : '')) + ' · ' + baselineScopeLabel_(baselineScope_(bl), projectsById[bl.project_id], wpsById);
+    });
+  }
   return names;
 }
 
@@ -267,7 +279,8 @@ function baselineView_(b, counts) {
   return {
     id: b.id, number: b.number === '' ? null : Number(b.number), label: b.label || '', status: b.status,
     justification: b.justification || '', requested_by: b.requested_by || '', decided_by: b.decided_by || '',
-    decided_at: b.decided_at || '', created_at: b.created_at || '', version: b.version, items: counts[b.id] || 0
+    decided_at: b.decided_at || '', created_at: b.created_at || '', version: b.version, items: counts[b.id] || 0,
+    scope_type: baselineScope_(b).type, scope_id: baselineScope_(b).id
   };
 }
 
@@ -294,10 +307,23 @@ defineAction('baselines.list', function (p, ctx) {
     return (rank[a.status] - rank[b.status]) || ((Number(b.number) || -1) - (Number(a.number) || -1)) ||
       String(b.created_at).localeCompare(String(a.created_at));
   });
+  var wpById = indexBy_(repoList('WorkPackage', function (w) { return w.project_id === projectId; }));
+  var frozenEvents = {};
+  repoList('ChangeEvent', function (e) { return e.project_id === projectId && e.field === 'baseline_frozen'; }).forEach(function (e) { frozenEvents[e.entity_id] = e; });
+  var scopes = baselineScopes_(ctx, project, rows);
   return {
     project: { id: project.id, code: project.code, name: project.name, active_baseline_id: project.active_baseline_id || '',
       calendar_id: project.calendar_id || '', drive_folder_id: project.drive_folder_id || '' },
-    baselines: rows.map(function (b) { return baselineView_(b, counts); }),
+    baselines: rows.map(function (b) {
+      var v = baselineView_(b, counts), ev = frozenEvents[b.id];
+      v.scope_label = baselineScopeLabel_(baselineScope_(b), project, wpById);
+      v.validation = !ev || eventRank_(ev) <= 0 ? '' : b.status === 'Refusée' ? 'refused' : isTrue(ev.acknowledged) ? 'validated' : 'pending';
+      v.validated_by = ev && isTrue(ev.acknowledged) ? ev.acknowledged_by || '' : '';
+      v.author_level = ev ? eventRank_(ev) : null;
+      return v;
+    }),
+    scopes: scopes,
+    canBaseline: scopes.some(function (s) { return s.canCreate; }),
     canManage: can(ctx, 'baseline.manage', scope),
     canRequest: can(ctx, 'baseline.request', scope),
     canAck: can(ctx, 'changes.ack', scope),
@@ -308,13 +334,14 @@ defineAction('baselines.list', function (p, ctx) {
 });
 
 /**
- * Fige l'état courant du projet. Avec requestId, la demande devient la baseline (sa justification est reprise
- * si aucune n'est donnée). La baseline figée devient active ; la précédente est archivée.
+ * Fige l'état courant d'un PÉRIMÈTRE (le projet par défaut ; scopeType = 'workpackage' + scopeId pour un workpackage ou un sous-workpackage). Avec requestId, la demande devient la
+ * baseline (sa justification et son périmètre sont repris). La baseline figée devient la référence active de SON périmètre ; la précédente du même périmètre est archivée. Elle reste
+ * « à valider » par le niveau du dessus (58_ScopeBaselines.gs).
  */
 defineAction('baselines.create', function (p, ctx) {
   var projectId = requireParam(p, 'projectId');
-  mustGet('Project', projectId);
-  requireCan(ctx, 'baseline.manage', { type: 'project', id: projectId });
+  var project = mustGet('Project', projectId);
+  var scope = scopeFromParams_(p, projectId);
   return withLock(function () {
     var request = null;
     if (!isBlank(p.requestId)) {
@@ -322,19 +349,25 @@ defineAction('baselines.create', function (p, ctx) {
       if (request.project_id !== projectId || request.status !== 'Demandée') {
         throw new PpmError('VALIDATION', 'Cette demande n’est plus en attente.');
       }
+      scope = baselineScope_(request);
     }
+    requireBaselineScope_(ctx, scope);
     var justification = String(p.justification || (request ? request.justification : '') || '').trim();
     if (!justification) throw new PpmError('VALIDATION', 'La justification est obligatoire.');
-    var snap = projectSnapshot_(loadSnapshotData_(), projectId);
+    var data = loadSnapshotData_();
+    var snap = projectSnapshot_(data, projectId, scope);
     if (!Object.keys(snap.PlanItem).length) {
-      throw new PpmError('VALIDATION', 'Rien à figer : le projet n’a encore aucun livrable ni jalon.');
+      throw new PpmError('VALIDATION', scope.type === 'project' ? 'Rien à figer : le projet n’a encore aucun livrable ni jalon.' : 'Rien à figer : ce périmètre n’a encore aucun livrable ni jalon.');
     }
-    var all = repoList('Baseline', function (b) { return b.project_id === projectId; });
+    var all = repoList('Baseline', function (b) { return b.project_id === projectId && sameBaselineScope_(baselineScope_(b), scope); });
     var frozen = all.filter(function (b) { return b.status === 'Active' || b.status === 'Archivée'; });
+    var previous = frozen.filter(function (b) { return b.status === 'Active'; })[0] || null;
+    var previousSnap = previous ? loadBaselineSnapshot_(previous.id) : null;
     var number = frozen.length ? Math.max.apply(null, frozen.map(function (b) { return Number(b.number) || 0; })) + 1 : 0;
     var values = {
       number: number, label: String(p.label || '').trim() || 'B' + number, justification: justification,
-      status: 'Active', decided_by: ctx.email, decided_at: nowIso()
+      status: 'Active', decided_by: ctx.email, decided_at: nowIso(),
+      scope_type: scope.type === 'project' ? '' : 'workpackage', scope_id: scope.type === 'project' ? '' : scope.id
     };
     var rec = request
       ? repoUpdate('Baseline', request.id, values, p.version, ctx.actx)
@@ -343,7 +376,9 @@ defineAction('baselines.create', function (p, ctx) {
     frozen.forEach(function (b) {
       if (b.status === 'Active') repoUpdate('Baseline', b.id, { status: 'Archivée' }, null, ctx.actx);
     });
-    repoUpdate('Project', projectId, { active_baseline_id: rec.id }, null, ctx.actx);
+    setActiveBaseline_(scope, rec.id, ctx);
+    var wpById = indexBy_(data.workpackages);
+    announceBaseline_(rec, baselineSummary_(rec, scope, previousSnap, snap, project, baselineScopeLabel_(scope, project, wpById)), ctx);
     return baselineView_(rec, { [rec.id]: Object.keys(snap.PlanItem).length });
   });
 });
@@ -351,16 +386,17 @@ defineAction('baselines.create', function (p, ctx) {
 /** Réactive une baseline archivée (motif obligatoire, conservé dans le journal). */
 defineAction('baselines.activate', function (p, ctx) {
   var b = mustGet('Baseline', requireParam(p, 'id'));
-  requireCan(ctx, 'baseline.manage', { type: 'project', id: b.project_id });
+  var scope = baselineScope_(b);
+  requireBaselineScope_(ctx, scope);
   var reason = String(p.reason || '').trim();
   if (!reason) throw new PpmError('VALIDATION', 'Le motif est obligatoire.');
   if (b.status !== 'Archivée') throw new PpmError('VALIDATION', 'Seule une baseline archivée peut être réactivée.');
   return withLock(function () {
-    repoList('Baseline', function (x) { return x.project_id === b.project_id && x.status === 'Active'; }).forEach(function (x) {
+    repoList('Baseline', function (x) { return x.project_id === b.project_id && x.status === 'Active' && sameBaselineScope_(baselineScope_(x), scope); }).forEach(function (x) {
       repoUpdate('Baseline', x.id, { status: 'Archivée' }, null, ctx.actx);
     });
     var rec = repoUpdate('Baseline', b.id, { status: 'Active', decided_by: ctx.email, decided_at: nowIso() }, p.version, ctx.actx);
-    repoUpdate('Project', b.project_id, { active_baseline_id: b.id }, null, ctx.actx);
+    setActiveBaseline_(scope, b.id, ctx);
     noteEvent_('Baseline', b.id, b.project_id, 'Réactivation : ' + reason, ctx);
     return baselineView_(rec, {});
   });
@@ -369,7 +405,7 @@ defineAction('baselines.activate', function (p, ctx) {
 /** Refuse une demande de baseline (motif obligatoire ; le demandeur le voit dans son récapitulatif). */
 defineAction('baselines.refuse', function (p, ctx) {
   var b = mustGet('Baseline', requireParam(p, 'id'));
-  requireCan(ctx, 'baseline.manage', { type: 'project', id: b.project_id });
+  requireBaselineScope_(ctx, baselineScope_(b));
   var reason = String(p.reason || '').trim();
   if (!reason) throw new PpmError('VALIDATION', 'Le motif du refus est obligatoire.');
   if (b.status !== 'Demandée') throw new PpmError('VALIDATION', 'Cette demande n’est plus en attente.');
@@ -385,26 +421,40 @@ defineAction('baselines.refuse', function (p, ctx) {
 defineAction('baselines.diff', function (p, ctx) {
   var projectId = requireParam(p, 'projectId');
   var project = mustGet('Project', projectId);
-  var baseId = p.baselineId || project.active_baseline_id;
+  var scope = scopeFromParams_(p, projectId);
+  var against = p.against === 'project' && scope.type === 'workpackage';     // les écarts d'un workpackage contre la référence du PROJET
+  var baseId;
+  if (against) baseId = project.active_baseline_id;
+  else if (!isBlank(p.baselineId)) baseId = p.baselineId;
+  else baseId = scope.type === 'project' ? project.active_baseline_id : (repoGet('WorkPackage', scope.id) || {}).active_baseline_id;
   var names = {};
   repoList('Resource', null, { includeDeleted: true }).forEach(function (r) { names[r.id] = r.name; });
   var wpNames = {};
   repoList('WorkPackage', null, { includeDeleted: true }).forEach(function (w) { wpNames[w.id] = (w.wbs_code ? w.wbs_code + ' ' : '') + w.name; });
-  if (isBlank(baseId)) return { baseline: null, compareTo: null, items: [], totals: null };
+  var wpRows = repoList('WorkPackage', function (w) { return w.project_id === projectId; });
+  var scopeInfo = { type: scope.type, id: scope.id, label: baselineScopeLabel_(scope, project, indexBy_(wpRows)) };
+  if (isBlank(baseId)) return { baseline: null, compareTo: null, items: [], totals: null, scope: scopeInfo };
   var base = mustGet('Baseline', baseId);
   if (base.project_id !== projectId || (base.status !== 'Active' && base.status !== 'Archivée')) {
     throw new PpmError('VALIDATION', 'Cette baseline n’est pas figée pour ce projet.');
   }
+  var baseScope = baselineScope_(base);
+  if (!against && !isBlank(p.baselineId) && isBlank(p.scopeType)) { scope = baseScope; scopeInfo = { type: scope.type, id: scope.id, label: baselineScopeLabel_(scope, project, indexBy_(wpRows)) }; }
+  if (!against && !sameBaselineScope_(baseScope, scope)) throw new PpmError('VALIDATION', 'Cette baseline porte sur un autre périmètre que celui demandé.');
+  var data = loadSnapshotData_();
   var cur, other = null;
   if (!isBlank(p.compareTo)) {
     other = mustGet('Baseline', p.compareTo);
     if (other.project_id !== projectId) throw new PpmError('VALIDATION', 'Les deux baselines doivent appartenir au même projet.');
+    if (!sameBaselineScope_(baselineScope_(other), scope)) throw new PpmError('VALIDATION', 'Les deux baselines doivent porter sur le même périmètre.');
     cur = loadBaselineSnapshot_(other.id);
   } else {
-    cur = projectSnapshot_(loadSnapshotData_(), projectId);
+    cur = projectSnapshot_(data, projectId, scope);
   }
-  var d = diffSnapshots(loadBaselineSnapshot_(base.id), cur, loadHolidayMap(project.holiday_country || 'FR'));
-  var seeBudget = can(ctx, 'budget.edit', { type: 'project', id: projectId });
+  var baseSnap = loadBaselineSnapshot_(base.id);
+  if (against) baseSnap = restrictSnapshotToWps_(baseSnap, snapshotWpSet_(baseSnap, wpRows, scope.id));
+  var d = diffSnapshots(baseSnap, cur, loadHolidayMap(project.holiday_country || 'FR'));
+  var seeBudget = can(ctx, 'budget.edit', scope.type === 'project' ? { type: 'project', id: projectId } : scope);
   d.items.forEach(function (i) {
     i.base_owner_name = names[i.base_owner] || ''; i.owner_name = names[i.owner] || '';
     i.wp_name = wpNames[i.wp_id] || '';
@@ -414,6 +464,8 @@ defineAction('baselines.diff', function (p, ctx) {
   d.baseline = baselineView_(base, {});
   d.compareTo = other ? baselineView_(other, {}) : null;
   d.seeBudget = seeBudget;
+  d.scope = scopeInfo;
+  d.against = against ? 'project' : '';
   return d;
 });
 
@@ -428,7 +480,7 @@ defineAction('changes.feed', function (p, ctx) {
   if (!can(ctx, 'baseline.request', scope)) throw new PpmError('FORBIDDEN', 'Le fil des changements est réservé aux personnes qui ont un rôle dans le projet.');
   var win = validationSince_(project);
   var events = repoList('ChangeEvent', function (e) { return e.project_id === projectId; });
-  var names = feedNames_();
+  var names = feedNames_(true);
   var all = buildChangeFeed(events, projectId, win.since, names, { all: true, eligible: isValidatableEvent_ });
   var byId = {}; events.forEach(function (e) { byId[e.id] = e; });
   var assignments = repoList('RoleAssignment', function (a) { return roleActive_(a, todayStr()); });

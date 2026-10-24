@@ -113,13 +113,13 @@ function openPage(file, user, boot, extraScript) {
   await p.until(() => p.doc.querySelectorAll('#panel-changes tbody tr[data-event-row]').length === 1);
   const cpRows = [...p.doc.querySelectorAll('#panel-changes tbody tr[data-event-row]')].map((r) => r.textContent);
   check(cpRows.length === 1 && cpRows[0].includes('Calcul') && cpRows[0].includes('fin prévue : 23/10/2026 → 28/10/2026') && cpRows[0].includes('Workpackage leader'), 'sa liste : la date de Rémi, avec le niveau de son auteur : ' + cpRows.join(' | '));
-  check(/Vos modifications en attente de validation \(2\)/.test(p.text('panel-changes')) && /Domain Program Leader/.test(p.text('panel-changes')), 'et ses deux changements à lui, qui attendent le DPL');
+  check(/Vos modifications en attente de validation \(3\)/.test(p.text('panel-changes')) && /Domain Program Leader/.test(p.text('panel-changes')), 'et ses trois changements à lui (deux modifications et la baseline qu’il a figée), qui attendent le DPL');
   check(/le Deliverable owner valide les Contributors/.test(p.text('feed-rule')), 'la règle est écrite sur la page');
   // le DPL valide tout, y compris ce que fait le chef de projet
   const dp = openPage('Suivi.html', 'dora@entreprise.com');
-  await dp.until(() => /\(3\)/.test(dp.text('tab-changes')));
-  check(dp.text('tab-changes') === 'Changements à valider (3)', 'le DPL : trois changements à valider : ' + dp.text('tab-changes'));
-  await dp.until(() => dp.doc.querySelectorAll('#panel-changes tbody tr[data-event-row]').length === 3);
+  await dp.until(() => /\(4\)/.test(dp.text('tab-changes')));
+  check(dp.text('tab-changes') === 'Changements à valider (4)', 'le DPL : quatre changements à valider (dont la baseline du chef de projet) : ' + dp.text('tab-changes'));
+  await dp.until(() => dp.doc.querySelectorAll('#panel-changes tbody tr[data-event-row]').length === 4);
   const feed = [...dp.doc.querySelectorAll('#panel-changes tbody tr[data-event-row]')].map((r) => r.textContent);
   check(feed.some((t) => t.includes('Calcul') && t.includes('fin prévue : 23/10/2026 → 28/10/2026')), 'changement de date lisible');
   check(feed.some((t) => t.includes('responsable : Carla → Rémi') && t.includes('Chef de projet')), 'responsable par son nom, fait au niveau chef de projet');
@@ -129,14 +129,14 @@ function openPage(file, user, boot, extraScript) {
   const box = dp.doc.querySelector('#panel-changes tbody input[type=checkbox]');
   box.checked = true; box.dispatchEvent(new dp.win.Event('change'));
   dp.click(dp.doc.getElementById('ack-selected'));
-  await dp.until(() => dp.doc.querySelectorAll('#panel-changes tbody tr[data-event-row]').length === 2);
-  check(dp.text('tab-changes') === 'Changements à valider (2)', 'une validation : ' + dp.text('tab-changes'));
+  await dp.until(() => dp.doc.querySelectorAll('#panel-changes tbody tr[data-event-row]').length === 3);
+  check(dp.text('tab-changes') === 'Changements à valider (3)', 'une validation : ' + dp.text('tab-changes'));
   dp.click(dp.doc.getElementById('ack-all'));
   await dp.until(() => dp.text('panel-changes').includes('Rien à valider'));
   check(dp.text('tab-changes') === 'Changements à valider', 'plus rien à valider');
   const all = dp.doc.getElementById('show-all');
   all.checked = true; all.dispatchEvent(new dp.win.Event('change'));
-  await dp.until(() => dp.doc.querySelectorAll('#panel-changes tbody tr[data-event-row]').length === 3);
+  await dp.until(() => dp.doc.querySelectorAll('#panel-changes tbody tr[data-event-row]').length === 4);
   check([...dp.doc.querySelectorAll('#panel-changes tbody tr[data-event-row]')].every((r) => r.textContent.includes('Validé par dora@entreprise.com')), 'historique : validés, par qui');
   p.click(p.doc.getElementById('reload'));
   await p.until(() => !/Vos modifications en attente/.test(p.text('panel-changes')) || p.doc.querySelectorAll('#panel-changes tbody tr[data-event-row]').length === 0);
@@ -268,6 +268,54 @@ function openPage(file, user, boot, extraScript) {
   ds.click(ds.doc.querySelector('#panel-program tbody tr button.proj-open'));
   await ds.until(() => ds.doc.getElementById('panel-program').hidden && !ds.doc.body.classList.contains('in-program'));
   check(ds.doc.getElementById('picker').value === w.p1.id && !ds.doc.getElementById('panel-ecarts').hidden, 'un clic sur un projet ouvre son suivi et referme la vue programme');
+
+  // ---------------------------------------------------------------- 0.15.5 : baselines par périmètre (projet, workpackage, sous-workpackage)
+  const wl = openPage('Suivi.html', RWP, { tab: 'baselines' });                   // Rémi : Workpackage leader du WP 1 (et de 1.1)
+  await wl.until(() => wl.doc.getElementById('create-scope'));
+  const optLabels = (sel) => [...sel.options].map((o) => o.textContent.replace(/\u00a0/g, '').split(' · ')[0]);
+  check(JSON.stringify(optLabels(wl.doc.getElementById('create-scope'))) === JSON.stringify(['1 Conception', '1.1 Calcul']), 'la liste des périmètres d’un Workpackage leader : son workpackage et son sous-workpackage, ni le projet ni WP 2 : ' + optLabels(wl.doc.getElementById('create-scope')).join(' | '));
+  check(!wl.button('Demander une nouvelle baseline'), 'il peut figer : pas de bouton « demander »');
+  const cpScopes = openPage('Suivi.html', CP, { tab: 'baselines' });
+  await cpScopes.until(() => cpScopes.doc.getElementById('create-scope'));
+  check(JSON.stringify(optLabels(cpScopes.doc.getElementById('create-scope'))) === JSON.stringify(['Projet P1', '1 Conception', '1.1 Calcul', '2 Essais']), 'le chef de projet : le projet et tous les workpackages, sans livrable ni jalon : ' + optLabels(cpScopes.doc.getElementById('create-scope')).join(' | '));
+  check(cpScopes.doc.getElementById('create-scope').value === 'project:' + w.p1.id, 'par défaut : le périmètre affiché, ici le projet');
+  const wlSel = wl.doc.getElementById('create-scope');
+  wlSel.value = 'workpackage:' + w.w1.id; wlSel.dispatchEvent(new wl.win.Event('change'));
+  check(wl.doc.getElementById('create-btn').textContent === 'Figer la baseline B0', 'WP 1 n’a pas encore de baseline : « Figer la baseline B0 »');
+  const projectBase = c.repoGet('Project', w.p1.id).active_baseline_id;
+  wl.click(wl.doc.getElementById('create-btn'));
+  check(wl.doc.getElementById('form').open && /1 Conception/.test(wl.text('form-title')) && /référence locale/.test(wl.text('form-text')) && /baseline du projet n’est pas modifiée/.test(wl.text('form-text')), 'la boîte dit le périmètre et que la baseline du projet n’est pas modifiée : ' + wl.text('form-title'));
+  wl.fill('form-reason', 'Conception figée après la revue');
+  wl.click(wl.doc.getElementById('form-ok'));
+  await wl.until(() => /Baseline B0 figée/.test(wl.text('toast')));
+  const wpBase = c.repoList('Baseline').find((b) => b.scope_type === 'workpackage' && b.scope_id === w.w1.id);
+  check(!!wpBase && wpBase.status === 'Active' && c.repoGet('WorkPackage', w.w1.id).active_baseline_id === wpBase.id && c.repoGet('Project', w.p1.id).active_baseline_id === projectBase, 'la baseline de WP 1 est active ; la référence du projet n’a pas bougé');
+  check(/à valider par le niveau du dessus/.test(wl.text('toast')), 'la page dit qu’elle est à valider par le niveau du dessus');
+  await wl.until(() => wl.doc.getElementById('view-scope') && wl.doc.getElementById('view-scope').value === 'workpackage:' + w.w1.id);
+  await wl.until(() => wl.doc.querySelectorAll('#panel-ecarts tbody tr[data-item]').length >= 1 || /Aucun écart/.test(wl.text('panel-ecarts')));
+  check(wl.doc.getElementById('view-scope').value === 'workpackage:' + w.w1.id, 'les écarts s’affichent pour le périmètre qu’on vient de figer');
+  check(/Spécification|Aucun écart/.test(wl.text('panel-ecarts')) && !/Essais|Revue/.test([...wl.doc.querySelectorAll('#panel-ecarts tbody td:first-child')].map((t) => t.textContent).join(' ')), 'seuls les éléments du périmètre sont comparés (pas Essais, pas Revue)');
+  check(/Conception/.test([...wl.doc.querySelectorAll('#baselines-scope-tag, #panel-baselines .scope-tag')].map((t) => t.textContent).join(' ')) && /À valider/.test(wl.text('panel-baselines')), 'l’historique dit le périmètre et « À valider »');
+  // les écarts d'un workpackage se lisent aussi contre la baseline du projet
+  await wl.until(() => wl.doc.getElementById('view-ref'));
+  const refSel = wl.doc.getElementById('view-ref');
+  refSel.value = 'project'; refSel.dispatchEvent(new wl.win.Event('change'));
+  await wl.until(() => wl.doc.getElementById('ref-project-note'));
+  check(/baseline B\d+ du projet, restreinte à ce périmètre/.test(wl.text('ref-project-note')) && /1 Conception/.test(wl.text('ref-project-note')) && wl.doc.getElementById('ref-project-note').getAttribute('data-against') === 'project' && wl.doc.getElementById('ref-project-note').getAttribute('data-baseline-scope') === 'project', 'contre la baseline du projet : la page le dit : ' + wl.text('ref-project-note'));
+  // le niveau du dessus est informé : le chef de projet voit la baseline et peut la refuser
+  const cpFeed = openPage('Suivi.html', CP);
+  await cpFeed.until(() => cpFeed.doc.querySelector('#panel-changes [data-reject]'));
+  const rejectBtn = cpFeed.doc.querySelector('#panel-changes [data-reject]');
+  const baselineRow = rejectBtn.closest('tr');
+  check(/Baseline B0 · 1 Conception/.test(baselineRow.textContent) && /Workpackage leader/.test(baselineRow.textContent) && /première baseline de ce périmètre/.test(baselineRow.textContent), 'le chef de projet voit la baseline du Workpackage leader, avec son niveau et son résumé : ' + baselineRow.textContent.replace(/\s+/g, ' ').slice(0, 160));
+  cpFeed.click(rejectBtn);
+  check(cpFeed.doc.getElementById('form').open && /Refuser la baseline/.test(cpFeed.text('form-title')), 'Refuser ouvre la boîte du motif');
+  cpFeed.fill('form-reason', 'Pas avant la revue de planning');
+  cpFeed.click(cpFeed.doc.getElementById('form-ok'));
+  await cpFeed.until(() => /Baseline refusée/.test(cpFeed.text('toast')));
+  check(c.repoGet('Baseline', wpBase.id).status === 'Refusée' && !(c.repoGet('WorkPackage', w.w1.id).active_baseline_id), 'refusée : WP 1 se retrouve sans baseline (il n’y en avait pas avant)');
+  await cpFeed.until(() => !cpFeed.doc.querySelector('#panel-changes [data-reject]'));   // le fil se recharge après le message
+  check(!cpFeed.doc.querySelector('#panel-changes [data-reject]'), 'le changement est traité : plus de bouton « Refuser »');
   console.log(failed ? '\n' + failed + ' échec(s).' : '\nPages Suivi et Gantt (baseline) : tout est conforme.');
   process.exit(failed ? 1 : 0);
 })();
