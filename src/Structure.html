@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.15.3">
+<meta name="ppm-version" content="0.15.4">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <?!= include('CommonForms') ?>
@@ -61,6 +61,16 @@
   aside .edit label { display: grid; gap: 2px; color: var(--muted); font-size: 13px; }
   aside .edit input { padding: 6px 8px; border: 1px solid var(--rule); border-radius: 4px; color: var(--ink); }
   aside ul.roles { margin: 0 0 16px; padding-left: 18px; font-size: 14px; }
+  .import-dialog { width: min(760px, 94vw); max-height: 90vh; }
+  .imp-step { margin: 14px 0; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 10px; }
+  .imp-step .note { margin: 4px 0 8px; }
+  .imp-step .lbl { display: block; margin: 8px 0; }
+  .imp-step input[type=text] { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; }
+  .imp-head.ok { color: var(--ok-ink); font-weight: 600; } .imp-head.bad { color: var(--alert-ink); font-weight: 600; }
+  .imp-sub { margin: 10px 0 4px; font-size: 14px; }
+  .imp-list { margin: 0 0 8px; padding-left: 18px; font-size: 13.5px; max-height: 220px; overflow: auto; }
+  .imp-list.bad li::marker { color: var(--alert-ink); } .imp-list.warn li::marker { color: var(--warn-ink); }
+  .imp-counts { margin: 4px 0 8px; padding-left: 18px; font-size: 14px; }
   .roles-box h3 { margin: 4px 0 8px; font-size: 15px; font-weight: 600; }
   .role-row { padding: 6px 0; border-bottom: 1px solid var(--rule); font-size: 14px; }
   .role-row .muted { color: var(--muted); font-size: 13px; }
@@ -107,6 +117,7 @@
     <button type="button" class="btn" id="wbs-add-wbs" hidden>Ajouter un workpackage</button>
     <button type="button" class="btn" id="wbs-add-deliverable-wbs" hidden>Ajouter un livrable</button>
     <button type="button" class="btn" id="wbs-add-milestone-wbs" hidden>Ajouter un jalon</button>
+    <button type="button" class="btn" id="import-btn-wbs" hidden>Importer / exporter</button>
     <button type="button" class="btn" id="options-btn-wbs" aria-expanded="false" aria-controls="options-wbs">Attributs affichés</button>
     <div class="seg" role="group" aria-label="Zoom">
       <button type="button" id="zoom-out-wbs" aria-label="Zoom arrière">−</button>
@@ -148,6 +159,14 @@
       <button type="submit" class="btn primary" id="ed-save-wbs">Enregistrer</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="import-wbs" aria-labelledby="import-title-wbs" class="import-dialog">
+  <div class="imp-box">
+    <h2 id="import-title-wbs">Importer / exporter le WBS par classeur</h2>
+    <div id="import-body-wbs"></div>
+    <div class="actions"><button type="button" class="btn" id="imp-close-wbs">Fermer</button></div>
+  </div>
 </dialog>
 
 <dialog id="confirm-wbs" aria-labelledby="confirm-title-wbs">
@@ -211,6 +230,7 @@ var BOOT = <?!= boot ?>;
 <?!= include('StructureEdit') ?>
 
 <?!= include('StructureOrg') ?>
+<?!= include('StructureImport') ?>
 
   // ------------------------------------------------------------ zoom
   function applyZoom() {

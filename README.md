@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.15.3)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.15.4)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -41,6 +41,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `36_Digest.gs` | Lot 2 : mail récapitulatif (un par personne, quotidien ou hebdomadaire), réglages personnels |
 | `37_Simulation.gs` | Lot 4 : simulation « et si… », synthèse chiffrée d'un projet, signaux faibles (sans IA) |
 | `43_Budget.gs` | 0.9.0 : CPN (projet et sous-projet), grille de taux, lignes de budget et étalement, bilan par CPN |
+| `56_Import.gs` | 0.15.4 : import et export du WBS par classeur Google Sheet (modèle, analyse, application par lots) |
 | `55_Envelope.gs` | 0.15.3 : enveloppe budgétaire par workpackage (budget autorisé, répartition, coût mis en regard) |
 | `45_Overview.gs` | 0.10.0 : page Overview : création et renommage de projet, indicateurs délais, qualité et coût |
 | `46_Resources.gs` | 0.10.0 : page Ressources : personnes, équipes, rôle de projet, taux journalier par personne |
@@ -57,8 +58,8 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `38_Copilot.gs` | Lot 4 : copilote (modes off, manual, api), garde-fou des chiffres, journal AiLog, quota, questions, décisions sur les suggestions |
 | `40_Jobs.gs` | Traitement nocturne par tranches (journal, règles, agenda et Drive, annuaire, sauvegardes), récapitulatif de 7 h |
 | `Gantt.html` | Page du planning (Frappe Gantt 0.6.1, chargé depuis jsDelivr) |
-| `Structure.html` | Page WBS (anciennement OBS/WBS, puis Structure) : mise en page, marquage, découpage dessiné en SVG sans bibliothèque externe, panneau des rôles. 0.12.2 : le code est coupé en six morceaux inclus dans l'ordre, voir ci-dessous |
-| `StructureState.html`, `StructureDraw.html`, `StructureLoad.html`, `StructureDetail.html`, `StructureEdit.html`, `StructureOrg.html` | 0.12.2 : morceaux de `Structure.html` (état et choix d'affichage ; mise en page, cartes et dessin ; chargement et sélecteurs ; panneau de détail ; création et édition du WBS ; dépendances, rôles, personnes et équipes). Ils partagent la fermeture de `createStructure` : un morceau n'est pas un module indépendant |
+| `Structure.html` | Page WBS (anciennement OBS/WBS, puis Structure) : mise en page, marquage, découpage dessiné en SVG sans bibliothèque externe, panneau des rôles. 0.12.2 : le code est coupé en morceaux inclus dans l'ordre, voir ci-dessous |
+| `StructureState.html`, `StructureDraw.html`, `StructureLoad.html`, `StructureDetail.html`, `StructureEdit.html`, `StructureOrg.html`, `StructureImport.html` | 0.12.2 : morceaux de `Structure.html` (état et choix d'affichage ; mise en page, cartes et dessin ; chargement et sélecteurs ; panneau de détail ; création, édition et panneau des rôles du WBS ; dépendances ; import par classeur (0.15.4)). Ils partagent la fermeture de `createStructure` : un morceau n'est pas un module indépendant |
 | `Suivi.html` | Page Suivi : écarts à la baseline, changements à valider, baselines, agenda et Drive, mes notifications |
 | `Overview.html` | Page d'accueil : verdict, indicateurs délais, qualité, coût, portefeuille, création de projet |
 | `Ressources.html` | Page Ressources : personnes, équipes, rôle dans le projet, taux, accès |
@@ -229,7 +230,7 @@ Additive et relançable, elle **termine** les anciennes lignes sans les supprime
 
 **Changements de comportement à connaître** : le Program Leader peut maintenant déclarer l'avancement ; un Workpackage leader ne supprime pas son propre workpackage ; la ligne de budget ne donne plus de droit (le Contributor la remplace) ; un chef de projet ne désigne pas son remplaçant ni un autre chef de projet (le DPL le fait).
 
-**Pas encore fait** : l'import par classeur Google Sheet. La démo n'est pas adaptée : elle garde ses anciens rôles, qui fonctionnent ; lancez `A9_MIGRER_ROLES` après `A2_SEED_DEMO` pour la passer aux nouveaux niveaux.
+**Pas encore fait** : rien de ce qui était prévu pour ce lot (les règles de dépassement d'enveloppe et les dépendances dans l'import restent des idées). La démo n'est pas adaptée : elle garde ses anciens rôles, qui fonctionnent ; lancez `A9_MIGRER_ROLES` après `A2_SEED_DEMO` pour la passer aux nouveaux niveaux.
 
 ## Validation par le niveau du dessus (0.15.3)
 
@@ -265,6 +266,34 @@ Additive et relançable, elle **termine** les anciennes lignes sans les supprime
 **Protection.** Les enveloppes ne s'écrivent que par `budget.envelope.set` : les mises à jour ordinaires d'un projet ou d'un workpackage (`projects.update`, `workpackages.*`, `wbs.*`) les ignorent. Actions : `budget.envelope.get` (lecture) et `budget.envelope.set` (`authorized`, `allocations: [{ wpId, amount }]`).
 
 **Limites.** Pas de règle du moteur de constats pour un dépassement d'enveloppe (seulement l'affichage) ; pas de graphique de consommation dans le temps ; l'enveloppe n'est pas figée par les baselines (elle est suivie par la validation). Vérifié sur les faux services et dans un aperçu, pas dans votre Apps Script. La démo reçoit une enveloppe (un workpackage dépassé pour l'illustrer) à l'étape « Enveloppe budgétaire de NAC-1 ».
+
+## Import et export du WBS par classeur Google Sheet (0.15.4)
+
+**À quoi ça sert.** Remplir un projet d'un coup (ou en modifier beaucoup) depuis un classeur : workpackages, sous-workpackages, livrables, jalons, dates, responsables, contributors, budget en euros, enveloppes. Où : page **WBS**, bouton **Importer / exporter** (chef de projet et au-dessus, droit `import.run`).
+
+**En trois temps.**
+1. **Créer le classeur modèle** : créé dans Drive, **partagé avec vous**, **prérempli avec ce que le projet contient déjà** (c'est donc aussi un export : modifier, ajouter des lignes, importer). Un onglet par objet : **Projet** (budget autorisé), **Workpackages**, **Livrables**, **Jalons**, **Budget**, plus un onglet « Lisez-moi ».
+2. **Analyser** : colle le lien du classeur rempli ; le rapport dit ce qui sera créé, modifié ou laissé tel quel, **sans rien écrire**, et chaque erreur avec **son onglet et sa ligne**.
+3. **Importer** : possible seulement si l'analyse n'a aucune erreur. L'import se fait **par lots** (chaque lot s'arrête avant la limite de six minutes d'Apps Script, après quatre minutes) ; la page relance jusqu'à « terminé ». Relancer un import interrompu reprend où il s'était arrêté.
+
+**Les onglets.**
+| Onglet | Colonnes |
+|---|---|
+| Projet | Budget autorisé (€) |
+| Workpackages | Code WBS · Parent (code WBS) · Nom · Leader (e-mail) · Imputation · Enveloppe (€) |
+| Livrables | Code WBS du workpackage · Nom · Début · Fin · Owner (e-mail) · Contributors (e-mails séparés par « ; ») |
+| Jalons | Code WBS du workpackage · Nom · Date · Catégorie · Owner (e-mail) |
+| Budget | Code WBS du workpackage · Livrable · Ressource (e-mail) · Type (TJM ou Forfait) · Jours · Montant forfait (€) |
+
+**Clés (ce qui fait retrouver un objet).** Un workpackage : son **code WBS**. Un livrable ou un jalon : son **workpackage et son nom** (changer un nom crée un nouvel objet). Une ligne de budget : son livrable et sa ressource. **Importer deux fois le même classeur ne change donc rien**, et **l'import ne supprime jamais rien** : ce qui est dans l'outil et pas dans le classeur est seulement signalé.
+
+**Les personnes** se désignent par leur **adresse e-mail** et doivent **déjà exister dans Ressources** : l'import ne crée jamais de personne (une adresse inconnue est une erreur, avec la marche à suivre). Le leader devient Workpackage leader (Sub-workpackage leader pour un sous-workpackage), l'owner Deliverable owner, les contributors des Contributors, par les mêmes règles que dans la page WBS.
+
+**Contrôles de l'analyse** : codes WBS (`1` ou `1.2`, doublons, parent introuvable ou déjà sous-niveau, code qui ne commence pas par celui du parent) ; dates (aaaa-mm-jj ou jj/mm/aaaa, vraies dates, fin après début, début et fin ensemble) ; catégories de jalon ; montants ; **budget** (livrable existant, type TJM ou Forfait, un TJM demande des jours et un taux sur la fiche de la personne, un forfait n'existe que pour une ressource externe, pas deux lignes pour la même ressource sur un livrable) ; en-têtes ou onglets modifiés ; plafonds (500 workpackages, 3 000 livrables et jalons, 6 000 lignes de budget par import).
+
+**Tout passe par les actions ordinaires** (`wbs.create`, `wbs.update`, `roles.assign`, `budget.line.save`, `budget.envelope.set`) : mêmes droits, mêmes règles, même journal. **Les changements importés restent donc « à valider »** par le niveau du dessus dans la page Suivi, comme s'ils avaient été saisis à la main : un gros import donne un gros lot à valider (le DPL a « Tout valider »).
+
+**Limites.** Pas de dépendances entre livrables dans le classeur (elles se créent depuis le Planning) ; un seul leader ou owner par objet (les autres rôles se posent dans la page WBS) ; un classeur que vous avez fait vous-même doit être **partagé en lecture avec le compte qui exécute l'outil** (le message d'erreur le dit) ; les codes WBS sont écrits en texte brut dans le modèle (sinon Sheets lit « 1.10 » comme le nombre 1,1) ; l'analyse relit tout le classeur à chaque lot. Vérifié sur de faux services et dans un aperçu, **pas dans votre Apps Script** : ni la durée réelle d'un lot, ni la création du fichier dans Drive, ni son partage.
 
 ## Planning : liste de gauche, recherche, filtres, enregistrement immédiat (0.15.2)
 

@@ -1,0 +1,89 @@
+  // ------------------------------------------------------------ importer / exporter par classeur Google Sheet (0.15.3)
+  /**
+   * Trois temps dans une même boîte : (1) créer le classeur modèle, prérempli avec le projet (c'est aussi l'export) ; (2) coller le lien du classeur rempli et « Analyser » : un rapport,
+   * sans rien écrire ; (3) « Importer », seulement si l'analyse n'a aucune erreur : l'import se fait par lots, la page relance jusqu'à « terminé » (chaque lot est un appel serveur
+   * qui s'arrête avant la limite de six minutes d'Apps Script).
+   */
+  var imp = { report: null, book: '', busy: false };
+  function impBody() { return $('import-body'); }
+  function impBusy(on, msg) {
+    imp.busy = on;
+    ['imp-template', 'imp-analyze', 'imp-run'].forEach(function (id) { if ($(id)) $(id).disabled = on || (id === 'imp-run' && !(imp.report && imp.report.ok && !imp.report.nothing_to_do)); });
+    $('imp-status').textContent = msg || '';
+  }
+  function impCounts(c) {
+    var line = function (label, o) { return o.create + o.update + o.same ? label + ' : ' + o.create + ' à créer, ' + o.update + ' à modifier, ' + o.same + ' inchangé' + (o.same > 1 ? 's' : '') : ''; };
+    return [line('Workpackages', c.wps), line('Livrables et jalons', c.items), c.contributors ? 'Contributors à poser : ' + c.contributors : '', line('Lignes de budget', c.lines), c.envelope ? 'Enveloppes à fixer : ' + c.envelope : ''].filter(Boolean);
+  }
+  function impRenderReport(rep) {
+    var box = $('imp-report'); clear(box);
+    if (!rep) return;
+    var head = rep.ok ? (rep.nothing_to_do ? 'Rien à importer : le classeur correspond déjà au projet.' : 'Analyse sans erreur : voici ce qui sera fait.') : 'Le classeur a ' + rep.errors_count + (rep.errors_count > 1 ? ' erreurs' : ' erreur') + ' : corrigez-les dans le classeur, puis relancez « Analyser ».';
+    box.appendChild(el('p', { class: 'imp-head' + (rep.ok ? ' ok' : ' bad'), id: 'imp-head', role: 'status', text: head }));
+    if (rep.ok) box.appendChild(el('ul', { class: 'imp-counts', id: 'imp-counts' }, impCounts(rep.counts).map(function (t) { return el('li', { text: t }); })));
+    var list = function (title, items, id, tone) {
+      if (!items.length) return;
+      box.appendChild(el('h3', { class: 'imp-sub', text: title }));
+      box.appendChild(el('ul', { class: 'imp-list ' + tone, id: id }, items.map(function (x) { return el('li', {}, [el('strong', { text: x.tab + (x.row ? ', ligne ' + x.row : '') + ' — ' }), x.message]); })));
+    };
+    list('Erreurs (' + rep.errors_count + (rep.errors_count > rep.errors.length ? ', les ' + rep.errors.length + ' premières' : '') + ')', rep.errors, 'imp-errors', 'bad');
+    list('À savoir (' + rep.warnings_count + ')', rep.warnings, 'imp-warnings', 'warn');
+  }
+  function impStale() { imp.report = null; impRenderReport(null); impBusy(false, ''); }
+  function openImport() {
+    imp.report = null; imp.book = '';
+    var body = impBody(); clear(body);
+    body.appendChild(el('p', { class: 'note', text: 'Un onglet par objet : Projet, Workpackages, Livrables, Jalons, Budget. Les personnes se désignent par leur e-mail et doivent déjà exister dans Ressources. L’import ne supprime jamais rien et peut être relancé sans risque.' }));
+    body.appendChild(el('div', { class: 'imp-step' }, [el('strong', { text: '1. Le classeur modèle' }),
+      el('p', { class: 'note', text: 'Créé dans Drive et partagé avec vous, prérempli avec ce que le projet contient déjà : c’est aussi un export.' }),
+      el('button', { type: 'button', class: 'btn', id: 'imp-template', text: 'Créer le classeur modèle', onclick: impTemplate }), el('div', { id: 'imp-template-out' })]));
+    var input = el('input', { type: 'text', id: 'imp-book', placeholder: 'https://docs.google.com/spreadsheets/d/…', autocomplete: 'off', 'aria-label': 'Lien du classeur à importer' });
+    input.addEventListener('input', function () { imp.book = input.value; impStale(); });
+    body.appendChild(el('div', { class: 'imp-step' }, [el('strong', { text: '2. Analyser' }),
+      el('label', { class: 'lbl' }, ['Lien du classeur rempli', input]),
+      el('button', { type: 'button', class: 'btn', id: 'imp-analyze', text: 'Analyser', onclick: impAnalyze })]));
+    body.appendChild(el('div', { id: 'imp-report' }));
+    body.appendChild(el('div', { class: 'imp-step' }, [el('strong', { text: '3. Importer' }),
+      el('button', { type: 'button', class: 'btn primary', id: 'imp-run', text: 'Importer', disabled: true, onclick: impRun }),
+      el('span', { class: 'note', id: 'imp-status', role: 'status', 'aria-live': 'polite' })]));
+    openDialog($('import'));
+  }
+  function impTemplate() {
+    impBusy(true, 'Création du classeur…');
+    call('import.template', { projectId: state.scopeId }, true).then(function (t) {
+      imp.book = t.url; $('imp-book').value = t.url;
+      var out = $('imp-template-out'); clear(out);
+      out.appendChild(el('p', {}, [el('a', { href: t.url, target: '_blank', rel: 'noopener', id: 'imp-template-link', text: 'Ouvrir « ' + t.name + ' »' }),
+        ' — ' + t.prefilled.workpackages + ' workpackage(s), ' + t.prefilled.livrables + ' livrable(s), ' + t.prefilled.jalons + ' jalon(s), ' + t.prefilled.budget + ' ligne(s) de budget.']));
+      (t.warnings || []).forEach(function (w) { out.appendChild(el('p', { class: 'note warn', text: w })); });
+      impBusy(false, '');
+    }).catch(function (e) { impBusy(false, ''); toast(window.ppmErrorText ? ppmErrorText(e) : (e.message || 'Impossible.'), true); });
+  }
+  function impAnalyze() {
+    if (!String(imp.book || '').trim()) { toast('Collez d’abord le lien du classeur.', true); return; }
+    impBusy(true, 'Analyse…');
+    call('import.analyze', { projectId: state.scopeId, book: imp.book }).then(function (rep) { imp.report = rep; impRenderReport(rep); impBusy(false, ''); })
+      .catch(function (e) { impBusy(false, ''); toast(window.ppmErrorText ? ppmErrorText(e) : (e.message || 'Analyse impossible.'), true); });
+  }
+  function impRun() {
+    if (!imp.report || !imp.report.ok) return;
+    var lot = 0, total = null;
+    var next = function () {
+      lot++;
+      impBusy(true, 'Import en cours — lot ' + lot + (total === null ? '' : ', reste ' + total + ' opération(s)') + '…');
+      return call('import.run', { projectId: state.scopeId, book: imp.book }, true).then(function (r) {
+        total = r.remaining;
+        if (r.done) return r;
+        if (lot >= 60) throw new Error('Import interrompu après 60 lots : relancez-le pour continuer.');
+        return next();
+      });
+    };
+    next().then(function (r) {
+      imp.report = null; impRenderReport(null); impBusy(false, '');
+      $('imp-run').disabled = true;
+      toast('Import terminé (' + (r.applied.wps + r.applied.items + r.applied.contributors + r.applied.lines + r.applied.envelope) + ' opération(s) au dernier lot).');
+      closeDialog($('import')); state.pendingSelect = ''; return load(true);
+    }).catch(function (e) { impBusy(false, ''); toast(window.ppmErrorText ? ppmErrorText(e) : (e.message || 'Import impossible.'), true); });
+  }
+  $('import-btn').addEventListener('click', openImport);
+  $('imp-close').addEventListener('click', function () { closeDialog($('import')); });

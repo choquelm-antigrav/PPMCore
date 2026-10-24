@@ -20,7 +20,7 @@ var PPM_PAGES = [
   { view: 'overview',   file: 'Overview',   title: 'PPM — Overview projet', eyebrow: 'Overview · Projet',                     tabs: [''], nav: 'bar',  share: true, shared: ['CommonForms'], parts: [] },
   { view: 'gantt',      file: 'Gantt',      title: 'PPM — Planning',        eyebrow: 'Planning · Gantt',                      tabs: [''], nav: 'bar',  share: true, shared: [], parts: [] },
   { view: 'structure',  file: 'Structure',  title: 'PPM — WBS',             eyebrow: 'WBS · Découpage et rôles',   tabs: [''], nav: 'bar',  share: true, shared: ['CommonForms'],
-    parts: ['StructureState', 'StructureDraw', 'StructureLoad', 'StructureDetail', 'StructureEdit', 'StructureOrg'] },
+    parts: ['StructureState', 'StructureDraw', 'StructureLoad', 'StructureDetail', 'StructureEdit', 'StructureOrg', 'StructureImport'] },
   { view: 'ressources', file: 'Ressources', title: 'PPM — Ressources',      eyebrow: 'Ressources · Équipes et rôles',         tabs: [''], nav: 'bar',  share: true, shared: ['CommonForms'], parts: [] },
   { view: 'suivi',      file: 'Suivi',      title: 'PPM — Suivi',           eyebrow: 'Suivi · Baselines',                     tabs: [''], nav: 'bar',  share: true, shared: ['CommonProgram'], parts: [] },
   { view: 'actualites', file: 'Actualites', title: 'PPM — Actualités',      eyebrow: 'Actualités · Réunions et actions',      tabs: [''], nav: 'bar',  share: true, shared: ['CommonProgram'], parts: [] },

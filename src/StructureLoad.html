@@ -37,6 +37,7 @@
     var d = state.data, sm = $('summary'), t = $('ztitle'), ctx = $('context');
     clear(ctx);
     ['wbs-add', 'wbs-add-deliverable', 'wbs-add-milestone'].forEach(function (id) { $(id).hidden = !(d && d.canCreate); });
+    $('import-btn').hidden = !(d && d.canImport);
     if (!d) { sm.textContent = ''; return; }
     if (d.scope === 'program') {
       t.textContent = 'Découpage (WBS) — ' + (d.program.code ? d.program.code + ' ' : '') + d.program.name;

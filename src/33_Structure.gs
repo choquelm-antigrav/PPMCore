@@ -218,6 +218,7 @@ function buildWbsTree(data, projectId, today, ctx) {
       program_name: program ? program.name : '' },
     nodes: nodes,
     canCreate: canEdit('project', projectId),
+    canImport: !!ctx && (ctx.isAdmin || can(ctx, 'import.run', { type: 'project', id: projectId })),
     canCpn: !!ctx && can(ctx, 'cpn.edit', { type: 'project', id: projectId }),
     stats: {
       wps: wps.length, items: items.length,
@@ -265,7 +266,7 @@ function buildWbsProgramTree_(data, programId, today, ctx) {
   return {
     today: today, scope: 'program', project: null,
     program: { id: none ? '' : program.id, code: none ? '' : program.code, name: none ? 'Projets hors programme' : program.name },
-    nodes: nodes, canCreate: false, canCpn: false,
+    nodes: nodes, canCreate: false, canImport: false, canCpn: false,
     stats: { projects: projects.length, wps: wps, items: items, depth: 2 }
   };
 }

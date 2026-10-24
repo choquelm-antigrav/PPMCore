@@ -5,7 +5,7 @@
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.15.3';
+var PPM_VERSION = '0.15.4';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -74,6 +74,7 @@ var PERMISSION_LEVEL = {
   'baseline.manage':  'CP',
   'baseline.request': 'CONTRIB',
   'budget.edit':      'WPL',
+  'import.run':      'CP',            // importer le WBS par classeur (56_Import.gs)
   'budget.authorize': 'CP',            // fixer l'enveloppe autorisée du projet et la répartir entre les workpackages (un sous-workpackage : par son Workpackage leader)
   'cpn.edit':         'CP',
   'po.edit':          'CONTRIB',

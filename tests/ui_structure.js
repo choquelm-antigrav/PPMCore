@@ -9,8 +9,11 @@ const path = require('path');
 const dep = (m) => require(process.env.UI_DEPS ? path.join(process.env.UI_DEPS, m) : m);
 const { JSDOM } = dep('jsdom');
 const { freshCore } = require('./harness');
+const { makeFakeSheets } = require('./fake_sheets');
 
 const c = freshCore();
+c.SpreadsheetApp = makeFakeSheets();
+c.IMPORT_DRIVE = { share() {}, moveToProjectFolder() {} };
 const S = { actor: 'setup', source: 'setup' };
 const A = 'admin@entreprise.com';
 const call = (email, action, params) => { const r = c.handleRequest({ action, params, apiVersion: '1.0' }, email); if (!r.ok) throw new Error(action + ' : ' + JSON.stringify(r.error)); return r.data; };
@@ -165,6 +168,45 @@ function openPage(user, boot) {
   const width = () => Number(p.doc.querySelector('#canvas-wbs svg').getAttribute('width'));
   const w0 = width(); p.click(p.$('zoom-in')); const w1z = width(); p.click(p.$('zoom-out')); p.click(p.$('zoom-out'));
   check(w1z > w0 && width() < w1z, 'le zoom agrandit et réduit le schéma');
+
+  // ---------------------------------------------------------------- importer / exporter par classeur (0.15.3)
+  p = openPage('alice@entreprise.com');
+  await p.until(() => p.nodes().length > 0);
+  check(!p.$('import-btn').hidden, 'le chef de projet a le bouton « Importer / exporter »');
+  check(k.$('import-btn').hidden && e.$('import-btn').hidden, 'ni un Sub-workpackage leader ni un Reader');
+  p.click(p.$('import-btn'));
+  await p.until(() => p.$('imp-template'));
+  check(!!p.$('import').getAttribute('open') || p.$('import').open, 'la boîte s’ouvre');
+  check(p.$('imp-run').disabled, 'on ne peut pas importer avant d’avoir analysé');
+  p.click(p.$('imp-template'));
+  await p.until(() => p.$('imp-template-link'));
+  check(/2 workpackage\(s\), 2 livrable\(s\), 1 jalon\(s\)/.test(p.$('imp-template-out').textContent), 'le modèle est créé, avec ce qu’il contient déjà : ' + p.$('imp-template-out').textContent.replace(/\s+/g, ' ').slice(0, 120));
+  const bookId = c.SpreadsheetApp.openById(/\/d\/([^/?#]+)/.exec(p.$('imp-book').value)[1]);
+  p.click(p.$('imp-analyze'));
+  await p.until(() => p.$('imp-head'));
+  check(/Rien à importer/.test(p.$('imp-head').textContent) && p.$('imp-run').disabled, 'le modèle tel quel : rien à importer, bouton « Importer » inactif');
+  // un classeur avec une erreur : personne inconnue
+  const add = (tab, rows) => { const sh = bookId.getSheetByName(tab); sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows); };
+  add('Workpackages', [['2', '', 'Qualification', 'inconnu@entreprise.com', '', '']]);
+  p.click(p.$('imp-analyze'));
+  await p.until(() => p.$('imp-errors'));
+  check(/1 erreur/.test(p.$('imp-head').textContent) && /Workpackages, ligne 4/.test(p.$('imp-errors').textContent) && /n’est pas dans Ressources/.test(p.$('imp-errors').textContent) && p.$('imp-run').disabled, 'l’erreur dit l’onglet, la ligne et quoi faire ; « Importer » reste inactif : ' + p.$('imp-errors').textContent.slice(0, 140));
+  // correction, puis import
+  bookId.getSheetByName('Workpackages').getRange(4, 4).setValue('dan@entreprise.com');
+  add('Livrables', [['2', 'Rapport final', '2026-12-01', '2026-12-11', 'dan@entreprise.com', '']]);
+  p.click(p.$('imp-analyze'));
+  await p.until(() => p.$('imp-counts'));
+  check(/Workpackages : 1 à créer/.test(p.$('imp-counts').textContent) && /Livrables et jalons : 1 à créer/.test(p.$('imp-counts').textContent) && !p.$('imp-run').disabled, 'le plan chiffré s’affiche, « Importer » devient actif : ' + p.$('imp-counts').textContent.replace(/\s+/g, ' '));
+  // des lots d'une seule opération : la page doit relancer jusqu'à « terminé » (l'import de test n'en compte que deux)
+  const realRun = c.API_ACTIONS['import.run']; let lots = 0;
+  c.API_ACTIONS['import.run'] = (params, ctx) => { lots++; return realRun(Object.assign({}, params, { maxOps: 1 }), ctx); };
+  p.click(p.$('imp-run'));
+  await p.until(() => p.nodes().length === 8, 6000);
+  c.API_ACTIONS['import.run'] = realRun;
+  check(lots >= 2, 'la page relance l’import lot après lot jusqu’à « terminé » : ' + lots + ' lots d’une opération');
+  check(p.nodes().length === 8 && c.repoList('PlanItem').some((i) => i.name === 'Rapport final') && c.repoList('WorkPackage').some((x) => String(x.wbs_code) === '2' && x.owner_resource_id === dan.id), 'importé : le WBS affiche 8 cartes, le workpackage a son leader : ' + p.nodes().length);
+  await p.until(() => !(p.$('import').open || p.$('import').getAttribute('open') !== null));
+  check(!(p.$('import').open), 'la boîte se referme à la fin');
 
   // ---------------------------------------------------------------- vue programme : on n'y pose pas de rôle
   const g = openPage('alice@entreprise.com', { project: '', program: prog.id });
