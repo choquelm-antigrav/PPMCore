@@ -12,8 +12,8 @@
     $('imp-status').textContent = msg || '';
   }
   function impCounts(c) {
-    var line = function (label, o) { return o.create + o.update + o.same ? label + ' : ' + o.create + ' à créer, ' + o.update + ' à modifier, ' + o.same + ' inchangé' + (o.same > 1 ? 's' : '') : ''; };
-    return [line('Workpackages', c.wps), line('Livrables et jalons', c.items), c.contributors ? 'Contributors à poser : ' + c.contributors : '', line('Lignes de budget', c.lines), c.envelope ? 'Enveloppes à fixer : ' + c.envelope : ''].filter(Boolean);
+    var line = function (label, o) { return o.create + (o.update || 0) + o.same ? label + ' : ' + o.create + ' à créer, ' + (o.update || 0) + ' à modifier, ' + o.same + ' inchangé' + (o.same > 1 ? 's' : '') : ''; };
+    return [c.people && c.people.create ? 'Personnes à créer : ' + c.people.create : '', line('Workpackages', c.wps), line('Livrables et jalons', c.items), c.contributors ? 'Contributors à poser : ' + c.contributors : '', c.deps && c.deps.create ? 'Dépendances à créer : ' + c.deps.create : '', line('Lignes de budget', c.lines), c.envelope ? 'Enveloppes à fixer : ' + c.envelope : ''].filter(Boolean);
   }
   function impRenderReport(rep) {
     var box = $('imp-report'); clear(box);
@@ -33,7 +33,7 @@
   function openImport() {
     imp.report = null; imp.book = '';
     var body = impBody(); clear(body);
-    body.appendChild(el('p', { class: 'note', text: 'Un onglet par objet : Projet, Workpackages, Livrables, Jalons, Budget. Les personnes se désignent par leur e-mail (à défaut d’adresse sur leur fiche, par leur nom exact) et doivent déjà exister dans Ressources. L’import ne supprime jamais rien et peut être relancé sans risque.' }));
+    body.appendChild(el('p', { class: 'note', text: 'Un onglet par objet : Projet, Workpackages, Livrables, Jalons, Budget. Les personnes se désignent par leur e-mail (à défaut d’adresse sur leur fiche, par leur nom exact) ; celles de l’onglet Personnes qui n’existent pas encore sont créées. L’import ne supprime jamais rien, enregistre une copie de sécurité avant d’écrire et peut être relancé sans risque. Pour plusieurs projets ou un programme : page Administration.' }));
     body.appendChild(el('div', { class: 'imp-step' }, [el('strong', { text: '1. Le classeur modèle' }),
       el('p', { class: 'note', text: 'Créé dans Drive et partagé avec vous, prérempli avec ce que le projet contient déjà : c’est aussi un export.' }),
       el('button', { type: 'button', class: 'btn', id: 'imp-template', text: 'Créer le classeur modèle', onclick: impTemplate }), el('div', { id: 'imp-template-out' })]));
@@ -43,6 +43,7 @@
       el('label', { class: 'lbl' }, ['Lien du classeur rempli', input]),
       el('button', { type: 'button', class: 'btn', id: 'imp-analyze', text: 'Analyser', onclick: impAnalyze })]));
     body.appendChild(el('div', { id: 'imp-report' }));
+    body.appendChild(el('div', { id: 'imp-backup' }));
     body.appendChild(el('div', { class: 'imp-step' }, [el('strong', { text: '3. Importer' }),
       el('button', { type: 'button', class: 'btn primary', id: 'imp-run', text: 'Importer', disabled: true, onclick: impRun }),
       el('span', { class: 'note', id: 'imp-status', role: 'status', 'aria-live': 'polite' })]));
@@ -54,7 +55,7 @@
       imp.book = t.url; $('imp-book').value = t.url;
       var out = $('imp-template-out'); clear(out);
       out.appendChild(el('p', {}, [el('a', { href: t.url, target: '_blank', rel: 'noopener', id: 'imp-template-link', text: 'Ouvrir « ' + t.name + ' »' }),
-        ' — ' + t.prefilled.workpackages + ' workpackage(s), ' + t.prefilled.livrables + ' livrable(s), ' + t.prefilled.jalons + ' jalon(s), ' + t.prefilled.budget + ' ligne(s) de budget.']));
+        ' — ' + t.prefilled.workpackages + ' workpackage(s), ' + t.prefilled.livrables + ' livrable(s), ' + t.prefilled.jalons + ' jalon(s), ' + t.prefilled.dependances + ' dépendance(s), ' + t.prefilled.budget + ' ligne(s) de budget.']));
       (t.warnings || []).forEach(function (w) { out.appendChild(el('p', { class: 'note warn', text: w })); });
       impBusy(false, '');
     }).catch(function (e) { impBusy(false, ''); toast(window.ppmErrorText ? ppmErrorText(e) : (e.message || 'Impossible.'), true); });
@@ -71,7 +72,9 @@
     var next = function () {
       lot++;
       impBusy(true, 'Import en cours — lot ' + lot + (total === null ? '' : ', reste ' + total + ' opération(s)') + '…');
-      return call('import.run', { projectId: state.scopeId, book: imp.book }, true).then(function (r) {
+      // le premier lot enregistre une copie de sécurité du projet ; les suivants reprennent (resume)
+      return call('import.run', { projectId: state.scopeId, book: imp.book, resume: lot > 1 }, true).then(function (r) {
+        if (r.backup) { var b = $('imp-backup'); clear(b); b.appendChild(el('p', { class: 'note' }, ['Copie de sécurité enregistrée avant l’import : ', el('a', { href: r.backup.url, target: '_blank', rel: 'noopener', id: 'imp-backup-link', text: r.backup.name })])); }
         total = r.remaining;
         if (r.done) return r;
         if (lot >= 60) throw new Error('Import interrompu après 60 lots : relancez-le pour continuer.');

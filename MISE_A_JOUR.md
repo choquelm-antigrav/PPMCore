@@ -40,6 +40,21 @@ Il est conçu pour être relancé sans risque sur des données existantes :
 
 À partir de la 0.14.2, `A1` pose aussi le déclencheur facultatif `warmCache` (cache gardé plein toutes les 5 minutes en semaine, de 6 h à 21 h).
 
+## Exporter vos projets dans un classeur, et les remettre (depuis la 0.16.0)
+
+La **page Administration › Projets : export et import** exporte des projets (ou un programme entier) dans un classeur Google Sheet, et importe un classeur. C'est le moyen de **garder ses projets en repartant d'une installation neuve**, et un complément à la copie des classeurs.
+
+**Garder vos projets en réinstallant à neuf**
+1. **Exporter** : page Administration, cochez tous vos programmes, **Exporter la sélection**. Gardez le classeur créé dans Drive (c'est votre sauvegarde ; vous pouvez en faire une copie).
+2. **Réinstaller** : dans les propriétés du script, supprimez **seulement** `PPM_DATA_ID` et `PPM_HISTORY_ID` (gardez le reste : domaine, administrateurs, adresse AppSheet), collez le nouveau code, lancez `A1_INSTALLER_PPM` : deux classeurs neufs, vides, sont créés.
+3. **Importer** : page Administration, collez le lien du classeur, **Analyser**, puis **Importer**. Le classeur recrée les programmes, les projets, les personnes, le découpage, les dépendances, le budget et les enveloppes. Vérifiez le rapport avant d'importer : il dit chaque erreur avec son onglet et sa ligne.
+4. **Reconfigurer AppSheet** vers les nouveaux classeurs.
+5. Les **Program Leaders** et les **DPL** ne sont pas dans le classeur (leurs rôles de programme et de projet ne s'exportent pas) : reposez-les dans la page WBS, section Rôles. Le chef de projet, lui, vient de la colonne « Chef de projet ».
+
+**Ce que cette sauvegarde ne contient pas** : les baselines (historique figé), les risques, les réunions et actualités, les achats (PO), le journal des modifications, les équipes. Si vous tenez à l'un d'eux, la copie des deux classeurs « PPM Données » et « PPM Historique » (étape 1 de la procédure) reste la référence : **ne supprimez pas les anciens classeurs avant d'avoir vérifié le nouveau**.
+
+**Importer dans une installation qui contient déjà des projets** est sans risque : rien n'est supprimé, ce qui existe déjà et qui est identique n'est pas touché, et une **copie de sécurité** des projets concernés est enregistrée avant d'écrire.
+
 ## Les pièges à éviter
 
 - **Ne copiez jamais le projet Apps Script dans un nouveau fichier ou un autre compte.** Les propriétés du script ne suivent pas : si `PPM_DATA_ID` est absent, `A1` crée **deux classeurs vides**. Vos données semblent perdues, mais elles sont toujours dans l'ancien classeur. Gardez un seul projet Apps Script.

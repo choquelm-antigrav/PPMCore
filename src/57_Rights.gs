@@ -30,7 +30,7 @@ var RIGHTS_ROWS = [
   { group: 'Planning et avancement', perm: 'progress.declare', label: 'Déclarer l’avancement d’un livrable' },
   { group: 'Planning et avancement', perm: 'baseline.request', label: 'Demander une baseline' },
   { group: 'Planning et avancement', perm: 'baseline.manage', label: 'Réactiver une baseline du projet, refuser une demande de baseline du projet' },
-  { group: 'Planning et avancement', perm: 'import.run', label: 'Importer ou exporter le WBS par classeur Google Sheet' },
+  { group: 'Planning et avancement', perm: 'import.run', label: 'Exporter et importer un ou plusieurs projets par classeur Google Sheet', where: 'pour chaque projet touché ; créer un programme : l’administrateur ; créer un projet : le DPL du programme' },
   { group: 'Budget et achats', perm: 'budget.authorize', label: 'Fixer l’enveloppe budgétaire du projet et des workpackages', where: 'celle d’un sous-workpackage : son Workpackage leader et au-dessus' },
   { group: 'Budget et achats', perm: 'ratecard.manage', label: 'Fixer les tarifs journaliers (grille et fiches)' },
   { group: 'Budget et achats', perm: 'cpn.edit', label: 'Définir le CPN du projet et des sous-projets' },

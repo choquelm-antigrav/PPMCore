@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.15.5)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.16.0)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -43,7 +43,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `43_Budget.gs` | 0.9.0 : CPN (projet et sous-projet), grille de taux, lignes de budget et étalement, bilan par CPN |
 | `58_ScopeBaselines.gs` | 0.15.5 : baselines par périmètre (projet, workpackage, sous-workpackage), droits de figer, instantané restreint, refus d'une baseline par le niveau du dessus |
 | `57_Rights.gs` | 0.15.4 : le tableau des droits par niveau de la page Administration, calculé depuis les règles |
-| `56_Import.gs` | 0.15.4 : import et export du WBS par classeur Google Sheet (modèle, analyse, application par lots) |
+| `56_Import.gs` | 0.16.0 : export et import d'un ou plusieurs projets par classeur Google Sheet (programmes, projets, personnes, découpage, dépendances, budget ; analyse, copie de sécurité, application par lots) |
 | `55_Envelope.gs` | 0.15.3 : enveloppe budgétaire par workpackage (budget autorisé, répartition, coût mis en regard) |
 | `45_Overview.gs` | 0.10.0 : page Overview : création et renommage de projet, indicateurs délais, qualité et coût |
 | `46_Resources.gs` | 0.10.0 : page Ressources : personnes, équipes, rôle de projet, taux journalier par personne |
@@ -271,33 +271,52 @@ Additive et relançable, elle **termine** les anciennes lignes sans les supprime
 
 **Limites.** Pas de règle du moteur de constats pour un dépassement d'enveloppe (seulement l'affichage) ; pas de graphique de consommation dans le temps ; l'enveloppe n'est pas figée par les baselines (elle est suivie par la validation). Vérifié sur les faux services et dans un aperçu, pas dans votre Apps Script. La démo reçoit une enveloppe (un workpackage dépassé pour l'illustrer) à l'étape « Enveloppe budgétaire de NAC-1 ».
 
-## Import et export du WBS par classeur Google Sheet (0.15.4)
+## Export et import de projets par classeur Google Sheet (0.16.0)
 
-**À quoi ça sert.** Remplir un projet d'un coup (ou en modifier beaucoup) depuis un classeur : workpackages, sous-workpackages, livrables, jalons, dates, responsables, contributors, budget en euros, enveloppes. Où : page **WBS**, bouton **Importer / exporter** (chef de projet et au-dessus, droit `import.run`).
+**À quoi ça sert.** Sortir les données d'un projet, de plusieurs projets ou de tout un programme dans un classeur Google Sheet, les modifier, les remettre dans l'outil, ou les **recréer dans une installation neuve**. Le classeur exporté est donc aussi une **sauvegarde qui se relit**. Il crée ou met à jour des **programmes**, des **projets**, des **personnes**, le **découpage** (workpackages, livrables, jalons), les **dépendances**, le **budget** et les **enveloppes**.
 
-**En trois temps.**
-1. **Créer le classeur modèle** : créé dans Drive, **partagé avec vous**, **prérempli avec ce que le projet contient déjà** (c'est donc aussi un export : modifier, ajouter des lignes, importer). Un onglet par objet : **Projet** (budget autorisé), **Workpackages**, **Livrables**, **Jalons**, **Budget**, plus un onglet « Lisez-moi ».
-2. **Analyser** : colle le lien du classeur rempli ; le rapport dit ce qui sera créé, modifié ou laissé tel quel, **sans rien écrire**, et chaque erreur avec **son onglet et sa ligne**.
-3. **Importer** : possible seulement si l'analyse n'a aucune erreur. L'import se fait **par lots** (chaque lot s'arrête avant la limite de six minutes d'Apps Script, après quatre minutes) ; la page relance jusqu'à « terminé ». Relancer un import interrompu reprend où il s'était arrêté.
+**Deux entrées.**
+- **Page WBS › Importer / exporter** (chef de projet et au-dessus) : pour **un projet** (celui de la page). Le classeur ne doit contenir que ce projet ; rien n'est créé au niveau des programmes ni des projets.
+- **Page Administration › Projets : export et import** (administrateur) : pour **plusieurs projets ou tout un programme** : une liste de cases (par programme) pour choisir quoi exporter, et l'import d'un classeur, qui peut **créer des programmes, des projets et des personnes**.
+Par l'API (`import.template`, `import.analyze`, `import.run`), un DPL importe aussi plusieurs projets de son programme, un chef de projet les siens ; seul l'administrateur crée un programme.
 
-**Les onglets.**
+**En trois temps.** (1) **Exporter** : un classeur est créé dans Drive, **partagé avec vous**, prérempli ; (2) **Analyser** : le rapport dit ce qui sera créé, modifié ou laissé tel quel, **sans rien écrire**, et chaque erreur avec **son onglet et sa ligne** ; (3) **Importer** : possible seulement sans erreur, par **lots** reprenables (quatre minutes au plus par lot ; la page relance jusqu'à « terminé »).
+
+**Les onglets** (une ligne = un objet ; les cinq derniers commencent par le code du **projet**).
 | Onglet | Colonnes |
 |---|---|
-| Projet | Budget autorisé (€) |
-| Workpackages | Code WBS · Parent (code WBS) · Nom · Leader (e-mail) · Imputation · Enveloppe (€) |
-| Livrables | Code WBS du workpackage · Nom · Début · Fin · Owner (e-mail) · Contributors (e-mails séparés par « ; ») |
-| Jalons | Code WBS du workpackage · Nom · Date · Catégorie · Owner (e-mail) |
-| Budget | Code WBS du workpackage · Livrable · Ressource (e-mail) · Type (TJM ou Forfait) · Jours · Montant forfait (€) |
+| Programmes | Code · Nom · Statut · Description |
+| Projets | Code · Nom · Programme (code) · Statut · Pays des jours fériés · Chef de projet (e-mail) · Budget autorisé (€) |
+| Personnes | Nom · E-mail · Type (Interne ou Externe) · Fonction · Organisation · Pays · Fournisseur · Taux journalier (€) |
+| Workpackages | Projet · Code WBS · Parent (code WBS) · Nom · Leader (e-mail) · Imputation · Enveloppe (€) |
+| Livrables | Projet · Code WBS du workpackage · Nom · Début · Fin · Owner (e-mail) · Contributors (e-mails séparés par « ; ») |
+| Jalons | Projet · Code WBS du workpackage · Nom · Date · Catégorie · Owner (e-mail) · Contributors |
+| Dépendances | Projet · Prédécesseur (WP, nom) · Successeur (WP, nom) · Type (FS, SS, FF, SF) · Décalage (jours) |
+| Budget | Projet · Code WBS du workpackage · Livrable · Ressource (e-mail) · Type (TJM ou Forfait) · Jours · Montant forfait (€) |
+Les onglets Programmes, Personnes et Dépendances sont facultatifs ; les autres sont obligatoires.
 
-**Clés (ce qui fait retrouver un objet).** Un workpackage : son **code WBS**. Un livrable ou un jalon : son **workpackage et son nom** (changer un nom crée un nouvel objet). Une ligne de budget : son livrable et sa ressource. **Importer deux fois le même classeur ne change donc rien**, et **l'import ne supprime jamais rien** : ce qui est dans l'outil et pas dans le classeur est seulement signalé.
+**Clés (ce qui fait retrouver un objet).** Un programme et un projet : leur **code**. Un workpackage : son code WBS. Un livrable ou un jalon : son workpackage et son nom (changer un nom en crée un nouveau). Une dépendance : ses deux bouts. Une ligne de budget : son livrable et sa ressource. **Importer deux fois le même classeur ne change rien**, et **rien n'est jamais supprimé** : ce qui est dans l'outil et pas dans le classeur est seulement signalé.
 
-**Les personnes** se désignent par leur **adresse e-mail** (à défaut d'adresse sur leur fiche, par leur **nom exact**, que l'export écrit alors à la place ; deux personnes du même nom sont refusées, il faut alors l'adresse) et doivent **déjà exister dans Ressources** : l'import ne crée jamais de personne (une adresse inconnue est une erreur, avec la marche à suivre). Le leader devient Workpackage leader (Sub-workpackage leader pour un sous-workpackage), l'owner Deliverable owner, les contributors des Contributors, par les mêmes règles que dans la page WBS.
+**Les personnes** se désignent par leur adresse e-mail (à défaut d'adresse sur leur fiche, par leur nom exact, que l'export écrit alors). Celles de l'onglet **Personnes** qui n'existent pas encore sont **créées d'abord** (donc un chef de projet ou un leader créé par le même classeur est reconnu) ; **une personne qui existe déjà n'est jamais modifiée**. Le **taux journalier** n'est exporté, et pris en compte à l'import, que pour le chef de projet et les niveaux au-dessus.
 
-**Contrôles de l'analyse** : codes WBS (`1` ou `1.2`, doublons, parent introuvable ou déjà sous-niveau, code qui ne commence pas par celui du parent) ; dates (aaaa-mm-jj ou jj/mm/aaaa, vraies dates, fin après début, début et fin ensemble) ; catégories de jalon ; montants ; **budget** (livrable existant, type TJM ou Forfait, un TJM demande des jours et un taux sur la fiche de la personne, un forfait n'existe que pour une ressource externe, pas deux lignes pour la même ressource sur un livrable) ; en-têtes ou onglets modifiés ; plafonds (500 workpackages, 3 000 livrables et jalons, 6 000 lignes de budget par import).
+**Sécurité.**
+- **Tout est analysé avant d'écrire** : une seule erreur et **rien n'est écrit, pour aucun projet**.
+- **Copie de sécurité automatique** : avant le premier lot, les projets existants que le classeur va toucher sont exportés dans un classeur « Copie avant import » (même format, lien affiché). **Si cette copie échoue, l'import est annulé.**
+- **Droits** : chaque projet existant demande d'être chef de projet ou au-dessus ; un programme nouveau, l'administrateur ; un projet nouveau, le DPL du programme ; une personne nouvelle, le chef de projet et au-dessus. Un classeur qui contient un projet qu'on ne peut pas importer est refusé en entier, avec la ligne.
+- Tout passe par les **actions ordinaires** (programs.create, projects.create, resources.create, wbs.create, wbs.update, roles.assign, dependencies.create, budget.line.save, budget.envelope.set) : mêmes droits, mêmes règles, même journal. **Les changements importés restent « à valider »** par le niveau du dessus (page Suivi).
+- Les contrôles de l'analyse : codes (doublons, parent introuvable ou déjà sous-niveau), dates (vraies dates, fin après début), catégories de jalon, montants, **dépendances** (éléments introuvables, soi-même, type, **boucle**), **budget** (un TJM demande des jours et un taux, un forfait n'existe que pour une ressource externe), personnes (e-mail, type, pays, taux), programmes et projets (statuts, pays, programme introuvable), en-têtes ou onglets modifiés, plafonds (50 projets, 500 personnes, 500 workpackages, 3 000 livrables et jalons, 6 000 lignes de budget par import).
 
-**Tout passe par les actions ordinaires** (`wbs.create`, `wbs.update`, `roles.assign`, `budget.line.save`, `budget.envelope.set`) : mêmes droits, mêmes règles, même journal. **Les changements importés restent donc « à valider »** par le niveau du dessus dans la page Suivi, comme s'ils avaient été saisis à la main : un gros import donne un gros lot à valider (le DPL a « Tout valider »).
+**Aller-retour vérifié.** Un essai exporte deux projets riches (workpackages, livrables, jalon, dépendance, budget, enveloppes, contributors), les importe dans une **installation neuve** et compare : programmes, projets, personnes, workpackages, éléments, dépendances, budget et rôles de leader, owner et contributors sont **identiques**, et relire l'installation neuve ne trouve plus rien à faire.
 
-**Limites.** Pas de dépendances entre livrables dans le classeur (elles se créent depuis le Planning) ; un seul leader ou owner par objet (les autres rôles se posent dans la page WBS) ; un classeur que vous avez fait vous-même doit être **partagé en lecture avec le compte qui exécute l'outil** (le message d'erreur le dit) ; les codes WBS sont écrits en texte brut dans le modèle (sinon Sheets lit « 1.10 » comme le nombre 1,1) ; l'analyse relit tout le classeur à chaque lot. Vérifié sur de faux services et dans un aperçu, **pas dans votre Apps Script** : ni la durée réelle d'un lot, ni la création du fichier dans Drive, ni son partage.
+**Ce que le classeur ne contient pas** : les **baselines** (historique figé), les **risques**, les **réunions et actualités**, les **achats (PO)**, le **journal des modifications**, les rôles de projet et de programme autres que chef de projet (déduit de la colonne « Chef de projet »), les **équipes** et les accès AppSheet. Pour tout cela, la sauvegarde reste la copie des classeurs « PPM Données » et « PPM Historique » (voir `MISE_A_JOUR.md`).
+
+**Limites.** Un classeur que vous avez fait vous-même doit être **partagé en lecture avec le compte qui exécute l'outil** ; les codes sont écrits en texte brut dans l'export (sinon Sheets lit « 1.10 » comme 1,1) ; l'analyse relit tout le classeur à chaque lot ; une dépendance existante dont le type ou le décalage diffère n'est pas modifiée (signalé). Vérifié sur de faux services et dans un aperçu, **pas dans votre Apps Script** : ni la durée réelle d'un lot, ni la création du fichier dans Drive et son partage.
+
+### Créer un programme de plusieurs projets
+
+- **Un programme** regroupe des projets : un projet appartient à **un seul** programme (colonne « Programme (code) »), ou à aucun. On peut avoir **autant de programmes que l'on veut** ; chacun a son Program Leader (désigné par l'administrateur), ses projets avec leur DPL, et ses vues (Overview, WBS, Suivi, Budget, Actualités par programme).
+- **Aujourd'hui, la seule façon de les créer dans l'outil est l'import** : l'**administrateur** remplit un classeur (onglets Programmes et Projets, plus Personnes si besoin), l'analyse, puis l'importe depuis la page Administration. Il n'existe pas de formulaire « nouveau programme » ; l'API (`programs.create`, `projects.create`) et la feuille de données en AppSheet le permettent aussi.
+- **Pour démarrer** : exportez un programme existant pour obtenir un classeur au bon format, ajoutez une ligne dans Programmes (code, nom), des lignes dans Projets (avec le code du programme), puis les lignes de découpage de chaque projet.
 
 ## Tableau des droits dans le panneau de l'administrateur (0.15.4)
 

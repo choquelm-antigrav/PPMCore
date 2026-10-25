@@ -1,5 +1,16 @@
 # Journal des versions
 
+## 0.16.0 — export et import de plusieurs projets, programmes et personnes
+
+- **Un seul format de classeur pour un ou plusieurs projets** : onglets Programmes, Projets, Personnes, Workpackages, Livrables, Jalons, Dépendances, Budget (les cinq derniers commencent par le code du projet). **Remplace** le classeur à un projet de la 0.15.4 (onglet « Projet » devenu « Projets », colonne « Projet » ajoutée) ; les contributors des jalons sont maintenant exportés.
+- **Page Administration › Projets : export et import** : choisir des projets ou un programme, exporter, analyser, importer ; l'import peut **créer des programmes, des projets et des personnes** (c'est aujourd'hui la seule façon de créer un programme dans l'outil). La page WBS garde l'import d'**un** projet et refuse un classeur qui en contient d'autres.
+- **Personnes** : celles de l'onglet Personnes qui n'existent pas sont créées d'abord (un leader ou un chef de projet créé par le même classeur est reconnu) ; une personne existante n'est jamais modifiée ; le taux n'est exporté et pris en compte que pour le chef de projet et au-dessus.
+- **Dépendances** exportées et importées (par les noms de leurs deux bouts), avec contrôle des boucles.
+- **Copie de sécurité automatique** avant le premier lot (classeur « Copie avant import » avec lien) ; **si elle échoue, l'import est annulé**. Tout est analysé avant d'écrire : une erreur, et rien n'est écrit pour aucun projet.
+- Actions : `import.template` (projectId, projectIds, programId ou all), `import.catalog` (nouvelle), `import.analyze`, `import.run` (paramètre `resume`) ; libellé du droit `import.run` mis à jour dans le tableau des droits.
+- Défaut trouvé par l'aller-retour et corrigé : le chef de projet d'un projet neuf n'était pas posé (les personnes sont maintenant créées avant les projets).
+- Tests : `test_import.js` (16, dont l'**aller-retour vers une installation neuve** qui compare programmes, projets, personnes, workpackages, éléments, dépendances, budget et rôles), `ui_compte.js` (110, zone d'export et d'import), `ui_structure.js` (43) ; sept sabotages de l'import et quatre de la zone vérifiés ; 335 tests serveur, seize essais de pages.
+
 ## 0.15.5 — baselines par périmètre, démo aux huit niveaux
 
 - **Baselines par périmètre** (projet, workpackage, sous-workpackage ; jamais un livrable) : une baseline active par périmètre, numérotation et historique par périmètre ; **figer demande de pouvoir modifier l'objet** (un Workpackage leader fige son workpackage et ses sous-workpackages, pas le projet) ; instantané restreint au périmètre (`58_ScopeBaselines.gs`). **Références parallèles** : la baseline du projet n'est jamais remplacée par celle d'un workpackage ; les écarts d'un workpackage se lisent contre sa baseline ou contre celle du projet (`against: 'project'`).

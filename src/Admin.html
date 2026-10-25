@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.15.5">
+<meta name="ppm-version" content="0.16.0">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <style>
@@ -33,6 +33,17 @@
   .editor { margin-top: 16px; }
   .editor textarea { width: 100%; min-height: 220px; font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; }
   @media (max-width: 700px) { .panel { padding: 8px 12px 24px; } .status .seg { display: grid; grid-template-columns: 1fr 1fr; width: 100%; } }
+  /* export et import de projets */
+  #cell-donnees, #panel-donnees { min-width: 0; max-width: 100%; }
+  .pf-step { margin: 14px 0; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 10px; }
+  .pf-group { margin: 8px 0 10px; }
+  .pf-program { display: block; margin-bottom: 4px; }
+  .pf-project { display: block; margin: 2px 0 2px 24px; font-size: 14px; }
+  .pf-head.ok { color: var(--ok-ink); font-weight: 600; } .pf-head.bad { color: var(--alert-ink); font-weight: 600; }
+  .pf-counts { margin: 4px 0 8px; padding-left: 18px; font-size: 14px; }
+  .pf-list { margin: 0 0 8px; padding-left: 18px; font-size: 13.5px; max-height: 240px; overflow: auto; }
+  .pf-list.bad li::marker { color: var(--alert-ink); } .pf-list.warn li::marker { color: var(--warn-ink); }
+  #panel-donnees input[type=text] { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; }
   /* tableau des droits par niveau */
   #cell-droits, #panel-droits { min-width: 0; max-width: 100%; }   /* le tableau défile dans son cadre au lieu d'élargir la page (téléphone) */
   #panel-droits .table-wrap { max-width: 100%; }
@@ -72,6 +83,10 @@
     <div class="zone" id="zone-feries"><h2 class="sec">Jours fériés</h2></div>
     <section class="panel" id="panel-feries" aria-label="Jours fériés"></section>
   </div>
+  <div class="cell wide" id="cell-donnees">
+    <div class="zone" id="zone-donnees"><h2 class="sec">Projets : export et import</h2></div>
+    <section class="panel" id="panel-donnees" aria-label="Projets : export et import"></section>
+  </div>
   <div class="cell wide" id="cell-droits">
     <div class="zone" id="zone-droits"><h2 class="sec">Droits par niveau</h2></div>
     <section class="panel" id="panel-droits" aria-label="Droits par niveau"></section>
@@ -92,7 +107,7 @@ var BOOT = <?!= boot ?>;
   'use strict';
   var el = ppm.el, clear = ppm.clear, uuid = ppm.uuid, plural = ppm.plural, toast = ppm.toast, call = ppm.call, frDate = ppm.frDate;
 
-  var state = { cfg: null, health: null, holidays: null, logs: null, rights: null, editing: '' };
+  var state = { cfg: null, health: null, holidays: null, logs: null, rights: null, catalog: null, pf: { book: '', report: null, busy: false, backup: null }, editing: '' };
   var $ = function (id) { return document.getElementById(id); };
   var COUNTRY_NAMES = { FR: 'France', DE: 'Allemagne', UK: 'Royaume-Uni', IN: 'Inde' };
   var STEP_LABELS = { reconcile: 'Réconciliation du journal', rules: 'Moteur de règles', workspace: 'Agenda et Drive', directory: 'Annuaire', backup: 'Sauvegarde des classeurs' };
@@ -123,6 +138,7 @@ var BOOT = <?!= boot ?>;
     renderSettings();
     loadHealth();
     loadHolidays();
+    loadPortfolio();
     loadRights();
     loadLogs();
   }
@@ -261,6 +277,130 @@ var BOOT = <?!= boot ?>;
     panel.appendChild(el('div', { class: 'row', style: 'margin-top:16px' }, [el('button', { type: 'button', class: 'btn', id: 'health-reload', text: 'Vérifier à nouveau', onclick: loadHealth })]));
   }
 
+  // ------------------------------------------------------------ Projets : export et import (0.16.0)
+  /**
+   * Exporter un, plusieurs projets ou tout un programme dans un classeur Google Sheet (c'est aussi une sauvegarde), et importer un classeur : il crée ou met à jour les programmes, les projets, les
+   * personnes, le découpage, les dépendances et le budget. Tout est analysé avant d'écrire ; une copie de sécurité des projets existants est faite avant le premier lot ; rien n'est jamais supprimé.
+   */
+  function loadPortfolio() {
+    var panel = $('panel-donnees');
+    loading(panel);
+    call('import.catalog', {}).then(function (c) { state.catalog = c; renderPortfolio(); }).catch(function (e) { failed(panel, e); });
+  }
+  function pfStatus(msg) { var n = $('pf-status'); if (n) n.textContent = msg || ''; }
+  function pfBusy(on, msg) {
+    state.pf.busy = on;
+    ['pf-export', 'pf-analyze', 'pf-run'].forEach(function (id) { var b = $(id); if (b) b.disabled = on || (id === 'pf-run' && !(state.pf.report && state.pf.report.ok && !state.pf.report.nothing_to_do)); });
+    pfStatus(msg);
+  }
+  function pfError(e) { pfBusy(false, ''); toast(window.ppmErrorText ? ppmErrorText(e) : ((e && e.message) || 'Impossible.'), true); }
+  function renderPortfolio() {
+    var panel = $('panel-donnees'), c = state.catalog;
+    clear(panel);
+    panel.appendChild(el('p', { class: 'note', text: 'Exportez des projets dans un classeur Google Sheet (c’est aussi une sauvegarde qui se relit), ou importez un classeur pour créer ou mettre à jour des programmes, des projets, des personnes et leur découpage. Tout est analysé avant d’écrire, une copie de sécurité est faite avant le premier lot, et rien n’est jamais supprimé.' }));
+    // 1. choisir les projets
+    var tree = el('div', { class: 'pf-tree', id: 'pf-tree' });
+    var projectRow = function (x) {
+      var cb = el('input', { type: 'checkbox', 'data-project': x.id, 'aria-label': 'Exporter ' + x.code });
+      cb.disabled = !x.canExport;
+      return el('label', { class: 'pf-project' }, [cb, ' ' + x.code + ' — ' + x.name + (x.canExport ? '' : ' (réservé à son chef de projet)')]);
+    };
+    var group = function (title, id, projects) {
+      var all = el('input', { type: 'checkbox', 'data-program': id || '', 'aria-label': 'Tout le programme ' + title });
+      var box = el('div', { class: 'pf-group' });
+      all.addEventListener('change', function () { [].slice.call(box.querySelectorAll('input[data-project]')).forEach(function (i) { if (!i.disabled) i.checked = all.checked; }); });
+      box.appendChild(el('label', { class: 'pf-program' }, [all, el('strong', { text: ' ' + title })]));
+      projects.forEach(function (x) { box.appendChild(projectRow(x)); });
+      return box;
+    };
+    c.programs.forEach(function (g) { if (g.projects.length) tree.appendChild(group(g.code + ' — ' + g.name, g.id, g.projects)); else tree.appendChild(el('p', { class: 'note', text: g.code + ' — ' + g.name + ' : aucun projet pour l’instant.' })); });
+    if (c.withoutProgram.length) tree.appendChild(group('Sans programme', '', c.withoutProgram));
+    if (!c.programs.length && !c.withoutProgram.length) tree.appendChild(el('p', { class: 'note', id: 'pf-none', text: 'Aucun projet pour l’instant : importez un classeur pour en créer.' }));
+    panel.appendChild(el('div', { class: 'pf-step' }, [el('strong', { text: '1. Exporter' }), tree,
+      el('div', { class: 'bar' }, [el('button', { type: 'button', class: 'btn primary', id: 'pf-export', text: 'Exporter la sélection', onclick: pfExport }), el('span', { class: 'note', id: 'pf-status', role: 'status', 'aria-live': 'polite' })]),
+      el('div', { id: 'pf-export-out' })]));
+    // 2. importer
+    var input = el('input', { type: 'text', id: 'pf-book', placeholder: 'https://docs.google.com/spreadsheets/d/…', autocomplete: 'off', 'aria-label': 'Lien du classeur à importer' });
+    input.value = state.pf.book;
+    input.addEventListener('input', function () { state.pf.book = input.value; state.pf.report = null; renderPfReport(); pfBusy(false, ''); });
+    panel.appendChild(el('div', { class: 'pf-step' }, [el('strong', { text: '2. Importer' }),
+      el('p', { class: 'note', text: c.canCreateProgram ? 'Vous pouvez créer des programmes, des projets et des personnes.' : 'Vous ne pouvez créer ni programme ni projet : seulement mettre à jour les projets dont vous êtes chef de projet (ou au-dessus).' }),
+      field('Lien du classeur', input),
+      el('div', { class: 'bar' }, [el('button', { type: 'button', class: 'btn', id: 'pf-analyze', text: 'Analyser', onclick: pfAnalyze }), el('button', { type: 'button', class: 'btn primary', id: 'pf-run', text: 'Importer', disabled: true, onclick: pfRun })]),
+      el('div', { id: 'pf-report' }), el('div', { id: 'pf-backup' })]));
+    renderPfReport();
+    renderPfBackup();
+  }
+  /** La copie de sécurité du dernier import : elle reste affichée après la fin, avec son lien. */
+  function renderPfBackup() {
+    var b = $('pf-backup');
+    if (!b) return;
+    clear(b);
+    if (state.pf.backup) b.appendChild(el('p', { class: 'note' }, ['Copie de sécurité enregistrée avant l’import : ', el('a', { href: state.pf.backup.url, target: '_blank', rel: 'noopener', id: 'pf-backup-link', text: state.pf.backup.name })]));
+  }
+  function pfExport() {
+    var ids = [].slice.call(document.querySelectorAll('#panel-donnees input[data-project]:checked')).map(function (i) { return i.getAttribute('data-project'); });
+    if (!ids.length) { toast('Cochez au moins un projet.', true); return; }
+    pfBusy(true, 'Création du classeur…');
+    call('import.template', { projectIds: ids }, true).then(function (t) {
+      state.pf.book = t.url; $('pf-book').value = t.url;
+      var out = $('pf-export-out'); clear(out);
+      var f = t.prefilled;
+      out.appendChild(el('p', {}, [el('a', { href: t.url, target: '_blank', rel: 'noopener', id: 'pf-export-link', text: 'Ouvrir « ' + t.name + ' »' }),
+        ' — ' + f.projets + ' projet(s), ' + f.workpackages + ' workpackage(s), ' + f.livrables + ' livrable(s), ' + f.jalons + ' jalon(s), ' + f.dependances + ' dépendance(s), ' + f.budget + ' ligne(s) de budget, ' + f.personnes + ' personne(s).']));
+      (t.skipped || []).forEach(function (x) { out.appendChild(el('p', { class: 'note warn', text: x.code + ' : ' + x.reason })); });
+      (t.warnings || []).forEach(function (w) { out.appendChild(el('p', { class: 'note warn', text: w })); });
+      pfBusy(false, '');
+    }).catch(pfError);
+  }
+  function pfCounts(c) {
+    var line = function (label, o, hasUpdate) { return o.create + (o.update || 0) + o.same ? label + ' : ' + o.create + ' à créer' + (hasUpdate ? ', ' + o.update + ' à modifier' : '') + ', ' + o.same + ' inchangé' + (o.same > 1 ? 's' : '') : ''; };
+    return [line('Programmes', c.programs), line('Projets', c.projects, true), line('Personnes', c.people), line('Workpackages', c.wps, true), line('Livrables et jalons', c.items, true), c.contributors ? 'Contributors à poser : ' + c.contributors : '',
+      line('Dépendances', c.deps), line('Lignes de budget', c.lines, true), c.envelope ? 'Enveloppes à fixer : ' + c.envelope : ''].filter(Boolean);
+  }
+  function renderPfReport() {
+    var box = $('pf-report'), rep = state.pf.report;
+    if (!box) return;
+    clear(box);
+    if (!rep) return;
+    var head = rep.ok ? (rep.nothing_to_do ? 'Rien à importer : le classeur correspond déjà à l’outil.' : 'Analyse sans erreur : voici ce qui sera fait.') : 'Le classeur a ' + rep.errors_count + (rep.errors_count > 1 ? ' erreurs' : ' erreur') + ' : corrigez-les dans le classeur, puis relancez « Analyser ». Rien n’a été écrit.';
+    box.appendChild(el('p', { class: 'pf-head ' + (rep.ok ? 'ok' : 'bad'), id: 'pf-head', role: 'status', text: head }));
+    if (rep.ok) box.appendChild(el('ul', { class: 'pf-counts', id: 'pf-counts' }, pfCounts(rep.counts).map(function (t) { return el('li', { text: t }); })));
+    var list = function (title, items, id, tone) {
+      if (!items.length) return;
+      box.appendChild(el('h3', { class: 'sub', text: title }));
+      box.appendChild(el('ul', { class: 'pf-list ' + tone, id: id }, items.map(function (x) { return el('li', {}, [el('strong', { text: x.tab + (x.row ? ', ligne ' + x.row : '') + ' — ' }), x.message]); })));
+    };
+    list('Erreurs (' + rep.errors_count + (rep.errors_count > rep.errors.length ? ', les ' + rep.errors.length + ' premières' : '') + ')', rep.errors, 'pf-errors', 'bad');
+    list('À savoir (' + rep.warnings_count + ')', rep.warnings, 'pf-warnings', 'warn');
+  }
+  function pfAnalyze() {
+    if (!String(state.pf.book || '').trim()) { toast('Collez d’abord le lien du classeur.', true); return; }
+    pfBusy(true, 'Analyse…');
+    call('import.analyze', { book: state.pf.book }).then(function (rep) { state.pf.report = rep; renderPfReport(); pfBusy(false, ''); }).catch(pfError);
+  }
+  function pfRun() {
+    if (!state.pf.report || !state.pf.report.ok) return;
+    var lot = 0, total = null;
+    state.pf.backup = null;
+    var next = function () {
+      lot++;
+      pfBusy(true, 'Import en cours — lot ' + lot + (total === null ? '' : ', reste ' + total + ' opération(s)') + '…');
+      return call('import.run', { book: state.pf.book, resume: lot > 1 }, true).then(function (r) {
+        if (r.backup) { state.pf.backup = r.backup; renderPfBackup(); }
+        total = r.remaining;
+        if (r.done) return r;
+        if (lot >= 80) throw new Error('Import interrompu après 80 lots : relancez-le pour continuer.');
+        return next();
+      });
+    };
+    next().then(function () {
+      state.pf.report = null; renderPfReport(); pfBusy(false, ''); $('pf-run').disabled = true;
+      toast('Import terminé.');
+      return call('import.catalog', {}).then(function (c) { state.catalog = c; });
+    }).then(function () { var keep = state.pf.book; renderPortfolio(); $('pf-book').value = keep; pfStatus('Import terminé.'); }).catch(pfError);
+  }
+
   // ------------------------------------------------------------ Droits par niveau (0.15.4)
   /**
    * Le tableau est calculé par le serveur à partir des règles que le moteur applique vraiment (rien n'est écrit à la main) : un ✓ veut dire que le niveau peut, sur l'objet qu'il
@@ -373,7 +513,7 @@ var BOOT = <?!= boot ?>;
 
   // ------------------------------------------------------------ démarrage
   if (!BOOT.isAdmin) {
-    ['sante', 'feries', 'droits', 'journaux'].forEach(function (t) { $('panel-' + t).hidden = true; $('zone-' + t).hidden = true; });
+    ['sante', 'feries', 'donnees', 'droits', 'journaux'].forEach(function (t) { $('panel-' + t).hidden = true; $('zone-' + t).hidden = true; });
     $('zone-reglages').hidden = true;
     empty($('panel-reglages'), 'Réservé aux administrateurs.', 'Vos réglages personnels sont dans « Mon compte ».');
   } else {

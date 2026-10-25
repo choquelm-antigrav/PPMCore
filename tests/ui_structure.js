@@ -187,23 +187,24 @@ function openPage(user, boot) {
   check(/Rien à importer/.test(p.$('imp-head').textContent) && p.$('imp-run').disabled, 'le modèle tel quel : rien à importer, bouton « Importer » inactif');
   // un classeur avec une erreur : personne inconnue
   const add = (tab, rows) => { const sh = bookId.getSheetByName(tab); sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows); };
-  add('Workpackages', [['2', '', 'Qualification', 'inconnu@entreprise.com', '', '']]);
+  add('Workpackages', [['P1', '2', '', 'Qualification', 'inconnu@entreprise.com', '', '']]);
   p.click(p.$('imp-analyze'));
   await p.until(() => p.$('imp-errors'));
   check(/1 erreur/.test(p.$('imp-head').textContent) && /Workpackages, ligne 4/.test(p.$('imp-errors').textContent) && /n’est pas dans Ressources/.test(p.$('imp-errors').textContent) && p.$('imp-run').disabled, 'l’erreur dit l’onglet, la ligne et quoi faire ; « Importer » reste inactif : ' + p.$('imp-errors').textContent.slice(0, 140));
   // correction, puis import
-  bookId.getSheetByName('Workpackages').getRange(4, 4).setValue('dan@entreprise.com');
-  add('Livrables', [['2', 'Rapport final', '2026-12-01', '2026-12-11', 'dan@entreprise.com', '']]);
+  bookId.getSheetByName('Workpackages').getRange(4, 5).setValue('dan@entreprise.com');
+  add('Livrables', [['P1', '2', 'Rapport final', '2026-12-01', '2026-12-11', 'dan@entreprise.com', '']]);
   p.click(p.$('imp-analyze'));
   await p.until(() => p.$('imp-counts'));
   check(/Workpackages : 1 à créer/.test(p.$('imp-counts').textContent) && /Livrables et jalons : 1 à créer/.test(p.$('imp-counts').textContent) && !p.$('imp-run').disabled, 'le plan chiffré s’affiche, « Importer » devient actif : ' + p.$('imp-counts').textContent.replace(/\s+/g, ' '));
   // des lots d'une seule opération : la page doit relancer jusqu'à « terminé » (l'import de test n'en compte que deux)
-  const realRun = c.API_ACTIONS['import.run']; let lots = 0;
-  c.API_ACTIONS['import.run'] = (params, ctx) => { lots++; return realRun(Object.assign({}, params, { maxOps: 1 }), ctx); };
+  const realRun = c.API_ACTIONS['import.run']; let lots = 0; const seen = [];
+  c.API_ACTIONS['import.run'] = (params, ctx) => { lots++; const out = realRun(Object.assign({}, params, { maxOps: 1 }), ctx); seen.push([!!params.resume, !!out.backup]); return out; };
   p.click(p.$('imp-run'));
   await p.until(() => p.nodes().length === 8, 6000);
   c.API_ACTIONS['import.run'] = realRun;
   check(lots >= 2, 'la page relance l’import lot après lot jusqu’à « terminé » : ' + lots + ' lots d’une opération');
+  check(JSON.stringify(seen[0]) === '[false,true]' && seen.slice(1).every((x) => x[0] === true && x[1] === false), 'le premier lot enregistre la copie de sécurité ; les suivants reprennent sans en refaire : ' + JSON.stringify(seen));
   check(p.nodes().length === 8 && c.repoList('PlanItem').some((i) => i.name === 'Rapport final') && c.repoList('WorkPackage').some((x) => String(x.wbs_code) === '2' && x.owner_resource_id === dan.id), 'importé : le WBS affiche 8 cartes, le workpackage a son leader : ' + p.nodes().length);
   await p.until(() => !(p.$('import').open || p.$('import').getAttribute('open') !== null));
   check(!(p.$('import').open), 'la boîte se referme à la fin');

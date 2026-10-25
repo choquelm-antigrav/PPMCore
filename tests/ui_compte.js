@@ -6,12 +6,15 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require(process.env.UI_DEPS ? path.join(process.env.UI_DEPS, 'jsdom') : 'jsdom');
 const { lot2World } = require('./fixtures_lot2');
+const { makeFakeSheets } = require('./fake_sheets');
 
 const w = lot2World();
 const c = w.c;
 let t0 = Date.parse('2026-10-14T08:00:00Z');
 c.CLOCK = () => (t0 += 1);
 c.backupBooks_ = () => {};
+c.SpreadsheetApp = makeFakeSheets();
+c.IMPORT_DRIVE = { share() {}, moveToProjectFolder() {} };
 c.setProp(c.PROP.DATA_ID, 'donnees'); c.setProp(c.PROP.HISTORY_ID, 'historique');
 c.TRIGGER_LIST = () => ['nightlyRun', 'sendDigests'];
 const RWP = 'remi@entreprise.com', CP = 'carla@entreprise.com', ADMIN = 'admin@entreprise.com', NOBODY = 'personne@entreprise.com';
@@ -146,7 +149,7 @@ function openPage(file, user, boot) {
   console.log('\nPage Administration (jsdom)');
   const denied = openPage('Admin.html', CP);
   await denied.until(() => /Réservé aux administrateurs/.test(denied.text('panel-reglages')));
-  check(['reglages', 'sante', 'feries', 'droits', 'journaux'].every((z) => denied.doc.getElementById('zone-' + z).hidden) && !denied.calls.some((a) => a.startsWith('admin.')), 'non-administrateur : message, aucune zone d’administration, aucune demande à l’administration');
+  check(['reglages', 'sante', 'feries', 'donnees', 'droits', 'journaux'].every((z) => denied.doc.getElementById('zone-' + z).hidden) && !denied.calls.some((a) => a.startsWith('admin.')), 'non-administrateur : message, aucune zone d’administration, aucune demande à l’administration');
   check(denied.doc.getElementById('ppm-admin').hidden, 'lien « Administration » absent de sa bannière');
 
   // ---------------------------------------------------------------- Réglages
@@ -233,6 +236,60 @@ function openPage(file, user, boot) {
   a.click(a.doc.getElementById('hol-save'));
   await a.until(() => a.doc.getElementById('toast').classList.contains('error'));
   check(/Date invalide/.test(a.text('toast')), 'date inexistante refusée : ' + a.text('toast'));
+
+  // ---------------------------------------------------------------- Projets : export et import (0.16.0)
+  await a.until(() => a.doc.getElementById('pf-tree'));
+  const pfBoxes = () => [...a.doc.querySelectorAll('#pf-tree input[data-project]')];
+  check(pfBoxes().length === 2 && pfBoxes().every((cb) => !cb.disabled) && /PG — Programme/.test(a.text('pf-tree')), 'le catalogue : une case par projet (P1 et P2), tous exportables par l’administrateur, groupés par programme : ' + flat(a.text('pf-tree')).slice(0, 90));
+  a.click(a.doc.getElementById('pf-export'));
+  await a.until(() => /Cochez au moins un projet/.test(a.text('toast')));
+  check(/Cochez au moins un projet/.test(a.text('toast')), 'exporter sans rien cocher : on le dit');
+  const all = a.doc.querySelector('#pf-tree input[data-program]');
+  all.checked = true; all.dispatchEvent(new a.win.Event('change'));
+  check(pfBoxes().every((cb) => cb.checked), 'cocher le programme coche tous ses projets');
+  a.click(a.doc.getElementById('pf-export'));
+  await a.until(() => a.doc.getElementById('pf-export-link'));
+  check(/2 projet\(s\)/.test(a.text('pf-export-out')) && /dépendance\(s\)/.test(a.text('pf-export-out')) && a.doc.getElementById('pf-book').value === a.doc.getElementById('pf-export-link').getAttribute('href'), 'le classeur est créé, son lien est mis dans le champ d’import : ' + flat(a.text('pf-export-out')).slice(0, 120));
+  const book = c.SpreadsheetApp.openById(/\/d\/([^/?#]+)/.exec(a.doc.getElementById('pf-book').value)[1]);
+  a.click(a.doc.getElementById('pf-analyze'));
+  await a.until(() => a.doc.getElementById('pf-head'));
+  check(/Rien à importer/.test(a.text('pf-head')) && a.doc.getElementById('pf-run').disabled, 'l’export relu tel quel : rien à importer, « Importer » inactif');
+  // un classeur qui crée un programme, deux projets, une personne et un découpage
+  const add = (tab, rows) => { const sh = book.getSheetByName(tab); sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows); };
+  add('Programmes', [['NEW', 'Nouveau programme', 'Actif', '']]);
+  add('Projets', [['N1', 'Projet nouveau 1', 'NEW', 'Actif', 'FR', 'zoe@entreprise.com', 5000], ['N2', 'Projet nouveau 2', 'NEW', 'Préparation', 'FR', '', '']]);
+  add('Personnes', [['Zoé Martin', 'zoe@entreprise.com', 'Interne', 'Cheffe de projet', 'Bureau d’études', 'FR', '', '']]);
+  add('Workpackages', [['N1', '1', '', 'Étude', 'zoe@entreprise.com', '', '']]);
+  add('Livrables', [['N1', '1', 'Dossier', '2026-11-02', '2026-11-13', 'zoe@entreprise.com', '']]);
+  add('Jalons', [['N1', '1', 'Fin étude', '2026-11-13', '', '', '']]);
+  add('Dépendances', [['N1', '1', 'Dossier', '1', 'Fin étude', 'FS', 0]]);
+  a.click(a.doc.getElementById('pf-analyze'));
+  await a.until(() => a.doc.getElementById('pf-counts') && /Programmes : 1 à créer/.test(flat(a.text('pf-counts'))));   // le rapport précédent est encore affiché jusqu'à la fin de l'analyse
+  const counts = flat(a.text('pf-counts'));
+  check(/Programmes : 1 à créer/.test(counts) && /Projets : 2 à créer/.test(counts) && /Personnes : 1 à créer/.test(counts) && /Dépendances : 1 à créer/.test(counts) && !a.doc.getElementById('pf-run').disabled, 'le plan chiffré : programme, projets, personne, dépendance ; « Importer » devient actif : ' + counts);
+  // des lots d'une opération : la page relance jusqu'à « terminé », la copie de sécurité n'est faite qu'au premier
+  const realRun = c.API_ACTIONS['import.run']; const seen = [];
+  c.API_ACTIONS['import.run'] = (params, ctx) => { const out = realRun(Object.assign({}, params, { maxOps: 1 }), ctx); seen.push([!!params.resume, !!out.backup]); return out; };
+  a.click(a.doc.getElementById('pf-run'));
+  await a.until(() => c.repoList('Project').some((x) => x.code === 'N1') && /Import terminé/.test(a.text('pf-status')), 8000);
+  c.API_ACTIONS['import.run'] = realRun;
+  const n1 = c.repoList('Project').find((x) => x.code === 'N1');
+  check(!!n1 && !!c.repoList('Program').find((g) => g.code === 'NEW') && c.repoList('Project').some((x) => x.code === 'N2') && !!c.findResourceByEmail('zoe@entreprise.com') && n1.manager_resource_id === c.findResourceByEmail('zoe@entreprise.com').id, 'importé : le programme, les deux projets, la personne, et la cheffe du projet posée');
+  check(seen.length >= 3 && JSON.stringify(seen[0]) === '[false,true]' && seen.slice(1).every((x) => x[0] === true && x[1] === false), 'relancé lot après lot, une seule copie de sécurité : ' + JSON.stringify(seen));
+  check(!!a.doc.getElementById('pf-backup-link') && /Copie avant import/.test(a.text('pf-backup')), 'le lien de la copie reste affiché après l’import');
+  check(a.doc.querySelectorAll('#pf-tree input[data-project]').length === 4, 'le catalogue se rafraîchit : quatre projets maintenant');
+  // un projet que l'appelant ne peut pas exporter : case désactivée, jamais cochée par « tout le programme »
+  const realCat = c.API_ACTIONS['import.catalog'];
+  c.API_ACTIONS['import.catalog'] = (p, ctx) => { const r = realCat(p, ctx); r.programs[0].projects[1].canExport = false; return r; };
+  a.win.__ppm.render();
+  await a.until(() => [...a.doc.querySelectorAll('#pf-tree input[data-project]')].some((cb) => cb.disabled));
+  c.API_ACTIONS['import.catalog'] = realCat;
+  const lockedBox = [...a.doc.querySelectorAll('#pf-tree input[data-project]')].filter((cb) => cb.disabled);
+  const firstAll = a.doc.querySelector('#pf-tree input[data-program]');
+  firstAll.checked = true; firstAll.dispatchEvent(new a.win.Event('change'));
+  check(lockedBox.length === 1 && /réservé à son chef de projet/.test(lockedBox[0].parentNode.textContent) && !lockedBox[0].checked && [...a.doc.querySelectorAll('#pf-tree input[data-project]')].filter((cb) => cb.checked).length === 1, 'un projet non exportable : case désactivée avec sa raison, et jamais cochée par « tout le programme »');
+  // un non-administrateur ne voit pas la zone
+  check(denied.doc.getElementById('zone-donnees').hidden, 'la zone est masquée à un non-administrateur');
 
   // ---------------------------------------------------------------- Droits par niveau (0.15.4)
   await a.until(() => a.doc.getElementById('rights-table'));
