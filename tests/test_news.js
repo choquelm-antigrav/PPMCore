@@ -204,41 +204,90 @@ module.exports = function () {
     eq(w.raw(CP, 'news.digest.publish', { projectId: w.p1.id, text: 'x'.repeat(12001) }).error.code, 'VALIDATION');
   });
 
-  test('Logo du jour : un par jour et par projet, stable dans la journée, jamais un logo servi ces 100 derniers jours, mémorisé seulement s’il figure dans la synthèse', () => {
+  test('Logo du jour : choisi par Gemini parmi les logos libres pour évoquer le sujet, relu en tête de la synthèse, jamais un logo servi ces 100 derniers jours sans le signaler', () => {
     const w = lot2World(), c = w.c, today = c.todayStr();
-    const text = (logo) => (logo || '') + '\nDécisions : le plan est validé.\nDates qui bougent : rien.\nRisques : retard fournisseur.\nBlocages : aucun.\nActions : Carla — planning — 30/10/2026';
+    const body = '\nDécisions : le plan est validé.\nDates qui bougent : rien.\nRisques : retard fournisseur.\nBlocages : aucun.\nActions : Carla — planning — 30/10/2026';
     const logos = c.NEWS_LOGOS;
-    ok(logos.length > c.NEWS_LOGO_DAYS && new Set(logos).size === logos.length && logos.every((l) => l && l.trim() === l), 'le catalogue : ' + logos.length + ' logos tous différents, plus que les ' + c.NEWS_LOGO_DAYS + ' jours de la fenêtre');
+    ok(logos.length > c.NEWS_LOGO_DAYS && new Set(logos).size === logos.length && logos.every((l) => c.newsLeadingLogo_(l) === l), 'le catalogue : ' + logos.length + ' logos tous différents et tous relus comme un logo, plus que les ' + c.NEWS_LOGO_DAYS + ' jours de la fenêtre');
     const first = w.call(CP, 'news.digest.prompt', { projectId: w.p1.id });
-    ok(logos.includes(first.logo) && first.prompt.indexOf('Logo du jour : ' + first.logo) >= 0 && /commence la synthèse par ce logo/.test(first.prompt), 'le prompt du jour donne le logo du jour et la consigne de commencer par lui : ' + first.logo);
-    eq(w.call(CP, 'news.digest.prompt', { projectId: w.p1.id }).logo, first.logo, 'le même jour, le même projet : le même logo, à chaque copie du prompt');
-    ok(!/NotebookLM|carnet/i.test(first.prompt) && /Gemini|journal du projet/.test(first.prompt), 'le prompt ne parle plus de NotebookLM ni de carnet : ' + first.prompt.split('\n')[2]);
-    // publication : le logo n'est mémorisé que s'il est dans la synthèse
-    const without = w.call(CP, 'news.digest.publish', { projectId: w.p1.id, text: text(''), notify: false });
-    eq([without.logo, without.logo_used, c.repoList('NewsDigest')[0].logo || ''], [first.logo, false, ''], 'synthèse sans le logo : il n’est pas compté comme servi');
-    const withIt = w.call(CP, 'news.digest.publish', { projectId: w.p1.id, text: text(first.logo), notify: false });
-    eq([withIt.logo_used, c.repoList('NewsDigest').filter((d) => !c.isTrue(d.deleted))[0].logo], [true, first.logo], 'synthèse avec le logo : il est mémorisé');
-    eq(w.call(CP, 'news.get', { projectId: w.p1.id }).digest.logo, first.logo, 'la page le reçoit avec la synthèse');
-    eq(w.call(CP, 'news.digest.prompt', { projectId: w.p1.id }).logo, first.logo, 'et publier la synthèse du jour ne change pas le logo du jour');
-    // cent jours de synthèses toutes différentes : le logo du jour est parmi les logos restants
+    ok(first.logos.length === logos.length && /évoque le mieux son sujet principal/.test(first.prompt) && logos.every((l) => first.prompt.indexOf(l) >= 0), 'le prompt demande à Gemini de choisir le logo qui évoque le sujet principal, dans la liste des logos libres (tous, ici)');
+    ok(first.prompt.indexOf('Si aucun ne convient : ' + first.logo) >= 0 && first.logos.includes(first.logo), 'avec un logo par défaut si aucun ne convient : ' + first.logo);
+    eq(w.call(CP, 'news.digest.prompt', { projectId: w.p1.id }).logo, first.logo, 'le logo par défaut est stable pour un projet et un jour donnés');
+    ok(!/NotebookLM|carnet/i.test(first.prompt) && /Gemini|journal du projet/.test(first.prompt), 'le prompt ne parle plus de NotebookLM ni de carnet');
+    // la publication relit le logo qui ouvre le texte : n'importe lequel, il est mémorisé
+    const pub = (text) => { const r = w.call(CP, 'news.digest.publish', { projectId: w.p1.id, text: text, notify: false }); return [r, c.repoList('NewsDigest').filter((d) => !c.isTrue(d.deleted)).pop().logo]; };
+    let [r, stored] = pub(body.trim());
+    eq([r.logo, r.logo_reused, stored], ['', false, ''], 'une synthèse qui ne commence pas par un logo : aucun logo mémorisé, rien n’est compté comme servi');
+    [r, stored] = pub(logos[7] + body);
+    eq([r.logo, r.logo_reused, stored], [logos[7], false, logos[7]], 'un logo de la liste, choisi pour le sujet : mémorisé');
+    [r, stored] = pub('\n\n🤖 ' + body.trim());
+    eq([r.logo, stored], ['🤖', '🤖'], 'un logo hors catalogue est accepté aussi (Gemini a le dernier mot), même après des lignes vides');
+    [r, stored] = pub('Décisions : 🚀 lancement.' + body);
+    eq(r.logo, '', 'un émoji au milieu du texte n’est pas le logo : seul compte celui qui ouvre la synthèse');
+    eq(w.call(CP, 'news.get', { projectId: w.p1.id }).digest.logo, '', 'la page reçoit le logo de la synthèse affichée (ici aucun)');
+    [r, stored] = pub(logos[7] + body);
+    eq(w.call(CP, 'news.get', { projectId: w.p1.id }).digest.logo, logos[7], 'la page reçoit le logo de la synthèse');
+    // un logo servi il y a 10 jours : accepté, mais signalé avec sa date
     const w2 = lot2World(), c2 = w2.c, t2 = c2.todayStr();
-    for (let i = 1; i <= 100; i++) c2.repoInsert('NewsDigest', { project_id: w2.p1.id, digest_date: c2.addCalendarDays(t2, -i), text: 'x', published_by: CP, logo: logos[i - 1] }, w2.S);
-    const pick = w2.call(CP, 'news.digest.prompt', { projectId: w2.p1.id }).logo;
-    ok(logos.slice(100).includes(pick), 'après 100 jours tous différents : le logo du jour est l’un des ' + (logos.length - 100) + ' restants : ' + pick);
-    // la frontière des 100 jours : A servi il y a 100 jours (encore exclu), B il y a 101 jours (libre) ; tous les autres servis hier : seul B est libre
+    c2.repoInsert('NewsDigest', { project_id: w2.p1.id, digest_date: c2.addCalendarDays(t2, -10), text: 'x', published_by: CP, logo: '✈️' }, w2.S);
+    const prompt2 = w2.call(CP, 'news.digest.prompt', { projectId: w2.p1.id });
+    ok(!prompt2.logos.some((l) => c2.newsLogoKey_(l) === c2.newsLogoKey_('✈️')) && prompt2.logos.length === logos.length - 1, 'le logo servi il y a 10 jours n’est plus proposé : ' + prompt2.logos.length + ' logos libres');
+    const again = w2.call(CP, 'news.digest.publish', { projectId: w2.p1.id, text: '✈' + body, notify: false });
+    eq([again.logo, again.logo_reused, again.logo_previous], ['✈', true, c2.addCalendarDays(t2, -10)], 'Gemini en choisit quand même un servi (écrit sans le sélecteur ✈ au lieu de ✈️) : accepté, signalé avec la date du dernier emploi');
+    // cent jours de synthèses toutes différentes : les logos libres sont les restants
+    const w3 = lot2World(), c3 = w3.c, t3 = c3.todayStr();
+    for (let i = 1; i <= 100; i++) c3.repoInsert('NewsDigest', { project_id: w3.p1.id, digest_date: c3.addCalendarDays(t3, -i), text: 'x', published_by: CP, logo: logos[i - 1] }, w3.S);
+    const rest = w3.call(CP, 'news.digest.prompt', { projectId: w3.p1.id });
+    eq(rest.logos, logos.slice(100), 'après 100 jours tous différents : les logos libres sont exactement les ' + (logos.length - 100) + ' restants');
+    ok(logos.slice(0, 100).every((l) => rest.prompt.indexOf(l) < 0) && logos.slice(100).includes(rest.logo), 'et le prompt ne propose aucun des cent servis');
+    // la frontière des 100 jours : A servi il y a 100 jours (exclu), B il y a 101 jours (libre) ; tous les autres servis hier : seul B est libre
     const A = logos[0], B = logos[1], others = logos.slice(2);
-    const digs = (extra) => others.map((l) => ({ project_id: 'X', digest_date: c2.addCalendarDays(t2, -1), logo: l, deleted: false })).concat(extra);
-    eq(c2.newsLogoOfDay_('X', t2, digs([{ project_id: 'X', digest_date: c2.addCalendarDays(t2, -100), logo: A, deleted: false }, { project_id: 'X', digest_date: c2.addCalendarDays(t2, -101), logo: B, deleted: false }])), B, 'servi il y a 100 jours : encore exclu ; il y a 101 jours : libre');
-    eq(c2.newsLogoOfDay_('X', t2, digs([{ project_id: 'X', digest_date: c2.addCalendarDays(t2, -99), logo: A, deleted: false }, { project_id: 'X', digest_date: c2.addCalendarDays(t2, -150), logo: B, deleted: false }])), B, 'servi il y a 99 jours : exclu aussi');
-    eq(c2.newsLogoOfDay_('X', t2, digs([{ project_id: 'X', digest_date: c2.addCalendarDays(t2, -100), logo: A, deleted: false }, { project_id: 'X', digest_date: c2.addCalendarDays(t2, -5), logo: B, deleted: true }])), B, 'une synthèse supprimée ne compte pas : son logo est libre');
-    eq(c2.newsLogoOfDay_('X', t2, digs([{ project_id: 'X', digest_date: t2, logo: B, deleted: false }, { project_id: 'X', digest_date: c2.addCalendarDays(t2, -100), logo: A, deleted: false }, { project_id: 'X', digest_date: c2.addCalendarDays(t2, -2), logo: A, deleted: false }])), B, 'la synthèse d’aujourd’hui ne compte pas contre elle-même : republier garde le même logo');
-    // un autre projet a son propre historique : les logos servis par X ne le contraignent pas
-    const days = Array.from({ length: 12 }, (_, k) => c2.addCalendarDays(t2, k));
-    const forY = new Set(days.map((d) => c2.newsLogoOfDay_('Y', d, digs([]))));
-    ok(forY.size > 3, 'un autre projet n’est pas limité par les logos du premier : ' + forY.size + ' logos différents en 12 jours');
-    // le choix varie d'un jour à l'autre et ne dépend que du projet, du jour et de l'historique
-    const seq = days.map((d) => c2.newsLogoOfDay_('Z', d, []));
-    ok(new Set(seq).size > 3 && days.every((d, k) => c2.newsLogoOfDay_('Z', d, []) === seq[k]), 'varie d’un jour à l’autre (' + new Set(seq).size + ' logos en 12 jours) et reste le même pour un jour donné');
+    const digs = (extra) => others.map((l) => ({ project_id: 'X', digest_date: c3.addCalendarDays(t3, -1), logo: l, deleted: false })).concat(extra);
+    const row = (d, l, del) => ({ project_id: 'X', digest_date: c3.addCalendarDays(t3, d), logo: l, deleted: !!del });
+    eq(c3.newsFreeLogos_('X', t3, digs([row(-100, A), row(-101, B)])), [B], 'servi il y a 100 jours : encore exclu ; il y a 101 jours : libre');
+    eq(c3.newsFreeLogos_('X', t3, digs([row(-99, A), row(-150, B)])), [B], 'servi il y a 99 jours : exclu aussi');
+    eq(c3.newsFreeLogos_('X', t3, digs([row(-100, A), row(-5, B, true)])), [B], 'une synthèse supprimée ne compte pas : son logo est libre');
+    eq(c3.newsFreeLogos_('X', t3, digs([row(0, B), row(-100, A)])), [B], 'la synthèse d’aujourd’hui ne compte pas contre elle-même : republier garde les mêmes logos libres');
+    eq(c3.newsFreeLogos_('Y', t3, digs([])).length, logos.length, 'un autre projet n’est pas limité par les logos du premier');
+    const days = Array.from({ length: 12 }, (_, k) => c3.addCalendarDays(t3, k));
+    const seq = days.map((d) => c3.newsLogoOfDay_('Z', d, []));
+    ok(new Set(seq).size > 3 && days.every((d, k) => c3.newsLogoOfDay_('Z', d, []) === seq[k]), 'le logo par défaut varie d’un jour à l’autre (' + new Set(seq).size + ' en 12 jours) et reste le même pour un jour donné');
+  });
+
+  test('Logo en tête : séquences d’émojis, lignes vides, texte sans logo', () => {
+    const c = lot2World().c, lead = c.newsLeadingLogo_;
+    eq([lead('🚀 Décisions'), lead('  \n🚀\nDécisions'), lead('✈️ x'), lead('✈ x'), lead('👩‍🚀 x'), lead('🇫🇷 x'), lead('👍🏽 x')], ['🚀', '🚀', '✈️', '✈', '👩‍🚀', '🇫🇷', '👍🏽'], 'un logo, avec ses séquences (sélecteur, personnage, drapeau, teinte), même après des lignes vides');
+    eq([lead('Décisions : 🚀'), lead(''), lead(null), lead('1. Décisions'), lead('« 🚀 »')], ['', '', '', '', ''], 'pas de logo en tête : texte, vide, chiffre, guillemet');
+    eq(c.newsLogoKey_('✈️') === c.newsLogoKey_('✈') && c.newsLogoKey_('🚀') !== c.newsLogoKey_('🛰️'), true, 'la clé de comparaison ignore le sélecteur de présentation et rien d’autre');
+  });
+
+  test('La synthèse précédente reste tant qu’il n’y en a pas de nouvelle : page, résumé, Overview et récapitulatif du matin', () => {
+    const w = lot2World(), c = w.c, today = c.todayStr();
+    const old = c.addCalendarDays(today, -6), OLD = '🚀\nDécisions : le plan d’essais est validé.\nDates qui bougent : rien.\nRisques : retard fournisseur.\nBlocages : aucun.\nActions : voir la liste.';
+    c.repoInsert('NewsDigest', { project_id: w.p1.id, digest_date: old, text: OLD, published_by: CP, logo: '🚀' }, w.S);
+    const g = w.call(CP, 'news.get', { projectId: w.p1.id });
+    eq([g.digest.date, /plan d’essais est validé/.test(g.digest.text), g.digest.logo], [old, true, '🚀'], 'six jours sans nouvelle synthèse : la page montre toujours la dernière, avec son logo');
+    const sum = w.call(CP, 'news.summary', { projectId: w.p1.id });
+    ok(sum.digest && sum.digest.date === old && /plan d’essais est validé/.test(sum.digest.text), 'l’Overview aussi');
+    // le récapitulatif de 7 h : la synthèse de six jours est toujours là, datée, et les réunions d'après sont ajoutées
+    c.repoInsert('Meeting', { project_id: w.p1.id, source: 'Agenda', event_id: 'ev-after', held_on: c.addCalendarDays(today, -2), title: 'Point d’après', participants: 'Carla', summary: 'On a avancé.', decisions: '', status: 'Publiée', dedupe_key: 'ev:after' }, w.S);
+    c.repoInsert('Meeting', { project_id: w.p1.id, source: 'Agenda', event_id: 'ev-before', held_on: c.addCalendarDays(today, -9), title: 'Point d’avant', participants: 'Carla', summary: 'Déjà couvert.', decisions: '', status: 'Publiée', dedupe_key: 'ev:before' }, w.S);
+    const digestFor = (email) => c.buildDigests(c.loadDigestData_(), today, { baseUrl: 'https://ppm.test/exec' }).filter((d) => d.to === email)[0];
+    let d = digestFor(RWP);
+    ok(/Décisions : le plan d’essais est validé/.test(d.text) && new RegExp('dernière synthèse publiée : ' + c.frDate_(old).replace(/[/]/g, '\\/') + ', pas de nouvelle depuis', 'i').test(d.text), 'le récapitulatif garde la dernière synthèse et dit sa date : ' + d.text.split('\n').filter((l) => /ACTUALITÉS/i.test(l))[0]);
+    ok(/Depuis la synthèse : .* Point d’après/.test(d.text) && !/Point d’avant/.test(d.text) && !/journal brut/i.test(d.text), 'avec les réunions tenues depuis cette synthèse, et pas celles qu’elle couvre déjà');
+    // une nouvelle synthèse remplace l'ancienne dans la page, l'Overview et le récapitulatif
+    w.call(CP, 'news.digest.publish', { projectId: w.p1.id, notify: false, text: '🧭\nDécisions : nouvelle ligne.\nDates qui bougent : rien.\nRisques : aucun.\nBlocages : aucun.\nActions : voir la liste.' });
+    const g2 = w.call(CP, 'news.get', { projectId: w.p1.id });
+    eq([g2.digest.date, /nouvelle ligne/.test(g2.digest.text), g2.digest.logo], [today, true, '🧭'], 'la nouvelle synthèse remplace l’ancienne à l’écran');
+    d = digestFor(RWP);
+    ok(/Décisions : nouvelle ligne/.test(d.text) && !/plan d’essais est validé/.test(d.text) && !/pas de nouvelle depuis/.test(d.text), 'et dans le récapitulatif du lendemain matin');
+    eq(c.repoList('NewsDigest').filter((x) => !c.isTrue(x.deleted)).length, 2, 'l’ancienne reste dans l’historique : publier ne supprime que la synthèse du MÊME jour');
+    // sans aucune synthèse : le journal brut, comme avant
+    const w2 = lot2World(), c2 = w2.c;
+    c2.repoInsert('Meeting', { project_id: w2.p1.id, source: 'Agenda', event_id: 'e', held_on: c2.addCalendarDays(c2.todayStr(), -1), title: 'Réunion brute', participants: '', summary: 'Un résumé.', decisions: '', status: 'Publiée', dedupe_key: 'ev:e' }, w2.S);
+    const t = c2.buildDigests(c2.loadDigestData_(), c2.todayStr(), { baseUrl: 'https://ppm.test/exec' }).filter((x) => x.to === RWP)[0].text;
+    ok(/JOURNAL BRUT : PAS DE SYNTHÈSE PUBLIÉE/.test(t) && /Réunion brute/.test(t), 'tant qu’aucune synthèse n’a jamais été publiée : le journal brut des réunions');
   });
 
   test('Journal du projet : créé puis mis à jour dans le même document, avec fiche et réunions', () => {

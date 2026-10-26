@@ -141,19 +141,45 @@ function newsParseNotes_(text, ref, people) {
 // ---------------------------------------------------------------- logo du jour
 
 /**
- * Le logo du jour : chaque synthèse du matin commence par un logo (un émoji) qui n'a PAS servi pour ce projet depuis NEWS_LOGO_DAYS jours, pour que chaque jour ait sa marque et qu'on reconnaisse
- * d'un coup d'œil la synthèse d'aujourd'hui. Un logo ne compte comme « servi » que si la synthèse publiée le contenait. Le choix est fait dans les logos libres, de façon stable : le même
- * projet et le même jour donnent toujours le même logo (le prompt copié le matin et la publication le soir disent la même chose). Le catalogue compte plus de logos que de jours de la fenêtre.
+ * Le logo du jour. Chaque synthèse du matin commence par un logo (un émoji) qui ÉVOQUE SON SUJET PRINCIPAL et qui n'a pas servi pour ce projet depuis NEWS_LOGO_DAYS jours. Le logo ne peut pas être
+ * tiré par l'outil : la synthèse n'existe pas encore quand il fabrique le prompt. C'est donc Gemini qui le choisit, en écrivant la synthèse, dans la liste des logos LIBRES (le prompt la donne) ;
+ * l'outil relit ensuite le logo qui ouvre le texte publié et le mémorise, quel qu'il soit : un logo hors liste est accepté, un logo déjà servi dans la fenêtre est accepté mais signalé. Un logo ne
+ * compte comme « servi » que s'il ouvre une synthèse publiée. `newsLogoOfDay_` propose seulement un logo par défaut (stable pour un projet et un jour donnés) à utiliser si aucun ne convient.
  */
 var NEWS_LOGOS = ['🛰️', '🚀', '✈️', '🛩️', '🪂', '🧭', '🗺️', '⚙️', '🔧', '🔩', '🧪', '🔬', '🔭', '📡', '💡', '🔋', '🧲', '🛠️', '📐', '📏', '🧱', '🏗️', '🏭', '🚧', '🚦', '⚓', '⛵', '🚢', '🚁', '🚂', '🚲', '🛴', '🏁', '🎯', '🧩', '♟️', '🎲', '🎨', '🎵', '🎺', '🥁', '📚', '📎', '📌', '📅', '⏱️', '⌛', '🔔', '🔑', '🔒', '💎', '🏆', '🥇', '🌟', '⭐', '☀️', '🌙', '🌈', '⛅', '❄️', '🔥', '💧', '🌊', '🌍', '🌱', '🌲', '🌳', '🌴', '🍀', '🍁', '🍂', '🌻', '🌷', '🌵', '🍎', '🍋', '🍇', '🍓', '🍒', '🥑', '🥕', '🌽', '🍄', '🐝', '🦋', '🐞', '🐢', '🐬', '🐳', '🦉', '🦅', '🦆', '🐧', '🦊', '🐺', '🦁', '🐯', '🐻', '🐼', '🐨', '🦒', '🐘', '🦏', '🐪', '🦘', '🦔', '🐿️', '🐇', '🦜', '🦚', '🦩', '🐙', '🦀', '🐠', '🦈', '🐚', '🏔️', '🏝️', '🌋', '⛰️', '🗻', '🏛️', '🏰', '🗼', '🎡', '🎢', '⛲', '🧊', '🪁', '🪐', '☄️', '🌠'];
 var NEWS_LOGO_DAYS = 100;
-function newsLogoOfDay_(projectId, today, digests) {
+
+/** La clé de comparaison d'un logo : sans le sélecteur de présentation (U+FE0F), qui fait varier « ✈ » et « ✈️ ». */
+function newsLogoKey_(logo) { return String(logo || '').replace(/\uFE0F/g, ''); }
+
+/** Le logo qui ouvre une synthèse : le premier émoji du texte, s'il est tout au début (après d'éventuelles lignes vides) ; '' sinon. Les séquences (drapeaux, personnages, teintes) comptent pour un seul. */
+function newsLeadingLogo_(text) {
+  var m = /^\s*((?:\p{Regional_Indicator}{2}|\p{Extended_Pictographic})(?:\uFE0F|[\u{1F3FB}-\u{1F3FF}]|\u200D\p{Extended_Pictographic}\uFE0F?)*)/u.exec(String(text || ''));
+  return m ? m[1] : '';
+}
+
+/** Les logos servis pour ce projet dans la fenêtre : { clé : date du dernier emploi }. La synthèse d'aujourd'hui ne compte pas (republier ne change rien). Les synthèses supprimées ne comptent pas. */
+function newsLogoHistory_(projectId, today, digests) {
   var since = addCalendarDays(today, -NEWS_LOGO_DAYS), used = {};
   (digests || []).forEach(function (d) {
-    if (d.project_id === projectId && !isTrue(d.deleted) && d.logo && String(d.digest_date) >= since && String(d.digest_date) < today) used[d.logo] = true;
+    var date = String(d.digest_date);
+    if (d.project_id !== projectId || isTrue(d.deleted) || !d.logo || date < since || date >= today) return;
+    var k = newsLogoKey_(d.logo);
+    if (!used[k] || used[k] < date) used[k] = date;
   });
-  var free = NEWS_LOGOS.filter(function (l) { return !used[l]; });
-  if (!free.length) free = NEWS_LOGOS.slice();
+  return used;
+}
+
+/** Les logos du catalogue que ce projet peut encore utiliser (aucun n'a servi dans la fenêtre). */
+function newsFreeLogos_(projectId, today, digests) {
+  var used = newsLogoHistory_(projectId, today, digests);
+  var free = NEWS_LOGOS.filter(function (l) { return !used[newsLogoKey_(l)]; });
+  return free.length ? free : NEWS_LOGOS.slice();   // jamais : le catalogue compte plus de logos que de jours de la fenêtre
+}
+
+/** Le logo par défaut du jour, stable pour un projet et un jour donnés, parmi les libres : à utiliser si aucun logo de la liste ne convient au sujet. */
+function newsLogoOfDay_(projectId, today, digests) {
+  var free = newsFreeLogos_(projectId, today, digests);
   var h = 0, key = projectId + '|' + today;
   for (var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
   return free[h % free.length];

@@ -172,9 +172,9 @@ function openPage(user, file, view) {
   p.click(p.$('prompt-copy'));
   await p.until(() => p.copied.length === 1);
   check(p.copied[0] === p.$('prompt-text').value, 'copié dans le presse-papiers');
-  const dayLogo = (/Logo du jour : (\S+) — commence la synthèse/.exec(p.$('prompt-text').value) || [])[1];
-  check(!!dayLogo && c.NEWS_LOGOS.includes(dayLogo) && p.text('prompt-note').indexOf('Logo du jour : ' + dayLogo) >= 0, 'le prompt contient le logo du jour et la fenêtre le rappelle : ' + dayLogo);
-  check(/Gemini/.test(p.text('prompt-note')) && !/NotebookLM|carnet/i.test(p.doc.documentElement.textContent), 'la page ne parle plus de NotebookLM : elle renvoie à Gemini');
+  const asked = p.$('prompt-text').value;
+  check(/évoque le mieux son sujet principal/.test(asked) && c.NEWS_LOGOS.every((l) => asked.indexOf(l) >= 0) && /Si aucun ne convient : \S+\./.test(asked), 'le prompt demande à Gemini le logo qui évoque le mieux le sujet principal, dans la liste des logos libres, avec un logo par défaut');
+  check(new RegExp('parmi les ' + c.NEWS_LOGOS.length + ' libres').test(p.text('prompt-note')) && /Gemini/.test(p.text('prompt-note')) && !/NotebookLM|carnet/i.test(p.doc.documentElement.textContent), 'la fenêtre le rappelle et ne parle plus de NotebookLM : elle renvoie à Gemini');
   p.click(p.$('prompt-close'));
   p.click(p.$('publish-btn'));
   await p.until(() => p.$('publish-dialog').open);
@@ -187,15 +187,25 @@ function openPage(user, file, view) {
   p.$('publish-form').dispatchEvent(new p.win.Event('submit', { cancelable: true }));
   await p.until(() => !p.$('publish-dialog').open && p.$('digest-text'));
   check(/Décisions : le plan d’essais est validé/.test(p.text('digest-text')) && /publiée aujourd’hui|pas celle d’aujourd’hui/.test(p.text('panel-digest')), 'la synthèse publiée s’affiche');
-  check(!p.$('digest-logo') && /ne figure pas dans la synthèse/.test(p.text('toast')) && /publiée aujourd’hui/.test(p.text('sum-digest')) && !p.$('toggle-digest').classList.contains('needs'), 'sans le logo du jour dans le texte : le message le dit, aucun logo n’est affiché ; la synthèse du jour est publiée, la section n’a plus rien à demander');
-  // republier avec le logo du jour : il s'affiche en tête de la synthèse
+  check(!p.$('digest-logo') && /ne commence pas par un logo/.test(p.text('toast')) && /publiée aujourd’hui/.test(p.text('sum-digest')) && !p.$('toggle-digest').classList.contains('needs'), 'une synthèse qui ne commence pas par un logo : le message le dit, aucun logo n’est affiché ; la synthèse du jour est publiée, la section n’a plus rien à demander');
+  // republier avec le logo choisi par Gemini pour le sujet : il s'affiche en tête de la synthèse
+  const chosen = c.NEWS_LOGOS[11];
   p.click(p.$('publish-btn'));
   await p.until(() => p.$('publish-dialog').open);
   p.$('publish-notify').checked = false;   // pas de nouveaux mails : la publication précédente a déjà prévenu les membres
-  p.$('publish-text').value = dayLogo + '\nDécisions : le plan d’essais est validé.\nDates qui bougent : rien.\nRisques : retard fournisseur.\nBlocages : aucun.\nActions : Carla — planning — 02/11/2026';
+  p.$('publish-text').value = chosen + '\nDécisions : le plan d’essais est validé.\nDates qui bougent : rien.\nRisques : retard fournisseur.\nBlocages : aucun.\nActions : Carla — planning — 02/11/2026';
   p.$('publish-form').dispatchEvent(new p.win.Event('submit', { cancelable: true }));
   await p.until(() => !p.$('publish-dialog').open && p.$('digest-logo'));
-  check(p.text('digest-logo') === dayLogo && !/ne figure pas/.test(p.text('toast')), 'avec le logo du jour dans la synthèse : il s’affiche en tête de la synthèse');
+  check(p.text('digest-logo') === chosen && !/Attention|ne commence pas/.test(p.text('toast')), 'le logo choisi pour le sujet s’affiche en tête de la synthèse, sans avertissement');
+  // un logo déjà servi il y a cinq jours : accepté, mais le message le signale avec la date
+  const helperDigest = c.repoInsert('NewsDigest', { project_id: w.p1.id, digest_date: c.addCalendarDays(c.todayStr(), -5), text: 'x', published_by: CP, logo: c.NEWS_LOGOS[20] }, w.S);
+  p.click(p.$('publish-btn'));
+  await p.until(() => p.$('publish-dialog').open);
+  p.$('publish-notify').checked = false;
+  p.$('publish-text').value = c.NEWS_LOGOS[20] + '\nDécisions : le plan d’essais est validé.\nDates qui bougent : rien.\nRisques : retard fournisseur.\nBlocages : aucun.\nActions : Carla — planning — 02/11/2026';
+  p.$('publish-form').dispatchEvent(new p.win.Event('submit', { cancelable: true }));
+  await p.until(() => !p.$('publish-dialog').open && /Attention/.test(p.text('toast')));
+  check(/Attention : le logo .* a déjà servi le \d\d\/\d\d\/\d{4} \(moins de 100 jours\)/.test(p.text('toast')), 'un logo déjà servi dans les 100 jours : accepté, mais le message le signale : ' + p.text('toast'));
   check(c.SENT_MAILS.length === 3, 'trois mails partis (chef de projet, DPL, Workpackage leader : ceux qui peuvent lire les comptes rendus) : ' + c.SENT_MAILS.length);
 
   // ---------------------------------------------------------------- repères et journal
@@ -239,6 +249,18 @@ function openPage(user, file, view) {
   const ov = openPage(RWP, 'Overview.html', 'overview');
   await ov.until(() => !ov.$('news-box').hidden);
   check(/Décisions : le plan d’essais est validé/.test(ov.text('news-digest')), 'Overview : la dernière synthèse publiée s’affiche : ' + ov.text('news-digest').slice(0, 60));
+  // ---------------------------------------------------------------- le chef de projet oublie de publier : la synthèse précédente reste
+  c.repoUpdate('NewsDigest', helperDigest.id, { digest_date: c.addCalendarDays(c.todayStr(), -50) }, null, w.S);   // la ligne d'aide du test du logo déjà servi : trop ancienne pour compter ici
+  const todays = c.repoList('NewsDigest').filter((x) => !c.isTrue(x.deleted) && x.digest_date === c.todayStr())[0];
+  c.repoUpdate('NewsDigest', todays.id, { digest_date: c.addCalendarDays(c.todayStr(), -6) }, null, w.S);
+  await p.win.__ppm.load();
+  await p.until(() => p.$('digest-stale'));
+  check(/Décisions : le plan d’essais est validé/.test(p.text('digest-text')) && /pas de nouvelle depuis 6 jours/.test(p.text('digest-badge')) && /reste affichée/.test(p.text('digest-stale')), 'six jours sans nouvelle synthèse : la dernière reste affichée, dit depuis combien de temps, et que c’est normal : ' + p.text('digest-badge'));
+  check(/pas de nouvelle depuis 6 jours/.test(p.text('sum-digest')) && p.$('toggle-digest').classList.contains('needs') && p.$('toggle-digest').getAttribute('aria-expanded') === 'true' && p.text('digest-logo') === c.NEWS_LOGOS[20], 'la rubrique est ouverte d’office pour le chef de projet (il doit en publier une), et le logo de la dernière synthèse est toujours là');
+  const ov2 = openPage(CP, 'Overview.html', 'overview');
+  await ov2.until(() => /Décisions : le plan d’essais est validé/.test(ov2.text('news-digest')));
+  check(/Décisions : le plan d’essais est validé/.test(ov2.text('news-digest')), 'l’Overview garde elle aussi la dernière synthèse');
+
   check(/3 actions ouvertes/.test(ov.text('news-actions')), 'Overview : les actions ouvertes : ' + ov.text('news-actions'));
   check(/view=actualites&project=/.test(ov.$('news-link').getAttribute('href')), 'Overview : lien vers la page Actualités du projet');
   const ovm = openPage(MEMBER, 'Overview.html', 'overview');

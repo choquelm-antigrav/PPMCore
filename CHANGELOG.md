@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 0.16.3 — le logo évoque le sujet, la synthèse précédente reste
+
+- **Logo en rapport avec le contenu** : en 0.16.2 le logo était tiré par l'outil avant que la synthèse existe, donc **sans aucun lien avec son contenu**. Désormais le prompt donne à Gemini la liste des logos libres (aucun servi pour ce projet ces 100 derniers jours) et lui demande **le logo qui évoque le mieux le sujet principal**, avec un logo par défaut si aucun ne convient. À la publication, l'outil **relit le logo qui ouvre le texte** (séquences d'émojis, lignes vides, « ✈ » = « ✈️ »), le mémorise, **accepte un logo hors catalogue**, et **signale avec la date** un logo déjà servi dans les 100 jours ; sans logo en tête, rien n'est mémorisé. `news.digest.prompt` rend la liste (`logos`), `news.digest.publish` rend `logo`, `logo_reused`, `logo_previous`.
+- **La synthèse précédente reste** tant qu'il n'y en a pas de nouvelle. **Défaut corrigé** : le récapitulatif de 7 h ne gardait la synthèse que sur la fenêtre d'un jour et retombait sur le journal brut dès le lendemain d'un oubli. Il garde maintenant la dernière synthèse, **datée** (« pas de nouvelle depuis »), et lui ajoute **les réunions tenues depuis** sa date. La page affiche « pas de nouvelle depuis N jours » avec une note, la rubrique s'ouvre d'office pour le chef de projet, l'Overview garde la dernière.
+- Tests : `test_news.js` (20), `ui_news.js` (75) ; dix sabotages vérifiés, dont celui qui rétablit le défaut du récapitulatif.
+
 ## 0.16.2 — synthèses par Gemini, logo du jour, fil du projet à gauche, rubriques condensées
 
 - **Gemini seul** : la synthèse du matin est rédigée directement par Gemini. Plus aucune mention de NotebookLM ni de carnet (prompt, page, documentation) ; le prompt demande de s'appuyer sur le journal du projet (Google Doc à joindre, son lien est dans le prompt) et sur les réunions de la période.

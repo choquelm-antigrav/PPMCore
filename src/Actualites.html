@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.16.2">
+<meta name="ppm-version" content="0.16.3">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <?!= include('CommonProgram') ?>
@@ -166,6 +166,8 @@ var BOOT = <?!= boot ?>;
   }
 
   // ------------------------------------------------------------ synthèse du matin
+  /** Le nombre de jours entre une date et aujourd'hui (celui du serveur). */
+  function daysSince(date) { return Math.max(0, Math.round((Date.parse(state.data.today) - Date.parse(date)) / 86400000)); }
   function renderDigest() {
     var d = state.data, box = $('panel-digest'), a = d.access;
     clear(box);
@@ -175,10 +177,11 @@ var BOOT = <?!= boot ?>;
       card.appendChild(el('div', { class: 'digest-head' }, [
         d.digest.logo ? el('span', { class: 'logo', id: 'digest-logo', title: 'Logo du jour', text: d.digest.logo }) : null,
         el('strong', { text: 'Synthèse du ' + frDate(d.digest.date) }),
-        el('span', { class: 'badge' + (late ? ' warn' : ' ok'), text: late ? 'pas celle d’aujourd’hui' : 'publiée aujourd’hui' }),
+        el('span', { class: 'badge' + (late ? ' warn' : ' ok'), id: 'digest-badge', text: late ? 'pas de nouvelle depuis ' + plural(daysSince(d.digest.date), 'jour', 'jours') : 'publiée aujourd’hui' }),
         el('span', { class: 'muted', text: 'par ' + (d.digest.by || '—') })
       ]));
       card.appendChild(el('p', { class: 'digest', id: 'digest-text', text: d.digest.text }));
+      if (late) card.appendChild(el('p', { class: 'note', id: 'digest-stale', text: 'C’est la dernière synthèse publiée : elle reste affichée, et partie dans le récapitulatif du matin, tant qu’une nouvelle n’est pas publiée.' }));
     } else {
       card.appendChild(el('p', { class: 'muted', id: 'digest-empty', text: 'Aucune synthèse publiée pour l’instant.' + (d.meetings.length ? ' Le récapitulatif du matin reprend alors le journal brut des réunions.' : '') }));
     }
@@ -194,7 +197,7 @@ var BOOT = <?!= boot ?>;
   function showPrompt() {
     call('news.digest.prompt', { projectId: state.projectId }).then(function (r) {
       $('prompt-text').value = r.prompt;
-      $('prompt-note').textContent = 'Copiez ce texte et collez-le dans Gemini : il rédige la synthèse du matin. Revenez ensuite la publier ici. ' + plural(r.meetings, 'réunion', 'réunions') + ' depuis le ' + frDate(r.since) + '. Logo du jour : ' + r.logo + '.';
+      $('prompt-note').textContent = 'Copiez ce texte et collez-le dans Gemini : il rédige la synthèse du matin et choisit, pour son sujet principal, un logo parmi les ' + r.logos.length + ' libres (aucun n’a servi pour ce projet ces 100 derniers jours). Revenez ensuite la publier ici. ' + plural(r.meetings, 'réunion', 'réunions') + ' depuis le ' + frDate(r.since) + '.';
       openDialog($('prompt-dialog'));
     }).catch(fail);
   }
@@ -210,7 +213,7 @@ var BOOT = <?!= boot ?>;
     $('publish-ok').disabled = true;
     call('news.digest.publish', { projectId: state.projectId, text: $('publish-text').value, notify: $('publish-notify').checked }, true).then(function (r) {
       closeDialog($('publish-dialog'));
-      toast('Actualités publiées' + (r.notified ? ' et envoyées à ' + plural(r.notified, 'personne', 'personnes') : '') + '.' + (r.logo_used ? '' : ' Le logo du jour (' + r.logo + ') ne figure pas dans la synthèse : il reste disponible.'));
+      toast('Actualités publiées' + (r.notified ? ' et envoyées à ' + plural(r.notified, 'personne', 'personnes') : '') + '.' + (!r.logo ? ' La synthèse ne commence pas par un logo.' : r.logo_reused ? ' Attention : le logo ' + r.logo + ' a déjà servi le ' + frDate(r.logo_previous) + ' (moins de 100 jours).' : ''));
       return load();
     }).catch(function (x) { err.textContent = ppmErrorText(x); err.hidden = false; }).then(function () { $('publish-ok').disabled = false; });
   }
@@ -442,7 +445,7 @@ var BOOT = <?!= boot ?>;
     var mineTodo = me ? d.actions.filter(function (x) { return x.owner_id === me && (x.status === 'Proposée' || x.status === 'Contestée'); }).length : 0;
     var kw = String(d.project.keywords || '').split(/[,;\n]+/).filter(function (k) { return k.trim(); }).length;
     var today = !!d.digest && d.digest.date === d.today;
-    applySection('digest', d.digest ? (today ? 'publiée aujourd’hui' : 'du ' + frDate(d.digest.date) + ' · pas celle d’aujourd’hui') : 'aucune publiée', d.access.manage && !today);
+    applySection('digest', d.digest ? (today ? 'publiée aujourd’hui' : 'du ' + frDate(d.digest.date) + ' · pas de nouvelle depuis ' + plural(daysSince(d.digest.date), 'jour', 'jours')) : 'aucune publiée', d.access.manage && !today);
     applySection('actions', d.actions.length ? plural(d.actions.length, 'ouverte', 'ouvertes') + (late ? ' · ' + late + ' en retard' : '') + (mineTodo ? ' · ' + mineTodo + ' pour moi' : '') : 'aucune', late > 0 || mineTodo > 0);
     applySection('triage', d.triage.length ? plural(d.triage.length, 'réunion', 'réunions') : '', d.triage.length > 0);
     applySection('add', '', false);

@@ -327,13 +327,13 @@ defineAction('news.journal.update', function (p, ctx) {
 
 // ---------------------------------------------------------------- synthèse du jour (prompt, publication)
 
-function newsPrompt_(project, meetings, since, today, logo, journalUrl) {
+function newsPrompt_(project, meetings, since, today, logo, journalUrl, freeLogos) {
   var L = [];
   L.push('Projet : ' + project.code + ' — ' + project.name + '.');
   L.push('Rédige la synthèse des actualités du projet depuis le ' + frDate_(since) + ' (jusqu’au ' + frDate_(today) + ').');
   L.push('Appuie-toi uniquement sur le journal du projet (le Google Doc joint) et sur les réunions rappelées ci-dessous, et cite-les entre parenthèses (titre de la réunion, date). N’invente rien.');
   if (journalUrl) L.push('Journal du projet à joindre ou à citer : ' + journalUrl);
-  if (logo) L.push('Logo du jour : ' + logo + ' — commence la synthèse par ce logo, seul sur la première ligne (il n’a pas servi pour ce projet ces ' + NEWS_LOGO_DAYS + ' derniers jours).');
+  if (freeLogos && freeLogos.length) L.push('Logo du jour : commence la synthèse par UN logo (un seul émoji, seul sur la première ligne) qui évoque le mieux son sujet principal, à choisir dans cette liste (aucun n’a servi pour ce projet ces ' + NEWS_LOGO_DAYS + ' derniers jours) : ' + freeLogos.join(' ') + '. Si aucun ne convient : ' + logo + '.');
   L.push('Réponds en français, en cinq sections, dans cet ordre et avec ces titres exacts :');
   NEWS_SECTIONS.forEach(function (s) { L.push(s + ' :'); });
   L.push('Section « Actions » : une ligne par action, sous la forme « Personne — action — échéance JJ/MM/AAAA — livrable concerné ».');
@@ -372,9 +372,10 @@ defineAction('news.digest.prompt', function (p, ctx) {
   repoList('NewsAction', function (a) { return a.project_id === project.id; }).forEach(function (a) { (actionsBy[a.meeting_id] = actionsBy[a.meeting_id] || []).push(newsActionView_(a, names, {})); });
   var meetings = repoList('Meeting', function (m) { return m.project_id === project.id && m.status === 'Publiée' && String(m.held_on) >= since; })
     .sort(function (a, b) { return String(a.held_on).localeCompare(String(b.held_on)); }).map(function (m) { var v = newsMeetingView_(m, []); v.actions = actionsBy[m.id] || []; return v; });
-  var logo = newsLogoOfDay_(project.id, today, repoList('NewsDigest', function (d) { return d.project_id === project.id; }));
+  var digestsOf = repoList('NewsDigest', function (d) { return d.project_id === project.id; });
+  var logo = newsLogoOfDay_(project.id, today, digestsOf), freeLogos = newsFreeLogos_(project.id, today, digestsOf);
   var journal = isBlank(project.news_journal_id) ? '' : 'https://docs.google.com/document/d/' + project.news_journal_id + '/edit';
-  return { prompt: newsPrompt_(project, meetings, since, today, logo, journal), since: since, meetings: meetings.length, logo: logo };
+  return { prompt: newsPrompt_(project, meetings, since, today, logo, journal, freeLogos), since: since, meetings: meetings.length, logo: logo, logos: freeLogos };
 });
 
 defineAction('news.digest.publish', function (p, ctx) {
@@ -389,10 +390,10 @@ defineAction('news.digest.publish', function (p, ctx) {
   var today = todayStr();
   return withLock(function () {
     repoList('NewsDigest', function (d) { return d.project_id === project.id && d.digest_date === today; }).forEach(function (d) { repoSoftDelete('NewsDigest', d.id, null, ctx.actx); });
-    // le logo du jour ne compte comme « servi » que s'il figure dans la synthèse
-    var dayLogo = newsLogoOfDay_(project.id, today, repoList('NewsDigest', function (x) { return x.project_id === project.id; }));
-    var logoUsed = text.indexOf(dayLogo) >= 0;
-    var d = repoInsert('NewsDigest', { project_id: project.id, digest_date: today, text: text, published_by: ctx.email, logo: logoUsed ? dayLogo : '' }, ctx.actx);
+    // le logo est celui qui ouvre la synthèse (Gemini l'a choisi pour son sujet) ; s'il a déjà servi dans la fenêtre, c'est accepté mais signalé
+    var logo = newsLeadingLogo_(text);
+    var previous = logo ? (newsLogoHistory_(project.id, today, repoList('NewsDigest', function (x) { return x.project_id === project.id; }))[newsLogoKey_(logo)] || '') : '';
+    var d = repoInsert('NewsDigest', { project_id: project.id, digest_date: today, text: text, published_by: ctx.email, logo: logo }, ctx.actx);
     var notified = 0;
     if (p.notify !== false) {
       var base = newsBase_(), members = newsProjectMembers_(project, base);
@@ -406,7 +407,7 @@ defineAction('news.digest.publish', function (p, ctx) {
         if (sendMail_(String(r.email).toLowerCase(), 'Actualités ' + project.code + ' du ' + frDate_(today), body, html)) notified++;
       });
     }
-    return { id: d.id, date: today, notified: notified, found: check.found, logo: dayLogo, logo_used: logoUsed };
+    return { id: d.id, date: today, notified: notified, found: check.found, logo: logo, logo_reused: !!previous, logo_previous: previous };
   });
 });
 
@@ -425,18 +426,20 @@ function newsDigestSections_(data, person, today, windowStart, link) {
   (data.assignments || []).forEach(function (a) { if (a.resource_id === person.id && scopeOf[a.scope_id]) memberOf[scopeOf[a.scope_id]] = true; });
   data.projects.forEach(function (p) { if (p.manager_resource_id === person.id) memberOf[p.id] = true; });
   data.projects.filter(function (p) { return memberOf[p.id] && !isTrue(p.deleted) && p.status !== 'Clos' && personReadsSensitive_(data, person.id, p, today); }).forEach(function (p) {
-    var digest = n.digests.filter(function (d) { return d.project_id === p.id && !isTrue(d.deleted) && d.digest_date >= windowStart; })
+    // la dernière synthèse publiée reste dans le récapitulatif TANT QU'IL N'Y EN A PAS DE NOUVELLE, quel que soit son âge : si le chef de projet oublie un jour, ou dix, c'est elle qu'on lit
+    var digest = n.digests.filter(function (d) { return d.project_id === p.id && !isTrue(d.deleted); })
       .sort(function (a, b) { return String(b.digest_date).localeCompare(String(a.digest_date)); })[0];
-    var lines = [];
+    var lines = [], since = digest ? String(digest.digest_date) : windowStart, stale = digest && String(digest.digest_date) < today;
     if (digest) {
       String(digest.text).split(/\n+/).map(function (l) { return l.trim(); }).filter(Boolean).slice(0, 14).forEach(function (l) { lines.push({ text: newsClip_(l, 220), url: lines.length ? '' : link('actualites', p.id) }); });
-    } else {
-      n.meetings.filter(function (m) { return m.project_id === p.id && m.status === 'Publiée' && !isTrue(m.deleted) && m.held_on >= windowStart; })
-        .sort(function (a, b) { return String(b.held_on).localeCompare(String(a.held_on)); }).slice(0, 6).forEach(function (m) {
-          lines.push({ text: frDate_(m.held_on) + ' · ' + m.title, note: newsClip_(m.summary, 140), url: link('actualites', p.id) });
-        });
     }
-    if (lines.length) out.push({ title: 'Actualités ' + p.code + (digest ? '' : ' (journal brut : pas de synthèse publiée)'), lines: lines });
+    // les réunions que la synthèse ne couvre pas encore : celles d'après sa date (ou, sans synthèse, celles de la période)
+    n.meetings.filter(function (m) { return m.project_id === p.id && m.status === 'Publiée' && !isTrue(m.deleted) && m.held_on > (digest ? since : addCalendarDays(windowStart, -1)); })
+      .sort(function (a, b) { return String(b.held_on).localeCompare(String(a.held_on)); }).slice(0, 6).forEach(function (m) {
+        lines.push({ text: (digest ? 'Depuis la synthèse : ' : '') + frDate_(m.held_on) + ' · ' + m.title, note: newsClip_(m.summary, 140), url: link('actualites', p.id) });
+      });
+    var title = 'Actualités ' + p.code + (!digest ? ' (journal brut : pas de synthèse publiée)' : stale ? ' (dernière synthèse publiée : ' + frDate_(digest.digest_date) + ', pas de nouvelle depuis)' : '');
+    if (lines.length) out.push({ title: title, lines: lines });
   });
   var soon = addCalendarDays(today, 7), project = indexBy_(data.projects);
   n.actions.filter(function (a) { return a.owner_resource_id === person.id && !isTrue(a.deleted) && NEWS_OPEN.indexOf(a.status) >= 0 && !isBlank(a.project_id); }).forEach(function (a) {
