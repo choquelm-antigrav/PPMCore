@@ -149,20 +149,36 @@ function newsKeywords_(project) {
 }
 
 /**
- * event = { title, attendees: [e-mails] } ; projects = [{ id, keywords: [..], members: { e-mail: true } }].
- * Un repère dans le titre l'emporte ; sinon au moins deux membres invités, le projet qui en compte le plus gagne ; égalité : « à trier ».
+ * event = { title } ; projects = [{ id, keywords: [..] }].
+ * Une réunion n'est retenue QUE si son titre contient un repère du projet (sans tenir compte des accents ni de la casse). Un seul projet concerné : « ok » ; les repères de plusieurs projets
+ * dans le même titre : « à trier » ; aucun repère : la réunion est ignorée. Les personnes invitées ne comptent pas : être invité à une réunion ne la rattache à aucun projet.
  */
 function newsMatchProject_(event, projects) {
-  var title = newsNorm_(event.title), att = (event.attendees || []).map(function (e) { return String(e).toLowerCase(); });
+  var title = newsNorm_(event.title);
   var byKey = projects.filter(function (p) { return (p.keywords || []).some(function (k) { return title.indexOf(newsNorm_(k)) >= 0; }); });
   if (byKey.length === 1) return { status: 'ok', projectId: byKey[0].id, why: 'repère' };
   if (byKey.length > 1) return { status: 'tie', candidates: byKey.map(function (p) { return p.id; }) };
-  var counted = projects.map(function (p) { return { id: p.id, n: att.filter(function (e) { return p.members && p.members[e]; }).length }; }).filter(function (x) { return x.n >= 2; });
-  if (!counted.length) return { status: 'none' };
-  var max = Math.max.apply(null, counted.map(function (x) { return x.n; }));
-  var best = counted.filter(function (x) { return x.n === max; });
-  if (best.length === 1) return { status: 'ok', projectId: best[0].id, why: 'membres' };
-  return { status: 'tie', candidates: best.map(function (x) { return x.id; }) };
+  return { status: 'none' };
+}
+
+/** Les pièces jointes d'une réunion, rangées dans la colonne `attachments` en JSON : au plus dix, des adresses https seulement, titres raccourcis. */
+var NEWS_ATTACH_MAX = 10;
+function newsAttachmentsJson_(list) {
+  var out = [];
+  (list || []).forEach(function (a) {
+    var url = String((a && a.url) || '').trim();
+    if (out.length >= NEWS_ATTACH_MAX || !/^https:\/\//i.test(url)) return;
+    out.push({ title: newsClip_(String(a.title || '').trim() || 'Pièce jointe', 120), url: url, mime: String(a.mime || '').slice(0, 80) });
+  });
+  return out.length ? JSON.stringify(out) : '';
+}
+function newsParseAttachments_(json) {
+  if (isBlank(json)) return [];
+  try {
+    var list = JSON.parse(json);
+    return (Array.isArray(list) ? list : []).filter(function (a) { return a && /^https:\/\//i.test(String(a.url || '')); }).slice(0, NEWS_ATTACH_MAX)
+      .map(function (a) { return { title: String(a.title || 'Pièce jointe'), url: String(a.url), mime: String(a.mime || '') }; });
+  } catch (e) { return []; }
 }
 
 function newsActiveAssignments_() { return repoList('RoleAssignment', function (a) { return isBlank(a.end_date) || String(a.end_date) >= todayStr(); }); }

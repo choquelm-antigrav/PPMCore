@@ -55,7 +55,8 @@ function newsLooksLikeNotes_(att) {
 }
 
 /**
- * Une passe de collecte : les réunions de la fenêtre (depuis la dernière passe, un jour au plus par défaut) de l'agenda du compte du script.
+ * Une passe de collecte : les réunions de la fenêtre (depuis la dernière passe, un jour au plus par défaut) de l'agenda du compte du script. Une réunion n'est retenue que si son titre
+ * contient un repère d'un projet (« Repères et journal du projet »).
  * Reprenable : une réunion déjà créée (même identifiant d'événement) n'est jamais recréée.
  */
 function newsCollect_(opts) {
@@ -72,9 +73,8 @@ function newsCollect_(opts) {
   var base = newsBase_(), byEmail = {};
   base.resources.forEach(function (r) { if (!isBlank(r.email)) byEmail[String(r.email).toLowerCase()] = r; });
   var specs = projects.map(function (pr) {
-    var ids = newsProjectMembers_(pr, base), emails = {};
-    base.resources.forEach(function (r) { if (ids[r.id] && !isBlank(r.email)) emails[String(r.email).toLowerCase()] = true; });
-    return { id: pr.id, keywords: newsKeywords_(pr), members: emails, memberIds: ids, project: pr };
+    var ids = newsProjectMembers_(pr, base);   // les membres servent à retrouver le responsable d'une action, plus à rattacher la réunion
+    return { id: pr.id, keywords: newsKeywords_(pr), memberIds: ids, project: pr };
   });
   var specById = {}; specs.forEach(function (s) { specById[s.id] = s; });
   var known = {}; repoList('Meeting', function (m) { return !isBlank(m.event_id); }).forEach(function (m) { known[m.event_id] = true; });
@@ -88,7 +88,7 @@ function newsCollect_(opts) {
     if (ev.isPrivate) { res.skippedPrivate++; continue; }
     var key = 'ev:' + ev.id;
     if (known[ev.id] || known[key]) continue;
-    var match = newsMatchProject_({ title: ev.title, attendees: ev.attendees }, specs);
+    var match = newsMatchProject_({ title: ev.title }, specs);   // le repère du titre, rien d'autre
     if (match.status === 'none') { res.ignored++; continue; }
     var spec = match.status === 'ok' ? specById[match.projectId] : specById[match.candidates[0]];
     var people = newsPeople_(base, spec.memberIds), texts = [], docUrl = '';
@@ -100,7 +100,7 @@ function newsCollect_(opts) {
     var names = ev.attendees.map(function (e) { return byEmail[e] ? byEmail[e].name : e.split('@')[0]; });
     var mt = repoInsert('Meeting', {
       project_id: match.status === 'ok' ? match.projectId : '', source: 'Agenda', event_id: ev.id, held_on: ev.date, title: newsClip_(ev.title, 140),
-      participants: newsClip_(names.join(', '), 400), doc_url: docUrl, summary: parsed.summary, decisions: parsed.decisions.join('\n'),
+      participants: newsClip_(names.join(', '), 400), doc_url: docUrl, attachments: newsAttachmentsJson_(ev.attachments), summary: parsed.summary, decisions: parsed.decisions.join('\n'),
       status: match.status === 'ok' ? 'Publiée' : 'À trier', candidates: match.status === 'tie' ? match.candidates.join(',') : '', dedupe_key: key, added_by: 'collecteur'
     }, actx);
     known[ev.id] = true;

@@ -1,5 +1,5 @@
 /**
- * PPM Core 0.16.0 — fichier unique à installer (fabriqué par tools/build.js, empreinte 95042da01e74).
+ * PPM Core 0.16.1 — fichier unique à installer (fabriqué par tools/build.js, empreinte cf4819a38084).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
  * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs, 53_Roles.gs, 54_Validation.gs, 55_Envelope.gs, 56_Import.gs, 57_Rights.gs, 58_ScopeBaselines.gs.
  */
@@ -47,7 +47,7 @@ function A9_MIGRER_ROLES_SIMULATION() { return migrerRoles_(true); }
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.16.0';
+var PPM_VERSION = '0.16.1';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -396,7 +396,7 @@ var SCHEMA = {
   Meeting: {
     book: 'data',
     cols: ['id', 'project_id', 'source', 'event_id', 'held_on', 'title', 'participants', 'doc_url', 'summary', 'decisions',
-      'status', 'candidates', 'dedupe_key', 'added_by'],
+      'status', 'candidates', 'dedupe_key', 'added_by', 'attachments'],   // attachments : pièces jointes de l'invitation, en JSON (48_NewsText.gs)
     required: ['title', 'held_on'],
     enums: { source: ['Manuel', 'Agenda'], status: ['Publiée', 'À trier'] }
   },
@@ -10214,7 +10214,7 @@ function newsNames_(base) { var m = {}; base.resources.forEach(function (r) { m[
 
 function newsMeetingView_(m, actions) {
   return {
-    id: m.id, project_id: m.project_id, source: m.source, held_on: m.held_on, title: m.title, participants: m.participants || '', doc_url: m.doc_url || '',
+    id: m.id, project_id: m.project_id, source: m.source, held_on: m.held_on, title: m.title, participants: m.participants || '', doc_url: m.doc_url || '', attachments: newsParseAttachments_(m.attachments),
     summary: m.summary || '', decisions: String(m.decisions || '').split('\n').filter(Boolean), status: m.status, candidates: String(m.candidates || '').split(',').filter(Boolean),
     version: m.version, actions: actions.map(function (a) { return a.id; })
   };
@@ -10697,20 +10697,36 @@ function newsKeywords_(project) {
 }
 
 /**
- * event = { title, attendees: [e-mails] } ; projects = [{ id, keywords: [..], members: { e-mail: true } }].
- * Un repère dans le titre l'emporte ; sinon au moins deux membres invités, le projet qui en compte le plus gagne ; égalité : « à trier ».
+ * event = { title } ; projects = [{ id, keywords: [..] }].
+ * Une réunion n'est retenue QUE si son titre contient un repère du projet (sans tenir compte des accents ni de la casse). Un seul projet concerné : « ok » ; les repères de plusieurs projets
+ * dans le même titre : « à trier » ; aucun repère : la réunion est ignorée. Les personnes invitées ne comptent pas : être invité à une réunion ne la rattache à aucun projet.
  */
 function newsMatchProject_(event, projects) {
-  var title = newsNorm_(event.title), att = (event.attendees || []).map(function (e) { return String(e).toLowerCase(); });
+  var title = newsNorm_(event.title);
   var byKey = projects.filter(function (p) { return (p.keywords || []).some(function (k) { return title.indexOf(newsNorm_(k)) >= 0; }); });
   if (byKey.length === 1) return { status: 'ok', projectId: byKey[0].id, why: 'repère' };
   if (byKey.length > 1) return { status: 'tie', candidates: byKey.map(function (p) { return p.id; }) };
-  var counted = projects.map(function (p) { return { id: p.id, n: att.filter(function (e) { return p.members && p.members[e]; }).length }; }).filter(function (x) { return x.n >= 2; });
-  if (!counted.length) return { status: 'none' };
-  var max = Math.max.apply(null, counted.map(function (x) { return x.n; }));
-  var best = counted.filter(function (x) { return x.n === max; });
-  if (best.length === 1) return { status: 'ok', projectId: best[0].id, why: 'membres' };
-  return { status: 'tie', candidates: best.map(function (x) { return x.id; }) };
+  return { status: 'none' };
+}
+
+/** Les pièces jointes d'une réunion, rangées dans la colonne `attachments` en JSON : au plus dix, des adresses https seulement, titres raccourcis. */
+var NEWS_ATTACH_MAX = 10;
+function newsAttachmentsJson_(list) {
+  var out = [];
+  (list || []).forEach(function (a) {
+    var url = String((a && a.url) || '').trim();
+    if (out.length >= NEWS_ATTACH_MAX || !/^https:\/\//i.test(url)) return;
+    out.push({ title: newsClip_(String(a.title || '').trim() || 'Pièce jointe', 120), url: url, mime: String(a.mime || '').slice(0, 80) });
+  });
+  return out.length ? JSON.stringify(out) : '';
+}
+function newsParseAttachments_(json) {
+  if (isBlank(json)) return [];
+  try {
+    var list = JSON.parse(json);
+    return (Array.isArray(list) ? list : []).filter(function (a) { return a && /^https:\/\//i.test(String(a.url || '')); }).slice(0, NEWS_ATTACH_MAX)
+      .map(function (a) { return { title: String(a.title || 'Pièce jointe'), url: String(a.url), mime: String(a.mime || '') }; });
+  } catch (e) { return []; }
 }
 
 function newsActiveAssignments_() { return repoList('RoleAssignment', function (a) { return isBlank(a.end_date) || String(a.end_date) >= todayStr(); }); }
@@ -10801,7 +10817,8 @@ function newsLooksLikeNotes_(att) {
 }
 
 /**
- * Une passe de collecte : les réunions de la fenêtre (depuis la dernière passe, un jour au plus par défaut) de l'agenda du compte du script.
+ * Une passe de collecte : les réunions de la fenêtre (depuis la dernière passe, un jour au plus par défaut) de l'agenda du compte du script. Une réunion n'est retenue que si son titre
+ * contient un repère d'un projet (« Repères et journal du projet »).
  * Reprenable : une réunion déjà créée (même identifiant d'événement) n'est jamais recréée.
  */
 function newsCollect_(opts) {
@@ -10818,9 +10835,8 @@ function newsCollect_(opts) {
   var base = newsBase_(), byEmail = {};
   base.resources.forEach(function (r) { if (!isBlank(r.email)) byEmail[String(r.email).toLowerCase()] = r; });
   var specs = projects.map(function (pr) {
-    var ids = newsProjectMembers_(pr, base), emails = {};
-    base.resources.forEach(function (r) { if (ids[r.id] && !isBlank(r.email)) emails[String(r.email).toLowerCase()] = true; });
-    return { id: pr.id, keywords: newsKeywords_(pr), members: emails, memberIds: ids, project: pr };
+    var ids = newsProjectMembers_(pr, base);   // les membres servent à retrouver le responsable d'une action, plus à rattacher la réunion
+    return { id: pr.id, keywords: newsKeywords_(pr), memberIds: ids, project: pr };
   });
   var specById = {}; specs.forEach(function (s) { specById[s.id] = s; });
   var known = {}; repoList('Meeting', function (m) { return !isBlank(m.event_id); }).forEach(function (m) { known[m.event_id] = true; });
@@ -10834,7 +10850,7 @@ function newsCollect_(opts) {
     if (ev.isPrivate) { res.skippedPrivate++; continue; }
     var key = 'ev:' + ev.id;
     if (known[ev.id] || known[key]) continue;
-    var match = newsMatchProject_({ title: ev.title, attendees: ev.attendees }, specs);
+    var match = newsMatchProject_({ title: ev.title }, specs);   // le repère du titre, rien d'autre
     if (match.status === 'none') { res.ignored++; continue; }
     var spec = match.status === 'ok' ? specById[match.projectId] : specById[match.candidates[0]];
     var people = newsPeople_(base, spec.memberIds), texts = [], docUrl = '';
@@ -10846,7 +10862,7 @@ function newsCollect_(opts) {
     var names = ev.attendees.map(function (e) { return byEmail[e] ? byEmail[e].name : e.split('@')[0]; });
     var mt = repoInsert('Meeting', {
       project_id: match.status === 'ok' ? match.projectId : '', source: 'Agenda', event_id: ev.id, held_on: ev.date, title: newsClip_(ev.title, 140),
-      participants: newsClip_(names.join(', '), 400), doc_url: docUrl, summary: parsed.summary, decisions: parsed.decisions.join('\n'),
+      participants: newsClip_(names.join(', '), 400), doc_url: docUrl, attachments: newsAttachmentsJson_(ev.attachments), summary: parsed.summary, decisions: parsed.decisions.join('\n'),
       status: match.status === 'ok' ? 'Publiée' : 'À trier', candidates: match.status === 'tie' ? match.candidates.join(',') : '', dedupe_key: key, added_by: 'collecteur'
     }, actx);
     known[ev.id] = true;

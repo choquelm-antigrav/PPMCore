@@ -115,7 +115,7 @@ function newsNames_(base) { var m = {}; base.resources.forEach(function (r) { m[
 
 function newsMeetingView_(m, actions) {
   return {
-    id: m.id, project_id: m.project_id, source: m.source, held_on: m.held_on, title: m.title, participants: m.participants || '', doc_url: m.doc_url || '',
+    id: m.id, project_id: m.project_id, source: m.source, held_on: m.held_on, title: m.title, participants: m.participants || '', doc_url: m.doc_url || '', attachments: newsParseAttachments_(m.attachments),
     summary: m.summary || '', decisions: String(m.decisions || '').split('\n').filter(Boolean), status: m.status, candidates: String(m.candidates || '').split(',').filter(Boolean),
     version: m.version, actions: actions.map(function (a) { return a.id; })
   };

@@ -96,7 +96,7 @@ var SCHEMA = {
   Meeting: {
     book: 'data',
     cols: ['id', 'project_id', 'source', 'event_id', 'held_on', 'title', 'participants', 'doc_url', 'summary', 'decisions',
-      'status', 'candidates', 'dedupe_key', 'added_by'],
+      'status', 'candidates', 'dedupe_key', 'added_by', 'attachments'],   // attachments : pièces jointes de l'invitation, en JSON (48_NewsText.gs)
     required: ['title', 'held_on'],
     enums: { source: ['Manuel', 'Agenda'], status: ['Publiée', 'À trier'] }
   },

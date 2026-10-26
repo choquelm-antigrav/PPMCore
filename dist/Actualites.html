@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.16.0">
+<meta name="ppm-version" content="0.16.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -482,6 +482,26 @@
   dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
   .form-grid { display: grid; gap: 10px; }
   label.lbl { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
+  /* deux colonnes : le fil du projet (le plus important) à droite et en premier ; sur téléphone, une seule colonne, le fil d'abord */
+  .news-cols { display: flex; flex-direction: row-reverse; align-items: flex-start; gap: 0 28px; max-width: 1560px; margin: 0 auto; padding: 0 24px 32px; }
+  .news-main { flex: 7 1 0; min-width: 0; }
+  .news-side { flex: 5 1 0; min-width: 0; }
+  .news-cols .panel { padding: 0 0 20px; max-width: none; }
+  .news-cols h2.sec { margin: 20px 0 10px; }
+  .news-cols .box { padding: 12px 14px; margin-bottom: 10px; }
+  .news-cols .table-wrap { overflow-x: auto; }
+  .news-cols #actions-table th, .news-cols #actions-table td { padding: 6px 8px; font-size: 13.5px; }
+  /* une réunion du fil : repliée par défaut, un clic sur son titre la déplie */
+  .meeting h3 { margin: 0; }
+  .meeting-head { display: flex; align-items: baseline; gap: 8px; width: 100%; margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; font-size: 15.5px; font-weight: 600; text-align: left; cursor: pointer; }
+  .meeting-head:focus-visible { outline: 2px solid var(--accent, #1f6feb); outline-offset: 3px; border-radius: 4px; }
+  .meeting-head .chev { flex: none; width: 14px; color: var(--muted); }
+  .meeting-body { margin-top: 6px; padding-left: 22px; }
+  .meeting-body[hidden] { display: none; }
+  .meeting ul.attach { list-style: none; margin: 4px 0; padding: 0; }
+  .meeting ul.attach li { margin: 3px 0; }
+  .feed-tools { display: flex; gap: 8px; margin: 0 0 8px; }
+  @media (max-width: 980px) { .news-cols { flex-direction: column; padding: 0 12px 24px; gap: 0; } .news-main, .news-side { flex: none; width: 100%; } }
   @media (max-width: 700px) { .panel { padding: 8px 12px 24px; } .ed-row2 { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -667,23 +687,28 @@
 <div class="zone" id="zone-program" hidden><h2 class="sec">Vue programme : les actualités de tous les projets</h2></div>
 <section class="panel" id="panel-program" aria-label="Vue programme" hidden></section>
 
-<div class="zone" id="zone-digest"><h2 class="sec">Synthèse du matin</h2></div>
-<section class="panel" id="panel-digest" aria-label="Synthèse du matin"></section>
+<div class="news-cols" id="news-cols">
+  <div class="news-main" id="news-main">
+    <div class="zone" id="zone-feed"><h2 class="sec">Fil du projet</h2></div>
+    <section class="panel" id="panel-feed" aria-label="Réunions"></section>
 
-<div class="zone" id="zone-actions"><h2 class="sec">Actions issues des réunions</h2></div>
-<section class="panel" id="panel-actions" aria-label="Actions"></section>
+    <div class="zone" id="zone-triage" hidden><h2 class="sec">Réunions à trier</h2></div>
+    <section class="panel" id="panel-triage" aria-label="Réunions à trier" hidden></section>
 
-<div class="zone" id="zone-feed"><h2 class="sec">Fil du projet</h2></div>
-<section class="panel" id="panel-feed" aria-label="Réunions"></section>
+    <div class="zone" id="zone-add" hidden><h2 class="sec">Ajouter un compte rendu</h2></div>
+    <section class="panel" id="panel-add" aria-label="Ajouter un compte rendu" hidden></section>
+  </div>
+  <div class="news-side" id="news-side">
+    <div class="zone" id="zone-digest"><h2 class="sec">Synthèse du matin</h2></div>
+    <section class="panel" id="panel-digest" aria-label="Synthèse du matin"></section>
 
-<div class="zone" id="zone-triage" hidden><h2 class="sec">Réunions à trier</h2></div>
-<section class="panel" id="panel-triage" aria-label="Réunions à trier" hidden></section>
+    <div class="zone" id="zone-actions"><h2 class="sec">Actions issues des réunions</h2></div>
+    <section class="panel" id="panel-actions" aria-label="Actions"></section>
 
-<div class="zone" id="zone-add" hidden><h2 class="sec">Ajouter un compte rendu</h2></div>
-<section class="panel" id="panel-add" aria-label="Ajouter un compte rendu" hidden></section>
-
-<div class="zone" id="zone-settings" hidden><h2 class="sec">Repères et journal du projet</h2></div>
-<section class="panel" id="panel-settings" aria-label="Repères et journal" hidden></section>
+    <div class="zone" id="zone-settings" hidden><h2 class="sec">Repères et journal du projet</h2></div>
+    <section class="panel" id="panel-settings" aria-label="Repères et journal" hidden></section>
+  </div>
+</div>
 
 <dialog id="prompt-dialog" aria-labelledby="prompt-title">
   <h2 id="prompt-title">Prompt du jour</h2>
@@ -731,7 +756,7 @@ var BOOT = <?!= boot ?>;
   'use strict';
   var el = ppm.el, clear = ppm.clear, uuid = ppm.uuid, plural = ppm.plural, toast = ppm.toast, call = ppm.call, openDialog = ppm.openDialog, closeDialog = ppm.closeDialog, frDate = ppm.frDate;
 
-  var state = { projectId: '', data: null, catalog: null, mineOnly: false, seq: 0 };
+  var state = { projectId: '', data: null, catalog: null, mineOnly: false, seq: 0, open: {} };
   var $ = function (id) { return document.getElementById(id); };
   var STATUS_TONE = { 'Proposée': 'warn', 'Acceptée': '', 'Contestée': 'alert', 'Faite': 'ok' };
 
@@ -857,32 +882,67 @@ var BOOT = <?!= boot ?>;
   }
 
   // ------------------------------------------------------------ fil des réunions
+  function safeUrl(u) { return /^https:\/\//i.test(String(u || '')) ? String(u) : ''; }
+  function attachIcon(mime) {
+    mime = String(mime || '');
+    return /pdf/.test(mime) ? '📄 ' : /sheet|excel|csv/.test(mime) ? '📊 ' : /presentation|powerpoint/.test(mime) ? '📽 ' : /document|word|text/.test(mime) ? '📝 ' : /image/.test(mime) ? '🖼 ' : '📎 ';
+  }
+  /**
+   * Le fil du projet : chaque réunion est repliée (titre, date, origine, et ce qu'elle contient en un coup d'œil) ; un clic sur son titre la déplie : résumé, participants,
+   * décisions, actions, pièces jointes de l'invitation et compte rendu source. Ce qui est déplié le reste quand la page se recharge.
+   */
   function renderFeed() {
     var d = state.data, box = $('panel-feed'); clear(box);
     if (!d.meetings.length) {
-      box.appendChild(el('div', { class: 'box' }, [el('p', { class: 'muted', id: 'feed-empty', text: 'Aucune réunion retenue pour ce projet ces 45 derniers jours.' + (d.access.add ? ' Ajoutez un compte rendu ci-dessous, ou activez la collecte dans « Repères et journal ».' : '') })]));
+      box.appendChild(el('div', { class: 'box' }, [el('p', { class: 'muted', id: 'feed-empty', text: 'Aucune réunion retenue pour ce projet ces 45 derniers jours. Une réunion est retenue quand son titre contient un des repères du projet.' + (d.access.add ? ' Ajoutez un compte rendu ci-contre, ou activez la collecte et renseignez les repères.' : '') })]));
       return;
     }
+    var bodies = [];
+    var setOpen = function (m, card, btn, body, on) {
+      state.open[m.id] = on;
+      body.hidden = !on;
+      btn.setAttribute('aria-expanded', String(on));
+      btn.querySelector('.chev').textContent = on ? '▾' : '▸';
+      card.classList.toggle('open', on);
+    };
+    var tools = el('div', { class: 'feed-tools' }, [
+      el('button', { type: 'button', class: 'btn', id: 'feed-open-all', text: 'Tout déplier', onclick: function () { bodies.forEach(function (x) { setOpen(x.m, x.card, x.btn, x.body, true); }); } }),
+      el('button', { type: 'button', class: 'btn', id: 'feed-close-all', text: 'Tout replier', onclick: function () { bodies.forEach(function (x) { setOpen(x.m, x.card, x.btn, x.body, false); }); } })
+    ]);
+    box.appendChild(tools);
     d.meetings.forEach(function (m) {
       var card = el('div', { class: 'box meeting', 'data-id': m.id });
-      card.appendChild(el('h3', { text: m.title }));
+      var atts = (m.attachments || []).filter(function (a) { return safeUrl(a.url); });
+      var btn = el('button', { type: 'button', class: 'meeting-head', id: 'meeting-btn-' + m.id, 'aria-expanded': 'false', 'aria-controls': 'meeting-body-' + m.id }, [el('span', { class: 'chev', 'aria-hidden': 'true', text: '▸' }), el('span', { class: 'mt', text: m.title })]);
+      card.appendChild(el('h3', {}, [btn]));
+      var counts = [m.decisions.length ? plural(m.decisions.length, 'décision', 'décisions') : '', m.action_list.length ? plural(m.action_list.length, 'action', 'actions') : '', atts.length ? plural(atts.length, 'pièce jointe', 'pièces jointes') : ''].filter(Boolean);
       card.appendChild(el('div', { class: 'meta' }, [
         el('span', { text: frDate(m.held_on) }),
         el('span', { class: 'badge', text: m.source === 'Agenda' ? 'agenda' : 'saisi à la main' }),
-        m.participants ? el('span', { text: m.participants }) : null,
-        m.doc_url ? el('a', { href: m.doc_url, target: '_blank', rel: 'noopener', text: 'Source' }) : null
+        counts.length ? el('span', { class: 'counts', text: counts.join(' · ') }) : null
       ]));
-      if (m.summary) card.appendChild(el('p', { text: m.summary }));
+      var body = el('div', { class: 'meeting-body', id: 'meeting-body-' + m.id, role: 'region', 'aria-labelledby': 'meeting-btn-' + m.id });
+      body.appendChild(el('p', { class: 'summary', text: m.summary || 'Pas de résumé : la réunion n’a pas de compte rendu.' }));
+      if (m.participants) body.appendChild(el('p', { class: 'muted', text: 'Participants : ' + m.participants }));
       if (m.decisions.length) {
-        card.appendChild(el('p', { class: 'k', text: 'Décisions' }));
-        card.appendChild(el('ul', {}, m.decisions.map(function (t) { return el('li', { text: t }); })));
+        body.appendChild(el('p', { class: 'k', text: 'Décisions' }));
+        body.appendChild(el('ul', {}, m.decisions.map(function (t) { return el('li', { text: t }); })));
       }
       if (m.action_list.length) {
-        card.appendChild(el('p', { class: 'k', text: 'Actions' }));
-        card.appendChild(el('ul', {}, m.action_list.map(function (a) {
+        body.appendChild(el('p', { class: 'k', text: 'Actions' }));
+        body.appendChild(el('ul', {}, m.action_list.map(function (a) {
           return el('li', {}, [a.text, ' — ', a.owner || a.owner_label || 'sans responsable', a.due_date ? ' — ' + frDate(a.due_date) : '', ' ', el('span', { class: 'badge ' + (STATUS_TONE[a.status] || ''), text: a.status })]);
         })));
       }
+      var links = [];
+      if (safeUrl(m.doc_url)) links.push(el('li', {}, [el('a', { href: m.doc_url, target: '_blank', rel: 'noopener', 'data-kind': 'source', text: '📝 Compte rendu source' })]));
+      atts.forEach(function (a) { links.push(el('li', {}, [el('a', { href: a.url, target: '_blank', rel: 'noopener', 'data-kind': 'attachment', text: attachIcon(a.mime) + a.title })])); });
+      body.appendChild(el('p', { class: 'k', text: 'Pièces jointes' }));
+      body.appendChild(links.length ? el('ul', { class: 'attach' }, links) : el('p', { class: 'muted', text: 'Aucune pièce jointe.' }));
+      card.appendChild(body);
+      bodies.push({ m: m, card: card, btn: btn, body: body });
+      btn.addEventListener('click', function () { setOpen(m, card, btn, body, body.hidden); });
+      setOpen(m, card, btn, body, state.open[m.id] === true);
       box.appendChild(card);
     });
   }
@@ -893,7 +953,7 @@ var BOOT = <?!= boot ?>;
     $('zone-triage').hidden = !on; $('panel-triage').hidden = !on;
     var box = $('panel-triage'); clear(box);
     if (!on) return;
-    box.appendChild(el('p', { class: 'note', text: 'Ces réunions pouvaient aller dans plusieurs projets (à égalité de membres invités, ou plusieurs repères dans le titre). Rattachez-les à ce projet ou ignorez-les.' }));
+    box.appendChild(el('p', { class: 'note', text: 'Ces réunions portent les repères de plusieurs projets dans leur titre. Rattachez-les à ce projet ou ignorez-les.' }));
     d.triage.forEach(function (m) {
       box.appendChild(el('div', { class: 'box meeting', 'data-id': m.id }, [
         el('h3', { text: m.title }),
@@ -947,8 +1007,8 @@ var BOOT = <?!= boot ?>;
       call('news.settings.set', { projectId: state.projectId, enabled: enabled.checked, keywords: words.value }, true).then(function () { toast('Réglages enregistrés.'); return load(); }).catch(fail); } });
     box.appendChild(el('div', { class: 'box form-grid' }, [
       el('label', { class: 'row', style: 'margin:0' }, [enabled, ' Activer la collecte automatique des réunions pour ce projet']),
-      el('label', { class: 'lbl' }, ['Repères : un mot du titre rattache une réunion à ce projet (lettres, sigle, logo, titre)', words]),
-      el('p', { class: 'note', style: 'margin:0', text: 'Une réunion est aussi retenue quand au moins deux membres du projet y sont invités. La collecte lit l’agenda du compte qui exécute l’outil, à 1 h et à 13 h' + (d.project.last_collect ? ' ; dernière collecte : ' + frDate(d.project.last_collect) + '.' : '.') }),
+      el('label', { class: 'lbl' }, ['Repères : une réunion n’est collectée que si son titre contient un de ces mots (lettres, sigle, logo, titre)', words]),
+      el('p', { class: 'note', style: 'margin:0', text: 'Sans repère dans le titre, une réunion n’est jamais collectée, même si des membres du projet y sont invités ; si les repères de deux projets figurent dans le même titre, elle va dans « Réunions à trier ». La collecte lit l’agenda du compte qui exécute l’outil, à 1 h et à 13 h' + (d.project.last_collect ? ' ; dernière collecte : ' + frDate(d.project.last_collect) + '.' : '.') }),
       el('div', {}, [save])
     ]));
     var jl = el('div', { class: 'box' });
@@ -980,7 +1040,7 @@ var BOOT = <?!= boot ?>;
   // ------------------------------------------------------------ démarrage
   // vue programme (PL et DPL) : un tableau par projet, les réunions récentes et les actions ouvertes de tous les projets
   var pv = ppm.programView({
-    hide: ['digest', 'actions', 'feed', 'triage', 'add', 'settings'].reduce(function (a, z) { return a.concat(['zone-' + z, 'panel-' + z]); }, []),
+    hide: ['digest', 'actions', 'feed', 'triage', 'add', 'settings'].reduce(function (a, z) { return a.concat(['zone-' + z, 'panel-' + z]); }, ['news-cols']),
     zone: 'zone-program', panel: 'panel-program', action: 'news.program',
     render: function (d, host) {
       var open = function (row) { pv.leave(); state.projectId = row.project_id || row.id; $('picker').value = state.projectId; load(); };

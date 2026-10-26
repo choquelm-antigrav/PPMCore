@@ -62,17 +62,15 @@ module.exports = function () {
     eq(odd.actions.map((a) => [a.text, a.owner_resource_id]), [['Objectif : tenir le planning', '']], 'un mot qui n’est pas une personne n’est pas pris pour un responsable ; une ligne trop courte est ignorée');
   });
 
-  test('Rattachement : repère du titre, deux membres invités, égalités à trier, sans accent ni casse', () => {
+  test('Rattachement : le repère du titre et rien d’autre ; plusieurs projets : à trier ; sans accent ni casse', () => {
     const w = lot2World(), m = (title, att, specs) => w.c.newsMatchProject_({ title, attendees: att }, specs);
-    const sp = (id, keywords, members) => ({ id, keywords, members: Object.fromEntries(members.map((e) => [e, true])) });
-    const A = sp('A', ['Nacelle', 'NAC-1'], ['a@x.com', 'b@x.com', 'c@x.com']), B = sp('B', ['Train'], ['b@x.com', 'c@x.com', 'd@x.com']);
-    eq(m('Revue NACELLE moteur', [], [A, B]), { status: 'ok', projectId: 'A', why: 'repère' }, 'le repère l’emporte, sans tenir compte de la casse');
-    eq(m('revue nacélle', [], [sp('A', ['Nacelle'], [])]).status, 'ok', 'ni des accents');
-    eq(m('Point train et nacelle', [], [A, B]), { status: 'tie', candidates: ['A', 'B'] }, 'deux repères : à trier');
-    eq(m('Point hebdo', ['a@x.com', 'b@x.com', 'c@x.com'], [A, B]), { status: 'ok', projectId: 'A', why: 'membres' }, 'le projet qui compte le plus de membres invités');
-    eq(m('Point hebdo', ['b@x.com', 'c@x.com'], [A, B]), { status: 'tie', candidates: ['A', 'B'] }, 'même nombre de membres : à trier');
-    eq(m('Point hebdo', ['a@x.com', 'z@x.com'], [A, B]), { status: 'none' }, 'un seul membre invité et aucun repère : pas retenue');
-    eq(m('Point', ['A@X.com', 'B@x.com'], [A, B]).status, 'ok', 'adresses comparées sans tenir compte de la casse');
+    const A = { id: 'A', keywords: ['Nacelle', 'NAC-1'] }, B = { id: 'B', keywords: ['Train'] };
+    eq(m('Revue NACELLE moteur', [], [A, B]), { status: 'ok', projectId: 'A', why: 'repère' }, 'le repère, sans tenir compte de la casse');
+    eq(m('revue nacélle', [], [{ id: 'A', keywords: ['Nacelle'] }]).status, 'ok', 'ni des accents');
+    eq(m('Point train et nacelle', [], [A, B]), { status: 'tie', candidates: ['A', 'B'] }, 'les repères de deux projets dans le titre : à trier');
+    eq(m('Point hebdo', ['a@x.com', 'b@x.com', 'c@x.com'], [{ id: 'A', keywords: ['Nacelle'], members: { 'a@x.com': true, 'b@x.com': true, 'c@x.com': true } }, B]), { status: 'none' }, 'sans repère dans le titre, des membres invités ne rattachent PAS la réunion : elle n’est pas retenue');
+    eq(m('Point hebdo', [], [A, B]), { status: 'none' }, 'aucun repère : pas retenue');
+    eq(m('Point hebdo', [], []), { status: 'none' }, 'aucun projet : pas retenue');
     eq(w.c.newsKeywords_({ news_keywords: 'NAC-1, nac-1 ; a, ✈️,\n Nacelle ' }), ['NAC-1', '✈️', 'Nacelle'], 'doublons retirés ; une seule lettre ignorée, un logo gardé');
   });
 
@@ -234,27 +232,36 @@ module.exports = function () {
     };
   }
 
-  test('Collecte : deux membres invités ou un repère ; privées, annulées et sans lien ignorées ; notes jointes lues ; jamais deux fois', () => {
+  test('Collecte : seulement les réunions dont le titre porte un repère ; privées, annulées et sans repère ignorées ; notes et pièces jointes gardées ; jamais deux fois', () => {
     const w = lot2World(), c = w.c, today = c.todayStr();
     w.call(CP, 'news.settings.set', { projectId: w.p1.id, enabled: true, keywords: 'P1, Nacelle' });
     const ev = (id, title, att, extra) => Object.assign({ id, title, date: today, start: today + 'T09:00:00+02:00', attendees: att, cancelled: false, isPrivate: false, attachments: [] }, extra || {});
     const events = [
-      ev('e1', 'Revue de conception', [CP, MEMBER, 'inconnu@ailleurs.com'], { attachments: [{ fileId: 'n1', title: 'Notes de Gemini — Revue', mime: 'application/vnd.google-apps.document', url: 'https://docs.test/n1' }, { fileId: 'p1', title: 'Présentation', mime: 'application/vnd.google-apps.presentation', url: 'https://docs.test/p1' }] }),
+      ev('e1', 'Revue de conception P1', [CP, MEMBER, 'inconnu@ailleurs.com'], { attachments: [{ fileId: 'n1', title: 'Notes de Gemini — Revue', mime: 'application/vnd.google-apps.document', url: 'https://docs.test/n1' }, { fileId: 'p1', title: 'Présentation', mime: 'application/vnd.google-apps.presentation', url: 'https://docs.test/p1' }, { fileId: 'x1', title: 'Piège', mime: '', url: 'javascript:alert(1)' }] }),
       ev('e2', 'Point confidentiel', [CP, MEMBER], { isPrivate: true }),
       ev('e3', 'Point nacelle', [CP]),
       ev('e4', 'Café', [CP]),
       ev('e5', 'Revue annulée', [CP, MEMBER], { cancelled: true }),
-      ev('e6', 'Réunion sans lien', [XAV, 'autre@ailleurs.com'])
+      ev('e6', 'Réunion sans lien', [XAV, 'autre@ailleurs.com']),
+      ev('e7', 'Point d’équipe projet', [CP, MEMBER, DPL])           // tous les membres du projet y sont invités, mais aucun repère dans le titre : non retenue
     ];
     const fake = fakeNews(events, { n1: NOTES });
     c.NEWS_ADAPTER = fake;
     const r = c.newsCollect_({});
-    eq([r.created, r.toTriage, r.skippedPrivate, r.ignored, r.notes, r.errors], [2, 0, 1, 3, 1, 0], JSON.stringify(r));
+    eq([r.created, r.toTriage, r.skippedPrivate, r.ignored, r.notes, r.errors], [2, 0, 1, 4, 1, 0], JSON.stringify(r));
     const ms = c.repoList('Meeting').sort((a, b) => a.event_id.localeCompare(b.event_id));
     eq(ms.map((m) => [m.event_id, m.source, m.status, m.project_id === w.p1.id]), [['e1', 'Agenda', 'Publiée', true], ['e3', 'Agenda', 'Publiée', true]]);
     ok(/Carla/.test(ms[0].participants) && /Mia/.test(ms[0].participants) && /inconnu/.test(ms[0].participants), 'participants : noms connus, adresse sinon : ' + ms[0].participants);
     eq([ms[0].doc_url, /Revue de la conception/.test(ms[0].summary)], ['https://docs.test/n1', true], 'les notes jointes sont lues, pas la présentation');
     eq(fake.calls.read, ['n1'], 'une seule pièce jointe ouverte');
+    ok(!c.repoList('Meeting').some((m) => m.event_id === 'e7'), 'une réunion sans repère n’est pas collectée, même avec tous les membres invités : aucune trace');
+    const att = c.newsParseAttachments_(ms[0].attachments);
+    eq(att.map((a) => a.title), ['Notes de Gemini — Revue', 'Présentation'], 'les pièces jointes de l’invitation sont gardées avec leur titre ; celle dont l’adresse n’est pas en https est écartée');
+    eq(att[1], { title: 'Présentation', url: 'https://docs.test/p1', mime: 'application/vnd.google-apps.presentation' });
+    ok(!/javascript/.test(ms[0].attachments), 'et elle n’est même pas enregistrée dans le classeur : ' + ms[0].attachments.slice(0, 60));
+    eq(c.newsParseAttachments_(JSON.stringify([{ title: 'x', url: 'javascript:alert(1)' }, { title: 'y', url: 'https://ok.test/y' }])).map((a) => a.title), ['y'], 'à la lecture aussi, un enregistrement ancien ou modifié à la main est filtré');
+    eq(w.call(CP, 'news.get', { projectId: w.p1.id }).meetings.find((m) => m.title === 'Revue de conception P1').attachments.length, 2, 'la page les reçoit avec la réunion');
+    eq(c.repoList('Meeting').find((m) => m.event_id === 'e3').attachments || '', '', 'sans pièce jointe : rien d’enregistré');
     eq(c.repoList('NewsAction').filter((a) => a.meeting_id === ms[0].id).length, 4, 'les actions des notes sont proposées');
     ok(!c.repoList('Meeting').some((m) => m.event_id === 'e2'), 'une réunion privée n’est jamais lue : aucune trace');
     // fenêtre : la passe suivante repart de la fin de la précédente, sans rien recréer
@@ -268,14 +275,12 @@ module.exports = function () {
 
   test('Collecte : égalité entre projets, « à trier », rattachement ou abandon par le chef de projet', () => {
     const w = lot2World(), c = w.c, today = c.todayStr();
-    w.call(CP, 'news.settings.set', { projectId: w.p1.id, enabled: true, keywords: '' });
-    w.call(CP, 'news.settings.set', { projectId: w.p1.id, enabled: true, keywords: '' });
-    w.call(ADMIN, 'news.settings.set', { projectId: w.p2.id, enabled: true, keywords: '' });
-    c.repoInsert('RoleAssignment', { resource_id: w.carla.id, role_code: 'CP', scope_type: 'project', scope_id: w.p2.id }, w.S); // Carla et Dora sont membres des deux projets
+    w.call(CP, 'news.settings.set', { projectId: w.p1.id, enabled: true, keywords: 'transverse' });
+    w.call(ADMIN, 'news.settings.set', { projectId: w.p2.id, enabled: true, keywords: 'transverse' });   // les deux projets ont le même repère
     const mk = (id, title) => ({ id, title, date: today, start: today + 'T14:00:00+02:00', attendees: [CP, DPL], cancelled: false, isPrivate: false, attachments: [{ fileId: 'n' + id, title: 'Notes Gemini', mime: 'application/vnd.google-apps.document', url: 'https://docs.test/' + id }] });
     c.NEWS_ADAPTER = fakeNews([mk('t1', 'Point transverse'), mk('t2', 'Point transverse bis')], { nt1: 'Étapes suivantes\n- [Mia] Relancer le fournisseur\n- [Carla] Valider le plan', nt2: 'Décision : à revoir' });
     const r = c.newsCollect_({});
-    eq([r.created, r.toTriage], [0, 2], 'à égalité de membres invités, rien n’est attribué : à trier');
+    eq([r.created, r.toTriage], [0, 2], 'le repère de deux projets dans le titre : rien n’est attribué, à trier');
     const tri = c.repoList('Meeting').filter((m) => m.status === 'À trier');
     eq(tri.map((m) => [m.project_id, m.candidates.split(',').sort().join()]), [['', [w.p1.id, w.p2.id].sort().join()], ['', [w.p1.id, w.p2.id].sort().join()]]);
     // le chef de projet voit la réunion dans sa liste, pas dans le fil

@@ -82,6 +82,48 @@ function openPage(user, file, view) {
   p.click(p.$('add-ok'));
   await p.until(() => /déjà dans le fil/.test(p.text('toast')));
   check(p.doc.querySelectorAll('#panel-feed .meeting').length === 1, 'le même compte rendu n’est pas ajouté deux fois');
+
+  // ---------------------------------------------------------------- disposition en colonnes : le fil du projet à droite, en premier dans le code
+  const cols = p.$('news-cols'), main = p.$('news-main'), side = p.$('news-side');
+  check(cols && cols.firstElementChild === main && cols.lastElementChild === side, 'deux colonnes ; la colonne du fil du projet vient d’abord dans le code (donc en premier sur téléphone)');
+  check(main.contains(p.$('zone-feed')) && main.contains(p.$('panel-feed')) && side.contains(p.$('zone-digest')) && side.contains(p.$('zone-actions')) && side.contains(p.$('zone-settings')), 'le fil du projet est dans la colonne principale ; la synthèse, les actions et les repères dans l’autre');
+  check(/\.news-cols \{[^}]*flex-direction: row-reverse/.test([...p.doc.querySelectorAll('style')].map((x) => x.textContent).join('\n')) && /@media \(max-width: 980px\)[^{]*\{[^}]*\.news-cols \{[^}]*flex-direction: column/.test([...p.doc.querySelectorAll('style')].map((x) => x.textContent).join('\n')), 'la colonne du fil est à droite sur grand écran ; une seule colonne sous 980 px');
+  check(/Sans repère dans le titre, une réunion n’est jamais collectée/.test(p.text('panel-settings')) && /une réunion n’est collectée que si son titre contient un de ces mots/.test(p.text('panel-settings')) && !/au moins deux membres/.test(p.text('panel-settings')), 'la zone des repères dit la règle : pas de repère dans le titre, pas de collecte, même avec des membres invités');
+
+  // ---------------------------------------------------------------- réunions du fil : repliées, dépliées au clic, avec leurs pièces jointes
+  c.repoInsert('Meeting', { project_id: w.p1.id, source: 'Agenda', event_id: 'evx', held_on: '2026-10-12', title: 'Revue structure P1', participants: 'Carla, Mia', doc_url: 'https://docs.test/cr', summary: 'On a validé le plan de calcul de la structure.',
+    decisions: 'Le calcul est gelé.\nLes essais commencent le 19.', status: 'Publiée', dedupe_key: 'ev:evx',
+    attachments: JSON.stringify([{ title: 'Plan de calcul.pdf', url: 'https://docs.test/pdf', mime: 'application/pdf' }, { title: 'Maquette', url: 'https://docs.test/pres', mime: 'application/vnd.google-apps.presentation' }, { title: 'Piège', url: 'javascript:alert(1)', mime: '' }]) }, w.S);
+  await p.win.__ppm.load();
+  await p.until(() => p.doc.querySelectorAll('#panel-feed .meeting').length === 2);
+  const card = () => [...p.doc.querySelectorAll('#panel-feed .meeting')].find((x) => /Revue structure P1/.test(x.textContent));
+  const head = () => card().querySelector('.meeting-head'), bodyOf = () => card().querySelector('.meeting-body');
+  check(head().getAttribute('aria-expanded') === 'false' && bodyOf().hidden && [...p.doc.querySelectorAll('#panel-feed .meeting-body')].every((b) => b.hidden), 'toutes les réunions du fil sont repliées au départ');
+  check(/12\/10\/2026/.test(card().querySelector('.meta').textContent) && /2 décisions · 2 pièces jointes/.test(card().querySelector('.meta').textContent), 'replié, on voit la date et ce que la réunion contient : ' + flat(card().querySelector('.meta').textContent));
+  p.click(head());
+  check(head().getAttribute('aria-expanded') === 'true' && !bodyOf().hidden && /On a validé le plan de calcul/.test(bodyOf().textContent) && /Participants : Carla, Mia/.test(bodyOf().textContent) && /Le calcul est gelé/.test(bodyOf().textContent), 'un clic sur le titre déplie la réunion : résumé, participants, décisions');
+  const links = [...bodyOf().querySelectorAll('a[data-kind="attachment"]')];
+  check(links.length === 2 && links[0].getAttribute('href') === 'https://docs.test/pdf' && /Plan de calcul\.pdf/.test(links[0].textContent) && links[0].getAttribute('target') === '_blank' && /noopener/.test(links[0].getAttribute('rel')), 'les pièces jointes sont des liens qui s’ouvrent dans un nouvel onglet : ' + links.map((a) => a.textContent).join(' | '));
+  check(!bodyOf().querySelector('a[href^="javascript"]') && bodyOf().querySelector('a[data-kind="source"]').getAttribute('href') === 'https://docs.test/cr', 'une adresse qui n’est pas en https n’est jamais affichée comme lien ; le compte rendu source reste accessible');
+  p.click(head());
+  check(head().getAttribute('aria-expanded') === 'false' && bodyOf().hidden, 'un second clic la replie');
+  // la page se défend aussi toute seule : même si le serveur laissait passer une adresse non sécurisée, elle n'est jamais un lien
+  const realGet = c.API_ACTIONS['news.get'];
+  c.API_ACTIONS['news.get'] = (params, ctx) => { const r = realGet(params, ctx); r.meetings.forEach((m) => { m.attachments = (m.attachments || []).concat([{ title: 'Piège', url: 'javascript:alert(2)', mime: '' }]); m.doc_url = m.doc_url || 'javascript:alert(3)'; }); return r; };
+  await p.win.__ppm.load();
+  await p.until(() => p.doc.querySelectorAll('#panel-feed .meeting').length === 2);
+  check(!p.doc.querySelector('#panel-feed a[href^="javascript"]') && p.doc.querySelectorAll('#panel-feed a[data-kind="attachment"]').length === 2, 'côté page : une adresse qui n’est pas en https n’est jamais affichée comme lien (ni pièce jointe, ni source)');
+  c.API_ACTIONS['news.get'] = realGet;
+  await p.win.__ppm.load();
+  await p.until(() => p.doc.querySelectorAll('#panel-feed .meeting').length === 2);
+  p.click(p.$('feed-open-all'));
+  check([...p.doc.querySelectorAll('#panel-feed .meeting-head')].every((b) => b.getAttribute('aria-expanded') === 'true'), '« Tout déplier »');
+  await p.win.__ppm.load();
+  await p.until(() => p.doc.querySelectorAll('#panel-feed .meeting').length === 2);
+  check([...p.doc.querySelectorAll('#panel-feed .meeting-head')].every((b) => b.getAttribute('aria-expanded') === 'true'), 'ce qui est déplié le reste quand la page se recharge');
+  p.click(p.$('feed-close-all'));
+  check([...p.doc.querySelectorAll('#panel-feed .meeting-body')].every((b) => b.hidden), '« Tout replier »');
+  check(/Aucune pièce jointe/.test(([...p.doc.querySelectorAll('#panel-feed .meeting')].find((x) => /Revue de conception$/.test(x.querySelector('.mt').textContent)) || { textContent: '' }).textContent), 'une réunion sans pièce jointe le dit');
   // erreur lisible
   p.$('add-title').value = ''; p.$('add-text').value = 'x';
   p.click(p.$('add-ok'));

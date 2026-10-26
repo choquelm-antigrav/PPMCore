@@ -1,5 +1,13 @@
 # Journal des versions
 
+## 0.16.1 — page Actualités : repères obligatoires, réunions dépliables, pièces jointes, deux colonnes
+
+- **Collecte** : une réunion n'est retenue **que si son titre contient un repère** du projet. Les membres invités ne rattachent plus une réunion à un projet (c'était la règle « au moins deux membres »). Plusieurs projets reconnus dans le même titre : « à trier ». Le texte de la zone « Repères et journal du projet » dit la règle.
+- **Fil du projet** : chaque réunion est **repliée** (titre, date, origine, ce qu'elle contient) et **se déplie au clic** : résumé, participants, décisions, actions, pièces jointes, compte rendu source ; « Tout déplier » et « Tout replier » ; ce qui est déplié le reste après un rechargement.
+- **Pièces jointes** : celles de l'invitation d'agenda sont conservées sur la réunion (colonne `attachments`, https seulement, dix au plus) et s'ouvrent dans un nouvel onglet. Les réunions déjà collectées n'en ont pas (rien n'est reconstitué).
+- **Deux colonnes** : le fil du projet en haut à droite ; la synthèse du matin, les actions et les repères à gauche ; une colonne sous 980 px, le fil d'abord.
+- Tests : `test_news.js` (17), `ui_news.js` (59) ; six sabotages vérifiés.
+
 ## 0.16.0 — export et import de plusieurs projets, programmes et personnes
 
 - **Un seul format de classeur pour un ou plusieurs projets** : onglets Programmes, Projets, Personnes, Workpackages, Livrables, Jalons, Dépendances, Budget (les cinq derniers commencent par le code du projet). **Remplace** le classeur à un projet de la 0.15.4 (onglet « Projet » devenu « Projets », colonne « Projet » ajoutée) ; les contributors des jalons sont maintenant exportés.
