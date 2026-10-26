@@ -1,5 +1,5 @@
 /**
- * PPM Core 0.16.1 — fichier unique à installer (fabriqué par tools/build.js, empreinte cf4819a38084).
+ * PPM Core 0.16.2 — fichier unique à installer (fabriqué par tools/build.js, empreinte 972e69c0f2e6).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
  * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs, 53_Roles.gs, 54_Validation.gs, 55_Envelope.gs, 56_Import.gs, 57_Rights.gs, 58_ScopeBaselines.gs.
  */
@@ -47,7 +47,7 @@ function A9_MIGRER_ROLES_SIMULATION() { return migrerRoles_(true); }
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.16.1';
+var PPM_VERSION = '0.16.2';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -410,7 +410,7 @@ var SCHEMA = {
   /** La synthèse du jour publiée par le chef de projet. */
   NewsDigest: {
     book: 'data',
-    cols: ['id', 'project_id', 'digest_date', 'text', 'published_by'],
+    cols: ['id', 'project_id', 'digest_date', 'text', 'published_by', 'logo'],   // logo : celui du jour, s'il figure dans la synthèse (48_NewsText.gs)
     required: ['project_id', 'digest_date', 'text']
   },
 
@@ -10102,7 +10102,7 @@ var DEMO_ORDERS = [
  *
  *  A. Saisie manuelle d'un compte rendu (texte collé ou lien d'un Google Doc) → une réunion et ses actions.
  *  B. Journal du projet : un Google Doc consolidé (fiche projet, puis les réunions de la plus récente à la plus ancienne).
- *  C. Actualités : « prompt du jour » à copier dans NotebookLM ou Gemini, publication de la synthèse (format vérifié, mail
+ *  C. Actualités : « prompt du jour » (avec le logo du jour) à coller dans Gemini, publication de la synthèse (format vérifié, mail
  *     aux membres), carte dans l'Overview, section dans le récapitulatif du matin.
  *  D. Actions : lues sans IA dans les « prochaines étapes » nominatives, proposées à chaque personne qui les accepte,
  *     les conteste ou les déclare faites.
@@ -10247,7 +10247,7 @@ defineAction('news.get', function (p, ctx) {
     meetings: meetings.map(function (m) { var v = newsMeetingView_(m, byMeeting[m.id] || []); v.action_list = (byMeeting[m.id] || []).map(function (a) { return newsActionView_(a, names, itemsById); }); return v; }),
     actions: allActions.filter(function (a) { return NEWS_OPEN.indexOf(a.status) >= 0; })
       .sort(function (a, b) { return (String(a.due_date || '9999')).localeCompare(String(b.due_date || '9999')); }).map(function (a) { return newsActionView_(a, names, itemsById); }),
-    digest: digest ? { id: digest.id, date: digest.digest_date, text: digest.text, by: digest.published_by } : null,
+    digest: digest ? { id: digest.id, date: digest.digest_date, text: digest.text, by: digest.published_by, logo: digest.logo || '' } : null,
     triage: [], people: [], items: [], today: today
   };
   if (access.manage) {
@@ -10426,18 +10426,20 @@ defineAction('news.journal.update', function (p, ctx) {
 
 // ---------------------------------------------------------------- synthèse du jour (prompt, publication)
 
-function newsPrompt_(project, meetings, since, today) {
+function newsPrompt_(project, meetings, since, today, logo, journalUrl) {
   var L = [];
   L.push('Projet : ' + project.code + ' — ' + project.name + '.');
   L.push('Rédige la synthèse des actualités du projet depuis le ' + frDate_(since) + ' (jusqu’au ' + frDate_(today) + ').');
-  L.push('Appuie-toi uniquement sur les sources du carnet et cite-les entre parenthèses (titre de la réunion, date). N’invente rien.');
+  L.push('Appuie-toi uniquement sur le journal du projet (le Google Doc joint) et sur les réunions rappelées ci-dessous, et cite-les entre parenthèses (titre de la réunion, date). N’invente rien.');
+  if (journalUrl) L.push('Journal du projet à joindre ou à citer : ' + journalUrl);
+  if (logo) L.push('Logo du jour : ' + logo + ' — commence la synthèse par ce logo, seul sur la première ligne (il n’a pas servi pour ce projet ces ' + NEWS_LOGO_DAYS + ' derniers jours).');
   L.push('Réponds en français, en cinq sections, dans cet ordre et avec ces titres exacts :');
   NEWS_SECTIONS.forEach(function (s) { L.push(s + ' :'); });
   L.push('Section « Actions » : une ligne par action, sous la forme « Personne — action — échéance JJ/MM/AAAA — livrable concerné ».');
   L.push('Si une section est vide, écris « Rien à signaler ».');
   if (meetings.length) {
     L.push('');
-    L.push('Rappel des réunions de la période (utile si la source du carnet n’est pas à jour) :');
+    L.push('Réunions de la période :');
     meetings.slice(0, 15).forEach(function (m) {
       L.push('- ' + frDate_(m.held_on) + ' · ' + m.title + (m.summary ? ' — ' + newsClip_(m.summary, 220) : ''));
       (m.decisions || []).slice(0, 4).forEach(function (d) { L.push('    décision : ' + newsClip_(d, 160)); });
@@ -10469,7 +10471,9 @@ defineAction('news.digest.prompt', function (p, ctx) {
   repoList('NewsAction', function (a) { return a.project_id === project.id; }).forEach(function (a) { (actionsBy[a.meeting_id] = actionsBy[a.meeting_id] || []).push(newsActionView_(a, names, {})); });
   var meetings = repoList('Meeting', function (m) { return m.project_id === project.id && m.status === 'Publiée' && String(m.held_on) >= since; })
     .sort(function (a, b) { return String(a.held_on).localeCompare(String(b.held_on)); }).map(function (m) { var v = newsMeetingView_(m, []); v.actions = actionsBy[m.id] || []; return v; });
-  return { prompt: newsPrompt_(project, meetings, since, today), since: since, meetings: meetings.length };
+  var logo = newsLogoOfDay_(project.id, today, repoList('NewsDigest', function (d) { return d.project_id === project.id; }));
+  var journal = isBlank(project.news_journal_id) ? '' : 'https://docs.google.com/document/d/' + project.news_journal_id + '/edit';
+  return { prompt: newsPrompt_(project, meetings, since, today, logo, journal), since: since, meetings: meetings.length, logo: logo };
 });
 
 defineAction('news.digest.publish', function (p, ctx) {
@@ -10484,7 +10488,10 @@ defineAction('news.digest.publish', function (p, ctx) {
   var today = todayStr();
   return withLock(function () {
     repoList('NewsDigest', function (d) { return d.project_id === project.id && d.digest_date === today; }).forEach(function (d) { repoSoftDelete('NewsDigest', d.id, null, ctx.actx); });
-    var d = repoInsert('NewsDigest', { project_id: project.id, digest_date: today, text: text, published_by: ctx.email }, ctx.actx);
+    // le logo du jour ne compte comme « servi » que s'il figure dans la synthèse
+    var dayLogo = newsLogoOfDay_(project.id, today, repoList('NewsDigest', function (x) { return x.project_id === project.id; }));
+    var logoUsed = text.indexOf(dayLogo) >= 0;
+    var d = repoInsert('NewsDigest', { project_id: project.id, digest_date: today, text: text, published_by: ctx.email, logo: logoUsed ? dayLogo : '' }, ctx.actx);
     var notified = 0;
     if (p.notify !== false) {
       var base = newsBase_(), members = newsProjectMembers_(project, base);
@@ -10498,7 +10505,7 @@ defineAction('news.digest.publish', function (p, ctx) {
         if (sendMail_(String(r.email).toLowerCase(), 'Actualités ' + project.code + ' du ' + frDate_(today), body, html)) notified++;
       });
     }
-    return { id: d.id, date: today, notified: notified, found: check.found };
+    return { id: d.id, date: today, notified: notified, found: check.found, logo: dayLogo, logo_used: logoUsed };
   });
 });
 
@@ -10684,6 +10691,27 @@ function newsParseNotes_(text, ref, people) {
     decisions: buckets.decisions.map(clean).filter(function (l) { return l.length > 1; }).slice(0, 12).map(function (l) { return newsClip_(l, 300); }),
     actions: actions
   };
+}
+
+// ---------------------------------------------------------------- logo du jour
+
+/**
+ * Le logo du jour : chaque synthèse du matin commence par un logo (un émoji) qui n'a PAS servi pour ce projet depuis NEWS_LOGO_DAYS jours, pour que chaque jour ait sa marque et qu'on reconnaisse
+ * d'un coup d'œil la synthèse d'aujourd'hui. Un logo ne compte comme « servi » que si la synthèse publiée le contenait. Le choix est fait dans les logos libres, de façon stable : le même
+ * projet et le même jour donnent toujours le même logo (le prompt copié le matin et la publication le soir disent la même chose). Le catalogue compte plus de logos que de jours de la fenêtre.
+ */
+var NEWS_LOGOS = ['🛰️', '🚀', '✈️', '🛩️', '🪂', '🧭', '🗺️', '⚙️', '🔧', '🔩', '🧪', '🔬', '🔭', '📡', '💡', '🔋', '🧲', '🛠️', '📐', '📏', '🧱', '🏗️', '🏭', '🚧', '🚦', '⚓', '⛵', '🚢', '🚁', '🚂', '🚲', '🛴', '🏁', '🎯', '🧩', '♟️', '🎲', '🎨', '🎵', '🎺', '🥁', '📚', '📎', '📌', '📅', '⏱️', '⌛', '🔔', '🔑', '🔒', '💎', '🏆', '🥇', '🌟', '⭐', '☀️', '🌙', '🌈', '⛅', '❄️', '🔥', '💧', '🌊', '🌍', '🌱', '🌲', '🌳', '🌴', '🍀', '🍁', '🍂', '🌻', '🌷', '🌵', '🍎', '🍋', '🍇', '🍓', '🍒', '🥑', '🥕', '🌽', '🍄', '🐝', '🦋', '🐞', '🐢', '🐬', '🐳', '🦉', '🦅', '🦆', '🐧', '🦊', '🐺', '🦁', '🐯', '🐻', '🐼', '🐨', '🦒', '🐘', '🦏', '🐪', '🦘', '🦔', '🐿️', '🐇', '🦜', '🦚', '🦩', '🐙', '🦀', '🐠', '🦈', '🐚', '🏔️', '🏝️', '🌋', '⛰️', '🗻', '🏛️', '🏰', '🗼', '🎡', '🎢', '⛲', '🧊', '🪁', '🪐', '☄️', '🌠'];
+var NEWS_LOGO_DAYS = 100;
+function newsLogoOfDay_(projectId, today, digests) {
+  var since = addCalendarDays(today, -NEWS_LOGO_DAYS), used = {};
+  (digests || []).forEach(function (d) {
+    if (d.project_id === projectId && !isTrue(d.deleted) && d.logo && String(d.digest_date) >= since && String(d.digest_date) < today) used[d.logo] = true;
+  });
+  var free = NEWS_LOGOS.filter(function (l) { return !used[l]; });
+  if (!free.length) free = NEWS_LOGOS.slice();
+  var h = 0, key = projectId + '|' + today;
+  for (var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return free[h % free.length];
 }
 
 // ---------------------------------------------------------------- rattachement d'une réunion à un projet

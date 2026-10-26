@@ -1,5 +1,12 @@
 # Journal des versions
 
+## 0.16.2 — synthèses par Gemini, logo du jour, fil du projet à gauche, rubriques condensées
+
+- **Gemini seul** : la synthèse du matin est rédigée directement par Gemini. Plus aucune mention de NotebookLM ni de carnet (prompt, page, documentation) ; le prompt demande de s'appuyer sur le journal du projet (Google Doc à joindre, son lien est dans le prompt) et sur les réunions de la période.
+- **Logo du jour** : le prompt demande de commencer la synthèse par un logo (émoji) pris dans un catalogue de 132, **qui n'a pas servi pour ce projet ces 100 derniers jours** ; choix stable (même projet, même jour : même logo), colonne `NewsDigest.logo` ; un logo ne compte comme servi que s'il figure dans la synthèse publiée ; affiché en tête de la synthèse.
+- **Disposition** : le fil du projet passe **à gauche** (la colonne principale). À droite, la synthèse du matin, les actions, les réunions à trier, l'ajout d'un compte rendu et les repères sont **repliés sur une ligne de résumé** (« 15 ouvertes · 2 en retard », « collecte active · 2 repères »…) et **s'ouvrent seuls quand il y a quelque chose à faire** : synthèse du jour pas encore publiée, action en retard ou à accepter, réunions à trier, collecte à régler. Le choix de la personne est gardé tant que la page reste ouverte.
+- Tests : `test_news.js` (18, dont le logo : frontière des 100 jours, synthèse supprimée, projets indépendants), `ui_news.js` (71) ; dix sabotages vérifiés.
+
 ## 0.16.1 — page Actualités : repères obligatoires, réunions dépliables, pièces jointes, deux colonnes
 
 - **Collecte** : une réunion n'est retenue **que si son titre contient un repère** du projet. Les membres invités ne rattachent plus une réunion à un projet (c'était la règle « au moins deux membres »). Plusieurs projets reconnus dans le même titre : « à trier ». Le texte de la zone « Repères et journal du projet » dit la règle.

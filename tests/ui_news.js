@@ -83,11 +83,26 @@ function openPage(user, file, view) {
   await p.until(() => /déjà dans le fil/.test(p.text('toast')));
   check(p.doc.querySelectorAll('#panel-feed .meeting').length === 1, 'le même compte rendu n’est pas ajouté deux fois');
 
-  // ---------------------------------------------------------------- disposition en colonnes : le fil du projet à droite, en premier dans le code
+  // ---------------------------------------------------------------- disposition : le fil du projet à gauche, le reste en sections repliables à droite
   const cols = p.$('news-cols'), main = p.$('news-main'), side = p.$('news-side');
+  const css = [...p.doc.querySelectorAll('style')].map((x) => x.textContent).join('\n');
   check(cols && cols.firstElementChild === main && cols.lastElementChild === side, 'deux colonnes ; la colonne du fil du projet vient d’abord dans le code (donc en premier sur téléphone)');
-  check(main.contains(p.$('zone-feed')) && main.contains(p.$('panel-feed')) && side.contains(p.$('zone-digest')) && side.contains(p.$('zone-actions')) && side.contains(p.$('zone-settings')), 'le fil du projet est dans la colonne principale ; la synthèse, les actions et les repères dans l’autre');
-  check(/\.news-cols \{[^}]*flex-direction: row-reverse/.test([...p.doc.querySelectorAll('style')].map((x) => x.textContent).join('\n')) && /@media \(max-width: 980px\)[^{]*\{[^}]*\.news-cols \{[^}]*flex-direction: column/.test([...p.doc.querySelectorAll('style')].map((x) => x.textContent).join('\n')), 'la colonne du fil est à droite sur grand écran ; une seule colonne sous 980 px');
+  check(main.contains(p.$('zone-feed')) && main.contains(p.$('panel-feed')) && !main.contains(p.$('zone-digest')) && ['digest', 'actions', 'triage', 'add', 'settings'].every((z) => side.contains(p.$('zone-' + z)) && side.contains(p.$('panel-' + z))), 'le fil du projet est seul dans la colonne principale ; la synthèse, les actions, les réunions à trier, l’ajout et les repères sont dans l’autre');
+  check(/\.news-cols \{[^}]*flex-direction: row;/.test(css) && !/row-reverse/.test(css) && /@media \(max-width: 980px\)[^{]*\{[^}]*\.news-cols \{[^}]*flex-direction: column/.test(css), 'le fil est à GAUCHE sur grand écran (plus de colonne inversée) ; une seule colonne sous 980 px');
+  const sec = (n) => ({ btn: p.$('toggle-' + n), panel: p.$('panel-' + n), open: p.$('toggle-' + n).getAttribute('aria-expanded') === 'true', sum: p.text('sum-' + n) });
+  check(['digest', 'actions', 'triage', 'add', 'settings'].every((n) => sec(n).btn.getAttribute('aria-controls') === 'panel-' + n && sec(n).open === !sec(n).panel.classList.contains('collapsed')), 'chaque section est un bouton lié à son contenu : l’état déplié et le contenu replié ne se contredisent jamais');
+  check(sec('actions').open && /ouvertes/.test(sec('actions').sum) && /pour moi/.test(sec('actions').sum) && sec('actions').btn.classList.contains('needs'), 'des actions m’attendent (à accepter) : la section s’ouvre toute seule et le résumé le dit : ' + sec('actions').sum);
+  check(!sec('add').open && sec('add').panel.classList.contains('collapsed') && sec('add').sum === '', 'l’ajout d’un compte rendu reste replié tant qu’on n’en a pas besoin');
+  check(sec('digest').open && /aucune publiée/.test(sec('digest').sum) && sec('digest').btn.classList.contains('needs'), 'le chef de projet n’a pas encore publié la synthèse du jour : la section est ouverte, « aucune publiée »');
+  check(sec('settings').open && /collecte non activée/.test(sec('settings').sum), 'collecte pas encore réglée : la section des repères est ouverte : ' + sec('settings').sum);
+  p.click(p.$('toggle-add'));
+  check(sec('add').open && !sec('add').panel.classList.contains('collapsed') && p.$('toggle-add').querySelector('.chev').textContent === '▾', 'un clic ouvre la section');
+  p.click(p.$('toggle-actions'));
+  check(!sec('actions').open && sec('actions').panel.classList.contains('collapsed'), 'et un clic ferme même une section ouverte d’office');
+  await p.win.__ppm.load();
+  await p.until(() => p.$('toggle-add').getAttribute('aria-expanded') === 'true');
+  check(sec('add').open && !sec('actions').open, 'le choix de la personne est gardé quand la page se recharge');
+  p.click(p.$('toggle-add'));
   check(/Sans repère dans le titre, une réunion n’est jamais collectée/.test(p.text('panel-settings')) && /une réunion n’est collectée que si son titre contient un de ces mots/.test(p.text('panel-settings')) && !/au moins deux membres/.test(p.text('panel-settings')), 'la zone des repères dit la règle : pas de repère dans le titre, pas de collecte, même avec des membres invités');
 
   // ---------------------------------------------------------------- réunions du fil : repliées, dépliées au clic, avec leurs pièces jointes
@@ -157,6 +172,9 @@ function openPage(user, file, view) {
   p.click(p.$('prompt-copy'));
   await p.until(() => p.copied.length === 1);
   check(p.copied[0] === p.$('prompt-text').value, 'copié dans le presse-papiers');
+  const dayLogo = (/Logo du jour : (\S+) — commence la synthèse/.exec(p.$('prompt-text').value) || [])[1];
+  check(!!dayLogo && c.NEWS_LOGOS.includes(dayLogo) && p.text('prompt-note').indexOf('Logo du jour : ' + dayLogo) >= 0, 'le prompt contient le logo du jour et la fenêtre le rappelle : ' + dayLogo);
+  check(/Gemini/.test(p.text('prompt-note')) && !/NotebookLM|carnet/i.test(p.doc.documentElement.textContent), 'la page ne parle plus de NotebookLM : elle renvoie à Gemini');
   p.click(p.$('prompt-close'));
   p.click(p.$('publish-btn'));
   await p.until(() => p.$('publish-dialog').open);
@@ -169,6 +187,15 @@ function openPage(user, file, view) {
   p.$('publish-form').dispatchEvent(new p.win.Event('submit', { cancelable: true }));
   await p.until(() => !p.$('publish-dialog').open && p.$('digest-text'));
   check(/Décisions : le plan d’essais est validé/.test(p.text('digest-text')) && /publiée aujourd’hui|pas celle d’aujourd’hui/.test(p.text('panel-digest')), 'la synthèse publiée s’affiche');
+  check(!p.$('digest-logo') && /ne figure pas dans la synthèse/.test(p.text('toast')) && /publiée aujourd’hui/.test(p.text('sum-digest')) && !p.$('toggle-digest').classList.contains('needs'), 'sans le logo du jour dans le texte : le message le dit, aucun logo n’est affiché ; la synthèse du jour est publiée, la section n’a plus rien à demander');
+  // republier avec le logo du jour : il s'affiche en tête de la synthèse
+  p.click(p.$('publish-btn'));
+  await p.until(() => p.$('publish-dialog').open);
+  p.$('publish-notify').checked = false;   // pas de nouveaux mails : la publication précédente a déjà prévenu les membres
+  p.$('publish-text').value = dayLogo + '\nDécisions : le plan d’essais est validé.\nDates qui bougent : rien.\nRisques : retard fournisseur.\nBlocages : aucun.\nActions : Carla — planning — 02/11/2026';
+  p.$('publish-form').dispatchEvent(new p.win.Event('submit', { cancelable: true }));
+  await p.until(() => !p.$('publish-dialog').open && p.$('digest-logo'));
+  check(p.text('digest-logo') === dayLogo && !/ne figure pas/.test(p.text('toast')), 'avec le logo du jour dans la synthèse : il s’affiche en tête de la synthèse');
   check(c.SENT_MAILS.length === 3, 'trois mails partis (chef de projet, DPL, Workpackage leader : ceux qui peuvent lire les comptes rendus) : ' + c.SENT_MAILS.length);
 
   // ---------------------------------------------------------------- repères et journal

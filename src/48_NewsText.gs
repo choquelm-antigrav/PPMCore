@@ -138,6 +138,27 @@ function newsParseNotes_(text, ref, people) {
   };
 }
 
+// ---------------------------------------------------------------- logo du jour
+
+/**
+ * Le logo du jour : chaque synthèse du matin commence par un logo (un émoji) qui n'a PAS servi pour ce projet depuis NEWS_LOGO_DAYS jours, pour que chaque jour ait sa marque et qu'on reconnaisse
+ * d'un coup d'œil la synthèse d'aujourd'hui. Un logo ne compte comme « servi » que si la synthèse publiée le contenait. Le choix est fait dans les logos libres, de façon stable : le même
+ * projet et le même jour donnent toujours le même logo (le prompt copié le matin et la publication le soir disent la même chose). Le catalogue compte plus de logos que de jours de la fenêtre.
+ */
+var NEWS_LOGOS = ['🛰️', '🚀', '✈️', '🛩️', '🪂', '🧭', '🗺️', '⚙️', '🔧', '🔩', '🧪', '🔬', '🔭', '📡', '💡', '🔋', '🧲', '🛠️', '📐', '📏', '🧱', '🏗️', '🏭', '🚧', '🚦', '⚓', '⛵', '🚢', '🚁', '🚂', '🚲', '🛴', '🏁', '🎯', '🧩', '♟️', '🎲', '🎨', '🎵', '🎺', '🥁', '📚', '📎', '📌', '📅', '⏱️', '⌛', '🔔', '🔑', '🔒', '💎', '🏆', '🥇', '🌟', '⭐', '☀️', '🌙', '🌈', '⛅', '❄️', '🔥', '💧', '🌊', '🌍', '🌱', '🌲', '🌳', '🌴', '🍀', '🍁', '🍂', '🌻', '🌷', '🌵', '🍎', '🍋', '🍇', '🍓', '🍒', '🥑', '🥕', '🌽', '🍄', '🐝', '🦋', '🐞', '🐢', '🐬', '🐳', '🦉', '🦅', '🦆', '🐧', '🦊', '🐺', '🦁', '🐯', '🐻', '🐼', '🐨', '🦒', '🐘', '🦏', '🐪', '🦘', '🦔', '🐿️', '🐇', '🦜', '🦚', '🦩', '🐙', '🦀', '🐠', '🦈', '🐚', '🏔️', '🏝️', '🌋', '⛰️', '🗻', '🏛️', '🏰', '🗼', '🎡', '🎢', '⛲', '🧊', '🪁', '🪐', '☄️', '🌠'];
+var NEWS_LOGO_DAYS = 100;
+function newsLogoOfDay_(projectId, today, digests) {
+  var since = addCalendarDays(today, -NEWS_LOGO_DAYS), used = {};
+  (digests || []).forEach(function (d) {
+    if (d.project_id === projectId && !isTrue(d.deleted) && d.logo && String(d.digest_date) >= since && String(d.digest_date) < today) used[d.logo] = true;
+  });
+  var free = NEWS_LOGOS.filter(function (l) { return !used[l]; });
+  if (!free.length) free = NEWS_LOGOS.slice();
+  var h = 0, key = projectId + '|' + today;
+  for (var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return free[h % free.length];
+}
+
 // ---------------------------------------------------------------- rattachement d'une réunion à un projet
 
 /** Mots qui désignent un projet dans un titre : séparés par virgule, point-virgule ou ligne ; un seul caractère seulement s'il n'est pas alphanumérique (logo). */

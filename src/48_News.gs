@@ -3,7 +3,7 @@
  *
  *  A. Saisie manuelle d'un compte rendu (texte collé ou lien d'un Google Doc) → une réunion et ses actions.
  *  B. Journal du projet : un Google Doc consolidé (fiche projet, puis les réunions de la plus récente à la plus ancienne).
- *  C. Actualités : « prompt du jour » à copier dans NotebookLM ou Gemini, publication de la synthèse (format vérifié, mail
+ *  C. Actualités : « prompt du jour » (avec le logo du jour) à coller dans Gemini, publication de la synthèse (format vérifié, mail
  *     aux membres), carte dans l'Overview, section dans le récapitulatif du matin.
  *  D. Actions : lues sans IA dans les « prochaines étapes » nominatives, proposées à chaque personne qui les accepte,
  *     les conteste ou les déclare faites.
@@ -148,7 +148,7 @@ defineAction('news.get', function (p, ctx) {
     meetings: meetings.map(function (m) { var v = newsMeetingView_(m, byMeeting[m.id] || []); v.action_list = (byMeeting[m.id] || []).map(function (a) { return newsActionView_(a, names, itemsById); }); return v; }),
     actions: allActions.filter(function (a) { return NEWS_OPEN.indexOf(a.status) >= 0; })
       .sort(function (a, b) { return (String(a.due_date || '9999')).localeCompare(String(b.due_date || '9999')); }).map(function (a) { return newsActionView_(a, names, itemsById); }),
-    digest: digest ? { id: digest.id, date: digest.digest_date, text: digest.text, by: digest.published_by } : null,
+    digest: digest ? { id: digest.id, date: digest.digest_date, text: digest.text, by: digest.published_by, logo: digest.logo || '' } : null,
     triage: [], people: [], items: [], today: today
   };
   if (access.manage) {
@@ -327,18 +327,20 @@ defineAction('news.journal.update', function (p, ctx) {
 
 // ---------------------------------------------------------------- synthèse du jour (prompt, publication)
 
-function newsPrompt_(project, meetings, since, today) {
+function newsPrompt_(project, meetings, since, today, logo, journalUrl) {
   var L = [];
   L.push('Projet : ' + project.code + ' — ' + project.name + '.');
   L.push('Rédige la synthèse des actualités du projet depuis le ' + frDate_(since) + ' (jusqu’au ' + frDate_(today) + ').');
-  L.push('Appuie-toi uniquement sur les sources du carnet et cite-les entre parenthèses (titre de la réunion, date). N’invente rien.');
+  L.push('Appuie-toi uniquement sur le journal du projet (le Google Doc joint) et sur les réunions rappelées ci-dessous, et cite-les entre parenthèses (titre de la réunion, date). N’invente rien.');
+  if (journalUrl) L.push('Journal du projet à joindre ou à citer : ' + journalUrl);
+  if (logo) L.push('Logo du jour : ' + logo + ' — commence la synthèse par ce logo, seul sur la première ligne (il n’a pas servi pour ce projet ces ' + NEWS_LOGO_DAYS + ' derniers jours).');
   L.push('Réponds en français, en cinq sections, dans cet ordre et avec ces titres exacts :');
   NEWS_SECTIONS.forEach(function (s) { L.push(s + ' :'); });
   L.push('Section « Actions » : une ligne par action, sous la forme « Personne — action — échéance JJ/MM/AAAA — livrable concerné ».');
   L.push('Si une section est vide, écris « Rien à signaler ».');
   if (meetings.length) {
     L.push('');
-    L.push('Rappel des réunions de la période (utile si la source du carnet n’est pas à jour) :');
+    L.push('Réunions de la période :');
     meetings.slice(0, 15).forEach(function (m) {
       L.push('- ' + frDate_(m.held_on) + ' · ' + m.title + (m.summary ? ' — ' + newsClip_(m.summary, 220) : ''));
       (m.decisions || []).slice(0, 4).forEach(function (d) { L.push('    décision : ' + newsClip_(d, 160)); });
@@ -370,7 +372,9 @@ defineAction('news.digest.prompt', function (p, ctx) {
   repoList('NewsAction', function (a) { return a.project_id === project.id; }).forEach(function (a) { (actionsBy[a.meeting_id] = actionsBy[a.meeting_id] || []).push(newsActionView_(a, names, {})); });
   var meetings = repoList('Meeting', function (m) { return m.project_id === project.id && m.status === 'Publiée' && String(m.held_on) >= since; })
     .sort(function (a, b) { return String(a.held_on).localeCompare(String(b.held_on)); }).map(function (m) { var v = newsMeetingView_(m, []); v.actions = actionsBy[m.id] || []; return v; });
-  return { prompt: newsPrompt_(project, meetings, since, today), since: since, meetings: meetings.length };
+  var logo = newsLogoOfDay_(project.id, today, repoList('NewsDigest', function (d) { return d.project_id === project.id; }));
+  var journal = isBlank(project.news_journal_id) ? '' : 'https://docs.google.com/document/d/' + project.news_journal_id + '/edit';
+  return { prompt: newsPrompt_(project, meetings, since, today, logo, journal), since: since, meetings: meetings.length, logo: logo };
 });
 
 defineAction('news.digest.publish', function (p, ctx) {
@@ -385,7 +389,10 @@ defineAction('news.digest.publish', function (p, ctx) {
   var today = todayStr();
   return withLock(function () {
     repoList('NewsDigest', function (d) { return d.project_id === project.id && d.digest_date === today; }).forEach(function (d) { repoSoftDelete('NewsDigest', d.id, null, ctx.actx); });
-    var d = repoInsert('NewsDigest', { project_id: project.id, digest_date: today, text: text, published_by: ctx.email }, ctx.actx);
+    // le logo du jour ne compte comme « servi » que s'il figure dans la synthèse
+    var dayLogo = newsLogoOfDay_(project.id, today, repoList('NewsDigest', function (x) { return x.project_id === project.id; }));
+    var logoUsed = text.indexOf(dayLogo) >= 0;
+    var d = repoInsert('NewsDigest', { project_id: project.id, digest_date: today, text: text, published_by: ctx.email, logo: logoUsed ? dayLogo : '' }, ctx.actx);
     var notified = 0;
     if (p.notify !== false) {
       var base = newsBase_(), members = newsProjectMembers_(project, base);
@@ -399,7 +406,7 @@ defineAction('news.digest.publish', function (p, ctx) {
         if (sendMail_(String(r.email).toLowerCase(), 'Actualités ' + project.code + ' du ' + frDate_(today), body, html)) notified++;
       });
     }
-    return { id: d.id, date: today, notified: notified, found: check.found };
+    return { id: d.id, date: today, notified: notified, found: check.found, logo: dayLogo, logo_used: logoUsed };
   });
 });
 

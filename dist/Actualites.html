@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.16.1">
+<meta name="ppm-version" content="0.16.2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -482,15 +482,26 @@
   dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
   .form-grid { display: grid; gap: 10px; }
   label.lbl { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
-  /* deux colonnes : le fil du projet (le plus important) à droite et en premier ; sur téléphone, une seule colonne, le fil d'abord */
-  .news-cols { display: flex; flex-direction: row-reverse; align-items: flex-start; gap: 0 28px; max-width: 1560px; margin: 0 auto; padding: 0 24px 32px; }
-  .news-main { flex: 7 1 0; min-width: 0; }
-  .news-side { flex: 5 1 0; min-width: 0; }
-  .news-cols .panel { padding: 0 0 20px; max-width: none; }
+  /* deux colonnes : le fil du projet (le plus important) à gauche ; le reste à droite, en sections repliées qui s'ouvrent seules quand il y a quelque chose à faire ; sur téléphone, une colonne, le fil d'abord */
+  .news-cols { display: flex; flex-direction: row; align-items: flex-start; gap: 0 28px; max-width: 1560px; margin: 0 auto; padding: 0 24px 32px; }
+  .news-main { flex: 3 1 0; min-width: 0; }
+  .news-side { flex: 2 1 0; min-width: 0; }
+  .news-cols .panel { padding: 0 0 12px; max-width: none; }
   .news-cols h2.sec { margin: 20px 0 10px; }
+  .news-side h2.sec { margin: 10px 0 4px; }
+  .news-side h2.sec::before { content: none; }   /* pas de trait décoratif devant les sections repliables */
   .news-cols .box { padding: 12px 14px; margin-bottom: 10px; }
   .news-cols .table-wrap { overflow-x: auto; }
   .news-cols #actions-table th, .news-cols #actions-table td { padding: 6px 8px; font-size: 13.5px; }
+  .panel.collapsed { display: none; }
+  .sec-toggle { display: flex; align-items: baseline; gap: 8px; width: 100%; margin: 0; padding: 8px 10px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--surface); color: inherit; font: inherit; font-size: 15px; font-weight: 600; text-align: left; cursor: pointer; }
+  .sec-toggle:hover { border-color: var(--muted); }
+  .sec-toggle:focus-visible { outline: 2px solid var(--accent, #1f6feb); outline-offset: 2px; }
+  .sec-toggle .chev { flex: none; width: 14px; color: var(--muted); }
+  .sec-toggle .sec-sum { margin-left: auto; font-size: 13px; font-weight: 400; color: var(--muted); text-align: right; }
+  .sec-toggle.needs .sec-sum { color: var(--warn-ink, #8a5a00); font-weight: 600; }
+  .news-side .panel:not(.collapsed) { padding-top: 8px; }
+  .digest-head .logo { font-size: 22px; line-height: 1; }
   /* une réunion du fil : repliée par défaut, un clic sur son titre la déplie */
   .meeting h3 { margin: 0; }
   .meeting-head { display: flex; align-items: baseline; gap: 8px; width: 100%; margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; font-size: 15.5px; font-weight: 600; text-align: left; cursor: pointer; }
@@ -501,7 +512,7 @@
   .meeting ul.attach { list-style: none; margin: 4px 0; padding: 0; }
   .meeting ul.attach li { margin: 3px 0; }
   .feed-tools { display: flex; gap: 8px; margin: 0 0 8px; }
-  @media (max-width: 980px) { .news-cols { flex-direction: column; padding: 0 12px 24px; gap: 0; } .news-main, .news-side { flex: none; width: 100%; } }
+  @media (max-width: 980px) { .news-cols { flex-direction: column; padding: 0 12px 24px; gap: 0; } .news-main, .news-side { flex: none; width: 100%; } .news-side h2.sec { margin: 8px 0 4px; } }
   @media (max-width: 700px) { .panel { padding: 8px 12px 24px; } .ed-row2 { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -691,28 +702,28 @@
   <div class="news-main" id="news-main">
     <div class="zone" id="zone-feed"><h2 class="sec">Fil du projet</h2></div>
     <section class="panel" id="panel-feed" aria-label="Réunions"></section>
-
-    <div class="zone" id="zone-triage" hidden><h2 class="sec">Réunions à trier</h2></div>
-    <section class="panel" id="panel-triage" aria-label="Réunions à trier" hidden></section>
-
-    <div class="zone" id="zone-add" hidden><h2 class="sec">Ajouter un compte rendu</h2></div>
-    <section class="panel" id="panel-add" aria-label="Ajouter un compte rendu" hidden></section>
   </div>
   <div class="news-side" id="news-side">
-    <div class="zone" id="zone-digest"><h2 class="sec">Synthèse du matin</h2></div>
+    <div class="zone" id="zone-digest"><h2 class="sec"><button type="button" class="sec-toggle" id="toggle-digest" aria-expanded="false" aria-controls="panel-digest"><span class="chev" aria-hidden="true">▸</span><span class="sec-title">Synthèse du matin</span><span class="sec-sum" id="sum-digest"></span></button></h2></div>
     <section class="panel" id="panel-digest" aria-label="Synthèse du matin"></section>
 
-    <div class="zone" id="zone-actions"><h2 class="sec">Actions issues des réunions</h2></div>
-    <section class="panel" id="panel-actions" aria-label="Actions"></section>
+    <div class="zone" id="zone-actions"><h2 class="sec"><button type="button" class="sec-toggle" id="toggle-actions" aria-expanded="false" aria-controls="panel-actions"><span class="chev" aria-hidden="true">▸</span><span class="sec-title">Actions issues des réunions</span><span class="sec-sum" id="sum-actions"></span></button></h2></div>
+    <section class="panel" id="panel-actions" aria-label="Actions issues des réunions"></section>
 
-    <div class="zone" id="zone-settings" hidden><h2 class="sec">Repères et journal du projet</h2></div>
-    <section class="panel" id="panel-settings" aria-label="Repères et journal" hidden></section>
+    <div class="zone" id="zone-triage" hidden><h2 class="sec"><button type="button" class="sec-toggle" id="toggle-triage" aria-expanded="false" aria-controls="panel-triage"><span class="chev" aria-hidden="true">▸</span><span class="sec-title">Réunions à trier</span><span class="sec-sum" id="sum-triage"></span></button></h2></div>
+    <section class="panel" id="panel-triage" aria-label="Réunions à trier" hidden></section>
+
+    <div class="zone" id="zone-add" hidden><h2 class="sec"><button type="button" class="sec-toggle" id="toggle-add" aria-expanded="false" aria-controls="panel-add"><span class="chev" aria-hidden="true">▸</span><span class="sec-title">Ajouter un compte rendu</span><span class="sec-sum" id="sum-add"></span></button></h2></div>
+    <section class="panel" id="panel-add" aria-label="Ajouter un compte rendu" hidden></section>
+
+    <div class="zone" id="zone-settings" hidden><h2 class="sec"><button type="button" class="sec-toggle" id="toggle-settings" aria-expanded="false" aria-controls="panel-settings"><span class="chev" aria-hidden="true">▸</span><span class="sec-title">Repères et journal du projet</span><span class="sec-sum" id="sum-settings"></span></button></h2></div>
+    <section class="panel" id="panel-settings" aria-label="Repères et journal du projet" hidden></section>
   </div>
 </div>
 
 <dialog id="prompt-dialog" aria-labelledby="prompt-title">
   <h2 id="prompt-title">Prompt du jour</h2>
-  <p class="note" id="prompt-note">Copiez ce texte, collez-le dans le carnet NotebookLM du projet (ou dans Gemini), puis revenez publier la réponse.</p>
+  <p class="note" id="prompt-note">Copiez ce texte et collez-le dans Gemini : il rédige la synthèse du matin. Revenez ensuite la publier ici.</p>
   <div class="ed-grid"><textarea id="prompt-text" class="big mono" readonly aria-label="Prompt du jour"></textarea></div>
   <div class="actions">
     <button type="button" class="btn" id="prompt-close">Fermer</button>
@@ -723,7 +734,7 @@
 <dialog id="publish-dialog" aria-labelledby="publish-title">
   <form id="publish-form" novalidate>
     <h2 id="publish-title">Publier les actualités</h2>
-    <p class="note">Collez la réponse de NotebookLM ou de Gemini. PPM vérifie les sections (décisions, dates qui bougent, risques, blocages, actions), la publie et prévient les membres du projet par mail.</p>
+    <p class="note">Collez la réponse de Gemini. PPM vérifie les sections (décisions, dates qui bougent, risques, blocages, actions), la publie et prévient les membres du projet par mail.</p>
     <div class="ed-grid"><textarea id="publish-text" class="big" aria-label="Synthèse à publier" placeholder="Décisions :&#10;…"></textarea>
       <label class="lbl" style="grid-auto-flow:column;justify-content:start;align-items:center;gap:8px"><input type="checkbox" id="publish-notify" checked style="width:auto"> Envoyer aussi par mail aux membres du projet</label></div>
     <p class="ed-error" id="publish-error" role="alert" hidden></p>
@@ -756,7 +767,7 @@ var BOOT = <?!= boot ?>;
   'use strict';
   var el = ppm.el, clear = ppm.clear, uuid = ppm.uuid, plural = ppm.plural, toast = ppm.toast, call = ppm.call, openDialog = ppm.openDialog, closeDialog = ppm.closeDialog, frDate = ppm.frDate;
 
-  var state = { projectId: '', data: null, catalog: null, mineOnly: false, seq: 0, open: {} };
+  var state = { projectId: '', data: null, catalog: null, mineOnly: false, seq: 0, open: {}, sections: {} };
   var $ = function (id) { return document.getElementById(id); };
   var STATUS_TONE = { 'Proposée': 'warn', 'Acceptée': '', 'Contestée': 'alert', 'Faite': 'ok' };
 
@@ -778,6 +789,7 @@ var BOOT = <?!= boot ?>;
     if (d.digest) {
       var late = d.digest.date !== d.today;
       card.appendChild(el('div', { class: 'digest-head' }, [
+        d.digest.logo ? el('span', { class: 'logo', id: 'digest-logo', title: 'Logo du jour', text: d.digest.logo }) : null,
         el('strong', { text: 'Synthèse du ' + frDate(d.digest.date) }),
         el('span', { class: 'badge' + (late ? ' warn' : ' ok'), text: late ? 'pas celle d’aujourd’hui' : 'publiée aujourd’hui' }),
         el('span', { class: 'muted', text: 'par ' + (d.digest.by || '—') })
@@ -791,14 +803,14 @@ var BOOT = <?!= boot ?>;
         el('button', { type: 'button', class: 'btn', id: 'prompt-btn', text: 'Copier le prompt du jour', onclick: showPrompt }),
         el('button', { type: 'button', class: 'btn primary', id: 'publish-btn', text: 'Publier les actualités', onclick: function () { $('publish-error').hidden = true; $('publish-text').value = ''; openDialog($('publish-dialog')); } })
       ]));
-      card.appendChild(el('p', { class: 'note', text: 'Chaque matin : resynchroniser la source du journal dans NotebookLM, coller le prompt du jour, puis publier la réponse ici (environ trois minutes).' }));
+      card.appendChild(el('p', { class: 'note', text: 'Chaque matin : copier le prompt du jour, le coller dans Gemini (avec le journal du projet en pièce jointe), puis publier ici sa réponse (environ trois minutes).' }));
     }
     box.appendChild(card);
   }
   function showPrompt() {
     call('news.digest.prompt', { projectId: state.projectId }).then(function (r) {
       $('prompt-text').value = r.prompt;
-      $('prompt-note').textContent = 'Copiez ce texte, collez-le dans le carnet NotebookLM du projet (ou dans Gemini), puis revenez publier la réponse. ' + plural(r.meetings, 'réunion', 'réunions') + ' depuis le ' + frDate(r.since) + '.';
+      $('prompt-note').textContent = 'Copiez ce texte et collez-le dans Gemini : il rédige la synthèse du matin. Revenez ensuite la publier ici. ' + plural(r.meetings, 'réunion', 'réunions') + ' depuis le ' + frDate(r.since) + '. Logo du jour : ' + r.logo + '.';
       openDialog($('prompt-dialog'));
     }).catch(fail);
   }
@@ -814,7 +826,7 @@ var BOOT = <?!= boot ?>;
     $('publish-ok').disabled = true;
     call('news.digest.publish', { projectId: state.projectId, text: $('publish-text').value, notify: $('publish-notify').checked }, true).then(function (r) {
       closeDialog($('publish-dialog'));
-      toast('Actualités publiées' + (r.notified ? ' et envoyées à ' + plural(r.notified, 'personne', 'personnes') : '') + '.');
+      toast('Actualités publiées' + (r.notified ? ' et envoyées à ' + plural(r.notified, 'personne', 'personnes') : '') + '.' + (r.logo_used ? '' : ' Le logo du jour (' + r.logo + ') ne figure pas dans la synthèse : il reste disponible.'));
       return load();
     }).catch(function (x) { err.textContent = ppmErrorText(x); err.hidden = false; }).then(function () { $('publish-ok').disabled = false; });
   }
@@ -1013,10 +1025,44 @@ var BOOT = <?!= boot ?>;
     ]));
     var jl = el('div', { class: 'box' });
     jl.appendChild(el('strong', { text: 'Journal du projet' }));
-    jl.appendChild(el('p', { class: 'note', id: 'journal-note' }, [d.project.journal_url ? el('span', {}, ['Un Google Doc tenu à jour par PPM, à ajouter comme source du carnet NotebookLM : ', el('a', { href: d.project.journal_url, target: '_blank', rel: 'noopener', id: 'journal-link', text: 'ouvrir le journal' }), '.']) : 'Pas encore créé : il se crée à la première collecte, ou tout de suite avec le bouton ci-dessous.']));
+    jl.appendChild(el('p', { class: 'note', id: 'journal-note' }, [d.project.journal_url ? el('span', {}, ['Un Google Doc tenu à jour par PPM, à joindre à Gemini avec le prompt du jour : ', el('a', { href: d.project.journal_url, target: '_blank', rel: 'noopener', id: 'journal-link', text: 'ouvrir le journal' }), '.']) : 'Pas encore créé : il se crée à la première collecte, ou tout de suite avec le bouton ci-dessous.']));
     jl.appendChild(el('div', { class: 'row', style: 'margin-top:10px' }, [el('button', { type: 'button', class: 'btn', id: 'journal-btn', text: 'Mettre à jour le journal maintenant', onclick: function () {
       call('news.journal.update', { projectId: state.projectId }, true).then(function (r) { toast('Journal ' + (r.created ? 'créé' : 'mis à jour') + ' : ' + plural(r.meetings, 'réunion', 'réunions') + '.'); return load(); }).catch(fail); } })]));
     box.appendChild(jl);
+  }
+
+  // ------------------------------------------------------------ sections repliables
+  /**
+   * Le fil du projet est toujours là ; le reste est replié sur une ligne de résumé et s'ouvre tout seul quand il y a quelque chose à faire (synthèse du jour à publier, action en retard ou
+   * à accepter, réunions à trier, collecte à régler). Un clic ouvre ou ferme une section, et ce choix est gardé tant que la page reste ouverte.
+   */
+  function applySection(name, summary, needs) {
+    var btn = $('toggle-' + name), panel = $('panel-' + name);
+    var open = name in state.sections ? state.sections[name] : !!needs;
+    $('sum-' + name).textContent = summary;
+    btn.classList.toggle('needs', !!needs);
+    btn.setAttribute('aria-expanded', String(open));
+    btn.querySelector('.chev').textContent = open ? '▾' : '▸';
+    panel.classList.toggle('collapsed', !open);
+  }
+  function toggleSection(name) {
+    var btn = $('toggle-' + name), open = btn.getAttribute('aria-expanded') !== 'true';
+    state.sections[name] = open;
+    btn.setAttribute('aria-expanded', String(open));
+    btn.querySelector('.chev').textContent = open ? '▾' : '▸';
+    $('panel-' + name).classList.toggle('collapsed', !open);
+  }
+  function renderSections() {
+    var d = state.data, me = d.me || '';
+    var late = d.actions.filter(function (x) { return x.due_date && x.due_date < d.today; }).length;
+    var mineTodo = me ? d.actions.filter(function (x) { return x.owner_id === me && (x.status === 'Proposée' || x.status === 'Contestée'); }).length : 0;
+    var kw = String(d.project.keywords || '').split(/[,;\n]+/).filter(function (k) { return k.trim(); }).length;
+    var today = !!d.digest && d.digest.date === d.today;
+    applySection('digest', d.digest ? (today ? 'publiée aujourd’hui' : 'du ' + frDate(d.digest.date) + ' · pas celle d’aujourd’hui') : 'aucune publiée', d.access.manage && !today);
+    applySection('actions', d.actions.length ? plural(d.actions.length, 'ouverte', 'ouvertes') + (late ? ' · ' + late + ' en retard' : '') + (mineTodo ? ' · ' + mineTodo + ' pour moi' : '') : 'aucune', late > 0 || mineTodo > 0);
+    applySection('triage', d.triage.length ? plural(d.triage.length, 'réunion', 'réunions') : '', d.triage.length > 0);
+    applySection('add', '', false);
+    applySection('settings', d.project.news_on ? 'collecte active · ' + plural(kw, 'repère', 'repères') : 'collecte non activée', !d.project.news_on || kw === 0);
   }
 
   // ------------------------------------------------------------ chargement
@@ -1024,7 +1070,7 @@ var BOOT = <?!= boot ?>;
     var d = state.data;
     $('title').textContent = 'Actualités';
     $('context').textContent = d.project.code + ' ' + d.project.name + ' · ' + plural(d.meetings.length, 'réunion', 'réunions') + ' · ' + plural(d.actions.length, 'action ouverte', 'actions ouvertes');
-    renderDigest(); renderActions(); renderFeed(); renderTriage(); renderAdd(); renderSettings();
+    renderDigest(); renderActions(); renderFeed(); renderTriage(); renderAdd(); renderSettings(); renderSections();
     var base = BOOT.baseUrl || '';
     $('nav-plan').setAttribute('href', base + '?view=gantt&project=' + state.projectId);
     $('nav-news').setAttribute('href', base + '?view=actualites&project=' + state.projectId);
@@ -1075,6 +1121,7 @@ var BOOT = <?!= boot ?>;
     onEnter: function (d) { $('title').textContent = 'Actualités — Programme ' + d.program.code; $('context').textContent = ''; try { google.script.history.replace(null, { view: 'actualites', program: d.program.id }); } catch (e) { /* hors web app */ } }
   });
   $('picker').addEventListener('change', function () { if (pv.isProgram(this.value)) pv.enter(this.value); else { pv.leave(); state.projectId = this.value; load(); } });
+  ['digest', 'actions', 'triage', 'add', 'settings'].forEach(function (n) { $('toggle-' + n).addEventListener('click', function () { toggleSection(n); }); });
   $('prompt-close').addEventListener('click', function () { closeDialog($('prompt-dialog')); });
   $('prompt-copy').addEventListener('click', copyPrompt);
   $('publish-cancel').addEventListener('click', function () { closeDialog($('publish-dialog')); });

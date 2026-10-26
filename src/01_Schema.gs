@@ -110,7 +110,7 @@ var SCHEMA = {
   /** La synthèse du jour publiée par le chef de projet. */
   NewsDigest: {
     book: 'data',
-    cols: ['id', 'project_id', 'digest_date', 'text', 'published_by'],
+    cols: ['id', 'project_id', 'digest_date', 'text', 'published_by', 'logo'],   // logo : celui du jour, s'il figure dans la synthèse (48_NewsText.gs)
     required: ['project_id', 'digest_date', 'text']
   },
 
