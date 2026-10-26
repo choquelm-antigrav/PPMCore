@@ -25,7 +25,7 @@
 var IMPORT_TABS = [
   { name: 'Programmes', cols: ['Code', 'Nom', 'Statut', 'Description'], text: [0], optional: true },
   { name: 'Projets', cols: ['Code', 'Nom', 'Programme (code)', 'Statut', 'Pays des jours fériés', 'Chef de projet (e-mail)', 'Budget autorisé (€)'], text: [0, 2] },
-  { name: 'Personnes', cols: ['Nom', 'E-mail', 'Type (Interne ou Externe)', 'Fonction', 'Organisation', 'Pays', 'Fournisseur', 'Taux journalier (€)'], text: [], optional: true },
+  { name: 'Personnes', cols: ['Nom', 'E-mail', 'Type (Interne ou Externe)', 'Fonction', 'Organisation', 'Pays', 'Fournisseur', 'Taux journalier (€)', 'Équipe'], text: [], optional: true },
   { name: 'Workpackages', cols: ['Projet', 'Code WBS', 'Parent (code WBS)', 'Nom', 'Leader (e-mail)', 'Imputation', 'Enveloppe (€)'], text: [0, 1, 2, 5] },
   { name: 'Livrables', cols: ['Projet', 'Code WBS du workpackage', 'Nom', 'Début', 'Fin', 'Owner (e-mail)', 'Contributors (e-mails séparés par « ; »)'], text: [0, 1] },
   { name: 'Jalons', cols: ['Projet', 'Code WBS du workpackage', 'Nom', 'Date', 'Catégorie', 'Owner (e-mail)', 'Contributors (e-mails séparés par « ; »)'], text: [0, 1] },
@@ -422,6 +422,7 @@ function importAnalyzeAll_(book, ctx, opts) {
     return named.length === 1 ? named[0] : null;
   };
   var programsByCode = {}; repoList('Program').forEach(function (g) { programsByCode[String(g.code)] = g; });
+  var teamsByName = {}; repoList('HierarchicalTeam').forEach(function (t) { (teamsByName[teamNorm_(t.name)] = teamsByName[teamNorm_(t.name)] || []).push(t); });
   var projectsByCode = {}; repoList('Project').forEach(function (x) { projectsByCode[String(x.code)] = x; });
   var out = { programs: [], projects: [], people: [], errors: errors, warnings: warnings };
 
@@ -450,7 +451,15 @@ function importAnalyzeAll_(book, ctx, opts) {
     if (!email && (maps.peopleByName[norm(name)] || []).length > 1) { err('Personnes', row, 'Plusieurs personnes s’appellent « ' + name + ' » : donnez une adresse e-mail.'); return; }
     if (!canCreatePeople) { err('Personnes', row, 'Créer une personne est réservé au chef de projet et aux niveaux au-dessus (page Ressources).'); return; }
     if (rate !== '' && !(ctx.isAdmin || canSetRates_(ctx))) { warn('Personnes', row, 'Le taux journalier de « ' + name + ' » est ignoré : le fixer est réservé au chef de projet et aux niveaux au-dessus.'); rate = ''; }
-    var virtual = { id: 'new:' + key, _new: true, name: name, email: email, resource_type: type, country: r['Pays'], job_function: r['Fonction'], organization: r['Organisation'], supplier: r['Fournisseur'], daily_rate: rate };
+    // l'équipe : une équipe qui existe déjà (importée avec la structure des équipes) ; sinon la personne est créée sans équipe, c'est signalé
+    var teamId = '';
+    if (r['Équipe']) {
+      var found = teamsByName[teamNorm_(r['Équipe'])] || [];
+      if (found.length === 1) teamId = found[0].id;
+      else if (found.length > 1) warn('Personnes', row, 'Plusieurs équipes s’appellent « ' + r['Équipe'] + ' » : « ' + name + ' » est créée sans équipe.');
+      else warn('Personnes', row, 'Équipe « ' + r['Équipe'] + ' » : introuvable, « ' + name + ' » est créée sans équipe (importez d’abord la structure des équipes, page Ressources).');
+    }
+    var virtual = { id: 'new:' + key, _new: true, name: name, email: email, resource_type: type, country: r['Pays'], job_function: r['Fonction'], organization: r['Organisation'], supplier: r['Fournisseur'], daily_rate: rate, team_id: teamId };
     if (email) maps.people[email] = virtual; else (maps.peopleByName[norm(name)] = maps.peopleByName[norm(name)] || []).push(virtual);
     out.people.push({ name: name, email: email, action: 'create', row: row, person: virtual });
   });
@@ -584,7 +593,7 @@ var IMPORT_README = [
   ['Chaque ligne des onglets Workpackages, Livrables, Jalons, Dépendances et Budget commence par le CODE DU PROJET (colonne « Projet »), qui doit figurer dans l’onglet Projets.'],
   [''],
   ['Programmes : le code est la clé. Projets : le code est la clé ; « Programme (code) » rattache le projet à un programme (de l’outil ou de l’onglet Programmes) ; le statut vaut Préparation, Actif, En pause ou Clos.'],
-  ['Personnes : celles qui n’existent pas encore dans l’outil sont créées (adresse e-mail ou nom exact comme clé) ; une personne qui existe déjà n’est jamais modifiée. Le taux journalier n’est exporté, et pris en compte à l’import, que pour le chef de projet et les niveaux au-dessus.'],
+  ['Personnes : celles qui n’existent pas encore dans l’outil sont créées (adresse e-mail ou nom exact comme clé), dans l’équipe indiquée si elle existe déjà (voir « Importer des équipes », page Ressources) ; une personne qui existe déjà n’est jamais modifiée. Le taux journalier n’est exporté, et pris en compte à l’import, que pour le chef de projet et les niveaux au-dessus.'],
   ['Workpackages : le code WBS (« 1 », « 1.2 ») est la clé ; le leader devient Workpackage leader (ou Sub-workpackage leader pour un sous-workpackage) ; l’enveloppe est facultative (vide : pas de plafond).'],
   ['Livrables et jalons : on les retrouve par leur workpackage et leur nom (changer un nom crée un nouvel objet). L’owner devient Deliverable owner ; les contributors se séparent par « ; ». Dates : aaaa-mm-jj ou jj/mm/aaaa.'],
   ['Dépendances : par workpackage et nom de chaque bout ; type FS, SS, FF ou SF ; décalage en jours. Une dépendance qui ferme une boucle est refusée.'],
@@ -597,7 +606,7 @@ var IMPORT_README = [
 
 /** Les lignes de chaque onglet pour ces projets (déjà filtrés sur les droits de l'appelant). */
 function importWorkbookRows_(ctx, projects) {
-  var maps = importPeopleMaps_(), resById = indexBy_(repoList('Resource')), programsById = indexBy_(repoList('Program'));
+  var maps = importPeopleMaps_(), resById = indexBy_(repoList('Resource')), programsById = indexBy_(repoList('Program')), teamsById = indexBy_(repoList('HierarchicalTeam'));
   var seeRates = !!ctx.isAdmin || canSetRates_(ctx);
   var email = function (id) { var r = resById[id]; return r ? (r.email || r.name || '') : ''; };   // à défaut d'adresse sur la fiche, le nom (l'import le comprend)
   var out = { 'Programmes': [], 'Projets': [], 'Personnes': [], 'Workpackages': [], 'Livrables': [], 'Jalons': [], 'Dépendances': [], 'Budget': [] };
@@ -631,7 +640,7 @@ function importWorkbookRows_(ctx, projects) {
   });
   Object.keys(usedPrograms).forEach(function (id) { var g = programsById[id]; out.Programmes.push([g.code, g.name, g.status || 'Actif', g.description || '']); });
   Object.keys(usedPeople).map(function (id) { return resById[id]; }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); }).forEach(function (r) {
-    out.Personnes.push([r.name, r.email || '', r.resource_type || 'Interne', r.job_function || '', r.organization || '', r.country || '', r.supplier || '', seeRates && !isBlank(r.daily_rate) ? Number(r.daily_rate) : '']);
+    out.Personnes.push([r.name, r.email || '', r.resource_type || 'Interne', r.job_function || '', r.organization || '', r.country || '', r.supplier || '', seeRates && !isBlank(r.daily_rate) ? Number(r.daily_rate) : '', teamsById[r.team_id] ? teamsById[r.team_id].name : '']);
   });
   void maps;
   return out;
@@ -870,7 +879,7 @@ defineAction('import.run', function (p, ctx) {
     step(function () {
       if (importPersonId_(x.person)) return;
       var v = x.person;
-      var created = run('resources.create', { values: { name: v.name, email: v.email, resource_type: v.resource_type, country: v.country, job_function: v.job_function, organization: v.organization, supplier: v.supplier } });
+      var created = run('resources.create', { values: { name: v.name, email: v.email, resource_type: v.resource_type, country: v.country, job_function: v.job_function, organization: v.organization, supplier: v.supplier, team_id: v.team_id || '' } });
       applied.people++;
       if (v.daily_rate !== '' && v.daily_rate !== null && v.daily_rate !== undefined) { run('people.setRate', { resourceId: created.id, daily_rate: v.daily_rate }); }
     });

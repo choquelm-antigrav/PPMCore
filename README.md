@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.16.3)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.17.0)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -53,6 +53,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `48_NewsText.gs`, `49_NewsCollect.gs` | 0.12.2 : lecture des textes et rattachement des réunions (calcul sans service Google) ; collecteur d'agenda et déclencheur. Le reste du module est dans `48_News.gs` |
 | `48_News.gs` | 0.12.0 : fil d'actualités du projet (lecture des comptes rendus, rattachement des réunions, actions, synthèse du matin, journal du projet, collecteur d'agenda) |
 | `44_Orders.gs` | 0.9.0 : commandes d'achat (PO) : saisie, statuts, répartition par livrable, constats et rappels de GR |
+| `59_TeamImport.gs` | 0.17.0 : import et export de la structure des équipes par un classeur Google Sheet dédié (analyse, copie de sécurité, application par lots) |
 | `42_Org.gs` | 0.8.0 : dépendances d'un élément (`deps.item`), rôles attribuables (`roles.options`), retrait d'une personne, équipes hiérarchiques (`teams.*`) |
 | `41_Edit.gs` | 0.7.0 : création, modification, déplacement et suppression sûre du WBS (`wbs.create`, `wbs.update`, `wbs.delete`) |
 | `39_Account.gs` | 0.6.0 : Mon compte (`account.get`) et Administration (`admin.*` : réglages validés, santé, journaux, jours fériés) |
@@ -64,7 +65,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `StructureState.html`, `StructureDraw.html`, `StructureLoad.html`, `StructureDetail.html`, `StructureEdit.html`, `StructureOrg.html`, `StructureImport.html` | 0.12.2 : morceaux de `Structure.html` (état et choix d'affichage ; mise en page, cartes et dessin ; chargement et sélecteurs ; panneau de détail ; création, édition et panneau des rôles du WBS ; dépendances ; import par classeur (0.15.4)). Ils partagent la fermeture de `createStructure` : un morceau n'est pas un module indépendant |
 | `Suivi.html` | Page Suivi : écarts à la baseline, changements à valider, baselines, agenda et Drive, mes notifications |
 | `Overview.html` | Page d'accueil : verdict, indicateurs délais, qualité, coût, portefeuille, création de projet |
-| `Ressources.html` | Page Ressources : personnes, équipes, rôle dans le projet, taux, accès |
+| `Ressources.html` | Page Ressources : personnes, équipes (celles qui participent au projet, 0.17.0), rôle dans le projet, taux, accès, import de la structure des équipes |
 | `Actualites.html` | Page Actualités : à gauche le **fil du projet** (réunions repliées, dépliées au clic : résumé, décisions, actions, pièces jointes) ; à droite, des **sections repliées sur une ligne de résumé** (synthèse du matin, actions, réunions à trier, ajout d'un compte rendu, repères et journal) qui s'ouvrent d'elles-mêmes quand il y a quelque chose à faire (0.16.2). Sur téléphone, une colonne, le fil d'abord |
 | `Budget.html` | Page Budget : bilan par CPN, achats (PO), lignes de budget |
 | `Compte.html` | Page Mon compte : fiche, rôles en lecture seule, notifications, affichage (thème, page d'accueil) |
@@ -270,6 +271,23 @@ Additive et relançable, elle **termine** les anciennes lignes sans les supprime
 **Protection.** Les enveloppes ne s'écrivent que par `budget.envelope.set` : les mises à jour ordinaires d'un projet ou d'un workpackage (`projects.update`, `workpackages.*`, `wbs.*`) les ignorent. Actions : `budget.envelope.get` (lecture) et `budget.envelope.set` (`authorized`, `allocations: [{ wpId, amount }]`).
 
 **Limites.** Pas de règle du moteur de constats pour un dépassement d'enveloppe (seulement l'affichage) ; pas de graphique de consommation dans le temps ; l'enveloppe n'est pas figée par les baselines (elle est suivie par la validation). Vérifié sur les faux services et dans un aperçu, pas dans votre Apps Script. La démo reçoit une enveloppe (un workpackage dépassé pour l'illustrer) à l'étape « Enveloppe budgétaire de NAC-1 ».
+
+## Équipes communes à tous les projets : import par classeur dédié (0.17.0)
+
+**Pourquoi.** Les projets s'appuient sur les mêmes ressources, réparties dans les mêmes équipes. On décrit donc la **structure des équipes une seule fois**, dans un **classeur Google Sheet dédié**, et on l'importe ; ensuite, **créer une ressource lui attribue une équipe qui existe déjà**, et chaque projet n'affiche que les équipes qui le concernent. **Créer des équipes à la main reste possible** (bouton « Ajouter une équipe », « Sous-équipe »).
+
+**Page Ressources, à droite : les équipes du projet.** La liste n'affiche plus toutes les équipes existantes mais celles qui ont **au moins un membre qui participe au projet**, avec leurs équipes parentes (en grisé, sans participant direct) pour que l'arborescence reste lisible ; chaque carte dit combien de ses membres sont au projet. **Participer au projet** : avoir un rôle actif sur le projet, l'un de ses workpackages ou l'un de ses livrables et jalons (un rôle de programme seul ne compte pas), être le chef de projet, ou être responsable d'un workpackage, d'un livrable ou d'un jalon du projet. La case **« Toutes les équipes »** les montre toutes ; sans projet choisi, toutes sont montrées. Le filtre des personnes suit la même liste, mais **les formulaires (attribuer une équipe à une personne, choisir l'équipe parente) proposent toujours toutes les équipes existantes**. Une équipe créée à la main s'affiche aussitôt (la page montre alors toutes les équipes) ; elle rejoindra la liste du projet quand un de ses membres y participera.
+
+**Importer la structure (bouton « Importer des équipes », chef de projet et au-dessus).** (1) **Créer le classeur modèle** : créé dans Drive, partagé avec vous, prérempli avec les équipes actuelles (c'est aussi un export) ; (2) coller le lien du classeur rempli et **Analyser** : un rapport sans rien écrire, chaque erreur avec son onglet et sa ligne ; (3) **Importer**, seulement sans erreur, par lots reprenables.
+- **Onglet Équipes** : Équipe · Équipe parente · Responsable (e-mail) · Centre de coût. **Onglet Membres** (facultatif) : Équipe · Nom · E-mail · Type · Fonction · Organisation · Pays · Fournisseur.
+- **Clés** : une équipe par son **nom** (sans tenir compte des accents, de la casse ni des espaces en trop) ; l'équipe parente se désigne par son nom ; une personne par son e-mail ou, à défaut, son nom exact.
+- **Rien n'est supprimé ni écrasé** : les équipes et les personnes qui manquent sont créées ; une équipe qui existe déjà n'a que ses **champs vides** complétés (parent, responsable, centre de coût) ; une personne **sans équipe** reçoit celle du classeur ; une personne **déjà dans une autre équipe n'est pas déplacée** (signalé) ; les équipes de l'outil absentes du classeur sont laissées. Importer deux fois le même classeur ne change rien.
+- **Contrôles** : nom d'équipe manquant ou doublon, équipe parente introuvable, **boucle dans la structure**, responsable introuvable, e-mail illisible, type, pays, doublon de personne, équipe d'un membre introuvable, en-têtes ou onglets modifiés, plafonds (500 équipes, 3 000 membres).
+- **Copie de sécurité** avant le premier lot **si des équipes ou des personnes existantes vont changer** ; si elle échoue, l'import est annulé. Des créations seules n'en demandent pas.
+- **Dans l'import de projets** (page Administration ou WBS), l'onglet **Personnes** a maintenant une colonne **Équipe** : une personne créée par l'import reçoit l'équipe indiquée si elle existe déjà ; sinon elle est créée sans équipe et c'est signalé. Importez donc d'abord la structure des équipes.
+- Actions : `teams.import.template`, `teams.import.analyze`, `teams.import.run` (paramètre `resume`) ; `ressources.get` rend `teams` (celles du projet, avec `participants` et `context`), `allTeams`, `teamsMode` et `participates` par personne.
+
+**Limites.** L'import ne **déplace** pas une personne d'une équipe à une autre et ne **retire** pas une équipe : cela se fait à la main dans la page Ressources. Vérifié sur de faux services et dans un aperçu, **pas dans votre Apps Script**.
 
 ## Export et import de projets par classeur Google Sheet (0.16.0)
 

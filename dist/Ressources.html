@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.16.3">
+<meta name="ppm-version" content="0.17.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -474,6 +474,17 @@
   .teams .team-card { background: var(--surface); border: 1px solid var(--rule); border-left: 4px solid var(--accent); border-radius: 6px; padding: 7px 10px; box-shadow: var(--shadow); }
   .teams .team-card.on { background: var(--tint); border-color: var(--accent); }
   .teams .team-card.noboss { border-left-color: var(--amber); }
+  .teams .team-card.ctx { opacity: .7; border-left-style: dashed; }
+  #teams-all-row { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; font-size: 13.5px; }
+  .import-dialog { width: min(760px, 94vw); max-height: 90vh; }
+  .imp-step { margin: 14px 0; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 10px; }
+  .imp-step .note { margin: 4px 0 8px; }
+  .imp-step .lbl { display: block; margin: 8px 0; }
+  .imp-step input[type=text] { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; }
+  .imp-head.ok { color: var(--ok-ink); font-weight: 600; } .imp-head.bad { color: var(--alert-ink); font-weight: 600; }
+  .imp-sub { margin: 10px 0 4px; font-size: 14px; }
+  .imp-list { margin: 0 0 8px; padding-left: 18px; font-size: 13.5px; max-height: 220px; overflow: auto; }
+  .imp-counts { margin: 4px 0 8px; padding-left: 18px; font-size: 14px; }
   .teams .t-name { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--ink); cursor: pointer; text-align: left; overflow-wrap: anywhere; }
   .teams .t-name[aria-pressed="true"] { color: var(--accent); }
   .teams small { display: block; color: var(--muted); overflow-wrap: anywhere; }
@@ -660,6 +671,7 @@
   </div>
   <div class="controls">
     <label class="field">Projet <select id="picker" aria-label="Projet"></select></label>
+    <button type="button" class="btn" id="teams-import" hidden>Importer des équipes</button>
     <button type="button" class="btn" id="team-add" hidden>Ajouter une équipe</button>
     <button type="button" class="btn primary" id="person-add" hidden>Ajouter une personne</button>
   </div>
@@ -679,6 +691,7 @@
   </section>
   <aside class="box" aria-label="Équipes">
     <h2 class="sec">Équipes</h2>
+    <label class="toggle" id="teams-all-row" hidden><input type="checkbox" id="teams-all"> Toutes les équipes</label>
     <ul class="teams" id="teams-list"></ul>
     <p class="note" id="teams-note"></p>
   </aside>
@@ -694,6 +707,14 @@
       <button type="submit" class="btn primary" id="gf-ok">Enregistrer</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="timp" aria-labelledby="timp-title" class="import-dialog">
+  <div class="imp-box">
+    <h2 id="timp-title">Importer la structure des équipes</h2>
+    <div id="timp-body"></div>
+    <div class="actions"><button type="button" class="btn" id="timp-close">Fermer</button></div>
+  </div>
 </dialog>
 
 <dialog id="confirm" aria-labelledby="confirm-title">
@@ -716,7 +737,7 @@ var BOOT = <?!= boot ?>;
   'use strict';
   var el = ppm.el, clear = ppm.clear, uuid = ppm.uuid, plural = ppm.plural, toast = ppm.toast, call = ppm.call, openDialog = ppm.openDialog, closeDialog = ppm.closeDialog;
 
-  var state = { data: null, projectId: '', team: '', catalog: null, seq: 0 };
+  var state = { data: null, projectId: '', team: '', catalog: null, seq: 0, showAllTeams: false };
   var $ = function (id) { return document.getElementById(id); };
   var COUNTRY_LIST = [['FR', 'France'], ['DE', 'Allemagne'], ['UK', 'Royaume-Uni'], ['IN', 'Inde']];
 
@@ -736,8 +757,13 @@ var BOOT = <?!= boot ?>;
     }).catch(function (e) { var p = $('people'); clear(p); p.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Chargement impossible.' }), el('span', { text: (e && e.message) || 'Erreur inconnue.' })])); });
   }
 
+  /**
+   * Les équipes affichées à droite : celles qui ont au moins un membre qui participe au projet (avec leurs parents, en grisé) ; « Toutes les équipes » les montre toutes. Les FORMULAIRES
+   * (attribuer une équipe à une personne, choisir l'équipe parente) proposent toujours TOUTES les équipes existantes, importées ou créées à la main.
+   */
+  function shownTeams() { var d = state.data; return d.teamsMode === 'project' && !state.showAllTeams ? d.teams : d.allTeams; }
   function teamOptions(emptyLabel) {
-    return [{ value: '', label: emptyLabel }].concat(state.data.teams.map(function (t) { return { value: t.id, label: new Array(t.depth + 1).join('— ') + t.name }; }));
+    return [{ value: '', label: emptyLabel }].concat(state.data.allTeams.map(function (t) { return { value: t.id, label: new Array(t.depth + 1).join('— ') + t.name }; }));
   }
 
   function visiblePeople() {
@@ -793,9 +819,12 @@ var BOOT = <?!= boot ?>;
     var d = state.data;
     $('title').textContent = d.project ? 'Ressources de ' + d.project.name : 'Ressources';
     $('context').textContent = d.project ? d.project.code : '';
-    $('person-add').hidden = !d.canEdit; $('team-add').hidden = !d.canEdit;
+    $('person-add').hidden = !d.canEdit; $('team-add').hidden = !d.canEdit; $('teams-import').hidden = !d.canEdit;
+    $('teams-all-row').hidden = d.teamsMode !== 'project'; $('teams-all').checked = state.showAllTeams;
+    var shown = shownTeams();
+    if (state.team && state.team !== '__none' && !shown.some(function (t) { return t.id === state.team; })) state.team = '';
     var tf = $('team-filter'), cur = state.team;
-    fillSelect(tf, [{ value: '', label: 'Toutes les équipes' }, { value: '__none', label: 'Sans équipe' }].concat(d.teams.map(function (t) { return { value: t.id, label: new Array(t.depth + 1).join('— ') + t.name }; })), cur);
+    fillSelect(tf, [{ value: '', label: 'Toutes les équipes' }, { value: '__none', label: 'Sans équipe' }].concat(shown.map(function (t) { return { value: t.id, label: new Array(t.depth + 1).join('— ') + t.name }; })), cur);
     var rows = visiblePeople();
     $('count').textContent = plural(rows.length, 'personne', 'personnes');
     var host = $('people'); clear(host);
@@ -822,13 +851,13 @@ var BOOT = <?!= boot ?>;
     }
     $('people-note').textContent = 'Pour qu’une personne intervienne : une fiche avec son adresse e-mail professionnelle (créée ici, et seulement ici), puis des rôles posés dans la page WBS. ' + (d.canRates ? 'Le taux journalier de la fiche sert de base au budget, interne ou externe ; il est figé dans chaque ligne de budget à sa création. Il est visible à partir du Workpackage leader ; le fixer est réservé au chef de projet et au-dessus.' : '');
     var tl = $('teams-list'); clear(tl);
-    if (!d.teams.length) tl.appendChild(el('li', {}, [el('span', { class: 'muted', text: 'Aucune équipe.' })]));
+    if (!shown.length) tl.appendChild(el('li', {}, [el('span', { class: 'muted', id: 'teams-empty', text: d.teamsMode === 'project' && !state.showAllTeams ? 'Aucune équipe : aucun membre d’une équipe ne participe encore à ce projet.' : 'Aucune équipe.' })]));
     // arbre imbriqué : l'équipe de profondeur k est rangée sous la dernière équipe de profondeur k − 1 (l'ordre du serveur est celui de l'arborescence)
     var stack = [];
-    d.teams.forEach(function (t) {
-      var card = el('div', { class: 'team-card' + (state.team === t.id ? ' on' : '') + (t.manager ? '' : ' noboss'), title: t.manager ? '' : 'Équipe sans responsable' }, [
+    shown.forEach(function (t) {
+      var card = el('div', { class: 'team-card' + (state.team === t.id ? ' on' : '') + (t.manager ? '' : ' noboss') + (d.teamsMode === 'project' && !state.showAllTeams && t.context ? ' ctx' : ''), title: t.context && !state.showAllTeams && d.teamsMode === 'project' ? 'Équipe parente : aucun de ses membres directs ne participe à ce projet' : (t.manager ? '' : 'Équipe sans responsable') }, [
         el('button', { type: 'button', class: 't-name', 'aria-pressed': String(state.team === t.id), text: t.name, onclick: function () { state.team = state.team === t.id ? '' : t.id; render(); } }),
-        el('small', { text: plural(t.members, 'membre', 'membres') + (t.manager ? ' · ' + t.manager : '') + (t.cost_center ? ' · ' + t.cost_center : '') })]);
+        el('small', { text: plural(t.members, 'membre', 'membres') + (d.teamsMode === 'project' && t.participants ? ' · ' + t.participants + ' au projet' : '') + (t.manager ? ' · ' + t.manager : '') + (t.cost_center ? ' · ' + t.cost_center : '') })]);
       if (d.canEdit) card.appendChild(el('div', { class: 't-actions' }, [
         el('button', { type: 'button', class: 'btn team-edit', text: 'Modifier', onclick: function () { openTeamForm(t, null); } }),
         el('button', { type: 'button', class: 'btn team-sub', text: 'Sous-équipe', onclick: function () { openTeamForm(null, t); } }),
@@ -839,7 +868,7 @@ var BOOT = <?!= boot ?>;
       var kids = el('ul', {}); li.appendChild(kids); stack.push(kids);
     });
     Array.prototype.forEach.call(tl.querySelectorAll('ul:empty'), function (u) { u.parentNode.removeChild(u); });
-    $('teams-note').textContent = d.canEdit ? 'Cliquez sur une équipe pour filtrer les personnes. Une équipe ne se supprime que vide.' : '';
+    $('teams-note').textContent = (d.teamsMode === 'project' ? 'Les équipes dont au moins un membre participe à ce projet' + (state.showAllTeams ? ' (toutes les équipes sont affichées).' : ' ; cochez « Toutes les équipes » pour voir les autres.') + ' ' : '') + (d.canEdit ? 'Cliquez sur une équipe pour filtrer les personnes. Une équipe ne se supprime que vide.' : '');
     try { google.script.history.replace(null, { view: 'ressources', project: state.projectId }); } catch (e) { /* hors web app */ }
     var base = BOOT.baseUrl || '';
     Array.prototype.forEach.call(document.querySelectorAll('.ppm-bar [data-view]'), function (n) {
@@ -902,13 +931,16 @@ var BOOT = <?!= boot ?>;
       fields: [
         { key: 'name', label: 'Nom', value: team ? team.name : '', maxlength: 80 },
         { key: 'parent_team_id', label: 'Équipe parente', type: 'select', value: team ? team.parent_team_id : (parent ? parent.id : ''),
-          options: [{ value: '', label: 'Aucune (racine)' }].concat(d.teams.filter(function (t) { return !team || t.id !== team.id; }).map(function (t) { return { value: t.id, label: new Array(t.depth + 1).join('— ') + t.name }; })) },
+          options: [{ value: '', label: 'Aucune (racine)' }].concat(d.allTeams.filter(function (t) { return !team || t.id !== team.id; }).map(function (t) { return { value: t.id, label: new Array(t.depth + 1).join('— ') + t.name }; })) },
         { key: 'manager_resource_id', label: 'Responsable', type: 'select', value: team ? team.manager_id : '', options: [{ value: '', label: '—' }].concat(d.people.filter(function (p) { return p.resource_type === 'Interne'; }).map(function (p) { return { value: p.resource_id, label: p.name }; })) },
         { key: 'cost_center', label: 'Centre de coût', value: team ? team.cost_center : '', maxlength: 40 }
       ],
       onSubmit: function (v) {
         var req = create ? call('teams.create', { values: v }, true) : call('teams.update', { id: team.id, version: team.version, patch: v }, true);
-        return req.then(function () { toast(create ? 'Équipe créée.' : 'Équipe enregistrée.'); return load(); });
+        return req.then(function () {
+          if (create && state.data.teamsMode === 'project') state.showAllTeams = true;   // une équipe toute neuve n'a encore aucun participant : on affiche toutes les équipes pour la voir
+          toast(create ? 'Équipe créée.' + (state.data.teamsMode === 'project' ? ' Elle apparaîtra parmi les équipes du projet quand un de ses membres y participera.' : '') : 'Équipe enregistrée.'); return load();
+        });
       }
     });
   }
@@ -918,6 +950,91 @@ var BOOT = <?!= boot ?>;
     });
   }
 
+  // ------------------------------------------------------------ importer la structure des équipes (classeur Google Sheet dédié)
+  /**
+   * Les équipes sont communes à tous les projets : on les décrit une fois dans un classeur à part. (1) créer le classeur modèle, prérempli avec les équipes actuelles (c'est aussi un export) ;
+   * (2) coller le lien du classeur rempli et « Analyser » (un rapport, rien n'est écrit) ; (3) « Importer », seulement sans erreur, par lots. Rien n'est supprimé ni écrasé.
+   */
+  var timp = { report: null, book: '', busy: false, backup: null };
+  function timpBusy(on, msg) {
+    timp.busy = on;
+    ['timp-template', 'timp-analyze', 'timp-run'].forEach(function (id) { var b = $(id); if (b) b.disabled = on || (id === 'timp-run' && !(timp.report && timp.report.ok && !timp.report.nothing_to_do)); });
+    var st = $('timp-status'); if (st) st.textContent = msg || '';
+  }
+  function timpCounts(c) {
+    var t = c.teams, m = c.members;
+    return [t.create + t.update + t.same ? 'Équipes : ' + t.create + ' à créer, ' + t.update + ' à compléter, ' + t.same + ' inchangée' + (t.same > 1 ? 's' : '') : '',
+      m.create + m.assign + m.same ? 'Personnes : ' + m.create + ' à créer, ' + m.assign + ' à rattacher à leur équipe, ' + m.same + ' déjà en place' : ''].filter(Boolean);
+  }
+  function timpRender() {
+    var box = $('timp-report'), rep = timp.report;
+    clear(box);
+    if (!rep) return;
+    box.appendChild(el('p', { class: 'imp-head ' + (rep.ok ? 'ok' : 'bad'), id: 'timp-head', role: 'status', text: rep.ok ? (rep.nothing_to_do ? 'Rien à importer : le classeur correspond déjà aux équipes de l’outil.' : 'Analyse sans erreur : voici ce qui sera fait.') : 'Le classeur a ' + rep.errors_count + (rep.errors_count > 1 ? ' erreurs' : ' erreur') + ' : corrigez-les dans le classeur, puis relancez « Analyser ». Rien n’a été écrit.' }));
+    if (rep.ok) box.appendChild(el('ul', { class: 'imp-counts', id: 'timp-counts' }, timpCounts(rep.counts).map(function (t) { return el('li', { text: t }); })));
+    var list = function (title, items, id) {
+      if (!items.length) return;
+      box.appendChild(el('h3', { class: 'imp-sub', text: title }));
+      box.appendChild(el('ul', { class: 'imp-list', id: id }, items.map(function (x) { return el('li', {}, [el('strong', { text: x.tab + (x.row ? ', ligne ' + x.row : '') + ' — ' }), x.message]); })));
+    };
+    list('Erreurs (' + rep.errors_count + ')', rep.errors, 'timp-errors');
+    list('À savoir (' + rep.warnings_count + ')', rep.warnings, 'timp-warnings');
+  }
+  function timpReset() { timp.report = null; timpRender(); timpBusy(false, ''); }
+  function openTeamImport() {
+    timp.report = null; timp.book = ''; timp.backup = null;
+    var body = $('timp-body'); clear(body);
+    body.appendChild(el('p', { class: 'note', text: 'Les équipes sont communes à tous les projets : décrivez-les une fois dans un classeur Google Sheet (onglet Équipes : la structure ; onglet Membres : qui est dans quelle équipe). L’import crée ce qui manque, ne supprime rien et n’écrase rien ; il enregistre une copie de sécurité avant de modifier des équipes ou des personnes existantes.' }));
+    body.appendChild(el('div', { class: 'imp-step' }, [el('strong', { text: '1. Le classeur modèle' }),
+      el('p', { class: 'note', text: 'Créé dans Drive et partagé avec vous, prérempli avec les équipes actuelles : c’est aussi un export.' }),
+      el('button', { type: 'button', class: 'btn', id: 'timp-template', text: 'Créer le classeur modèle', onclick: timpTemplate }), el('div', { id: 'timp-template-out' })]));
+    var input = el('input', { type: 'text', id: 'timp-book', placeholder: 'https://docs.google.com/spreadsheets/d/…', autocomplete: 'off', 'aria-label': 'Lien du classeur à importer' });
+    input.addEventListener('input', function () { timp.book = input.value; timpReset(); });
+    body.appendChild(el('div', { class: 'imp-step' }, [el('strong', { text: '2. Analyser' }), el('label', { class: 'lbl' }, ['Lien du classeur rempli', input]),
+      el('button', { type: 'button', class: 'btn', id: 'timp-analyze', text: 'Analyser', onclick: timpAnalyze })]));
+    body.appendChild(el('div', { id: 'timp-report' }));
+    body.appendChild(el('div', { class: 'imp-step' }, [el('strong', { text: '3. Importer' }),
+      el('button', { type: 'button', class: 'btn primary', id: 'timp-run', text: 'Importer', disabled: true, onclick: timpRun }),
+      el('span', { class: 'note', id: 'timp-status', role: 'status', 'aria-live': 'polite' }), el('div', { id: 'timp-backup' })]));
+    openDialog($('timp'));
+  }
+  function timpError(e) { timpBusy(false, ''); toast(ppmErrorText(e), true); }
+  function timpTemplate() {
+    timpBusy(true, 'Création du classeur…');
+    call('teams.import.template', {}, true).then(function (t) {
+      timp.book = t.url; $('timp-book').value = t.url;
+      var out = $('timp-template-out'); clear(out);
+      out.appendChild(el('p', {}, [el('a', { href: t.url, target: '_blank', rel: 'noopener', id: 'timp-template-link', text: 'Ouvrir « ' + t.name + ' »' }), ' — ' + plural(t.prefilled.equipes, 'équipe', 'équipes') + ', ' + plural(t.prefilled.membres, 'membre', 'membres') + '.']));
+      (t.warnings || []).forEach(function (w) { out.appendChild(el('p', { class: 'note', text: w })); });
+      timpBusy(false, '');
+    }).catch(timpError);
+  }
+  function timpAnalyze() {
+    if (!String(timp.book || '').trim()) { toast('Collez d’abord le lien du classeur.', true); return; }
+    timpBusy(true, 'Analyse…');
+    call('teams.import.analyze', { book: timp.book }).then(function (rep) { timp.report = rep; timpRender(); timpBusy(false, ''); }).catch(timpError);
+  }
+  function timpRun() {
+    if (!timp.report || !timp.report.ok) return;
+    var lot = 0, total = null;
+    var next = function () {
+      lot++;
+      timpBusy(true, 'Import en cours — lot ' + lot + (total === null ? '' : ', reste ' + total + ' opération(s)') + '…');
+      return call('teams.import.run', { book: timp.book, resume: lot > 1 }, true).then(function (r) {
+        if (r.backup) { timp.backup = r.backup; var b = $('timp-backup'); clear(b); b.appendChild(el('p', { class: 'note' }, ['Copie de sécurité enregistrée avant l’import : ', el('a', { href: r.backup.url, target: '_blank', rel: 'noopener', id: 'timp-backup-link', text: r.backup.name })])); }
+        total = r.remaining;
+        if (r.done) return r;
+        if (lot >= 60) throw new Error('Import interrompu après 60 lots : relancez-le pour continuer.');
+        return next();
+      });
+    };
+    next().then(function () {
+      timp.report = null; timpRender(); timpBusy(false, 'Import terminé.'); $('timp-run').disabled = true;
+      toast('Structure des équipes importée.');
+      return load();
+    }).catch(timpError);
+  }
+
   // ------------------------------------------------------------ démarrage
   $('res-search').addEventListener('input', function () { render(); });
   $('type-filter').addEventListener('change', function () { render(); });
@@ -925,6 +1042,9 @@ var BOOT = <?!= boot ?>;
   $('picker').addEventListener('change', function () { state.projectId = this.value; load(); });
   $('person-add').addEventListener('click', function () { openPersonForm(null); });
   $('team-add').addEventListener('click', function () { openTeamForm(null, null); });
+  $('teams-import').addEventListener('click', openTeamImport);
+  $('timp-close').addEventListener('click', function () { closeDialog($('timp')); });
+  $('teams-all').addEventListener('change', function () { state.showAllTeams = this.checked; render(); });
   $('gf-form').addEventListener('submit', function (e) { e.preventDefault(); submitForm(); });
   $('gf-cancel').addEventListener('click', function () { closeDialog($('genform')); });
   $('confirm-cancel').addEventListener('click', function () { closeDialog($('confirm')); });

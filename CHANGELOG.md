@@ -1,5 +1,13 @@
 # Journal des versions
 
+## 0.17.0 — structure des équipes importée, équipes du projet
+
+- **Import de la structure des équipes** par un classeur Google Sheet dédié (onglets Équipes et Membres), depuis la page Ressources (« Importer des équipes ») : modèle prérempli (aussi un export), analyse sans écriture avec chaque erreur à son onglet et sa ligne, import par lots, **copie de sécurité** si des équipes ou personnes existantes changent. **Rien n'est supprimé ni écrasé** (champs vides complétés, personne déjà dans une autre équipe non déplacée), clé = nom d'équipe sans accent ni casse, boucles refusées. Module `59_TeamImport.gs`.
+- **Liste de droite de la page Ressources = les équipes qui ont au moins un membre qui participe au projet** (avec leurs parents en grisé, et le nombre de participants), case « Toutes les équipes », sans projet : toutes. **Les formulaires proposent toujours toutes les équipes existantes** pour attribuer une équipe à une personne. Créer des équipes à la main reste possible ; une équipe toute neuve s'affiche aussitôt.
+- **Import de projets** : l'onglet Personnes a une colonne **Équipe** ; une personne créée reçoit une équipe déjà importée (sinon avertissement, créée sans équipe).
+- Tableau des droits : le droit de gérer les personnes couvre aussi les équipes et leur import.
+- Tests : `test_team_import.js` (9, dont l'**aller-retour vers une installation neuve**), `ui_ressources.js` (57) ; quatorze sabotages vérifiés.
+
 ## 0.16.3 — le logo évoque le sujet, la synthèse précédente reste
 
 - **Logo en rapport avec le contenu** : en 0.16.2 le logo était tiré par l'outil avant que la synthèse existe, donc **sans aucun lien avec son contenu**. Désormais le prompt donne à Gemini la liste des logos libres (aucun servi pour ce projet ces 100 derniers jours) et lui demande **le logo qui évoque le mieux le sujet principal**, avec un logo par défaut si aucun ne convient. À la publication, l'outil **relit le logo qui ouvre le texte** (séquences d'émojis, lignes vides, « ✈ » = « ✈️ »), le mémorise, **accepte un logo hors catalogue**, et **signale avec la date** un logo déjà servi dans les 100 jours ; sans logo en tête, rien n'est mémorisé. `news.digest.prompt` rend la liste (`logos`), `news.digest.publish` rend `logo`, `logo_reused`, `logo_previous`.

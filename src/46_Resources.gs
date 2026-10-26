@@ -34,6 +34,23 @@ function teamsFlat_(teams, resources) {
   return out;
 }
 
+/**
+ * Les équipes à afficher à droite de la page Ressources d'un projet : celles qui ont AU MOINS UN MEMBRE QUI PARTICIPE au projet (`participates`), avec leurs parents pour que l'arborescence
+ * reste lisible (marqués `context` quand ils n'ont eux-mêmes aucun participant). Sans projet (participates nul) : toutes. Chaque équipe dit combien de ses membres participent.
+ */
+function projectTeams_(teams, resources, participates) {
+  var flat = teamsFlat_(teams, resources);
+  if (!participates) return flat.map(function (t) { return Object.assign({}, t, { participants: 0, context: false }); });
+  var part = {};
+  resources.forEach(function (r) { if (participates[r.id] && !isBlank(r.team_id)) part[r.team_id] = (part[r.team_id] || 0) + 1; });
+  var byId = indexBy_(teams), keep = {};
+  Object.keys(part).forEach(function (id) {
+    var cur = id, guard = 0;
+    while (cur && byId[cur] && guard++ < 100) { keep[cur] = true; cur = isBlank(byId[cur].parent_team_id) ? '' : byId[cur].parent_team_id; }
+  });
+  return flat.filter(function (t) { return keep[t.id]; }).map(function (t) { return Object.assign({}, t, { participants: part[t.id] || 0, context: !part[t.id] }); });
+}
+
 defineAction('ressources.get', function (p, ctx) {
   var project = isBlank(p.projectId) ? null : mustGet('Project', p.projectId);
   var today = todayStr();
@@ -83,12 +100,24 @@ defineAction('ressources.get', function (p, ctx) {
     if (a.scope_type !== 'workpackage' || ['WPL', 'SWPL', 'RWP', 'MEMBER'].indexOf(a.role_code) < 0) return;
     (wpItems[a.scope_id] || []).forEach(function (i) { if (i.owner_resource_id !== a.resource_id) set[i.id] = true; });
   });
+  // qui PARTICIPE au projet : un rôle actif sur le projet, l'un de ses workpackages ou l'un de ses livrables et jalons (un rôle de programme seul ne compte pas), le chef de projet, ou le responsable
+  // d'un workpackage, d'un livrable ou d'un jalon du projet
+  var participates = {};
+  if (project) {
+    repoList('RoleAssignment').forEach(function (a) {
+      if (!isBlank(a.end_date) && String(a.end_date) < today) return;
+      if ((a.scope_type === 'project' && a.scope_id === project.id) || (a.scope_type === 'workpackage' && wpIds[a.scope_id]) || (a.scope_type === 'planitem' && itemIds[a.scope_id])) participates[a.resource_id] = true;
+    });
+    if (!isBlank(project.manager_resource_id)) participates[project.manager_resource_id] = true;
+    data.workpackages.forEach(function (w) { if (wpIds[w.id] && !isBlank(w.owner_resource_id)) participates[w.owner_resource_id] = true; });
+    data.planitems.forEach(function (i) { if (itemIds[i.id] && !isBlank(i.owner_resource_id)) participates[i.owner_resource_id] = true; });
+  }
   var editAll = canEditResources_(ctx);
   var people = resources.map(function (r) {
     var mine = (roles[r.id] || []).sort(function (a, b) { return a.rank - b.rank; });
     return {
       resource_id: r.id, version: r.version, name: r.name, email: r.email || '', job_function: r.job_function || '', organization: r.organization || '',
-      unplaced: !placed[r.id],
+      unplaced: !placed[r.id], participates: !!participates[r.id],
       deliverables: (owned[r.id] || {}).d || 0, milestones: (owned[r.id] || {}).m || 0, contributes: Object.keys(contrib[r.id] || {}).length,
       access: isBlank(r.email) ? 'none' : (isAllowedEmail_(r.email) ? 'ok' : 'outside'),
       resource_type: r.resource_type, supplier: r.supplier || '', country: r.country || '', capacity: isBlank(r.capacity_days_month) ? '' : Number(r.capacity_days_month),
@@ -100,7 +129,8 @@ defineAction('ressources.get', function (p, ctx) {
   }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
   return {
     project: project ? { id: project.id, code: project.code, name: project.name, manager_id: project.manager_resource_id || '' } : null,
-    people: people, teams: teamsFlat_(teams, resources),
+    people: people, teams: projectTeams_(teams, resources, project ? participates : null), allTeams: teamsFlat_(teams, resources),
+    teamsMode: project ? 'project' : 'all',
     canEdit: editAll, canRates: canRates, canSetRates: canSetRates_(ctx),
     countries: COUNTRIES, domains: allowedDomains()
   };

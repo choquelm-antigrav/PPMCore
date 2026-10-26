@@ -6,9 +6,12 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require(process.env.UI_DEPS ? path.join(process.env.UI_DEPS, 'jsdom') : 'jsdom');
 const { lot2World } = require('./fixtures_lot2');
+const { makeFakeSheets } = require('./fake_sheets');
 
 const w = lot2World();
 const c = w.c;
+c.SpreadsheetApp = makeFakeSheets();
+c.IMPORT_DRIVE = { share() {}, moveToProjectFolder() {} };
 let t0 = Date.parse('2026-10-14T08:00:00Z');
 c.CLOCK = () => (t0 += 1);
 const CP = 'carla@entreprise.com', RWP = 'remi@entreprise.com', MEMBER = 'mia@entreprise.com', DPL = 'dora@entreprise.com';
@@ -155,7 +158,7 @@ function openPage(user) {
   // droits
   const m = openPage(MEMBER);
   await m.until(() => m.$('res-table'));
-  check(m.$('person-add').hidden && m.$('team-add').hidden && !m.doc.querySelector('.rate-input') && !/Taux journalier/.test(m.text('res-table')), 'un membre : liste en lecture seule, ni rôles à choisir, ni taux, ni ajout');
+  check(m.$('person-add').hidden && m.$('team-add').hidden && m.$('teams-import').hidden && !m.doc.querySelector('.rate-input') && !/Taux journalier/.test(m.text('res-table')), 'un membre : liste en lecture seule, ni rôles à choisir, ni taux, ni ajout');
   check(/Chef de projet/.test(flat(m.row(w.carla.id).textContent)) && /Workpackage leader/.test(flat(m.row(w.remi.id).textContent)), 'mais il voit les rôles de chacun');
   const r = openPage(RWP);
   await r.until(() => r.$('res-table'));
@@ -169,6 +172,8 @@ function openPage(user) {
   const rootA = team({ name: 'Direction ouest', manager_resource_id: w.carla.id }), branchA = team({ name: 'Branche calcul', parent_team_id: rootA.id, manager_resource_id: w.remi.id });
   const leafA = team({ name: 'Cellule fatigue', parent_team_id: branchA.id }), rootB = team({ name: 'Direction est' });
   const org = openPage(CP);
+  await org.until(() => org.$('teams-all-row') && !org.$('teams-all-row').hidden);
+  org.$('teams-all').checked = true; org.change(org.$('teams-all'));   // ces équipes n'ont encore aucun participant : on les affiche toutes pour vérifier l'organigramme
   await org.until(() => org.doc.querySelector('#teams-list li[data-team="' + leafA.id + '"]'));
   const q = (sel) => org.doc.querySelector(sel);
   check(!!q('#teams-list > li[data-team="' + rootA.id + '"] > ul > li[data-team="' + branchA.id + '"] > ul > li[data-team="' + leafA.id + '"]'), 'organigramme : la cellule est sous sa branche, elle-même sous sa direction (arbre imbriqué)');
@@ -181,6 +186,67 @@ function openPage(user) {
   check(!!q('li[data-team="' + branchA.id + '"] > .team-card.on') && q('#team-filter').value === branchA.id, 'cliquer une équipe la met en évidence et filtre les personnes');
   const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'Ressources.html'), 'utf8');
   check(/grid-template-columns: minmax\(0, 3fr\) minmax\(0, 1fr\)/.test(css) && /\.teams ul > li::before/.test(css) && /\.teams ul > li:last-child::after/.test(css), 'mise en page 75 % pour la liste, 25 % pour les équipes, avec traits de liaison entre équipes');
+
+
+  // ---------------------------------------------------------------- 0.17.0 : équipes du projet, toutes les équipes dans les formulaires, import de la structure des équipes
+  const tp = openPage(CP);
+  await tp.until(() => tp.$('teams-all-row') && !tp.$('teams-all-row').hidden && tp.doc.querySelector('#teams-list [data-team]'));
+  const listed = (pg) => [...pg.doc.querySelectorAll('#teams-list .t-name')].map((n) => n.textContent);
+  check(listed(tp).includes('Calcul') && listed(tp).includes('Bureau d’études') && !listed(tp).some((n) => /Direction|Cellule|Branche/.test(n)), 'par défaut : seulement les équipes dont un membre participe au projet (Rémi, dans Calcul) et leur parent ; pas les équipes sans participant : ' + listed(tp).join(' | '));
+  check(tp.doc.querySelector('#teams-list li[data-team="' + be.id + '"] > .team-card').classList.contains('ctx') && !tp.doc.querySelector('#teams-list li[data-team="' + calc.id + '"] > .team-card').classList.contains('ctx') && /1 au projet/.test(flat(tp.doc.querySelector('#teams-list li[data-team="' + calc.id + '"] > .team-card').textContent)), 'le parent est grisé (aucun participant direct), l’équipe qui participe dit combien de ses membres sont au projet');
+  check(/dont au moins un membre participe à ce projet/.test(tp.text('teams-note')) && !tp.$('teams-all').checked, 'la note dit la règle et propose « Toutes les équipes »');
+  check(![...tp.$('team-filter').options].some((o) => /Direction est/.test(o.textContent)) && [...tp.$('team-filter').options].some((o) => /Calcul/.test(o.textContent)), 'le filtre des personnes ne propose, lui aussi, que les équipes du projet');
+  tp.click(tp.doc.querySelector('#res-table tr[data-id="' + w.mia.id + '"] .person-edit'));
+  await tp.until(() => tp.$('genform').open && tp.$('gf-team_id'));
+  const formTeams = [...tp.$('gf-team_id').options].map((o) => o.textContent.replace(/^[— ]+/, ''));
+  check(['Direction est', 'Direction ouest', 'Cellule fatigue', 'Branche calcul', 'Calcul', 'Bureau d’études'].every((n) => formTeams.includes(n)), 'le formulaire d’une personne propose TOUTES les équipes existantes, même celles qui ne participent pas au projet : ' + formTeams.join(' | '));
+  tp.click(tp.$('gf-cancel'));
+  tp.$('teams-all').checked = true; tp.change(tp.$('teams-all'));
+  check(listed(tp).includes('Direction est') && listed(tp).includes('Cellule fatigue') && !tp.doc.querySelector('#teams-list .team-card.ctx') && /toutes les équipes sont affichées/.test(tp.text('teams-note')), '« Toutes les équipes » les montre toutes, sans grisé');
+  tp.$('teams-all').checked = false; tp.change(tp.$('teams-all'));
+  check(!listed(tp).includes('Direction est'), 'décochée : elles disparaissent de nouveau');
+  // créer une équipe à la main reste possible ; une équipe toute neuve est visible tout de suite
+  tp.click(tp.$('team-add'));
+  await tp.until(() => tp.$('genform').open);
+  tp.set('name', 'Pôle créé à la main'); tp.submit();
+  await tp.until(() => c.repoList('HierarchicalTeam').some((t) => t.name === 'Pôle créé à la main'));
+  await tp.until(() => listed(tp).includes('Pôle créé à la main'));
+  check(tp.$('teams-all').checked && /apparaîtra parmi les équipes du projet quand un de ses membres y participera/.test(tp.text('toast')), 'une équipe créée à la main s’affiche aussitôt (toutes les équipes sont montrées) et le message explique quand elle sera « du projet »');
+  // importer la structure des équipes
+  check(!tp.$('teams-import').hidden, 'le chef de projet a le bouton « Importer des équipes »');
+  const lola = c.repoInsert('Resource', { resource_type: 'Interne', name: 'Lola Libre', email: 'lola@entreprise.com', country: 'FR' }, w.S);
+  tp.click(tp.$('teams-import'));
+  await tp.until(() => tp.$('timp').open && tp.$('timp-template'));
+  check(tp.$('timp-run').disabled, 'on ne peut pas importer avant d’avoir analysé');
+  tp.click(tp.$('timp-template'));
+  await tp.until(() => tp.$('timp-template-link'));
+  check(/équipes?, \d+ membres?/.test(tp.text('timp-template-out')) && tp.$('timp-book').value === tp.$('timp-template-link').getAttribute('href'), 'le modèle est créé, prérempli, son lien est dans le champ d’import : ' + tp.text('timp-template-out'));
+  const book = c.SpreadsheetApp.openById(/\/d\/([^/?#]+)/.exec(tp.$('timp-book').value)[1]);
+  const add = (tab, rows2) => { const sh = book.getSheetByName(tab); sh.getRange(sh.getLastRow() + 1, 1, rows2.length, rows2[0].length).setValues(rows2); };
+  tp.click(tp.$('timp-analyze'));
+  await tp.until(() => tp.$('timp-head'));
+  check(/Rien à importer/.test(tp.text('timp-head')) && tp.$('timp-run').disabled, 'le modèle relu tel quel : rien à importer, « Importer » inactif');
+  add('Équipes', [['Pôle essais', 'Parent fantôme', '', '']]);
+  tp.click(tp.$('timp-analyze'));
+  await tp.until(() => tp.$('timp-errors'));
+  check(/1 erreur/.test(tp.text('timp-head')) && /Équipes, ligne \d+ — Équipe parente « Parent fantôme » : introuvable/.test(tp.text('timp-errors')) && tp.$('timp-run').disabled, 'une erreur dit l’onglet, la ligne et ce qui manque ; « Importer » reste inactif : ' + tp.text('timp-errors').slice(0, 120));
+  const last = book.getSheetByName('Équipes'); last.getRange(last.getLastRow(), 2).setValue('Bureau d’études');
+  add('Membres', [['Pôle essais', 'Lola Libre', 'lola@entreprise.com', 'Interne', '', '', 'FR', ''], ['Pôle essais', 'Nina Roux', 'nina@entreprise.com', 'Interne', 'Ingénieure', '', 'FR', '']]);
+  tp.click(tp.$('timp-analyze'));
+  await tp.until(() => tp.$('timp-counts'));
+  check(/Équipes : 1 à créer/.test(tp.text('timp-counts')) && /Personnes : 1 à créer, 1 à rattacher/.test(tp.text('timp-counts')) && !tp.$('timp-run').disabled, 'le plan chiffré s’affiche, « Importer » devient actif : ' + tp.text('timp-counts'));
+  const realRun = c.API_ACTIONS['teams.import.run']; const seen = [];
+  c.API_ACTIONS['teams.import.run'] = (params, ctx) => { const out = realRun(Object.assign({}, params, { maxOps: 1 }), ctx); seen.push([!!params.resume, !!out.backup]); return out; };
+  tp.click(tp.$('timp-run'));
+  await tp.until(() => c.repoList('HierarchicalTeam').some((t) => t.name === 'Pôle essais') && c.findResourceByEmail('nina@entreprise.com') && /Import terminé/.test(tp.text('timp-status')), 8000);
+  c.API_ACTIONS['teams.import.run'] = realRun;
+  const pe = c.repoList('HierarchicalTeam').find((t) => t.name === 'Pôle essais');
+  check(pe.parent_team_id === be.id && c.repoGet('Resource', lola.id).team_id === pe.id && c.findResourceByEmail('nina@entreprise.com').team_id === pe.id, 'importé : l’équipe sous son parent, la personne existante rattachée, la personne neuve créée dans l’équipe');
+  check(seen.length >= 3 && JSON.stringify(seen[0]) === '[false,true]' && seen.slice(1).every((x) => x[0] === true && x[1] === false), 'relancé lot après lot, une seule copie de sécurité (une personne existante a changé) : ' + JSON.stringify(seen));
+  check(!!tp.$('timp-backup-link') && /Copie avant import d’équipes/.test(tp.text('timp-backup')), 'le lien de la copie reste affiché');
+  tp.click(tp.$('timp-close'));
+  await tp.until(() => listed(tp).includes('Pôle essais'));
+  check(listed(tp).includes('Pôle essais'), 'la liste des équipes est rafraîchie après l’import');
 
   console.log(failed ? '\n' + failed + ' échec(s).' : '\nPage Ressources : tout est conforme.');
   process.exit(failed ? 1 : 0);

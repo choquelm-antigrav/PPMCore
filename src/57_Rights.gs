@@ -36,7 +36,7 @@ var RIGHTS_ROWS = [
   { group: 'Budget et achats', perm: 'cpn.edit', label: 'Définir le CPN du projet et des sous-projets' },
   { group: 'Budget et achats', perm: 'po.edit', label: 'Saisir les commandes d’achat (PO)' },
   { group: 'Budget et achats', perm: 'actuals.manage', label: 'Importer les réalisés' },
-  { group: 'Personnes', perm: 'resource.edit', label: 'Créer et modifier les personnes (page Ressources)', where: 'chacun peut modifier sa propre fonction et son organisation' },
+  { group: 'Personnes', perm: 'resource.edit', label: 'Créer et modifier les personnes et les équipes, importer la structure des équipes (page Ressources)', where: 'chacun peut modifier sa propre fonction et son organisation' },
   { group: 'Projets et programmes', perm: 'program.create', label: 'Créer un programme' },
   { group: 'Projets et programmes', perm: 'project.create', label: 'Créer un projet' },
   { group: 'Risques, constats, actualités', perm: 'risk.create', label: 'Créer un risque ou une opportunité' },
