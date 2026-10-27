@@ -1,5 +1,12 @@
 # Journal des versions
 
+## 0.17.4 — l'exercice dans un classeur Google Sheet : export et import
+
+- **Export** (`exercise.import.template`) : un classeur créé dans Drive et partagé avec vous, prérempli avec l'exercice choisi pour vos projets : onglet **Budget par équipe** (projet, équipe, attendu, accordé) et onglet **Parts des livrables** (projet, code WBS du workpackage, livrable, équipe, montant). **Import** en trois temps : **analyse** sans écriture (`exercise.import.analyze`, chaque erreur avec son onglet et sa ligne), puis **application par lots** reprenables (`exercise.import.run`, paramètre `resume`).
+- **Règles** : les valeurs du classeur sont appliquées ; une cellule vide ne change rien ; rien n'est supprimé ; les règles de l'exercice jouent ligne à ligne (attendu figé en exécution, exercice clos, équipes de 3 ou 4 caractères, un livrable n'a qu'un exercice, droits par projet) ; copie de sécurité avant le premier lot si des valeurs existantes changent. L'import passe par `exercise.set` et `budget.line.save` et n'envoie que ce qui change.
+- **Page Budget** : bouton « Exporter ou importer l'exercice (Google Sheet) » dans la zone de l'exercice, avec sa boîte en trois étapes ; le tableau est rafraîchi après l'import. Le contrôle d'équipe de l'exercice est partagé (`exerciseTeamCheck_`) ; la lecture des onglets de l'import de projets accepte maintenant une liste d'onglets.
+- Tests : `test_exercise_import.js` (8), `ui_budget.js` (84) ; treize sabotages vérifiés (dont la copie de sécurité refaite à chaque lot, qui exigeait un essai de plus). **Backlog** : cette étape est faite (`BACKLOG.md`).
+
 ## 0.17.3 — jalons : « Mes jalons », Gantt creux ou plein, rappels
 
 - **Page Compte, « Mes jalons »** (`milestones.mine`) : les jalons dont on est responsable (échus ou à venir sous 30 jours), tous projets confondus ; **Marquer passé** avec confirmation en deux temps ; **Rouvrir** pour ceux passés depuis 30 jours.

@@ -266,6 +266,17 @@ defineAction('exercise.program', function (p, ctx) {
   return Object.assign({ exercise: exerciseView_(ex), program: { id: program.id, code: program.code, name: program.name }, projects: perProject }, table);
 });
 
+/** Le message d'erreur si l'équipe ne peut pas porter de budget (nom de 3 ou 4 caractères ; 4 caractères : une parente à 3), sinon ''. */
+function exerciseTeamCheck_(team) {
+  var lvl = teamLevel_(team);
+  if (!lvl) return 'Le budget se saisit par équipe dont le nom a 3 ou 4 caractères (« ' + team.name + ' » en a ' + String(team.name).trim().length + ').';
+  if (lvl === 4) {
+    var par = isBlank(team.parent_team_id) ? null : repoGet('HierarchicalTeam', team.parent_team_id);
+    if (!par || teamLevel_(par) !== 3) return 'L’équipe « ' + team.name + ' » (4 caractères) doit être rattachée à une équipe de 3 caractères pour s’additionner dans sa parente.';
+  }
+  return '';
+}
+
 /**
  * Saisir l'attendu et/ou l'accordé d'une équipe sur un projet. Le chef de projet et au-dessus. L'attendu se fige quand l'exercice passe en exécution ; l'accordé reste modifiable
  * (février, avril) jusqu'à la clôture. Une valeur vide efface ; une ligne sans aucune valeur disparaît.
@@ -276,12 +287,8 @@ defineAction('exercise.set', function (p, ctx) {
   var ex = mustGet('Exercise', requireParam(p, 'exerciseId'));
   if (ex.status === 'Clos') throw new PpmError('VALIDATION', 'L’exercice ' + ex.year + ' est clos : on n’y change plus rien.');
   var team = mustGet('HierarchicalTeam', requireParam(p, 'teamId'));
-  var lvl = teamLevel_(team);
-  if (!lvl) throw new PpmError('VALIDATION', 'Le budget se saisit par équipe dont le nom a 3 ou 4 caractères (« ' + team.name + ' » en a ' + String(team.name).trim().length + ').');
-  if (lvl === 4) {
-    var par = isBlank(team.parent_team_id) ? null : repoGet('HierarchicalTeam', team.parent_team_id);
-    if (!par || teamLevel_(par) !== 3) throw new PpmError('VALIDATION', 'L’équipe « ' + team.name + ' » (4 caractères) doit être rattachée à une équipe de 3 caractères pour s’additionner dans sa parente.');
-  }
+  var teamErr = exerciseTeamCheck_(team);
+  if (teamErr) throw new PpmError('VALIDATION', teamErr);
   var touched = ['expected', 'granted'].filter(function (f) { return f in p; });
   if (!touched.length) throw new PpmError('VALIDATION', 'Rien à enregistrer : donnez l’attendu ou l’accordé.');
   if (touched.indexOf('expected') >= 0 && ex.status !== 'Préparation') throw new PpmError('VALIDATION', 'Le budget attendu est figé : l’exercice ' + ex.year + ' est en ' + ex.status.toLowerCase() + '.');

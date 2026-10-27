@@ -287,14 +287,15 @@ function importBookId_(ref) {
 }
 
 /** Lit tous les onglets du classeur. Les onglets Projets, Workpackages, Livrables, Jalons et Budget sont obligatoires ; Programmes, Personnes et Dépendances sont facultatifs. */
-function importReadBook_(ref) {
+/** `tabs` : les onglets attendus (par défaut ceux de l'import de projets ; l'import de l'exercice passe les siens). */
+function importReadBook_(ref, tabs) {
   var id = importBookId_(ref), ss;
   try { ss = SpreadsheetApp.openById(id); } catch (e) {
     var who = ''; try { who = Session.getEffectiveUser().getEmail(); } catch (e2) { who = ''; }
     throw new PpmError('VALIDATION', 'Classeur illisible. Utilisez le classeur créé par l’outil, ou partagez le vôtre en lecture avec ' + (who || 'le compte qui exécute l’outil') + '.');
   }
   var parsed = {}, problems = [];
-  IMPORT_TABS.forEach(function (tab) {
+  (tabs || IMPORT_TABS).forEach(function (tab) {
     var sh = ss.getSheetByName(tab.name);
     if (!sh) { if (!tab.optional) problems.push({ tab: tab.name, row: 0, message: 'Onglet « ' + tab.name + ' » introuvable : gardez les onglets du modèle.' }); parsed[tab.name] = []; return; }
     var data = sh.getLastRow() < 1 ? [] : sh.getDataRange().getValues().map(function (row) { return row.map(normalizeValue); });

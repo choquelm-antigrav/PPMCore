@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.17.3">
+<meta name="ppm-version" content="0.17.4">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -551,6 +551,15 @@
 <style>
   .box { margin: 0 0 20px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow); }
   .panel { padding: 8px 24px 32px; max-width: 1240px; }
+  .import-dialog { width: min(760px, 94vw); max-height: 90vh; }
+  .imp-step { margin: 14px 0; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 10px; }
+  .imp-step .note { margin: 4px 0 8px; }
+  .imp-step .lbl { display: block; margin: 8px 0; }
+  .imp-step input[type=text] { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; }
+  .imp-head.ok { color: var(--ok-ink); font-weight: 600; } .imp-head.bad { color: var(--alert-ink); font-weight: 600; }
+  .imp-sub { margin: 10px 0 4px; font-size: 14px; }
+  .imp-list { margin: 0 0 8px; padding-left: 18px; font-size: 13.5px; max-height: 220px; overflow: auto; }
+  .imp-counts { margin: 4px 0 8px; padding-left: 18px; font-size: 14px; }
   h2.sec { margin: 24px 0 12px; font-size: 16px; font-weight: 600; }
   .note { margin: 8px 0 0; color: var(--muted); font-size: 14px; max-width: 76ch; }
   .card { padding: 12px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); }
@@ -798,6 +807,14 @@
       <button type="submit" class="btn primary" id="po-save">Enregistrer</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="eximp" aria-labelledby="eximp-title" class="import-dialog">
+  <div class="imp-box">
+    <h2 id="eximp-title">Importer l’exercice</h2>
+    <div id="eximp-body"></div>
+    <div class="actions"><button type="button" class="btn" id="eximp-close">Fermer</button></div>
+  </div>
 </dialog>
 
 <dialog id="confirm" aria-labelledby="confirm-title">
@@ -1348,6 +1365,8 @@ var BOOT = <?!= boot ?>;
     // équipes qui ne s'additionnent nulle part
     if (v.orphans.length) panel.appendChild(el('p', { class: 'note late', id: 'exercise-orphans', text: 'Équipes à 4 caractères sans équipe parente à 3 caractères (non additionnées) : ' + v.orphans.map(function (o) { return o.name + ' (attendu ' + (o.expected === null ? '—' : eur(o.expected)) + ', parts ' + eur(o.parts) + ')'; }).join(' ; ') + '.' }));
     if (v.unruled.length) panel.appendChild(el('p', { class: 'note late', id: 'exercise-unruled', text: 'Parts sur des équipes dont le nom n’a pas 3 ou 4 caractères (hors règle, non comptées dans les équipes ci-dessus) : ' + v.unruled.map(function (o) { return o.name + ' ' + eur(o.parts); }).join(' ; ') + '.' }));
+    // exporter / importer l'exercice dans un classeur Google Sheet (la préparation se fait dans un tableur)
+    if (v.can_edit) panel.appendChild(el('div', { class: 'row' }, [el('button', { type: 'button', class: 'btn', id: 'exercise-import', text: 'Exporter ou importer l’exercice (Google Sheet)', onclick: openExerciseImport })]));
     // ajouter une équipe au tableau
     if (v.can_edit) {
       var inTable = {};
@@ -1362,6 +1381,94 @@ var BOOT = <?!= boot ?>;
         panel.appendChild(el('div', { class: 'row' }, [sel, add]));
       }
     }
+  }
+
+  // ------------------------------------------------------------ exercice : export et import par classeur Google Sheet
+  /**
+   * La préparation de l'exercice se fait d'abord dans un tableur. (1) créer le classeur, prérempli avec l'exercice choisi (c'est aussi l'export) ; (2) coller le lien du classeur modifié et « Analyser »
+   * (un rapport, rien n'est écrit) ; (3) « Importer », seulement sans erreur, par lots. Les valeurs du classeur sont appliquées ; une cellule vide ne change rien ; rien n'est supprimé.
+   */
+  var eximp = { report: null, book: '', exerciseId: '', busy: false };
+  function eximpBusy(on, msg) {
+    eximp.busy = on;
+    ['eximp-template', 'eximp-analyze', 'eximp-run'].forEach(function (id) { var b = $(id); if (b) b.disabled = on || (id === 'eximp-run' && !(eximp.report && eximp.report.ok && !eximp.report.nothing_to_do)); });
+    var st = $('eximp-status'); if (st) st.textContent = msg || '';
+  }
+  function eximpCounts(c) {
+    var b = c.budgets, p = c.parts;
+    return [b.create + b.update + b.same ? 'Budget par équipe : ' + b.create + ' à créer, ' + b.update + ' à modifier, ' + b.same + ' inchangée' + (b.same > 1 ? 's' : '') : '',
+      p.create + p.update + p.same ? 'Parts des livrables : ' + p.create + ' à créer, ' + p.update + ' à modifier, ' + p.same + ' inchangée' + (p.same > 1 ? 's' : '') : ''].filter(Boolean);
+  }
+  function eximpRender() {
+    var box = $('eximp-report'), rep = eximp.report;
+    clear(box);
+    if (!rep) return;
+    box.appendChild(el('p', { class: 'imp-head ' + (rep.ok ? 'ok' : 'bad'), id: 'eximp-head', role: 'status', text: rep.ok ? (rep.nothing_to_do ? 'Rien à importer : le classeur correspond déjà à l’exercice.' : 'Analyse sans erreur : voici ce qui sera fait.') : 'Le classeur a ' + rep.errors_count + (rep.errors_count > 1 ? ' erreurs' : ' erreur') + ' : corrigez-les dans le classeur, puis relancez « Analyser ». Rien n’a été écrit.' }));
+    if (rep.ok) box.appendChild(el('ul', { class: 'imp-counts', id: 'eximp-counts' }, eximpCounts(rep.counts).map(function (t) { return el('li', { text: t }); })));
+    var list = function (title, items, id) {
+      if (!items.length) return;
+      box.appendChild(el('h3', { class: 'imp-sub', text: title }));
+      box.appendChild(el('ul', { class: 'imp-list', id: id }, items.map(function (x) { return el('li', {}, [el('strong', { text: x.tab + (x.row ? ', ligne ' + x.row : '') + ' — ' }), x.message]); })));
+    };
+    list('Erreurs (' + rep.errors_count + ')', rep.errors, 'eximp-errors');
+    list('À savoir (' + rep.warnings_count + ')', rep.warnings, 'eximp-warnings');
+  }
+  function eximpReset() { eximp.report = null; eximpRender(); eximpBusy(false, ''); }
+  function openExerciseImport() {
+    var ex = currentExercise();
+    if (!ex) { toast('Choisissez d’abord un exercice.', true); return; }
+    eximp.report = null; eximp.book = ''; eximp.exerciseId = ex.id;
+    $('eximp-title').textContent = 'Exporter ou importer l’exercice ' + ex.year + ' (' + ex.status.toLowerCase() + ')';
+    var body = $('eximp-body'); clear(body);
+    body.appendChild(el('p', { class: 'note', text: 'La préparation se fait d’abord dans un tableur : budget attendu par équipe et par projet, puis parts des livrables par équipe, puis accordé. Les valeurs du classeur sont appliquées ; une cellule vide ne change rien ; rien n’est supprimé ; une copie de sécurité est enregistrée avant de modifier des valeurs existantes. Les livrables doivent exister déjà (page WBS).' }));
+    body.appendChild(el('div', { class: 'imp-step' }, [el('strong', { text: '1. Le classeur (aussi un export)' }),
+      el('p', { class: 'note', text: 'Créé dans Drive et partagé avec vous, prérempli avec l’exercice de vos projets.' }),
+      el('button', { type: 'button', class: 'btn', id: 'eximp-template', text: 'Créer le classeur', onclick: eximpTemplate }), el('div', { id: 'eximp-template-out' })]));
+    var input = el('input', { type: 'text', id: 'eximp-book', placeholder: 'https://docs.google.com/spreadsheets/d/…', autocomplete: 'off', 'aria-label': 'Lien du classeur à importer' });
+    input.addEventListener('input', function () { eximp.book = input.value; eximpReset(); });
+    body.appendChild(el('div', { class: 'imp-step' }, [el('strong', { text: '2. Analyser' }), el('label', { class: 'lbl' }, ['Lien du classeur modifié', input]),
+      el('button', { type: 'button', class: 'btn', id: 'eximp-analyze', text: 'Analyser', onclick: eximpAnalyze })]));
+    body.appendChild(el('div', { id: 'eximp-report' }));
+    body.appendChild(el('div', { class: 'imp-step' }, [el('strong', { text: '3. Importer' }),
+      el('button', { type: 'button', class: 'btn primary', id: 'eximp-run', text: 'Importer', disabled: true, onclick: eximpRun }),
+      el('span', { class: 'note', id: 'eximp-status', role: 'status', 'aria-live': 'polite' }), el('div', { id: 'eximp-backup' })]));
+    openDialog($('eximp'));
+  }
+  function eximpError(e) { eximpBusy(false, ''); toast(ppmErrorText(e), true); }
+  function eximpTemplate() {
+    eximpBusy(true, 'Création du classeur…');
+    call('exercise.import.template', { exerciseId: eximp.exerciseId }, true).then(function (t) {
+      eximp.book = t.url; $('eximp-book').value = t.url;
+      var out = $('eximp-template-out'); clear(out);
+      out.appendChild(el('p', {}, [el('a', { href: t.url, target: '_blank', rel: 'noopener', id: 'eximp-template-link', text: 'Ouvrir « ' + t.name + ' »' }), ' — ' + plural(t.prefilled.budgets, 'ligne de budget', 'lignes de budget') + ', ' + plural(t.prefilled.parts, 'part de livrable', 'parts de livrables') + '.']));
+      (t.warnings || []).forEach(function (w) { out.appendChild(el('p', { class: 'note', text: w })); });
+      eximpBusy(false, '');
+    }).catch(eximpError);
+  }
+  function eximpAnalyze() {
+    if (!String(eximp.book || '').trim()) { toast('Collez d’abord le lien du classeur.', true); return; }
+    eximpBusy(true, 'Analyse…');
+    call('exercise.import.analyze', { exerciseId: eximp.exerciseId, book: eximp.book }).then(function (rep) { eximp.report = rep; eximpRender(); eximpBusy(false, ''); }).catch(eximpError);
+  }
+  function eximpRun() {
+    if (!eximp.report || !eximp.report.ok) return;
+    var lot = 0, total = null;
+    var next = function () {
+      lot++;
+      eximpBusy(true, 'Import en cours — lot ' + lot + (total === null ? '' : ', reste ' + total + ' opération(s)') + '…');
+      return call('exercise.import.run', { exerciseId: eximp.exerciseId, book: eximp.book, resume: lot > 1 }, true).then(function (r) {
+        if (r.backup) { var b = $('eximp-backup'); clear(b); b.appendChild(el('p', { class: 'note' }, ['Copie de sécurité enregistrée avant l’import : ', el('a', { href: r.backup.url, target: '_blank', rel: 'noopener', id: 'eximp-backup-link', text: r.backup.name })])); }
+        total = r.remaining;
+        if (r.done) return r;
+        if (lot >= 60) throw new Error('Import interrompu après 60 lots : relancez-le pour continuer.');
+        return next();
+      });
+    };
+    next().then(function () {
+      eximp.report = null; eximpRender(); eximpBusy(false, 'Import terminé.'); $('eximp-run').disabled = true;
+      toast('Exercice importé.');
+      return reload();
+    }).catch(eximpError);
   }
 
   // ------------------------------------------------------------ événements et démarrage
@@ -1421,6 +1528,7 @@ var BOOT = <?!= boot ?>;
     if (a.budget) jobs.push(loadBudget());
     return Promise.all(jobs);
   });
+  $('eximp-close').addEventListener('click', function () { closeDialog($('eximp')); });
   $('cpn-edit').addEventListener('click', editCpn);
   $('gf-form').addEventListener('submit', function (e) { e.preventDefault(); submitForm(); });
   $('gf-cancel').addEventListener('click', function () { closeDialog($('genform')); });
