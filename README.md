@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.17.2)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.17.3)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -283,6 +283,9 @@ Un jalon n'a pas d'avancement : il est atteint ou il ne l'est pas. Jusqu'en 0.17
 - **Effet** : statut Terminé, avancement 100 %, date réelle, tracé dans le journal des changements. Toutes les règles qui regardent « terminé » cessent d'alerter ce jalon : retard (`LATE_ITEM`), glissement critique (`CRITICAL_SLIP`), jalon menacé (`MILESTONE_THREATENED`). Rouvrir le remet à faire (et les alertes reviennent si sa date est dépassée).
 - **Ce qui reste signalé** : un jalon déclaré passé alors qu'un livrable qu'il exige n'est pas terminé (`MILESTONE_INCOMPLETE`) : c'est une incohérence, pas un retard ; elle se traite comme les autres constats (accepter ou ignorer).
 - Droit : `milestone.pass`, ligne « Marquer un jalon passé (ou le rouvrir) » du tableau des droits.
+- **Depuis Mon compte (0.17.3)** : la zone **« Mes jalons »** (page Compte) liste, tous projets confondus, les jalons dont on est responsable, échus ou à venir dans 30 jours ; **Marquer passé** (confirmation en deux temps : un premier clic, puis « Confirmer : passé aujourd'hui ») ; les jalons passés depuis 30 jours se **rouvrent** d'un clic. La zone n'apparaît que s'il y a des jalons. Action : `milestones.mine`.
+- **Gantt (0.17.3)** : un jalon **à venir est creux** (contour), un jalon **passé est plein** (vert) ; un jalon échu non déclaré est creux et rouge. La légende l'explique.
+- **Récapitulatif du matin (0.17.3)** : un jalon passé n'y figure plus. Un jalon échu est rappelé chaque matin à son responsable (« jalon échu depuis N jours : à déclarer passé ou à replanifier », avec le lien du WBS) ; au bout de **7 jours** (`THRESHOLDS.milestoneStaleDays`), ceux qui pilotent le projet (chef de projet, DPL) lisent « N jalons échus depuis plus de 7 jours, non déclarés passés : … (responsable) ». Il n'y a pas de mail de plus : c'est le récapitulatif existant. L'alerte de retard dit maintenant au responsable comment s'en sortir. Aussi vérifié : un jalon passé disparaît des prochains jalons de l'Overview, de ceux du prompt des actualités, et son événement d'agenda est marqué ✓.
 
 ## L'exercice budgétaire annuel : budget par équipe, livrables, clash (0.17.1)
 

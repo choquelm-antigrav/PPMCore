@@ -34,7 +34,9 @@ function evaluateRules(data, today, holFor) {
     if (!done && !isBlank(it.planned_finish) && it.planned_finish < today) {
       push(it.project_id, 'LATE_ITEM', 'Alerte', 'PlanItem', it.id,
         label + ' devait être terminé le ' + it.planned_finish + ' (avancement ' + (Number(it.progress_pct) || 0) + ' %).',
-        'Déclarer l’avancement ou mettre à jour la prévision ; si le retard est confirmé, vérifier l’impact sur les successeurs.');
+        it.item_type === 'Jalon'
+          ? 'Le responsable du jalon le déclare passé (page WBS, ou « Mes jalons » dans Mon compte) s’il l’est, sinon il replanifie sa date ; si le retard est confirmé, vérifier l’impact sur les successeurs.'
+          : 'Déclarer l’avancement ou mettre à jour la prévision ; si le retard est confirmé, vérifier l’impact sur les successeurs.');
     }
     if (isBlank(it.owner_resource_id)) {
       push(it.project_id, 'MISSING_OWNER', 'Vigilance', 'PlanItem', it.id,

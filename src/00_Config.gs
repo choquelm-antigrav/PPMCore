@@ -5,7 +5,7 @@
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.17.2';
+var PPM_VERSION = '0.17.3';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -15,6 +15,7 @@ var TECH_COLS = ['created_at', 'created_by', 'updated_at', 'updated_by', 'versio
 var THRESHOLDS = {
   staleProgressDays: 30,
   dueSoonDays: 7,
+  milestoneStaleDays: 7,        // un jalon échu depuis plus de N jours sans avoir été déclaré passé est signalé à ceux qui pilotent le projet (récapitulatif du matin)
   criticalSlipDays: 5,
   cpiWarn: 0.95,
   cpiAlert: 0.90,

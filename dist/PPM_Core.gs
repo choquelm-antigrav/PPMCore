@@ -1,5 +1,5 @@
 /**
- * PPM Core 0.17.2 — fichier unique à installer (fabriqué par tools/build.js, empreinte cb7c846e6df0).
+ * PPM Core 0.17.3 — fichier unique à installer (fabriqué par tools/build.js, empreinte de2f8d3befbd).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
  * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs, 53_Roles.gs, 54_Validation.gs, 55_Envelope.gs, 56_Import.gs, 57_Rights.gs, 58_ScopeBaselines.gs, 59_TeamImport.gs, 60_Exercise.gs.
  */
@@ -47,7 +47,7 @@ function A9_MIGRER_ROLES_SIMULATION() { return migrerRoles_(true); }
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.17.2';
+var PPM_VERSION = '0.17.3';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -57,6 +57,7 @@ var TECH_COLS = ['created_at', 'created_by', 'updated_at', 'updated_by', 'versio
 var THRESHOLDS = {
   staleProgressDays: 30,
   dueSoonDays: 7,
+  milestoneStaleDays: 7,        // un jalon échu depuis plus de N jours sans avoir été déclaré passé est signalé à ceux qui pilotent le projet (récapitulatif du matin)
   criticalSlipDays: 5,
   cpiWarn: 0.95,
   cpiAlert: 0.90,
@@ -1400,7 +1401,9 @@ function evaluateRules(data, today, holFor) {
     if (!done && !isBlank(it.planned_finish) && it.planned_finish < today) {
       push(it.project_id, 'LATE_ITEM', 'Alerte', 'PlanItem', it.id,
         label + ' devait être terminé le ' + it.planned_finish + ' (avancement ' + (Number(it.progress_pct) || 0) + ' %).',
-        'Déclarer l’avancement ou mettre à jour la prévision ; si le retard est confirmé, vérifier l’impact sur les successeurs.');
+        it.item_type === 'Jalon'
+          ? 'Le responsable du jalon le déclare passé (page WBS, ou « Mes jalons » dans Mon compte) s’il l’est, sinon il replanifie sa date ; si le retard est confirmé, vérifier l’impact sur les successeurs.'
+          : 'Déclarer l’avancement ou mettre à jour la prévision ; si le retard est confirmé, vérifier l’impact sur les successeurs.');
     }
     if (isBlank(it.owner_resource_id)) {
       push(it.project_id, 'MISSING_OWNER', 'Vigilance', 'PlanItem', it.id,
@@ -5612,7 +5615,7 @@ function buildDigests(data, today, opts) {
     mine.forEach(function (i) {
       var f = i.planned_finish;
       var p = projects[i.project_id];
-      var line = { text: p.code + ' · ' + i.name, date: f, url: link('gantt', i.project_id) };
+      var line = { text: p.code + ' · ' + (i.item_type === 'Jalon' ? '◆ ' : '') + i.name, date: f, url: link(i.item_type === 'Jalon' ? 'structure' : 'gantt', i.project_id), milestone: i.item_type === 'Jalon' };
       if (!isBlank(f) && f < today) late.push(line);
       else if (!isBlank(f) && f <= soon) due.push(line);
       if (i.item_type === 'Livrable' && Number(i.progress_pct) > 0) {
@@ -5621,7 +5624,11 @@ function buildDigests(data, today, opts) {
       }
     });
     var byDate = function (a, b) { return String(a.date).localeCompare(String(b.date)); };
-    if (late.length) sections.push({ title: 'En retard', tone: 'alert', lines: late.sort(byDate).map(function (l) { return Object.assign(l, { note: 'fin prévue le ' + frDate_(l.date) }); }) });
+    // un jalon échu se déclare passé (page WBS ou Mon compte) ou se replanifie ; tant qu'il ne l'est pas, il est rappelé ici chaque matin
+    if (late.length) sections.push({ title: 'En retard', tone: 'alert', lines: late.sort(byDate).map(function (l) {
+      var d = Math.round((parseYmd(today) - parseYmd(l.date)) / DAY_MS);
+      return Object.assign(l, { note: l.milestone ? 'jalon échu depuis ' + d + (d > 1 ? ' jours' : ' jour') + ' (le ' + frDate_(l.date) + ') : à déclarer passé ou à replanifier' : 'fin prévue le ' + frDate_(l.date) });
+    }) });
     if (due.length) sections.push({ title: 'À échéance dans les ' + THRESHOLDS.dueSoonDays + ' jours', lines: due.sort(byDate).map(function (l) { return Object.assign(l, { note: 'le ' + frDate_(l.date) }); }) });
     if (stale.length) sections.push({ title: 'Avancement à déclarer', lines: stale.sort(byDate).map(function (l) { return Object.assign(l, { note: 'dernière déclaration le ' + frDate_(l.date) }); }) });
 
@@ -5648,6 +5655,14 @@ function buildDigests(data, today, opts) {
       (data.baselines || []).filter(function (b) { return live(b) && b.project_id === p.id && b.status === 'Demandée'; }).forEach(function (b) {
         pilotLines.push({ text: p.code + ' · demande de baseline de ' + b.requested_by, note: truncate(b.justification, 140), url: link('suivi', p.id, '&tab=baselines') });
       });
+      // des jalons échus depuis plus de N jours que leur responsable n'a toujours pas déclarés passés : un rappel à ceux qui pilotent
+      var staleMs = data.planitems.filter(function (i) {
+        return live(i) && i.project_id === p.id && i.item_type === 'Jalon' && !isDone_(i) && !isBlank(i.planned_finish) && i.planned_finish < addCalendarDays(today, -THRESHOLDS.milestoneStaleDays);
+      }).sort(byDate);
+      if (staleMs.length) {
+        var who = function (i) { var o = data.resources.filter(function (x) { return x.id === i.owner_resource_id; })[0]; return o ? ' (' + o.name + ')' : ' (sans responsable)'; };
+        pilotLines.push({ text: p.code + ' · ' + staleMs.length + (staleMs.length > 1 ? ' jalons échus' : ' jalon échu') + ' depuis plus de ' + THRESHOLDS.milestoneStaleDays + ' jours, non déclaré' + (staleMs.length > 1 ? 's' : '') + ' passé' + (staleMs.length > 1 ? 's' : '') + ' : ' + staleMs.slice(0, 3).map(function (i) { return i.name + who(i); }).join(', ') + (staleMs.length > 3 ? '…' : ''), tone: 'alert', url: link('structure', p.id) });
+      }
       var ins = (data.insights || []).filter(function (x) { return live(x) && x.project_id === p.id && x.status === 'Nouveau'; });
       var alerts = ins.filter(function (x) { return x.severity === 'Alerte'; });
       alerts.slice(0, 3).forEach(function (x) { pilotLines.push({ text: p.code + ' · ' + x.message, tone: 'alert', url: link('gantt', p.id) }); });
@@ -7648,6 +7663,32 @@ defineAction('milestone.pass', function (p, ctx) {
     var rec = repoUpdate('PlanItem', item.id, patch, p.version, ctx.actx);
     return { id: rec.id, version: rec.version, status: rec.status, progress_pct: Number(rec.progress_pct) || 0, actual_finish: rec.actual_finish || '' };
   });
+});
+
+/**
+ * Mes jalons (0.17.3), tous projets confondus : ceux dont la personne connectée est responsable, échus ou à venir dans 30 jours et pas encore déclarés passés (`pending`), et ceux qu'elle a
+ * déclarés passés depuis 30 jours (`recent`, pour les rouvrir en cas d'erreur). Alimente la zone « Mes jalons » de la page Compte, d'où le responsable déclare ses jalons passés sans
+ * chercher le projet.
+ */
+defineAction('milestones.mine', function (p, ctx) {
+  var today = todayStr(), me = ctx.resourceId;
+  if (!me) return { today: today, pending: [], recent: [] };
+  var projects = indexBy_(repoList('Project')), wps = indexBy_(repoList('WorkPackage'));
+  var soon = addCalendarDays(today, 30), since = addCalendarDays(today, -30);
+  var active = function (i) { var pr = projects[i.project_id]; return pr && !isTrue(pr.deleted) && pr.status !== 'Clos'; };
+  var mine = repoList('PlanItem', function (i) { return i.item_type === 'Jalon' && i.owner_resource_id === me && active(i); });
+  var view = function (i) {
+    var pr = projects[i.project_id], wp = i.wp_id ? wps[i.wp_id] : null, f = i.planned_finish || '';
+    return { id: i.id, version: i.version, name: i.name, project: pr.code, project_id: pr.id, wp: wp ? ((wp.wbs_code ? wp.wbs_code + ' ' : '') + wp.name) : '', date: f,
+      late: !!f && f < today, late_days: f && f < today ? Math.round((parseYmd(today) - parseYmd(f)) / DAY_MS) : 0 };
+  };
+  return {
+    today: today,
+    pending: mine.filter(function (i) { return !isDone_(i) && !isBlank(i.planned_finish) && i.planned_finish <= soon; }).map(view)
+      .sort(function (a, b) { return String(a.date).localeCompare(String(b.date)) || String(a.name).localeCompare(String(b.name), 'fr'); }),
+    recent: mine.filter(function (i) { return isDone_(i) && !isBlank(i.actual_finish) && String(i.actual_finish) >= since; })
+      .map(function (i) { return Object.assign(view(i), { passed_on: String(i.actual_finish) }); }).sort(function (a, b) { return String(b.passed_on).localeCompare(String(a.passed_on)); })
+  };
 });
 
 defineAction('wbs.delete', function (p, ctx) {

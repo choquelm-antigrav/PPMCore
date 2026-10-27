@@ -291,6 +291,35 @@ function openPage(file, user, boot) {
   // un non-administrateur ne voit pas la zone
   check(denied.doc.getElementById('zone-donnees').hidden, 'la zone est masquée à un non-administrateur');
 
+  // ---------------------------------------------------------------- 0.17.3 : « Mes jalons » : le responsable déclare ses jalons passés depuis son compte
+  const msLate = w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name: 'Revue échue de Rémi', item_type: 'Jalon', planned_start: '2026-10-01', planned_finish: '2026-10-01', wp_id: w.w1.id, owner_resource_id: w.remi.id } });
+  const msSoon = w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name: 'Revue à venir de Rémi', item_type: 'Jalon', planned_start: '2026-10-20', planned_finish: '2026-10-20', wp_id: w.w1.id, owner_resource_id: w.remi.id } });
+  const ms = openPage('Compte.html', RWP);
+  await ms.until(() => ms.doc.getElementById('ms-table'));
+  const rowOf = (id) => ms.doc.querySelector('#ms-table tr[data-ms="' + id + '"]');
+  check(!ms.doc.getElementById('zone-ms').hidden && ms.doc.querySelectorAll('#ms-table tbody tr').length === 2, 'la zone « Mes jalons » liste les jalons dont on est responsable (un échu, un à venir)');
+  check(/échu depuis 13 jours/.test(flat(rowOf(msLate.id).textContent)) && /à venir/.test(flat(rowOf(msSoon.id).textContent)) && /1 Conception|Conception/.test(flat(rowOf(msLate.id).textContent)), 'chacun dit son état (échu depuis 13 jours / à venir) et son workpackage : ' + flat(rowOf(msLate.id).textContent));
+  ms.click(rowOf(msLate.id).querySelector('[data-act="pass"]'));
+  await ms.until(() => rowOf(msLate.id).querySelector('[data-act="pass-ok"]'));
+  check(/Confirmer : passé aujourd’hui/.test(rowOf(msLate.id).textContent) && c.repoGet('PlanItem', msLate.id).status !== 'Terminé', 'un premier clic demande confirmation, rien n’est encore changé');
+  ms.click(rowOf(msLate.id).querySelector('[data-act="pass-cancel"]'));
+  await ms.until(() => rowOf(msLate.id).querySelector('[data-act="pass"]'));
+  check(c.repoGet('PlanItem', msLate.id).status !== 'Terminé', 'Annuler ne change rien');
+  ms.click(rowOf(msLate.id).querySelector('[data-act="pass"]'));
+  await ms.until(() => rowOf(msLate.id).querySelector('[data-act="pass-ok"]'));
+  ms.click(rowOf(msLate.id).querySelector('[data-act="pass-ok"]'));
+  await ms.until(() => c.repoGet('PlanItem', msLate.id).status === 'Terminé');
+  await ms.until(() => rowOf(msLate.id) && rowOf(msLate.id).querySelector('[data-act="reopen"]'));
+  check(Number(c.repoGet('PlanItem', msLate.id).progress_pct) === 100 && /passé le/.test(flat(rowOf(msLate.id).textContent)) && /Jalon marqué passé/.test(ms.text('toast')), 'confirmé : le jalon est passé (100 %, date réelle) et la ligne dit « passé le … » avec « Rouvrir »');
+  ms.click(rowOf(msLate.id).querySelector('[data-act="reopen"]'));
+  await ms.until(() => c.repoGet('PlanItem', msLate.id).status === 'À faire');
+  await ms.until(() => rowOf(msLate.id) && rowOf(msLate.id).querySelector('[data-act="pass"]'));
+  check(/échu depuis 13 jours/.test(flat(rowOf(msLate.id).textContent)), 'rouvert : le jalon revient à traiter, échu comme avant');
+  const none = openPage('Compte.html', 'dora@entreprise.com');
+  await none.until(() => none.doc.getElementById('panel-fiche') && none.doc.getElementById('panel-fiche').children.length > 0);
+  await wait(250);
+  check(none.doc.getElementById('zone-ms').hidden && none.doc.getElementById('panel-ms').hidden, 'qui n’est responsable d’aucun jalon proche ne voit pas la zone');
+
   // ---------------------------------------------------------------- 0.17.1 : exercices budgétaires et coût d'un ETP (administrateur)
   await a.until(() => a.doc.getElementById('ex-empty') && a.doc.getElementById('etp-empty'));
   check(!a.doc.getElementById('zone-budget').hidden && /Aucun exercice/.test(a.text('ex-empty')) && /Aucun coût paramétré/.test(a.text('etp-empty')), 'zone « Budget : exercices et coût d’un ETP » : rien au départ, et la page explique les deux paramètres');

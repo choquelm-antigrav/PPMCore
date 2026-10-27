@@ -68,7 +68,7 @@ function buildDigests(data, today, opts) {
     mine.forEach(function (i) {
       var f = i.planned_finish;
       var p = projects[i.project_id];
-      var line = { text: p.code + ' · ' + i.name, date: f, url: link('gantt', i.project_id) };
+      var line = { text: p.code + ' · ' + (i.item_type === 'Jalon' ? '◆ ' : '') + i.name, date: f, url: link(i.item_type === 'Jalon' ? 'structure' : 'gantt', i.project_id), milestone: i.item_type === 'Jalon' };
       if (!isBlank(f) && f < today) late.push(line);
       else if (!isBlank(f) && f <= soon) due.push(line);
       if (i.item_type === 'Livrable' && Number(i.progress_pct) > 0) {
@@ -77,7 +77,11 @@ function buildDigests(data, today, opts) {
       }
     });
     var byDate = function (a, b) { return String(a.date).localeCompare(String(b.date)); };
-    if (late.length) sections.push({ title: 'En retard', tone: 'alert', lines: late.sort(byDate).map(function (l) { return Object.assign(l, { note: 'fin prévue le ' + frDate_(l.date) }); }) });
+    // un jalon échu se déclare passé (page WBS ou Mon compte) ou se replanifie ; tant qu'il ne l'est pas, il est rappelé ici chaque matin
+    if (late.length) sections.push({ title: 'En retard', tone: 'alert', lines: late.sort(byDate).map(function (l) {
+      var d = Math.round((parseYmd(today) - parseYmd(l.date)) / DAY_MS);
+      return Object.assign(l, { note: l.milestone ? 'jalon échu depuis ' + d + (d > 1 ? ' jours' : ' jour') + ' (le ' + frDate_(l.date) + ') : à déclarer passé ou à replanifier' : 'fin prévue le ' + frDate_(l.date) });
+    }) });
     if (due.length) sections.push({ title: 'À échéance dans les ' + THRESHOLDS.dueSoonDays + ' jours', lines: due.sort(byDate).map(function (l) { return Object.assign(l, { note: 'le ' + frDate_(l.date) }); }) });
     if (stale.length) sections.push({ title: 'Avancement à déclarer', lines: stale.sort(byDate).map(function (l) { return Object.assign(l, { note: 'dernière déclaration le ' + frDate_(l.date) }); }) });
 
@@ -104,6 +108,14 @@ function buildDigests(data, today, opts) {
       (data.baselines || []).filter(function (b) { return live(b) && b.project_id === p.id && b.status === 'Demandée'; }).forEach(function (b) {
         pilotLines.push({ text: p.code + ' · demande de baseline de ' + b.requested_by, note: truncate(b.justification, 140), url: link('suivi', p.id, '&tab=baselines') });
       });
+      // des jalons échus depuis plus de N jours que leur responsable n'a toujours pas déclarés passés : un rappel à ceux qui pilotent
+      var staleMs = data.planitems.filter(function (i) {
+        return live(i) && i.project_id === p.id && i.item_type === 'Jalon' && !isDone_(i) && !isBlank(i.planned_finish) && i.planned_finish < addCalendarDays(today, -THRESHOLDS.milestoneStaleDays);
+      }).sort(byDate);
+      if (staleMs.length) {
+        var who = function (i) { var o = data.resources.filter(function (x) { return x.id === i.owner_resource_id; })[0]; return o ? ' (' + o.name + ')' : ' (sans responsable)'; };
+        pilotLines.push({ text: p.code + ' · ' + staleMs.length + (staleMs.length > 1 ? ' jalons échus' : ' jalon échu') + ' depuis plus de ' + THRESHOLDS.milestoneStaleDays + ' jours, non déclaré' + (staleMs.length > 1 ? 's' : '') + ' passé' + (staleMs.length > 1 ? 's' : '') + ' : ' + staleMs.slice(0, 3).map(function (i) { return i.name + who(i); }).join(', ') + (staleMs.length > 3 ? '…' : ''), tone: 'alert', url: link('structure', p.id) });
+      }
       var ins = (data.insights || []).filter(function (x) { return live(x) && x.project_id === p.id && x.status === 'Nouveau'; });
       var alerts = ins.filter(function (x) { return x.severity === 'Alerte'; });
       alerts.slice(0, 3).forEach(function (x) { pilotLines.push({ text: p.code + ' · ' + x.message, tone: 'alert', url: link('gantt', p.id) }); });

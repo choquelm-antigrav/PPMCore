@@ -76,4 +76,52 @@ module.exports = function () {
     eq([node(CP, w.j.id).canPass, node(WPL, w.late.id).canPass, node(DPL, w.late.id).canPass], [true, true, true], 'le chef de projet, le Workpackage leader et le DPL : oui');
     eq(node(CP, w.j.id).passed_on, '', 'un jalon non passé : pas de date');
   });
+
+  test('Mes jalons : ceux dont on est responsable, échus ou à venir sous 30 jours, puis passés depuis 30 jours ; tout projet confondu', () => {
+    const w = world(), today = w.c.todayStr();
+    const mk = (name, date, owner, extra) => w.call(CP, 'planitems.create', { values: Object.assign({ project_id: w.p1.id, name, item_type: 'Jalon', planned_start: date, planned_finish: date, wp_id: w.w1.id, owner_resource_id: owner.id }, extra || {}) });
+    const soon = mk('Jalon sous dix jours', '2026-10-15', w.mia), far = mk('Jalon lointain', '2026-12-31', w.mia), others = mk('Jalon d’une autre personne', '2026-09-25', w.remi);
+    const mine = () => w.call(MEMBER, 'milestones.mine', {});
+    const m = mine();
+    eq(m.pending.map((x) => x.name), ['Revue à date dépassée', 'Jalon sous dix jours'], 'le jalon échu d’abord, puis celui du mois ; ni le lointain, ni celui d’une autre personne');
+    const late = m.pending[0];
+    eq(w.call(WPL, 'milestones.mine', {}).pending.map((x) => x.name), ['Jalon d’une autre personne'], 'chacun ne voit que ses propres jalons : Rémi, le sien seulement');
+    eq([late.late, late.late_days, late.project, late.wp, m.pending[1].late, m.pending[1].late_days], [true, 15, 'P1', '1 Conception', false, 0], 'échu depuis quinze jours, avec son projet et son workpackage ; l’autre n’est pas en retard');
+    ok(w.pass(MEMBER).ok, 'le responsable déclare le jalon échu passé');
+    const after = mine();
+    eq([after.pending.map((x) => x.name), after.recent.map((x) => x.name + ':' + x.passed_on)], [['Jalon sous dix jours'], ['Revue à date dépassée:' + today]], 'il quitte la liste à traiter et passe dans « passés depuis 30 jours », avec sa date');
+    w.c.repoUpdate('PlanItem', w.late.id, { actual_finish: w.c.addCalendarDays(today, -45) }, null, w.S);
+    eq(mine().recent.length, 0, 'passé depuis plus de 30 jours : n’est plus proposé à la réouverture ici');
+    w.c.repoUpdate('Project', w.p1.id, { status: 'Clos' }, null, w.S);
+    eq([mine().pending.length, mine().recent.length], [0, 0], 'un projet clos n’apparaît plus');
+  });
+
+  test('Récapitulatif du matin : un jalon échu est rappelé à son responsable, puis à ceux qui pilotent s’il dure ; un jalon passé n’y figure plus', () => {
+    const w = world(), today = w.c.todayStr();
+    w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name: 'Jalon échu depuis peu', item_type: 'Jalon', planned_start: '2026-10-03', planned_finish: '2026-10-03', wp_id: w.w1.id, owner_resource_id: w.mia.id } });
+    const recap = (email) => w.c.buildDigests(w.c.loadDigestData_(), today, { baseUrl: 'https://ppm.test/exec' }).filter((d) => d.to === email)[0];
+    let mia = recap(MEMBER).text;
+    ok(/◆ Revue à date dépassée/.test(mia) && /jalon échu depuis 15 jours \(le 20\/09\/2026\) : à déclarer passé ou à replanifier/.test(mia), 'le responsable lit : « jalon échu depuis 15 jours … à déclarer passé ou à replanifier » : ' + (mia.match(/◆ Revue à date dépassée[^\n]*\n?[^\n]*/) || [''])[0]);
+    ok(/jalon échu depuis 2 jours/.test(mia), 'un jalon échu depuis deux jours est rappelé aussi, avec le bon nombre de jours');
+    ok(mia.indexOf('view=structure&project=' + w.p1.id) >= 0, 'et le lien mène au WBS du projet, où se fait le passage');
+    const cp = recap(CP).text;
+    ok(/1 jalon échu depuis plus de 7 jours, non déclaré passé : Revue à date dépassée \(Mia\)/.test(cp) && !/Jalon échu depuis peu \(/.test(cp), 'le chef de projet est prévenu des jalons échus depuis plus de 7 jours (un seul ici : celui de deux jours attend encore)');
+    ok(w.pass(MEMBER).ok);
+    mia = recap(MEMBER).text;
+    ok(!/Revue à date dépassée/.test(mia) && /Jalon échu depuis peu/.test(mia), 'déclaré passé : il disparaît du récapitulatif de son responsable ; l’autre y reste');
+    ok(!/jalon échu depuis plus de 7 jours/.test(recap(CP).text) && !/jalons? échus? depuis plus de 7 jours/.test(recap(CP).text), 'et du rappel de ceux qui pilotent');
+  });
+
+  test('Les autres endroits qui parlent des jalons ne mentionnent plus un jalon passé : Overview, agenda, prochains jalons des actualités', () => {
+    const w = world();
+    const upcoming = () => w.call(CP, 'overview.get', { projectId: w.p1.id }).detail.milestones.map((m) => m.name);
+    ok(upcoming().includes('Revue'), 'avant : le jalon « Revue » (9 novembre) est dans les prochains jalons de l’Overview');
+    ok(w.raw(CP, 'milestone.pass', { id: w.j.id }).ok, 'son responsable le déclare passé (en avance)');
+    ok(!upcoming().includes('Revue'), 'après : il n’est plus dans les prochains jalons');
+    const project = w.c.repoGet('Project', w.p1.id), data = { planitems: w.c.repoList('PlanItem'), resources: w.c.repoList('Resource'), workpackages: w.c.repoList('WorkPackage'), settings: [] };
+    const ev = w.c.desiredEvents_(data, project, '');
+    ok(/^✓ ◆ /.test(ev[w.j.id].title) && !/^✓/.test(ev[w.late.id].title), 'l’agenda marque le jalon passé d’un ✓ et pas les autres : ' + ev[w.j.id].title);
+    const prompt = w.call(CP, 'news.digest.prompt', { projectId: w.p1.id }).prompt;
+    ok(!/Jalons à venir :.*Revue \(/.test(prompt), 'le prompt des actualités ne l’annonce plus comme à venir');
+  });
 };

@@ -95,6 +95,11 @@ function openPage(today, onStart) {
   const cx = Number(bar.getAttribute('x')) + Number(bar.getAttribute('width')) / 2;
   check(pts.length === 8 && Math.abs((pts[0] + pts[4]) / 2 - cx) < 0.01 && pts[2] - pts[6] === 22, 'losange centré sur la date du jalon (22 px de large) : la barre d’origine, invisible, garde le clic et le glisser');
 
+  // jalon à venir creux, jalon passé plein (0.17.3) : les deux règles du style, et la classe « passé » que le dessin reprend du statut
+  const css = [...doc.querySelectorAll('style')].map((x) => x.textContent).join('\n');
+  check(/\.gantt \.milestone-mark:not\(\.is-done\) polygon \{[^}]*fill: var\(--surface\)[^}]*stroke: var\(--b\)/.test(css) && /\.gantt \.milestone-mark polygon \{[^}]*fill: var\(--b\)/.test(css), 'un jalon à venir est creux (contour), un jalon passé est plein : les deux règles sont dans le style');
+  check(!/is-done/.test(marks[0].getAttribute('class')) && /Jalon à venir \(creux\)/.test(doc.querySelector('.legend').textContent), 'ce jalon n’est pas passé : sans la classe « passé », donc creux ; la légende l’explique');
+
   // repère « aujourd'hui »
   const line = doc.querySelector('.today-line');
   check(!!line && doc.querySelector('.today-chip text').textContent === 'Aujourd’hui', 'une ligne et une pastille « Aujourd’hui »');

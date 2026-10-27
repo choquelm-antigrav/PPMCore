@@ -1,5 +1,13 @@
 # Journal des versions
 
+## 0.17.3 — jalons : « Mes jalons », Gantt creux ou plein, rappels
+
+- **Page Compte, « Mes jalons »** (`milestones.mine`) : les jalons dont on est responsable (échus ou à venir sous 30 jours), tous projets confondus ; **Marquer passé** avec confirmation en deux temps ; **Rouvrir** pour ceux passés depuis 30 jours.
+- **Gantt** : un jalon à venir est **creux**, un jalon passé est **plein et vert**, un jalon échu non déclaré est creux et rouge ; légende mise à jour.
+- **Récapitulatif du matin** : un jalon échu est rappelé à son responsable avec « à déclarer passé ou à replanifier » et le lien du WBS ; **au bout de 7 jours** (`THRESHOLDS.milestoneStaleDays`) il est signalé aussi à ceux qui pilotent le projet ; un jalon passé n'y figure plus. L'alerte de retard d'un jalon indique la marche à suivre.
+- Vérifié par essai : un jalon passé disparaît des prochains jalons de l'Overview, de ceux du prompt des actualités, et son événement d'agenda est marqué ✓.
+- Tests : `test_milestone.js` (7), `ui_compte.js` (128), `ui_gantt_look.js` (35) ; dix sabotages vérifiés. **Backlog** : l'étape des jalons est faite (`BACKLOG.md`).
+
 ## 0.17.2 — jalon passé, déclaré par son responsable
 
 - **Défaut corrigé** : un jalon n'a pas d'avancement et rien ne permettait de le déclarer atteint ; un jalon à date dépassée restait donc « en retard » (alerte de retard, glissement critique) pour toujours.

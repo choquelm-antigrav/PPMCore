@@ -257,6 +257,32 @@ defineAction('milestone.pass', function (p, ctx) {
   });
 });
 
+/**
+ * Mes jalons (0.17.3), tous projets confondus : ceux dont la personne connectée est responsable, échus ou à venir dans 30 jours et pas encore déclarés passés (`pending`), et ceux qu'elle a
+ * déclarés passés depuis 30 jours (`recent`, pour les rouvrir en cas d'erreur). Alimente la zone « Mes jalons » de la page Compte, d'où le responsable déclare ses jalons passés sans
+ * chercher le projet.
+ */
+defineAction('milestones.mine', function (p, ctx) {
+  var today = todayStr(), me = ctx.resourceId;
+  if (!me) return { today: today, pending: [], recent: [] };
+  var projects = indexBy_(repoList('Project')), wps = indexBy_(repoList('WorkPackage'));
+  var soon = addCalendarDays(today, 30), since = addCalendarDays(today, -30);
+  var active = function (i) { var pr = projects[i.project_id]; return pr && !isTrue(pr.deleted) && pr.status !== 'Clos'; };
+  var mine = repoList('PlanItem', function (i) { return i.item_type === 'Jalon' && i.owner_resource_id === me && active(i); });
+  var view = function (i) {
+    var pr = projects[i.project_id], wp = i.wp_id ? wps[i.wp_id] : null, f = i.planned_finish || '';
+    return { id: i.id, version: i.version, name: i.name, project: pr.code, project_id: pr.id, wp: wp ? ((wp.wbs_code ? wp.wbs_code + ' ' : '') + wp.name) : '', date: f,
+      late: !!f && f < today, late_days: f && f < today ? Math.round((parseYmd(today) - parseYmd(f)) / DAY_MS) : 0 };
+  };
+  return {
+    today: today,
+    pending: mine.filter(function (i) { return !isDone_(i) && !isBlank(i.planned_finish) && i.planned_finish <= soon; }).map(view)
+      .sort(function (a, b) { return String(a.date).localeCompare(String(b.date)) || String(a.name).localeCompare(String(b.name), 'fr'); }),
+    recent: mine.filter(function (i) { return isDone_(i) && !isBlank(i.actual_finish) && String(i.actual_finish) >= since; })
+      .map(function (i) { return Object.assign(view(i), { passed_on: String(i.actual_finish) }); }).sort(function (a, b) { return String(b.passed_on).localeCompare(String(a.passed_on)); })
+  };
+});
+
 defineAction('wbs.delete', function (p, ctx) {
   var kind = requireParam(p, 'kind');
   if (['wp', 'item'].indexOf(kind) < 0) throw new PpmError('VALIDATION', 'Nature inconnue : wp ou item.');

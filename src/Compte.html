@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.17.2">
+<meta name="ppm-version" content="0.17.3">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <style>
@@ -46,6 +46,10 @@
     <div class="zone"><h2 class="sec">Ma fiche</h2></div>
     <section class="panel" id="panel-fiche" aria-label="Ma fiche"></section>
   </div>
+  <div class="cell wide" id="cell-ms">
+    <div class="zone" id="zone-ms" hidden><h2 class="sec">Mes jalons</h2></div>
+    <section class="panel" id="panel-ms" aria-label="Mes jalons" hidden></section>
+  </div>
   <div class="cell wide" id="cell-mine">
     <div class="zone" id="zone-mine" hidden><h2 class="sec">Mes actions issues des réunions</h2></div>
     <section class="panel" id="panel-mine" aria-label="Mes actions" hidden></section>
@@ -70,7 +74,7 @@ var BOOT = <?!= boot ?>;
   'use strict';
   var el = ppm.el, clear = ppm.clear, uuid = ppm.uuid, toast = ppm.toast, call = ppm.call, frDate = ppm.frDate;
 
-  var state = { acct: null, suggestions: null };
+  var state = { acct: null, suggestions: null, msConfirm: '' };
   var $ = function (id) { return document.getElementById(id); };
   var HOMES = [['overview', 'Overview projet'], ['gantt', 'Planning'], ['structure', 'WBS'], ['ressources', 'Ressources'], ['suivi', 'Suivi']].concat(BOOT.copilot ? [['copilote', 'Copilote']] : []).concat([['budget', 'Budget']]);
 
@@ -249,6 +253,49 @@ var BOOT = <?!= boot ?>;
   }
 
   /** Plus d'onglets : les trois rubriques s'affichent ensemble. */
+  /**
+   * Mes jalons, tous projets confondus : ceux dont je suis responsable, échus ou à venir dans 30 jours. Je les déclare passés d'ici (confirmation en deux temps : un jalon passé n'alerte plus),
+   * et je rouvre ceux que j'ai déclarés passés par erreur. La zone n'apparaît que s'il y en a.
+   */
+  function renderMilestones() {
+    return call('milestones.mine', {}).then(function (r) {
+      var zone = $('zone-ms'), box = $('panel-ms'); clear(box);
+      var pend = r.pending || [], rec = r.recent || [];
+      zone.hidden = !(pend.length || rec.length); box.hidden = zone.hidden;
+      if (zone.hidden) return;
+      var fail = function (e) { toast(ppmErrorText(e), true); };
+      var table = el('table', { id: 'ms-table' });
+      table.appendChild(el('thead', {}, [el('tr', {}, ['Projet', 'Jalon', 'Échéance', 'État', ''].map(function (h) { return el('th', { text: h }); }))]));
+      var tb = el('tbody');
+      pend.forEach(function (m) {
+        var confirming = state.msConfirm === m.id, btns = [];
+        if (!confirming) btns.push(el('button', { type: 'button', class: 'btn primary', 'data-act': 'pass', text: 'Marquer passé', onclick: function () { state.msConfirm = m.id; renderMilestones(); } }));
+        else {
+          btns.push(el('button', { type: 'button', class: 'btn primary', 'data-act': 'pass-ok', text: 'Confirmer : passé aujourd’hui', onclick: function () {
+            call('milestone.pass', { id: m.id, version: m.version, passed: true }, true).then(function () { state.msConfirm = ''; toast('Jalon marqué passé : plus d’alerte d’échéance.'); return renderMilestones(); }).catch(function (e) { state.msConfirm = ''; fail(e); renderMilestones(); });
+          } }));
+          btns.push(el('button', { type: 'button', class: 'btn', 'data-act': 'pass-cancel', text: 'Annuler', onclick: function () { state.msConfirm = ''; renderMilestones(); } }));
+        }
+        tb.appendChild(el('tr', { 'data-ms': m.id }, [
+          el('td', { text: m.project }), el('td', {}, [m.name, m.wp ? el('small', { style: 'display:block;color:var(--muted)', text: m.wp }) : null]),
+          el('td', { text: frDate(m.date) }),
+          el('td', {}, [el('span', { class: 'badge ' + (m.late ? 'alert' : ''), text: m.late ? 'échu depuis ' + m.late_days + (m.late_days > 1 ? ' jours' : ' jour') : 'à venir' })]),
+          el('td', {}, [el('div', { class: 'row' }, btns)])]));
+      });
+      rec.forEach(function (m) {
+        tb.appendChild(el('tr', { 'data-ms': m.id, class: 'passed' }, [
+          el('td', { text: m.project }), el('td', { text: m.name }), el('td', { text: frDate(m.date) }),
+          el('td', {}, [el('span', { class: 'badge ok', text: 'passé le ' + frDate(m.passed_on) })]),
+          el('td', {}, [el('button', { type: 'button', class: 'btn', 'data-act': 'reopen', text: 'Rouvrir', onclick: function () {
+            call('milestone.pass', { id: m.id, version: m.version, passed: false }, true).then(function () { toast('Jalon rouvert.'); return renderMilestones(); }).catch(fail);
+          } })])]));
+      });
+      table.appendChild(tb);
+      box.appendChild(el('div', { class: 'table-wrap' }, [table]));
+      box.appendChild(el('p', { id: 'ms-note', style: 'margin:8px 0 0;font-size:14px;color:var(--muted)', text: 'Un jalon passé n’alerte plus (retard, glissement critique). Rouvrir un jalon passé par erreur est possible pendant 30 jours ; plus tard, depuis la page WBS du projet.' }));
+    }).catch(function () { $('zone-ms').hidden = true; $('panel-ms').hidden = true; });
+  }
+
   /** Mes actions issues des réunions, tous projets confondus : la zone n'apparaît que s'il y en a. */
   function renderMine() {
     return call('news.mine', {}).then(function (r) {
@@ -286,6 +333,7 @@ var BOOT = <?!= boot ?>;
     if (!state.acct) return;
     renderSheet();
     renderFiche();
+    renderMilestones();
     renderMine();
     renderNotifications();
     renderAffichage();
