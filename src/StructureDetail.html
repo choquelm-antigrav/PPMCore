@@ -41,13 +41,13 @@
       ['Responsable', n.owner], ['Organisation', n.owner ? (n.owner_org || 'Non renseignée') : ''], ['Fonction', n.owner_function],
       ['Début', frDate(n.start)], ['Fin', frDate(n.finish)],
       ['Avancement', n.kind === 'item' && n.item_type === 'Jalon' ? '' : n.progress + ' %'],
-      ['Statut', n.status], ['Imputation', n.charge_code], ['Marge', flt]
+      ['Statut', n.kind === 'item' && n.item_type === 'Jalon' ? (n.passed_on ? 'Passé le ' + frDate(n.passed_on) : (n.late ? 'Échéance dépassée : pas encore marqué passé' : 'À venir')) : n.status], ['Imputation', n.charge_code], ['Marge', flt]
     ]));
     if (n.late) nodes.push(el('p', { class: 'flag alert', text: 'Au moins un élément est en retard sur sa date de fin prévue.' }));
     if (state.data.scope === 'program') { if (n.kind !== 'program') nodes.push(openProjectActions(n)); }
     else {
       if (n.kind === 'project' || n.kind === 'wp' || n.kind === 'item') nodes.push(rolesBlock(n));
-      if (n.canEdit) nodes.push(wbsActions(n));
+      if (n.canEdit || n.canPass) nodes.push(wbsActions(n));
     }
     if (n.kind === 'item' && state.data.scope !== 'program') nodes.push(depsBlock(n));
     if (BOOT.appsheetUrl) nodes.push(el('div', { class: 'links' }, [el('a', { class: 'btn', href: BOOT.appsheetUrl, target: '_blank', rel: 'noopener', text: 'Modifier dans AppSheet' })]));

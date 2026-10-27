@@ -1,5 +1,13 @@
 # Journal des versions
 
+## 0.17.2 — jalon passé, déclaré par son responsable
+
+- **Défaut corrigé** : un jalon n'a pas d'avancement et rien ne permettait de le déclarer atteint ; un jalon à date dépassée restait donc « en retard » (alerte de retard, glissement critique) pour toujours.
+- **`milestone.pass`** : le responsable du jalon (Deliverable owner) et les niveaux au-dessus marquent un jalon **passé** (statut Terminé, 100 %, date réelle d'aujourd'hui ou passée, jamais future) ou le **rouvrent**, avec confirmation et trace dans le journal. Les alertes de retard, de glissement critique et de jalon menacé cessent ; `MILESTONE_INCOMPLETE` (jalon passé alors qu'un livrable exigé n'est pas terminé) reste signalé.
+- **Page WBS** : bouton « Marquer le jalon passé » / « Rouvrir le jalon » sur la carte d'un jalon (seulement si le serveur l'autorise : `canPass`), et le détail dit « À venir », « Échéance dépassée : pas encore marqué passé » ou « Passé le … ». Nouveau droit `milestone.pass` (niveau Deliverable owner), ligne du tableau des droits.
+- **`BACKLOG.md`** : le reste à faire dans l'ordre proposé (vérification en réel, exercice : tableur, versions, constats, suivi ; jalons, baselines, équipes, nettoyage).
+- Tests : `test_milestone.js` (4), `ui_edit.js` (61) ; neuf sabotages vérifiés, dont celui de la défense côté page.
+
 ## 0.17.1 — l'exercice budgétaire annuel ; plus aucun taux journalier
 
 - **Plus de taux journalier dans tout l'outil** : ni sur les personnes, ni profil tarifaire, ni grille de taux, ni taux figé, ni colonne d'import ou d'export, ni droit « fixer les tarifs ». Le seul coût du personnel est le **coût annuel d'un ETP par pays et par an** (administrateur) ; un montant se convertit en jours par `montant ÷ (coût ÷ jours ouvrés du pays)`, avec le pays de l'équipe et l'année de l'exercice ; sans coût paramétré : « à paramétrer ».

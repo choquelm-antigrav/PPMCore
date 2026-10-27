@@ -28,6 +28,7 @@ var RIGHTS_ROWS = [
   { group: 'Lire', perm: 'budget.edit', label: 'Lire et saisir le budget (lignes par livrable)', where: 'sur son périmètre : un Workpackage leader ne voit que son workpackage' },
   { group: 'Lire', perm: 'program.view', label: 'Vues consolidées d’un programme (Actualités, Suivi, Budget)' },
   { group: 'Planning et avancement', perm: 'progress.declare', label: 'Déclarer l’avancement d’un livrable' },
+  { group: 'Planning et avancement', perm: 'milestone.pass', label: 'Marquer un jalon passé (ou le rouvrir)', where: 'le responsable du jalon (Deliverable owner) et les niveaux au-dessus' },
   { group: 'Planning et avancement', perm: 'baseline.request', label: 'Demander une baseline' },
   { group: 'Planning et avancement', perm: 'baseline.manage', label: 'Réactiver une baseline du projet, refuser une demande de baseline du projet' },
   { group: 'Planning et avancement', perm: 'import.run', label: 'Exporter et importer un ou plusieurs projets par classeur Google Sheet', where: 'pour chaque projet touché ; créer un programme : l’administrateur ; créer un projet : le DPL du programme' },

@@ -233,6 +233,30 @@ function wpContent_(wpId, projectId) {
   return { wps: kids, items: items };
 }
 
+/**
+ * « Jalon passé » (0.17.2). Un jalon n'a pas d'avancement : il est atteint ou il ne l'est pas, et c'est le RESPONSABLE DU JALON (son Deliverable owner, ou un niveau au-dessus) qui le déclare,
+ * explicitement. Sans cette déclaration un jalon dont la date est dépassée restait « en retard » pour toujours (alerte LATE_ITEM, glissement critique…) : il n'y avait aucun moyen de l'en sortir.
+ * Marquer passé = statut Terminé, avancement 100 %, date réelle (aujourd'hui, ou une date passée donnée) ; toutes les règles qui regardent « terminé » cessent alors de l'alerter. Rouvrir remet le
+ * jalon à faire. Déclarer un jalon passé alors que des livrables qu'il exige ne sont pas terminés reste signalé (MILESTONE_INCOMPLETE) : c'est une incohérence, pas un retard.
+ */
+defineAction('milestone.pass', function (p, ctx) {
+  var item = mustGet('PlanItem', requireParam(p, 'id'));
+  if (item.item_type !== 'Jalon') throw new PpmError('VALIDATION', 'Seul un jalon se marque passé : l’avancement d’un livrable se déclare.');
+  requireCan(ctx, 'milestone.pass', { type: 'planitem', id: item.id });
+  var passed = !('passed' in p) || isTrue(p.passed);
+  var today = todayStr(), date = isBlank(p.date) ? today : String(p.date);
+  if (passed) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(Date.parse(date))) throw new PpmError('VALIDATION', 'Date du passage : une date valide (AAAA-MM-JJ).');
+    if (date > today) throw new PpmError('VALIDATION', 'Un jalon ne peut pas être passé dans le futur : choisissez aujourd’hui ou une date passée.');
+  }
+  return withLock(function () {
+    var patch = passed ? { status: 'Terminé', progress_pct: 100, actual_finish: date, last_progress_at: nowIso() }
+      : { status: 'À faire', progress_pct: 0, actual_finish: '', last_progress_at: '' };
+    var rec = repoUpdate('PlanItem', item.id, patch, p.version, ctx.actx);
+    return { id: rec.id, version: rec.version, status: rec.status, progress_pct: Number(rec.progress_pct) || 0, actual_finish: rec.actual_finish || '' };
+  });
+});
+
 defineAction('wbs.delete', function (p, ctx) {
   var kind = requireParam(p, 'kind');
   if (['wp', 'item'].indexOf(kind) < 0) throw new PpmError('VALIDATION', 'Nature inconnue : wp ou item.');

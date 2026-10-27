@@ -253,6 +253,50 @@ function openPage(user) {
   await g.until(() => g.doc.querySelector('#canvas-wbs .node.selected'));
   check(!!g.doc.querySelector('#canvas-wbs .node.selected[data-id="' + wpId + '"]'), 'et le workpackage choisi y est sélectionné');
 
+  // ---------------------------------------------------------------- 0.17.2 : un jalon passé, déclaré par son responsable
+  const wpx = w.call(CP, 'workpackages.create', { values: { project_id: w.p1.id, wbs_code: '9', name: 'Jalons de revue', owner_resource_id: w.remi.id } });
+  const lateMs = w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name: 'Revue dépassée', item_type: 'Jalon', planned_start: '2026-10-01', planned_finish: '2026-10-01', wp_id: wpx.id, owner_resource_id: w.mia.id } });
+  const foreign = w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name: 'Revue de Carla', item_type: 'Jalon', planned_start: '2026-10-02', planned_finish: '2026-10-02', wp_id: wpx.id, owner_resource_id: w.carla.id } });
+  const z = openPage(MEMBER);
+  await z.until(() => z.doc.querySelector('#canvas-wbs .node[data-id="item:' + lateMs.id + '"]'));
+  await z.pick('item:' + lateMs.id, 'Revue dépassée');
+  check(/Échéance dépassée : pas encore marqué passé/.test(z.text('details')) && JSON.stringify(z.buttons()) === JSON.stringify(['Marquer le jalon passé', 'Modifier', 'Supprimer']), 'le responsable du jalon voit « Échéance dépassée » et le bouton « Marquer le jalon passé » : ' + z.buttons().join(' | '));
+  z.click(z.$('pass-milestone'));
+  await z.until(() => z.$('confirm').open);
+  check(/Marquer le jalon passé/.test(z.text('confirm-title')) && /Plus aucune alerte d’échéance/.test(z.text('confirm-text')) && z.text('confirm-ok') === 'Marquer passé', 'confirmation : elle dit que les alertes d’échéance cessent : ' + z.text('confirm-text').slice(0, 80));
+  z.click(z.$('confirm-cancel'));
+  check(!z.$('confirm').open && c.repoGet('PlanItem', lateMs.id).status !== 'Terminé', 'Annuler ne change rien');
+  z.click(z.$('pass-milestone'));
+  await z.until(() => z.$('confirm').open);
+  z.click(z.$('confirm-ok'));
+  await z.until(() => c.repoGet('PlanItem', lateMs.id).status === 'Terminé');
+  await z.until(() => /Jalon marqué passé/.test(z.text('toast')));
+  const done = c.repoGet('PlanItem', lateMs.id);
+  check(Number(done.progress_pct) === 100 && !!done.actual_finish, 'le jalon est terminé, à 100 %, avec sa date réelle : ' + done.actual_finish);
+  await z.until(() => z.$('pass-milestone') && z.text('pass-milestone') === 'Rouvrir le jalon');
+  await z.pick('item:' + lateMs.id, 'Revue dépassée');
+  check(/Passé le/.test(z.text('details')) && !/Échéance dépassée/.test(z.text('details')) && z.text('pass-milestone') === 'Rouvrir le jalon', 'passé : le détail dit « Passé le … », plus d’échéance dépassée, et le bouton devient « Rouvrir le jalon »');
+  z.click(z.$('pass-milestone'));
+  await z.until(() => z.$('confirm').open);
+  check(/Rouvrir le jalon/.test(z.text('confirm-title')) && z.text('confirm-ok') === 'Rouvrir', 'rouvrir demande aussi confirmation');
+  z.click(z.$('confirm-ok'));
+  await z.until(() => c.repoGet('PlanItem', lateMs.id).status === 'À faire');
+  check(c.repoGet('PlanItem', lateMs.id).actual_finish === '' || !c.repoGet('PlanItem', lateMs.id).actual_finish, 'rouvert : à faire, sans date réelle');
+  await z.pick('item:' + foreign.id, 'Revue de Carla');
+  check(!z.$('pass-milestone') && z.buttons().length === 0, 'un jalon dont on n’est pas responsable : aucun bouton');
+  // la page se défend aussi toute seule : si le serveur dit « modifiable » mais pas « déclarable passé », le bouton n'est pas montré
+  const realTree = c.API_ACTIONS['wbs.tree'];
+  c.API_ACTIONS['wbs.tree'] = (params, ctx) => { const r = realTree(params, ctx); r.nodes.forEach((n) => { if (n.kind === 'item') n.canPass = false; }); return r; };
+  const nopass = openPage(MEMBER);
+  await nopass.until(() => nopass.doc.querySelector('#canvas-wbs .node[data-id="item:' + lateMs.id + '"]'));
+  await nopass.pick('item:' + lateMs.id, 'Revue dépassée');
+  check(!nopass.$('pass-milestone') && nopass.buttons().includes('Modifier'), 'côté page : sans « canPass » du serveur, pas de bouton de passage (la modification reste proposée)');
+  c.API_ACTIONS['wbs.tree'] = realTree;
+  const rw = openPage(RWP);
+  await rw.until(() => rw.doc.querySelector('#canvas-wbs .node[data-id="item:' + lateMs.id + '"]'));
+  await rw.pick('item:' + lateMs.id, 'Revue dépassée');
+  check(!!rw.$('pass-milestone') && rw.text('pass-milestone') === 'Marquer le jalon passé', 'le Workpackage leader du workpackage peut aussi le déclarer');
+
   console.log(failed ? '\n' + failed + ' échec(s).' : '\nÉdition du WBS : tout est conforme.');
   process.exit(failed ? 1 : 0);
 })();

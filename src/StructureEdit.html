@@ -37,7 +37,10 @@
       if (!n.parent_ref) add('Ajouter un sous-workpackage', 'wp', 'add-subwp');
       add('Ajouter un livrable', 'Livrable', 'add-deliverable'); add('Ajouter un jalon', 'Jalon', 'add-milestone');
     }
-    if (n.kind !== 'project') {
+    if (n.kind === 'item' && n.item_type === 'Jalon' && n.canPass) {
+      box.appendChild(el('button', { type: 'button', class: 'btn' + (n.passed_on ? '' : ' primary'), id: 'pass-milestone', text: n.passed_on ? 'Rouvrir le jalon' : 'Marquer le jalon passé', onclick: function () { openPassMilestone(n); } }));
+    }
+    if (n.kind !== 'project' && n.canEdit) {
       box.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'edit-node', text: 'Modifier', onclick: function () { openEditor({ mode: 'edit', kind: n.kind === 'wp' ? 'wp' : n.item_type, node: n }); } }));
       box.appendChild(el('button', { type: 'button', class: 'btn', id: 'delete-node', text: 'Supprimer', onclick: function () { openDelete(n); } }));
     }
@@ -202,6 +205,32 @@
     $('confirm-error').hidden = true;
     $('confirm-ok').disabled = false;
     state.deleting = { node: n, cascade: wps + items > 0 };
+    openDialog($('confirm'));
+  }
+
+  /** Marquer un jalon passé (ou le rouvrir) : par son responsable, explicitement ; les alertes d'échéance cessent pour ce jalon. */
+  function openPassMilestone(n) {
+    var reopen = !!n.passed_on;
+    state.deleting = null;
+    $('confirm-title').textContent = reopen ? 'Rouvrir le jalon ?' : 'Marquer le jalon passé ?';
+    $('confirm-text').textContent = reopen
+      ? '« ' + n.name + ' » repasse à faire : ses alertes d’échéance reviennent si sa date est dépassée.'
+      : '« ' + n.name + ' » est passé aujourd’hui. Plus aucune alerte d’échéance (retard, glissement critique) ne s’affichera pour ce jalon ; on peut le rouvrir. Le passage est tracé dans le journal.';
+    $('confirm-ok').textContent = reopen ? 'Rouvrir' : 'Marquer passé';
+    $('confirm-ok').className = 'btn primary';
+    $('confirm-error').hidden = true;
+    $('confirm-ok').disabled = false;
+    state.confirmAction = function () {
+      $('confirm-ok').disabled = true;
+      call('milestone.pass', { id: n.ref, passed: !reopen }, true).then(function () {
+        closeDialog($('confirm')); state.confirmAction = null;
+        toast(reopen ? 'Jalon rouvert.' : 'Jalon marqué passé.');
+        return load(true);
+      }).catch(function (err) {
+        $('confirm-ok').disabled = false;
+        var m = $('confirm-error'); m.textContent = ppmErrorText(err); m.hidden = false;
+      });
+    };
     openDialog($('confirm'));
   }
 

@@ -5,7 +5,7 @@
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.17.1';
+var PPM_VERSION = '0.17.2';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -71,6 +71,7 @@ var PERMISSION_LEVEL = {
   'wbs.edit':         'DO',      // modifier un objet, ou créer dedans : le niveau exact dépend de l'objet (projet CP, workpackage WPL, sous-workpackage SWPL, livrable DO)
   'wbs.delete':       'DO',      // supprimer un objet : projet DPL, workpackage CP, sous-workpackage WPL, livrable ou jalon DO
   'progress.declare': 'CONTRIB',
+  'milestone.pass':   'DO',      // déclarer un jalon passé (ou le rouvrir) : le responsable du jalon (Deliverable owner) et les niveaux au-dessus
   'baseline.manage':  'CP',
   'baseline.request': 'CONTRIB',
   'budget.edit':      'WPL',

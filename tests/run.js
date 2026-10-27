@@ -20,6 +20,7 @@ require('./test_envelope')();
 require('./test_import')();
 require('./test_team_import')();
 require('./test_exercise')();
+require('./test_milestone')();
 require('./test_rights_table')();
 require('./test_baseline_scopes')();
 require('./test_reminders')();

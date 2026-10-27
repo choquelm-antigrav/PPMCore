@@ -1,5 +1,5 @@
 /**
- * PPM Core 0.17.1 — fichier unique à installer (fabriqué par tools/build.js, empreinte a46bcb741662).
+ * PPM Core 0.17.2 — fichier unique à installer (fabriqué par tools/build.js, empreinte cb7c846e6df0).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
  * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs, 53_Roles.gs, 54_Validation.gs, 55_Envelope.gs, 56_Import.gs, 57_Rights.gs, 58_ScopeBaselines.gs, 59_TeamImport.gs, 60_Exercise.gs.
  */
@@ -47,7 +47,7 @@ function A9_MIGRER_ROLES_SIMULATION() { return migrerRoles_(true); }
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.17.1';
+var PPM_VERSION = '0.17.2';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -113,6 +113,7 @@ var PERMISSION_LEVEL = {
   'wbs.edit':         'DO',      // modifier un objet, ou créer dedans : le niveau exact dépend de l'objet (projet CP, workpackage WPL, sous-workpackage SWPL, livrable DO)
   'wbs.delete':       'DO',      // supprimer un objet : projet DPL, workpackage CP, sous-workpackage WPL, livrable ou jalon DO
   'progress.declare': 'CONTRIB',
+  'milestone.pass':   'DO',      // déclarer un jalon passé (ou le rouvrir) : le responsable du jalon (Deliverable owner) et les niveaux au-dessus
   'baseline.manage':  'CP',
   'baseline.request': 'CONTRIB',
   'budget.edit':      'WPL',
@@ -4177,7 +4178,8 @@ function buildWbsTree(data, projectId, today, ctx) {
       critical: !!f.critical, float: f.float === undefined ? null : f.float,
       late: !isDone_(i) && !isBlank(itemFinish(i)) && itemFinish(i) < today,
       ref: i.id, version: i.version, owner_id: i.owner_resource_id || '', wp_ref: i.wp_id || '', raw_start: i.planned_start || '', raw_finish: i.planned_finish || '',
-      milestone_category: i.milestone_category || '', dep_count: depCount[i.id] || 0, canEdit: canEdit('planitem', i.id)
+      milestone_category: i.milestone_category || '', dep_count: depCount[i.id] || 0, canEdit: canEdit('planitem', i.id),
+      canPass: i.item_type === 'Jalon' && !!ctx && can(ctx, 'milestone.pass', { type: 'planitem', id: i.id }), passed_on: i.item_type === 'Jalon' && !isBlank(i.actual_finish) ? String(i.actual_finish) : ''
     }, ownerOf(i.owner_resource_id)));
   };
   (childrenOfWp[''] || []).slice().sort(byWbs_).forEach(function (w) { emitWp(w, rootId); });
@@ -7623,6 +7625,30 @@ function wpContent_(wpId, projectId) {
   var items = repoList('PlanItem', function (i) { return i.project_id === projectId && wpIds[i.wp_id]; });
   return { wps: kids, items: items };
 }
+
+/**
+ * « Jalon passé » (0.17.2). Un jalon n'a pas d'avancement : il est atteint ou il ne l'est pas, et c'est le RESPONSABLE DU JALON (son Deliverable owner, ou un niveau au-dessus) qui le déclare,
+ * explicitement. Sans cette déclaration un jalon dont la date est dépassée restait « en retard » pour toujours (alerte LATE_ITEM, glissement critique…) : il n'y avait aucun moyen de l'en sortir.
+ * Marquer passé = statut Terminé, avancement 100 %, date réelle (aujourd'hui, ou une date passée donnée) ; toutes les règles qui regardent « terminé » cessent alors de l'alerter. Rouvrir remet le
+ * jalon à faire. Déclarer un jalon passé alors que des livrables qu'il exige ne sont pas terminés reste signalé (MILESTONE_INCOMPLETE) : c'est une incohérence, pas un retard.
+ */
+defineAction('milestone.pass', function (p, ctx) {
+  var item = mustGet('PlanItem', requireParam(p, 'id'));
+  if (item.item_type !== 'Jalon') throw new PpmError('VALIDATION', 'Seul un jalon se marque passé : l’avancement d’un livrable se déclare.');
+  requireCan(ctx, 'milestone.pass', { type: 'planitem', id: item.id });
+  var passed = !('passed' in p) || isTrue(p.passed);
+  var today = todayStr(), date = isBlank(p.date) ? today : String(p.date);
+  if (passed) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(Date.parse(date))) throw new PpmError('VALIDATION', 'Date du passage : une date valide (AAAA-MM-JJ).');
+    if (date > today) throw new PpmError('VALIDATION', 'Un jalon ne peut pas être passé dans le futur : choisissez aujourd’hui ou une date passée.');
+  }
+  return withLock(function () {
+    var patch = passed ? { status: 'Terminé', progress_pct: 100, actual_finish: date, last_progress_at: nowIso() }
+      : { status: 'À faire', progress_pct: 0, actual_finish: '', last_progress_at: '' };
+    var rec = repoUpdate('PlanItem', item.id, patch, p.version, ctx.actx);
+    return { id: rec.id, version: rec.version, status: rec.status, progress_pct: Number(rec.progress_pct) || 0, actual_finish: rec.actual_finish || '' };
+  });
+});
 
 defineAction('wbs.delete', function (p, ctx) {
   var kind = requireParam(p, 'kind');
@@ -12892,6 +12918,7 @@ var RIGHTS_ROWS = [
   { group: 'Lire', perm: 'budget.edit', label: 'Lire et saisir le budget (lignes par livrable)', where: 'sur son périmètre : un Workpackage leader ne voit que son workpackage' },
   { group: 'Lire', perm: 'program.view', label: 'Vues consolidées d’un programme (Actualités, Suivi, Budget)' },
   { group: 'Planning et avancement', perm: 'progress.declare', label: 'Déclarer l’avancement d’un livrable' },
+  { group: 'Planning et avancement', perm: 'milestone.pass', label: 'Marquer un jalon passé (ou le rouvrir)', where: 'le responsable du jalon (Deliverable owner) et les niveaux au-dessus' },
   { group: 'Planning et avancement', perm: 'baseline.request', label: 'Demander une baseline' },
   { group: 'Planning et avancement', perm: 'baseline.manage', label: 'Réactiver une baseline du projet, refuser une demande de baseline du projet' },
   { group: 'Planning et avancement', perm: 'import.run', label: 'Exporter et importer un ou plusieurs projets par classeur Google Sheet', where: 'pour chaque projet touché ; créer un programme : l’administrateur ; créer un projet : le DPL du programme' },

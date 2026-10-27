@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.17.1)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.17.2)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -53,6 +53,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `48_NewsText.gs`, `49_NewsCollect.gs` | 0.12.2 : lecture des textes et rattachement des réunions (calcul sans service Google) ; collecteur d'agenda et déclencheur. Le reste du module est dans `48_News.gs` |
 | `48_News.gs` | 0.12.0 : fil d'actualités du projet (lecture des comptes rendus, rattachement des réunions, actions, synthèse du matin, journal du projet, collecteur d'agenda) |
 | `44_Orders.gs` | 0.9.0 : commandes d'achat (PO) : saisie, statuts, répartition par livrable, constats et rappels de GR |
+| `BACKLOG.md` | Ce qui reste à faire, dans l'ordre proposé, avec les raisons de l'ordre |
 | `60_Exercise.gs` | 0.17.1 : l'exercice budgétaire : coût d'un ETP par pays et par an, conversion d'un montant en jours, exercices, budget attendu et accordé par équipe, écarts et clash, vue programme |
 | `59_TeamImport.gs` | 0.17.0 : import et export de la structure des équipes par un classeur Google Sheet dédié (analyse, copie de sécurité, application par lots) |
 | `42_Org.gs` | 0.8.0 : dépendances d'un élément (`deps.item`), rôles attribuables (`roles.options`), retrait d'une personne, équipes hiérarchiques (`teams.*`) |
@@ -141,7 +142,7 @@ Actions disponibles :
 | Rôles (0.15.3) | `roles.of` (rôles d'un objet), `roles.options`, `roles.assign`, `roles.end` |
 | Structure (lot 1) | `wbs.tree`, `views.config`, `prefs.set` |
 | Personnes (lot 1) | `resources.list`, `resources.create`, `resources.update` |
-| Avancement et alertes | `progress.declare`, `changes.since`, `insights.list` |
+| Avancement et alertes | `progress.declare`, `milestone.pass`, `changes.since`, `insights.list` |
 | Baselines (lot 2) | `baselines.list`, `baselines.request`, `baselines.create`, `baselines.activate`, `baselines.refuse`, `baselines.diff` (tous avec un périmètre facultatif : `scopeType: 'workpackage'` + `scopeId`), `changes.reject` (0.15.5) |
 | Fil des changements (lot 2) | `changes.feed`, `changes.ack` |
 | Workspace (lot 2) | `workspace.status`, `workspace.enable`, `workspace.sync` |
@@ -272,6 +273,16 @@ Additive et relançable, elle **termine** les anciennes lignes sans les supprime
 **Protection.** Les enveloppes ne s'écrivent que par `budget.envelope.set` : les mises à jour ordinaires d'un projet ou d'un workpackage (`projects.update`, `workpackages.*`, `wbs.*`) les ignorent. Actions : `budget.envelope.get` (lecture) et `budget.envelope.set` (`authorized`, `allocations: [{ wpId, amount }]`).
 
 **Limites.** Pas de règle du moteur de constats pour un dépassement d'enveloppe (seulement l'affichage) ; pas de graphique de consommation dans le temps ; l'enveloppe n'est pas figée par les baselines (elle est suivie par la validation). Vérifié sur les faux services et dans un aperçu, pas dans votre Apps Script. La démo reçoit une enveloppe (un workpackage dépassé pour l'illustrer) à l'étape « Enveloppe budgétaire de NAC-1 ».
+
+## Jalon passé : déclaré explicitement par son responsable (0.17.2)
+
+Un jalon n'a pas d'avancement : il est atteint ou il ne l'est pas. Jusqu'en 0.17.1 rien ne permettait de le déclarer atteint, donc un jalon dont la date était dépassée restait « en retard » pour toujours (alerte `LATE_ITEM`, glissement critique…).
+
+- **Qui** : le **responsable du jalon** (son Deliverable owner) et les niveaux au-dessus (Workpackage leader, chef de projet, DPL, Program Leader, administrateur). Un Contributor du jalon ou une personne sans rôle ne le peut pas.
+- **Comment** : page **WBS**, carte du jalon, bouton **« Marquer le jalon passé »** (avec confirmation) ; le même bouton devient **« Rouvrir le jalon »**. Le détail du jalon dit « À venir », « Échéance dépassée : pas encore marqué passé » ou « Passé le JJ/MM/AAAA ». Action : `milestone.pass` (`id`, `passed` vrai par défaut, `date` facultative : aujourd'hui ou une date passée, jamais dans le futur).
+- **Effet** : statut Terminé, avancement 100 %, date réelle, tracé dans le journal des changements. Toutes les règles qui regardent « terminé » cessent d'alerter ce jalon : retard (`LATE_ITEM`), glissement critique (`CRITICAL_SLIP`), jalon menacé (`MILESTONE_THREATENED`). Rouvrir le remet à faire (et les alertes reviennent si sa date est dépassée).
+- **Ce qui reste signalé** : un jalon déclaré passé alors qu'un livrable qu'il exige n'est pas terminé (`MILESTONE_INCOMPLETE`) : c'est une incohérence, pas un retard ; elle se traite comme les autres constats (accepter ou ignorer).
+- Droit : `milestone.pass`, ligne « Marquer un jalon passé (ou le rouvrir) » du tableau des droits.
 
 ## L'exercice budgétaire annuel : budget par équipe, livrables, clash (0.17.1)
 
