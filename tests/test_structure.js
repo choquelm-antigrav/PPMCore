@@ -57,15 +57,14 @@ module.exports = function () {
     void get;
   });
 
-  test('resources.list : recherche, droits d’édition, pas de profil tarifaire', () => {
+  test('resources.list : recherche, droits d’édition, aucun taux ni profil tarifaire', () => {
     const { c, call, eve } = world();
-    c.repoUpdate('Resource', eve.id, { rate_profile: 'Senior' }, null, { actor: 'x', source: 'core' });
     const asEve = call('eve@entreprise.com', 'resources.list', { q: 'alpha' }).data;
     eq(asEve.map((p) => p.name), ['Carl']);
     ok(!asEve[0].canEdit);
     const all = call('alice@entreprise.com', 'resources.list', {}).data;
     ok(all.every((p) => p.canEdit), 'un chef de projet peut modifier toutes les fiches');
-    ok(all.every((p) => !('rate_profile' in p)), 'le profil tarifaire n’est pas exposé');
+    ok(all.every((p) => !('rate_profile' in p) && !('daily_rate' in p)), 'ni profil tarifaire ni taux : ils n’existent plus');
     eq(call('eve@entreprise.com', 'resources.list', {}).data.filter((p) => p.canEdit).map((p) => p.name), ['Eve']);
   });
 

@@ -62,7 +62,7 @@ module.exports = function () {
     eq(w.book(t).getSheets().map((s) => s.getName()), ['Lisez-moi', 'Équipes', 'Membres'], 'deux onglets et le mode d’emploi');
     eq(t.prefilled, { equipes: 2, membres: 3 });
     eq(w.shared, [[t.id, CP]], 'partagé avec la personne qui l’a demandé');
-    eq(w.rowsOf(t, 'Équipes'), [['Équipe', 'Équipe parente', 'Responsable (e-mail)', 'Centre de coût'], ['Bureau d’études', '', '', 'CC-10'], ['Calcul', 'Bureau d’études', 'remi@entreprise.com', '']], 'la structure, dans l’ordre de l’arborescence, le responsable par son e-mail');
+    eq(w.rowsOf(t, 'Équipes'), [['Équipe', 'Équipe parente', 'Responsable (e-mail)', 'Centre de coût', 'Pays'], ['Bureau d’études', '', '', 'CC-10', ''], ['Calcul', 'Bureau d’études', 'remi@entreprise.com', '', '']], 'la structure, dans l’ordre de l’arborescence, le responsable par son e-mail');
     eq(w.rowsOf(t, 'Membres').slice(1).map((r) => r[0] + '|' + r[1]), ['Bureau d’études|Carla', 'Calcul|Mia', 'Calcul|Rémi'], 'les membres de chaque équipe');
     const rep = w.analyze(t);
     ok(rep.ok && rep.data.ok && rep.data.nothing_to_do, 'le classeur non modifié ne change rien : ' + JSON.stringify(rep.data && rep.data.counts));
@@ -250,9 +250,9 @@ module.exports = function () {
     // l'import de projets : la colonne Équipe de l'onglet Personnes
     const t = w.call(CP, 'import.template', { projectId: w.p1.id });
     const sh = w.book(t).getSheetByName('Personnes');
-    const header = w.book(t).getSheetByName('Personnes').getRange(1, 1, 1, 9).getValues()[0];
-    eq(header[8], 'Équipe', 'l’onglet Personnes a une colonne Équipe');
-    sh.getRange(sh.getLastRow() + 1, 1, 2, 9).setValues([['Nina Roux', 'nina@entreprise.com', 'Interne', '', '', 'FR', '', '', 'calcul'], ['Omar Test', 'omar@entreprise.com', 'Interne', '', '', 'FR', '', '', 'Équipe inconnue']]);
+    const header = w.book(t).getSheetByName('Personnes').getRange(1, 1, 1, 8).getValues()[0];
+    eq(header[7], 'Équipe', 'l’onglet Personnes a une colonne Équipe');
+    sh.getRange(sh.getLastRow() + 1, 1, 2, 8).setValues([['Nina Roux', 'nina@entreprise.com', 'Interne', '', '', 'FR', '', 'calcul'], ['Omar Test', 'omar@entreprise.com', 'Interne', '', '', 'FR', '', 'Équipe inconnue']]);
     const rep = w.raw(CP, 'import.analyze', { projectId: w.p1.id, book: t.id }).data;
     ok(rep.ok && /Personnes l\.\d+ : Équipe « Équipe inconnue » : introuvable, « Omar Test » est créée sans équipe/.test(msgs({ errors: rep.warnings }).join('\n')), 'une équipe inconnue : avertissement, la personne est créée sans équipe');
     const r = w.raw(CP, 'import.run', { projectId: w.p1.id, book: t.id });
@@ -260,6 +260,6 @@ module.exports = function () {
     eq([w.c.findResourceByEmail('nina@entreprise.com').team_id, w.c.findResourceByEmail('omar@entreprise.com').team_id || ''], [calc.id, ''], 'la personne créée par l’import de projets reçoit l’équipe importée (sans tenir compte de la casse) ; l’inconnue, aucune');
     w.put(w.remi, calc);
     const again = w.call(CP, 'import.template', { projectId: w.p1.id });
-    ok(w.rowsOf(again, 'Personnes').some((x) => x[1] === 'remi@entreprise.com' && x[8] === 'Calcul'), 'et l’export des projets écrit l’équipe de chaque personne');
+    ok(w.rowsOf(again, 'Personnes').some((x) => x[1] === 'remi@entreprise.com' && x[7] === 'Calcul'), 'et l’export des projets écrit l’équipe de chaque personne');
   });
 };

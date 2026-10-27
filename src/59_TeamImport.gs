@@ -19,7 +19,7 @@
  */
 
 var TEAM_IMPORT_TABS = [
-  { name: 'Équipes', cols: ['Équipe', 'Équipe parente', 'Responsable (e-mail)', 'Centre de coût'], text: [] },
+  { name: 'Équipes', cols: ['Équipe', 'Équipe parente', 'Responsable (e-mail)', 'Centre de coût', 'Pays'], text: [] },
   { name: 'Membres', cols: ['Équipe', 'Nom', 'E-mail', 'Type (Interne ou Externe)', 'Fonction', 'Organisation', 'Pays', 'Fournisseur'], text: [], optional: true }
 ];
 var TEAM_IMPORT_LIMITS = { teams: 500, members: 3000 };
@@ -66,7 +66,8 @@ function teamsImportAnalyze_(book, ctx) {
     var same = toolByName[key] || [];
     if (same.length > 1) { err('Équipes', row, 'Plusieurs équipes de l’outil s’appellent « ' + name + ' » : renommez-en une avant d’importer.'); return; }
     if (r['Centre de coût'].length > 40) { err('Équipes', row, 'Centre de coût : 40 caractères au plus.'); return; }
-    planned[key] = { name: name, key: key, row: row, parentText: r['Équipe parente'], managerText: r['Responsable (e-mail)'], cost: r['Centre de coût'], existing: same[0] || null };
+    if (r['Pays'] && COUNTRIES.indexOf(r['Pays']) < 0) { err('Équipes', row, 'Pays « ' + r['Pays'] + ' » : ' + COUNTRIES.join(', ') + ' (ou vide : la France).'); return; }
+    planned[key] = { name: name, key: key, row: row, parentText: r['Équipe parente'], managerText: r['Responsable (e-mail)'], cost: r['Centre de coût'], country: r['Pays'], existing: same[0] || null };
     order.push(planned[key]);
   });
   var teamKnown = function (name) { var k = teamNorm_(name); return !!planned[k] || (toolByName[k] || []).length > 0; };
@@ -105,7 +106,7 @@ function teamsImportAnalyze_(book, ctx) {
     if (['Interne', 'Externe'].indexOf(type) < 0) { err('Membres', row, 'Type « ' + type + ' » : Interne ou Externe.'); return; }
     if (r['Pays'] && COUNTRIES.indexOf(r['Pays']) < 0) { err('Membres', row, 'Pays « ' + r['Pays'] + ' » : ' + COUNTRIES.join(', ') + ' (ou vide).'); return; }
     if (!canCreatePeople) { err('Membres', row, 'Créer une personne est réservé au chef de projet et aux niveaux au-dessus.'); return; }
-    var virtual = { id: 'new:' + key, _new: true, name: name, email: email, resource_type: type, country: r['Pays'], job_function: r['Fonction'], organization: r['Organisation'], supplier: r['Fournisseur'], daily_rate: '' };
+    var virtual = { id: 'new:' + key, _new: true, name: name, email: email, resource_type: type, country: r['Pays'], job_function: r['Fonction'], organization: r['Organisation'], supplier: r['Fournisseur'] };
     if (email) maps.people[email] = virtual; else (maps.peopleByName[teamNorm_(name)] = maps.peopleByName[teamNorm_(name)] || []).push(virtual);
     members.push({ teamKey: tkey, teamName: teamName, person: virtual, action: 'create', row: row });
   });
@@ -158,6 +159,10 @@ function teamsImportAnalyze_(book, ctx) {
       if (!ex.cost_center) fills.push('cost');
       else if (ex.cost_center !== pt.cost) warn('Équipes', pt.row, 'L’équipe « ' + pt.name + ' » a un autre centre de coût dans l’outil : il n’est pas changé.');
     }
+    if (pt.country) {
+      if (!ex.country) fills.push('country');
+      else if (ex.country !== pt.country) warn('Équipes', pt.row, 'L’équipe « ' + pt.name + ' » a un autre pays dans l’outil : il n’est pas changé.');
+    }
     pt.fills = fills; pt.action = fills.length ? 'update' : 'same';
   });
   var counts = { teams: { create: 0, update: 0, same: 0 }, members: { create: 0, assign: 0, same: 0 } };
@@ -186,7 +191,7 @@ var TEAM_IMPORT_README = [
   ['Deux onglets : Équipes (la structure) et Membres (qui est dans quelle équipe, facultatif). Ne changez ni les noms d’onglets ni les en-têtes de colonnes.'],
   ['Ce classeur est prérempli avec les équipes actuelles de l’outil : modifiez-le, ajoutez des lignes, puis revenez dans la page Ressources (Importer des équipes) pour « Analyser », puis « Importer ».'],
   [''],
-  ['Équipes : le nom est la clé (sans tenir compte des accents ni de la casse). « Équipe parente » désigne une autre équipe par son nom ; laissez vide pour une équipe de premier niveau. Le responsable se désigne par son e-mail.'],
+  ['Équipes : le nom est la clé (sans tenir compte des accents ni de la casse) ET le niveau budgétaire : 3 caractères = l’équipe porte le budget de l’exercice, 4 caractères = un détail rattaché à son équipe parente à 3 caractères. « Équipe parente » désigne une autre équipe par son nom ; laissez vide pour une équipe de premier niveau. Le responsable se désigne par son e-mail. Le pays sert à convertir un montant en jours (coût d’un ETP) ; vide : la France.'],
   ['Membres : une ligne par personne et par équipe. Une personne qui n’existe pas encore est créée (nom obligatoire ; type Interne ou Externe) ; une personne sans équipe reçoit celle du classeur ; une personne déjà dans une autre équipe n’est pas déplacée.'],
   [''],
   ['L’import ne supprime jamais rien et n’écrase jamais rien : une équipe qui existe déjà n’a que ses champs vides complétés. Importer deux fois le même classeur ne change rien.'],
@@ -201,7 +206,7 @@ function teamExportRows_() {
   flat.forEach(function (t, i) {
     rank[t.id] = i;
     var parent = t.parent_team_id && teamById[t.parent_team_id] ? teamById[t.parent_team_id].name : '';
-    out['Équipes'].push([t.name, parent, contact(t.manager_id), t.cost_center || '']);
+    out['Équipes'].push([t.name, parent, contact(t.manager_id), t.cost_center || '', t.country || '']);
   });
   resources.filter(function (r) { return !isBlank(r.team_id) && teamById[r.team_id]; })
     .sort(function (a, b) { return (rank[a.team_id] - rank[b.team_id]) || String(a.name).localeCompare(String(b.name), 'fr'); })
@@ -277,7 +282,7 @@ defineAction('teams.import.run', function (p, ctx) {
   all.planned.filter(function (pt) { return pt.action === 'create'; }).sort(function (a, b) { return depthOf(a) - depthOf(b); }).forEach(function (pt) {
     step(function () {
       if (toolTeam(pt.key)) return;
-      var values = { name: pt.name, cost_center: pt.cost };
+      var values = { name: pt.name, cost_center: pt.cost, country: pt.country };
       if (pt.parentKey) { var par = toolTeam(pt.parentKey); if (par) values.parent_team_id = par.id; }
       run('teams.create', { values: values });
       applied.teams++;
@@ -310,6 +315,7 @@ defineAction('teams.import.run', function (p, ctx) {
       if (pt.parentKey && isBlank(cur.parent_team_id)) { var par = toolTeam(pt.parentKey); if (par) patch.parent_team_id = par.id; }
       if (pt.manager && isBlank(cur.manager_resource_id)) { var mid = importPersonId_(pt.manager); if (mid) patch.manager_resource_id = mid; }
       if (pt.cost && isBlank(cur.cost_center)) patch.cost_center = pt.cost;
+      if (pt.country && isBlank(cur.country)) patch.country = pt.country;
       if (Object.keys(patch).length) { run('teams.update', { id: cur.id, version: cur.version, patch: patch }); applied.filled++; }
     });
   });

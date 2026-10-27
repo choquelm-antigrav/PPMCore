@@ -5,7 +5,7 @@
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.17.0';
+var PPM_VERSION = '0.17.1';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -78,7 +78,8 @@ var PERMISSION_LEVEL = {
   'budget.authorize': 'CP',            // fixer l'enveloppe autorisée du projet et la répartir entre les workpackages (un sous-workpackage : par son Workpackage leader)
   'cpn.edit':         'CP',
   'po.edit':          'CONTRIB',
-  'ratecard.manage':  'CP',
+  'exercise.read':    'WPL',     // voir l'exercice budgétaire (60_Exercise.gs), en entier, au global
+  'exercise.edit':    'CP',      // saisir le budget attendu et accordé par équipe d'un projet
   'actuals.manage':   'CP',
   'roles.assign':     'DO',      // poser un rôle : le niveau exact dépend du rôle posé (voir roleAssignError_ dans 05_Rbac.gs)
   'resource.edit':    'CP',      // créer et modifier les personnes (page Ressources)
@@ -89,7 +90,7 @@ var PERMISSION_LEVEL = {
   'insight.decide':   'CP',
   'news.add':         'CP',
   'news.manage':      'CP',
-  'sensitive.read':   'WPL',     // lire les tarifs journaliers et les comptes rendus de réunion (le budget se lit avec budget.edit, sur son périmètre : un WPL voit celui de son workpackage) ; tout le reste se lit sans rôle
+  'sensitive.read':   'WPL',     // lire les comptes rendus de réunion (le budget se lit avec budget.edit, sur son périmètre : un WPL voit celui de son workpackage) ; tout le reste se lit sans rôle
   'addon.install':    '*'
 };
 
@@ -98,7 +99,7 @@ var PERMISSION_LEVEL = {
  * un DPL posé sur des projets voit les vues consolidées de leur programme).
  */
 var PERMISSION_DEEP = {
-  'baseline.request': true, 'po.edit': true, 'risk.create': true, 'sensitive.read': true,
+  'baseline.request': true, 'po.edit': true, 'risk.create': true, 'sensitive.read': true, 'exercise.read': true,
   'program.view': true, 'project.create': true
 };
 

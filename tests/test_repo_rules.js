@@ -36,8 +36,10 @@ module.exports = function () {
     eq(r.score, 12);
     const j = c.repoInsert('PlanItem', { project_id: p.id, item_type: 'Jalon', name: 'J', planned_finish: '2026-11-02' }, A);
     eq(j.planned_start, '2026-11-02');
-    const b = c.repoInsert('BudgetLine', { deliverable_id: j.id, resource_id: 'r', cost_type: 'TJM', planned_days: 10, frozen_rate: 650.5 }, A);
-    eq(b.planned_amount, 6505);
+    const b = c.repoInsert('BudgetLine', { deliverable_id: j.id, team_id: 't', cost_type: 'Équipe', planned_amount: 6505.456 }, A);
+    eq(b.planned_amount, 6505.46, 'le montant d’une part d’équipe est arrondi au centime');
+    const f = c.repoInsert('BudgetLine', { deliverable_id: j.id, resource_id: 'r', cost_type: 'Forfait', fixed_amount: 1200.004 }, A);
+    eq(f.planned_amount, 1200, 'et celui d’un forfait vient du forfait');
   });
 
   test('Chemin AppSheet : création, modification, inchangé, suppression', () => {

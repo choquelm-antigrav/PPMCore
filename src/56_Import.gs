@@ -25,12 +25,12 @@
 var IMPORT_TABS = [
   { name: 'Programmes', cols: ['Code', 'Nom', 'Statut', 'Description'], text: [0], optional: true },
   { name: 'Projets', cols: ['Code', 'Nom', 'Programme (code)', 'Statut', 'Pays des jours fériés', 'Chef de projet (e-mail)', 'Budget autorisé (€)'], text: [0, 2] },
-  { name: 'Personnes', cols: ['Nom', 'E-mail', 'Type (Interne ou Externe)', 'Fonction', 'Organisation', 'Pays', 'Fournisseur', 'Taux journalier (€)', 'Équipe'], text: [], optional: true },
+  { name: 'Personnes', cols: ['Nom', 'E-mail', 'Type (Interne ou Externe)', 'Fonction', 'Organisation', 'Pays', 'Fournisseur', 'Équipe'], text: [], optional: true },
   { name: 'Workpackages', cols: ['Projet', 'Code WBS', 'Parent (code WBS)', 'Nom', 'Leader (e-mail)', 'Imputation', 'Enveloppe (€)'], text: [0, 1, 2, 5] },
   { name: 'Livrables', cols: ['Projet', 'Code WBS du workpackage', 'Nom', 'Début', 'Fin', 'Owner (e-mail)', 'Contributors (e-mails séparés par « ; »)'], text: [0, 1] },
   { name: 'Jalons', cols: ['Projet', 'Code WBS du workpackage', 'Nom', 'Date', 'Catégorie', 'Owner (e-mail)', 'Contributors (e-mails séparés par « ; »)'], text: [0, 1] },
   { name: 'Dépendances', cols: ['Projet', 'Prédécesseur (WP)', 'Prédécesseur (nom)', 'Successeur (WP)', 'Successeur (nom)', 'Type (FS, SS, FF ou SF)', 'Décalage (jours)'], text: [0, 1, 3], optional: true },
-  { name: 'Budget', cols: ['Projet', 'Code WBS du workpackage', 'Livrable', 'Ressource (e-mail)', 'Type (TJM ou Forfait)', 'Jours', 'Montant forfait (€)'], text: [0, 1] }
+  { name: 'Budget', cols: ['Projet', 'Code WBS du workpackage', 'Livrable', 'Équipe ou ressource', 'Type (Équipe ou Forfait)', 'Montant (€)'], text: [0, 1] }
 ];
 var IMPORT_LIMITS = { projects: 50, people: 500, workpackages: 500, items: 3000, budget: 6000 };
 var IMPORT_BUDGET_MS = 240000;   // un lancement d'import.run s'arrête de lui-même après quatre minutes
@@ -213,25 +213,25 @@ function importAnalyze_(parsed, existing) {
       return i.item_type === 'Livrable' && (w ? String(w.wbs_code) : '') === wpCode && norm(i.name) === norm(name);
     })[0] || null;
     if (!item && !inProject) { err('Budget', row, 'Livrable « ' + name + ' » (workpackage « ' + wpCode + ' ») : introuvable dans l’onglet Livrables ni dans le projet. Un jalon n’a pas de budget.'); bad = true; }
-    var res = person('Budget', row, r['Ressource (e-mail)'], 'Ressource', true);
-    if (!res) bad = true;
-    var type = norm(r['Type (TJM ou Forfait)']);
-    var days = importAmount_(r._raw['Jours']), fixed = importAmount_(r._raw['Montant forfait (€)']);
-    if (type !== 'tjm' && type !== 'forfait') { err('Budget', row, 'Type « ' + r['Type (TJM ou Forfait)'] + ' » : TJM ou Forfait.'); bad = true; }
-    else if (type === 'tjm') {
-      if (days !== days || days === '' || days <= 0) { err('Budget', row, 'Un budget TJM demande un nombre de jours positif.'); bad = true; }
-      else if (res && existing.rateOf(res) === null) { err('Budget', row, 'Aucun taux journalier pour « ' + res.name + ' » : à renseigner dans Ressources avant d’importer un budget en jours.'); bad = true; }
+    var kindText = teamNorm_(r['Type (Équipe ou Forfait)']), who = r['Équipe ou ressource'], amount = importAmount_(r._raw['Montant (€)']), team = null, res = null;
+    if (kindText !== 'equipe' && kindText !== 'forfait') { err('Budget', row, 'Type « ' + r['Type (Équipe ou Forfait)'] + ' » : Équipe ou Forfait.'); bad = true; }
+    else if (kindText === 'equipe') {
+      var found = existing.teamsByName[teamNorm_(who)] || [];
+      if (found.length !== 1) { err('Budget', row, found.length ? 'Plusieurs équipes s’appellent « ' + who + ' » : renommez-en une avant d’importer.' : 'Équipe « ' + who + ' » : introuvable (importez d’abord la structure des équipes, page Ressources).'); bad = true; }
+      else team = found[0];
     } else {
-      if (res && res.resource_type !== 'Externe') { err('Budget', row, '« ' + res.name + ' » est interne : un forfait est réservé aux ressources externes ; budgétez-la en jours (TJM).'); bad = true; }
-      else if (fixed !== fixed || fixed === '' || fixed <= 0) { err('Budget', row, 'Un forfait demande un montant en euros positif.'); bad = true; }
+      res = person('Budget', row, who, 'Ressource', true);
+      if (!res) bad = true;
+      else if (res.resource_type !== 'Externe') { err('Budget', row, '« ' + res.name + ' » est interne : un forfait est réservé aux ressources externes ; le budget interne se saisit par équipe.'); bad = true; }
     }
-    var key = wpCode + '|' + norm(name) + '|' + (res ? res.id : '');
-    if (res && lineKeys[key]) { err('Budget', row, 'Cette ressource a déjà une ligne sur ce livrable (ligne ' + lineKeys[key] + ').'); bad = true; }
+    if (amount !== amount || amount === '' || amount <= 0) { err('Budget', row, 'Montant : un montant en euros positif.'); bad = true; }
+    var key = wpCode + '|' + norm(name) + '|' + (team ? 't:' + team.id : 'r:' + (res ? res.id : ''));
+    if ((team || res) && lineKeys[key]) { err('Budget', row, 'Cette ' + (team ? 'équipe' : 'ressource') + ' a déjà une ligne sur ce livrable (ligne ' + lineKeys[key] + ').'); bad = true; }
     lineKeys[key] = row;
     if (bad) return;
     var exLine = null;
-    if (inProject) exLine = existing.lines.filter(function (l) { return l.deliverable_id === inProject.id && l.resource_id === res.id; })[0] || null;
-    plan.lines.push({ wp: wpCode, item: name, resource: res, type: type === 'tjm' ? 'TJM' : 'Forfait', days: days, fixed: fixed, row: row, existing: exLine });
+    if (inProject) exLine = existing.lines.filter(function (l) { return l.deliverable_id === inProject.id && (team ? l.team_id === team.id : l.resource_id === res.id); })[0] || null;
+    plan.lines.push({ wp: wpCode, item: name, team: team, resource: res, kind: team ? 'team' : 'forfait', amount: amount, row: row, existing: exLine });
   });
 
   // ---- ce qui change, ce qui reste
@@ -264,8 +264,7 @@ function importAnalyze_(parsed, existing) {
     var ex = l.existing;
     if (!ex) l.action = 'create';
     else {
-      var same = l.type === 'TJM' ? ex.cost_type === 'TJM' && Number(ex.planned_days) === l.days : ex.cost_type === 'Forfait' && Number(ex.fixed_amount) === l.fixed;
-      l.action = same ? 'same' : 'update';
+      l.action = Number(ex.planned_amount) === l.amount ? 'same' : 'update';
     }
     counts.lines[l.action]++;
   });
@@ -323,20 +322,21 @@ function importExisting_(project) {
     lines: repoList('BudgetLine', function (l) { return !!itemIds[l.deliverable_id]; }),
     deps: repoList('Dependency', function (d) { return !!itemIds[d.successor_id] || !!itemIds[d.predecessor_id]; }),
     roles: repoList('RoleAssignment', function (a) { return roleActive_(a, todayStr()); }),
-    rateOf: function (res) { return importRateOf_(res); }
+    teamsByName: importTeamsByName_()
   };
 }
 
 /** L'état d'un projet qui n'existe pas encore : rien, mais les personnes sont celles de l'outil. */
 function importExistingNew_(stub) {
   var maps = importPeopleMaps_();
-  return { project: stub, wps: [], items: [], people: maps.people, peopleByName: maps.peopleByName, today: todayStr(), lines: [], deps: [], roles: [], rateOf: function (res) { return importRateOf_(res); } };
+  return { project: stub, wps: [], items: [], people: maps.people, peopleByName: maps.peopleByName, today: todayStr(), lines: [], deps: [], roles: [], teamsByName: importTeamsByName_() };
 }
 
-/** Taux journalier d'une personne : celui de sa fiche, ou celui que le classeur lui donne si elle n'existe pas encore (null sans taux). */
-function importRateOf_(res) {
-  if (res && res._new) return res.daily_rate === '' || res.daily_rate === null || res.daily_rate === undefined ? null : Number(res.daily_rate);
-  return dailyRateOf_(res, todayStr());
+/** Les équipes de l'outil par nom (sans accent ni casse) : un budget d'équipe désigne l'équipe par son nom. */
+function importTeamsByName_() {
+  var out = {};
+  repoList('HierarchicalTeam').forEach(function (t) { (out[teamNorm_(t.name)] = out[teamNorm_(t.name)] || []).push(t); });
+  return out;
 }
 
 /** La personne réelle (la fiche de l'outil) derrière une personne du classeur, y compris une personne que l'import vient de créer. */
@@ -440,8 +440,6 @@ function importAnalyzeAll_(book, ctx, opts) {
     var type = r['Type (Interne ou Externe)'] || 'Interne';
     if (['Interne', 'Externe'].indexOf(type) < 0) { err('Personnes', row, 'Type « ' + type + ' » : Interne ou Externe.'); bad = true; }
     if (r['Pays'] && COUNTRIES.indexOf(r['Pays']) < 0) { err('Personnes', row, 'Pays « ' + r['Pays'] + ' » : ' + COUNTRIES.join(', ') + ' (ou vide).'); bad = true; }
-    var rate = importAmount_(r._raw['Taux journalier (€)']);
-    if (rate !== rate) { err('Personnes', row, 'Taux journalier : un montant en euros, positif ou nul.'); bad = true; }
     var key = email || 'nom:' + norm(name);
     if (seenPeople[key]) { err('Personnes', row, 'Cette personne est déjà à la ligne ' + seenPeople[key] + '.'); bad = true; }
     seenPeople[key] = row;
@@ -450,7 +448,6 @@ function importAnalyzeAll_(book, ctx, opts) {
     if (existing) { out.people.push({ name: name, email: email, action: 'same', row: row }); return; }
     if (!email && (maps.peopleByName[norm(name)] || []).length > 1) { err('Personnes', row, 'Plusieurs personnes s’appellent « ' + name + ' » : donnez une adresse e-mail.'); return; }
     if (!canCreatePeople) { err('Personnes', row, 'Créer une personne est réservé au chef de projet et aux niveaux au-dessus (page Ressources).'); return; }
-    if (rate !== '' && !(ctx.isAdmin || canSetRates_(ctx))) { warn('Personnes', row, 'Le taux journalier de « ' + name + ' » est ignoré : le fixer est réservé au chef de projet et aux niveaux au-dessus.'); rate = ''; }
     // l'équipe : une équipe qui existe déjà (importée avec la structure des équipes) ; sinon la personne est créée sans équipe, c'est signalé
     var teamId = '';
     if (r['Équipe']) {
@@ -459,7 +456,7 @@ function importAnalyzeAll_(book, ctx, opts) {
       else if (found.length > 1) warn('Personnes', row, 'Plusieurs équipes s’appellent « ' + r['Équipe'] + ' » : « ' + name + ' » est créée sans équipe.');
       else warn('Personnes', row, 'Équipe « ' + r['Équipe'] + ' » : introuvable, « ' + name + ' » est créée sans équipe (importez d’abord la structure des équipes, page Ressources).');
     }
-    var virtual = { id: 'new:' + key, _new: true, name: name, email: email, resource_type: type, country: r['Pays'], job_function: r['Fonction'], organization: r['Organisation'], supplier: r['Fournisseur'], daily_rate: rate, team_id: teamId };
+    var virtual = { id: 'new:' + key, _new: true, name: name, email: email, resource_type: type, country: r['Pays'], job_function: r['Fonction'], organization: r['Organisation'], supplier: r['Fournisseur'], team_id: teamId };
     if (email) maps.people[email] = virtual; else (maps.peopleByName[norm(name)] = maps.peopleByName[norm(name)] || []).push(virtual);
     out.people.push({ name: name, email: email, action: 'create', row: row, person: virtual });
   });
@@ -597,7 +594,7 @@ var IMPORT_README = [
   ['Workpackages : le code WBS (« 1 », « 1.2 ») est la clé ; le leader devient Workpackage leader (ou Sub-workpackage leader pour un sous-workpackage) ; l’enveloppe est facultative (vide : pas de plafond).'],
   ['Livrables et jalons : on les retrouve par leur workpackage et leur nom (changer un nom crée un nouvel objet). L’owner devient Deliverable owner ; les contributors se séparent par « ; ». Dates : aaaa-mm-jj ou jj/mm/aaaa.'],
   ['Dépendances : par workpackage et nom de chaque bout ; type FS, SS, FF ou SF ; décalage en jours. Une dépendance qui ferme une boucle est refusée.'],
-  ['Budget : une ligne par livrable et par ressource. TJM = jours × taux de la fiche de la personne (le taux doit exister) ; Forfait = montant en euros, ressources externes seulement.'],
+  ['Budget : une ligne par livrable et par équipe (type Équipe : la part de l’équipe, en euros, l’équipe désignée par son nom et déjà présente dans l’outil) ou par ressource externe (type Forfait). Il n’y a plus de taux journalier : un montant se convertit en jours avec le coût d’un ETP du pays de l’équipe.'],
   [''],
   ['L’import ne supprime jamais rien : ce qui est dans l’outil et pas dans ce classeur reste en place. Importer deux fois le même classeur ne change rien. Avant d’écrire, l’outil enregistre une copie de sécurité des projets concernés.'],
   ['Ne sont pas dans le classeur : les baselines (historique figé), les risques, les réunions, les achats, le journal des modifications, les rôles autres que leader, owner et contributors.'],
@@ -607,7 +604,6 @@ var IMPORT_README = [
 /** Les lignes de chaque onglet pour ces projets (déjà filtrés sur les droits de l'appelant). */
 function importWorkbookRows_(ctx, projects) {
   var maps = importPeopleMaps_(), resById = indexBy_(repoList('Resource')), programsById = indexBy_(repoList('Program')), teamsById = indexBy_(repoList('HierarchicalTeam'));
-  var seeRates = !!ctx.isAdmin || canSetRates_(ctx);
   var email = function (id) { var r = resById[id]; return r ? (r.email || r.name || '') : ''; };   // à défaut d'adresse sur la fiche, le nom (l'import le comprend)
   var out = { 'Programmes': [], 'Projets': [], 'Personnes': [], 'Workpackages': [], 'Livrables': [], 'Jalons': [], 'Dépendances': [], 'Budget': [] };
   var usedPeople = {}, usedPrograms = {}, use = function (id) { if (id && resById[id]) usedPeople[id] = true; return email(id); };
@@ -635,12 +631,12 @@ function importWorkbookRows_(ctx, projects) {
     });
     ex.lines.forEach(function (l) {
       var it = itemById[l.deliverable_id]; if (!it) return;
-      out.Budget.push([project.code, wpCode(it.wp_id), it.name, use(l.resource_id), l.cost_type === 'Forfait' ? 'Forfait' : 'TJM', l.cost_type === 'TJM' && !isBlank(l.planned_days) ? Number(l.planned_days) : '', l.cost_type === 'Forfait' && !isBlank(l.fixed_amount) ? Number(l.fixed_amount) : '']);
+      out.Budget.push([project.code, wpCode(it.wp_id), it.name, l.cost_type === 'Équipe' ? (teamsById[l.team_id] ? teamsById[l.team_id].name : '') : use(l.resource_id), l.cost_type === 'Équipe' ? 'Équipe' : 'Forfait', Number(l.planned_amount) || 0]);
     });
   });
   Object.keys(usedPrograms).forEach(function (id) { var g = programsById[id]; out.Programmes.push([g.code, g.name, g.status || 'Actif', g.description || '']); });
   Object.keys(usedPeople).map(function (id) { return resById[id]; }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); }).forEach(function (r) {
-    out.Personnes.push([r.name, r.email || '', r.resource_type || 'Interne', r.job_function || '', r.organization || '', r.country || '', r.supplier || '', seeRates && !isBlank(r.daily_rate) ? Number(r.daily_rate) : '', teamsById[r.team_id] ? teamsById[r.team_id].name : '']);
+    out.Personnes.push([r.name, r.email || '', r.resource_type || 'Interne', r.job_function || '', r.organization || '', r.country || '', r.supplier || '', teamsById[r.team_id] ? teamsById[r.team_id].name : '']);
   });
   void maps;
   return out;
@@ -815,15 +811,14 @@ function importApplyProject_(ctx, project, bp, io) {
       var wid = wpId(l.wp);
       var it = repoList('PlanItem', function (x) { return x.project_id === project.id && x.item_type === 'Livrable' && (x.wp_id || '') === wid && nm(x.name) === nm(l.item); })[0];
       if (!it) return;
-      var who = pid(l.resource);
-      var cur = repoList('BudgetLine', function (b) { return b.deliverable_id === it.id && b.resource_id === who; })[0];
-      var values = l.type === 'TJM' ? { planned_days: l.days } : { fixed_amount: l.fixed };
+      var who = l.team ? l.team.id : pid(l.resource);
+      var cur = repoList('BudgetLine', function (b) { return b.deliverable_id === it.id && (l.team ? b.team_id === who : b.resource_id === who); })[0];
+      var values = l.team ? { planned_amount: l.amount } : { fixed_amount: l.amount };
       if (cur) {
-        var same = l.type === 'TJM' ? cur.cost_type === 'TJM' && Number(cur.planned_days) === l.days : cur.cost_type === 'Forfait' && Number(cur.fixed_amount) === l.fixed;
-        if (same) return;
+        if (Number(cur.planned_amount) === l.amount) return;
         run('budget.line.save', { id: cur.id, values: values });
       } else {
-        run('budget.line.save', { values: Object.assign({ deliverable_id: it.id, resource_id: who }, values) });
+        run('budget.line.save', { values: Object.assign({ deliverable_id: it.id }, l.team ? { team_id: who } : { resource_id: who }, values) });
       }
       applied.lines++;
     });
@@ -879,9 +874,8 @@ defineAction('import.run', function (p, ctx) {
     step(function () {
       if (importPersonId_(x.person)) return;
       var v = x.person;
-      var created = run('resources.create', { values: { name: v.name, email: v.email, resource_type: v.resource_type, country: v.country, job_function: v.job_function, organization: v.organization, supplier: v.supplier, team_id: v.team_id || '' } });
+      run('resources.create', { values: { name: v.name, email: v.email, resource_type: v.resource_type, country: v.country, job_function: v.job_function, organization: v.organization, supplier: v.supplier, team_id: v.team_id || '' } });
       applied.people++;
-      if (v.daily_rate !== '' && v.daily_rate !== null && v.daily_rate !== undefined) { run('people.setRate', { resourceId: created.id, daily_rate: v.daily_rate }); }
     });
   });
   // 3. projets (création, ou mise à jour du nom, du statut et du pays des jours fériés)

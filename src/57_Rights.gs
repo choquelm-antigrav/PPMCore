@@ -24,7 +24,7 @@ var WBS_EDIT_NOTES = {
 /** Les lignes décrites à la main (libellé et groupe) ; la case de chaque niveau est calculée. perm = clé de PERMISSION_LEVEL. */
 var RIGHTS_ROWS = [
   { group: 'Lire', all: true, label: 'Lire le WBS, le planning, l’avancement, les risques, les actualités', where: 'tout le monde, y compris sans rôle (Reader)' },
-  { group: 'Lire', perm: 'sensitive.read', label: 'Lire les tarifs journaliers et les comptes rendus de réunion' },
+  { group: 'Lire', perm: 'sensitive.read', label: 'Lire les comptes rendus de réunion' },
   { group: 'Lire', perm: 'budget.edit', label: 'Lire et saisir le budget (lignes par livrable)', where: 'sur son périmètre : un Workpackage leader ne voit que son workpackage' },
   { group: 'Lire', perm: 'program.view', label: 'Vues consolidées d’un programme (Actualités, Suivi, Budget)' },
   { group: 'Planning et avancement', perm: 'progress.declare', label: 'Déclarer l’avancement d’un livrable' },
@@ -32,7 +32,8 @@ var RIGHTS_ROWS = [
   { group: 'Planning et avancement', perm: 'baseline.manage', label: 'Réactiver une baseline du projet, refuser une demande de baseline du projet' },
   { group: 'Planning et avancement', perm: 'import.run', label: 'Exporter et importer un ou plusieurs projets par classeur Google Sheet', where: 'pour chaque projet touché ; créer un programme : l’administrateur ; créer un projet : le DPL du programme' },
   { group: 'Budget et achats', perm: 'budget.authorize', label: 'Fixer l’enveloppe budgétaire du projet et des workpackages', where: 'celle d’un sous-workpackage : son Workpackage leader et au-dessus' },
-  { group: 'Budget et achats', perm: 'ratecard.manage', label: 'Fixer les tarifs journaliers (grille et fiches)' },
+  { group: 'Budget et achats', perm: 'exercise.read', label: 'Voir l’exercice budgétaire (attendu, accordé, parts par équipe)', where: 'en entier, au global du projet' },
+  { group: 'Budget et achats', perm: 'exercise.edit', label: 'Saisir le budget attendu et accordé par équipe d’un projet' },
   { group: 'Budget et achats', perm: 'cpn.edit', label: 'Définir le CPN du projet et des sous-projets' },
   { group: 'Budget et achats', perm: 'po.edit', label: 'Saisir les commandes d’achat (PO)' },
   { group: 'Budget et achats', perm: 'actuals.manage', label: 'Importer les réalisés' },

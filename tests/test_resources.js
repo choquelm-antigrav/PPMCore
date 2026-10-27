@@ -2,7 +2,7 @@ const { test, eq, ok } = require('./harness');
 const { lot2World } = require('./fixtures_lot2');
 
 module.exports = function () {
-  console.log('\nRessources : personnes, équipes, rôle de projet et taux (0.10.0)');
+  console.log('\nRessources : personnes, équipes, rôle de projet (0.10.0) ; plus aucun taux journalier (0.17.1)');
 
   const CP = 'carla@entreprise.com', RWP = 'remi@entreprise.com', MEMBER = 'mia@entreprise.com', DPL = 'dora@entreprise.com', ADMIN = 'admin@entreprise.com';
   const at = (w, iso) => { let t = Date.parse(iso); w.c.CLOCK = () => (t += 1); };
@@ -14,17 +14,16 @@ module.exports = function () {
   }
   const row = (r, name) => r.people.find((x) => x.name === name);
 
-  test('ressources.get : personnes, équipes, rôles dans le projet, taux visibles des seuls DPL et chefs de projet', () => {
+  test('ressources.get : personnes, équipes, rôles dans le projet ; aucun taux ni profil tarifaire nulle part', () => {
     const w = world();
     const be = w.call(CP, 'teams.create', { values: { name: 'Bureau d’études', manager_resource_id: w.carla.id } });
     const calc = w.call(CP, 'teams.create', { values: { name: 'Calcul', parent_team_id: be.id } });
     w.call(CP, 'resources.update', { id: w.remi.id, patch: { team_id: calc.id } });
-    w.call(CP, 'people.setRate', { resourceId: w.remi.id, daily_rate: 520 });
     const cp = w.call(CP, 'ressources.get', { projectId: w.p1.id });
-    eq([cp.project.code, cp.canEdit, cp.canRates, cp.canAssign, cp.roleChoices], ['P1', true, true, undefined, undefined], 'les rôles ne se posent plus depuis cette page : ils se posent dans le WBS');
+    eq([cp.project.code, cp.canEdit, cp.canRates, cp.canSetRates, cp.canAssign, cp.roleChoices], ['P1', true, undefined, undefined, undefined, undefined], 'les rôles ne se posent plus depuis cette page : ils se posent dans le WBS');
     eq(cp.teams.map((t) => [t.name, t.depth, t.members]), [['Bureau d’études', 0, 0], ['Calcul', 1, 1]], 'équipes dans l’ordre de l’arborescence');
     const remi = row(cp, 'Rémi');
-    eq([remi.team, remi.team_id === calc.id, remi.daily_rate, remi.rate_source, remi.resource_type], ['Calcul', true, 520, 'fiche', 'Interne']);
+    eq([remi.team, remi.team_id === calc.id, remi.resource_type, 'daily_rate' in remi, 'rate_source' in remi], ['Calcul', true, 'Interne', false, false], 'plus de taux sur la fiche d’une personne');
     eq(remi.roles.map((r) => r.code + ':' + r.scope), ['WPL:1 Conception', 'DO:2 livrables ou jalons'], 'ses rôles dans le projet : leader du workpackage, propriétaire de deux livrables (regroupés)');
     eq([row(cp, 'Carla').roles.map((r) => r.code).join(), row(cp, 'Mia').roles.map((r) => r.code).join(), row(cp, 'Xavier').roles.length], ['CP,WPL,DO', 'CONTRIB', 0], 'les rôles de chacun, en lecture seule (Xavier : aucun, donc Reader)');
     eq(row(cp, 'Mia').roles.map((r) => r.code + ':' + r.scope), ['CONTRIB:4 livrables ou jalons'], 'Mia : Contributor de quatre livrables ou jalons, sur une seule ligne');
@@ -36,54 +35,44 @@ module.exports = function () {
     eq(cp.domains, ['entreprise.com'], 'les domaines autorisés sont fournis à la page');
     void nomail;
     const mia = w.call(MEMBER, 'ressources.get', { projectId: w.p1.id });
-    eq([mia.canEdit, mia.canRates], [false, false], 'un Contributor ne modifie aucune fiche et ne voit pas les tarifs');
-    ok(mia.people.every((x) => x.daily_rate === null && x.rate_source === ''), 'un membre ne voit aucun taux');
-    eq(w.call(DPL, 'ressources.get', { projectId: w.p1.id }).canRates, true, 'le DPL voit les taux');
+    eq(mia.canEdit, false, 'un Contributor ne modifie aucune fiche');
+    ok(!JSON.stringify([cp, mia, w.call(DPL, 'ressources.get', { projectId: w.p1.id })]).match(/daily_rate|rate_source|rate_profile|canRates/), 'aucun taux dans ce que la page reçoit, pour personne');
     eq(w.call(CP, 'ressources.get', {}).project, null, 'sans projet : la liste des personnes seulement');
     eq(w.raw(CP, 'ressources.get', { projectId: 'inconnu' }).error.code, 'NOT_FOUND');
   });
 
-  test('Taux journalier par personne : saisie, droits, bornes ; interne ou externe', () => {
+  test('Plus de taux journalier : l’action, le champ et le profil n’existent plus ; le pays d’une équipe sert à convertir un montant en jours', () => {
     const w = world();
-    const rate = (who, id, v) => w.raw(who, 'people.setRate', { resourceId: id, daily_rate: v });
-    eq(rate(CP, w.remi.id, '520,50').data.daily_rate, 520.5, 'la virgule est acceptée');
-    eq(rate(CP, w.xavier.id, 450).data.daily_rate, 450, 'un externe aussi');
-    eq(rate(MEMBER, w.remi.id, 100).error.code, 'FORBIDDEN');
-    eq(rate(RWP, w.remi.id, 100).error.code, 'FORBIDDEN');
-    ['0', '-5', 'x', 100001].forEach((v) => eq(rate(CP, w.remi.id, v).error.code, 'VALIDATION', 'taux ' + v));
-    eq(rate(CP, w.remi.id, '').data.daily_rate, null, 'vide : effacé');
-    eq(w.c.repoGet('Resource', w.remi.id).daily_rate, '');
-    eq(rate(ADMIN, w.mia.id, 600).data.daily_rate, 600, 'l’administrateur aussi');
-    ok(w.c.repoList('ChangeEvent').some((e) => e.table_name === 'Resource' && e.field === 'daily_rate' && e.new_value === '450'), 'tracé');
+    ['people.setRate', 'rates.list', 'rates.set', 'rates.delete', 'rates.people', 'rates.assign'].forEach((a) => eq(w.raw(ADMIN, a, {}).error.code, 'NOT_FOUND', a + ' n’existe plus'));
+    const schema = w.c.SCHEMA;
+    ok(!schema.Resource.cols.includes('daily_rate') && !schema.Resource.cols.includes('rate_profile') && !schema.RateCard && !schema.BudgetLine.cols.includes('frozen_rate') && !schema.BudgetLine.cols.includes('planned_days'), 'ni dans les colonnes des personnes, ni grille de taux, ni taux figé ou jours sur une ligne de budget');
+    const team = w.call(CP, 'teams.create', { values: { name: 'T1A', country: 'DE' } });
+    eq(w.c.repoGet('HierarchicalTeam', team.id).country, 'DE', 'une équipe a un pays');
+    eq(w.raw(CP, 'teams.create', { values: { name: 'T2B', country: 'ES' } }).error.code, 'VALIDATION', 'un pays inconnu est refusé');
+    eq(w.call(CP, 'teams.update', { id: team.id, patch: { country: '' } }).country, '', 'le pays se vide : la France par défaut');
+    eq(w.call(CP, 'ressources.get', { projectId: w.p1.id }).allTeams.find((t) => t.id === team.id).level, 3, 'la page reçoit le niveau budgétaire de chaque équipe (3 caractères)');
   });
 
-  test('Budget : le taux de la fiche sert de base, figé à la création ; un externe se budgète au forfait ou en jours', () => {
+  test('Budget : une part d’équipe en montant libre, un externe au forfait ; le budget externe compte les forfaits', () => {
     const w = world();
     const line = (v) => w.raw(CP, 'budget.line.save', { values: v });
-    w.call(CP, 'people.setRate', { resourceId: w.remi.id, daily_rate: 500 });
-    const a = line({ deliverable_id: w.b.id, resource_id: w.remi.id, planned_days: 10 });
+    const t1 = w.call(CP, 'teams.create', { values: { name: 'T1A', country: 'FR' } });
+    const a = line({ deliverable_id: w.b.id, team_id: t1.id, planned_amount: 5000 });
     ok(a.ok, JSON.stringify(a.error));
-    eq([a.data.cost_type, a.data.frozen_rate, a.data.planned_amount, a.data.external], ['TJM', 500, 5000, false], 'taux de la fiche, sans passer par la grille');
-    w.call(CP, 'people.setRate', { resourceId: w.remi.id, daily_rate: 700 });
-    eq(w.call(CP, 'budget.line.save', { id: a.data.id, values: { planned_days: 12 } }).planned_amount, 6000, 'le taux est figé : 12 jours à 500 €');
-    eq(w.call(CP, 'budget.line.save', { id: a.data.id, values: { refresh_rate: true } }).planned_amount, 8400, 'sur demande : au nouveau taux (700 €)');
-    ok(/Aucun taux journalier pour « Mia »/.test(line({ deliverable_id: w.a.id, resource_id: w.mia.id, planned_days: 2 }).error.message));
-    w.call(CP, 'people.setRate', { resourceId: w.xavier.id, daily_rate: 450 });
-    const x = line({ deliverable_id: w.cc.id, resource_id: w.xavier.id, planned_days: 10 });
-    eq([x.data.cost_type, x.data.frozen_rate, x.data.planned_amount, x.data.external], ['TJM', 450, 4500, true], 'externe en jours × taux');
+    eq([a.data.cost_type, a.data.planned_amount, a.data.external, a.data.team.country], ['Équipe', 5000, false, 'FR'], 'une part d’équipe : un montant, interne');
+    eq(w.call(CP, 'budget.line.save', { id: a.data.id, values: { planned_amount: 6000 } }).planned_amount, 6000, 'le montant se modifie librement (pas de taux figé)');
     const f = line({ deliverable_id: w.a.id, resource_id: w.xavier.id, fixed_amount: 3000 });
     eq([f.data.cost_type, f.data.planned_amount, f.data.external], ['Forfait', 3000, true], 'externe au forfait');
+    const x = line({ deliverable_id: w.cc.id, resource_id: w.xavier.id, fixed_amount: 4500 });
+    eq(x.data.planned_amount, 4500);
+    eq(line({ deliverable_id: w.b.id, resource_id: w.xavier.id }).error.code, 'VALIDATION', 'ni montant ni forfait : refusé');
+    ok(/ressource externe/.test(line({ deliverable_id: w.b.id, resource_id: w.remi.id, fixed_amount: 100 }).error.message), 'un forfait avec un interne : refusé, le budget interne se saisit par équipe');
     const g = w.call(CP, 'budget.get', { projectId: w.p1.id });
-    eq([g.totals.external, g.totals.internal, g.totals.total], [7500, 8400, 15900], 'le budget externe compte le forfait et les jours × taux des externes');
+    eq([g.totals.external, g.totals.internal, g.totals.total], [7500, 6000, 13500], 'le budget externe compte les forfaits ; l’interne, les parts d’équipe');
     const bal = w.call(CP, 'budget.balance', { projectId: w.p1.id });
-    eq([bal.totals.budget.external, bal.totals.budget.internal], [7500, 8400]);
+    eq([bal.totals.budget.external, bal.totals.budget.internal], [7500, 6000]);
     const opt = w.call(CP, 'po.options', { projectId: w.p1.id });
-    eq(opt.deliverables.find((d) => d.id === w.cc.id).budget_external, 4500, 'une PO se compare aussi au budget externe en jours × taux');
-    eq(line({ deliverable_id: w.b.id, resource_id: w.xavier.id }).error.code, 'VALIDATION', 'ni jours ni forfait : refusé');
-    // un externe sans taux ni forfait
-    const y = w.c.repoInsert('Resource', { resource_type: 'Externe', name: 'Yves', email: 'yves@sous-traitant.fr', country: 'FR' }, w.S);
-    ok(/Aucun taux journalier pour « Yves »/.test(line({ deliverable_id: w.b.id, resource_id: y.id, planned_days: 3 }).error.message));
-    eq(w.c.repoGet('Resource', w.xavier.id).daily_rate, 450);
+    eq(opt.deliverables.find((d) => d.id === w.cc.id).budget_external, 4500, 'une PO se compare au budget externe (forfaits) du livrable');
   });
 
   test('ressources.get : livrables et jalons de chaque personne (dont elle est responsable) et ceux auxquels elle contribue (0.14.0)', () => {

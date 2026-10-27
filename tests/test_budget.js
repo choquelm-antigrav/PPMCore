@@ -7,13 +7,14 @@ module.exports = function () {
   const CP = 'carla@entreprise.com', RWP = 'remi@entreprise.com', MEMBER = 'mia@entreprise.com', DPL = 'dora@entreprise.com', ADMIN = 'admin@entreprise.com';
   const NOBODY = 'personne@entreprise.com';
   const at = (w, iso) => { let t = Date.parse(iso); w.c.CLOCK = () => (t += 1); };
+  // Plus de taux journalier (0.17.1) : une part d'équipe est un montant libre ; 520 € ci-dessous = « 10 jours à 52 € », l'ancien jeu d'essai (T1A, équipe de la France).
   // Jeu : WP 1 ⊃ 1.1 ; WP 2 ; A, B (dans 1.1), C (WP 2, 26/10→06/11), J ; Carla CP de P1, Rémi RWP du WP 1, Mia membre du projet, Dora DPL du programme, Xavier externe.
 
   function world() {
     const w = lot2World();
     at(w, '2026-10-14T08:00:00Z');
-    w.call(CP, 'rates.set', { values: { profile: 'Ingénieur', country: 'FR', daily_rate: 520, effective_date: '2026-01-01' } });
-    w.call(CP, 'rates.assign', { resource_id: w.remi.id, rate_profile: 'Ingénieur' });
+    w.t1 = w.call(CP, 'teams.create', { values: { name: 'T1A', country: 'FR' } });   // l'équipe qui porte les parts de budget (3 caractères)
+    w.call(ADMIN, 'etp.set', { values: { country: 'FR', year: 2026, annual_cost: 130000 } });
     w.call(CP, 'cpn.set', { projectId: w.p1.id, cpn: 'cpn-100', cpn_label: 'Nacelle moteur' });
     w.call(CP, 'wbs.update', { kind: 'wp', id: w.w2.id, patch: { cpn: 'CPN-200', cpn_label: 'Essais en vol' } });
     const line = (who, v) => w.raw(who || CP, 'budget.line.save', { values: v });
@@ -34,69 +35,81 @@ module.exports = function () {
     const n = w.call(CP, 'wbs.create', { projectId: w.p1.id, kind: 'wp', values: { name: 'Sous-projet C', cpn: 'CPN-300', cpn_label: 'Autre' } });
     eq(n.record.cpn, 'CPN-300');
     const acc = w.call(CP, 'budget.access', { projectId: w.p1.id });
-    eq([acc.budget, acc.all, acc.po, acc.rates, acc.cpn, acc.project.cpn], [true, true, true, true, true, 'CPN-100']);
+    eq([acc.budget, acc.all, acc.po, acc.cpn, acc.exercise, acc.project.cpn], [true, true, true, true, true, 'CPN-100']);
     const mia = w.call(MEMBER, 'budget.access', { projectId: w.p1.id });
-    eq([mia.budget, mia.po, mia.rates, mia.cpn], [false, true, false, false], 'un membre interne : les PO, pas le budget ni les taux');
+    eq([mia.budget, mia.po, mia.exercise, mia.cpn], [false, true, false, false], 'un membre interne : les PO, ni le budget ni l’exercice (réservé au Workpackage leader et au-dessus)');
     const tree = w.call(CP, 'wbs.tree', { projectId: w.p1.id });
     eq([tree.canCpn, tree.nodes.find((x) => x.ref === w.w2.id).cpn, tree.nodes.find((x) => x.kind === 'project').cpn_label], [true, 'CPN-200', 'Nacelle moteur']);
   });
 
-  test('Taux : réservés au chef de projet et au DPL, dates d’effet, profil des personnes', () => {
-    const w = world();
-    eq(w.raw(MEMBER, 'rates.list', {}).error.code, 'FORBIDDEN');
-    eq(w.raw(RWP, 'rates.list', {}).error.code, 'FORBIDDEN');
-    ok(w.call(DPL, 'rates.list', {}).rates.length === 1, 'le DPL les voit');
-    const set = (v, id) => w.raw(CP, 'rates.set', { id, values: Object.assign({ profile: 'Ingénieur', country: 'FR', daily_rate: 540, effective_date: '2026-10-01' }, v) });
-    ok(set({}).ok, 'un nouveau taux à une autre date d’effet');
-    ok(/déjà un taux/.test(set({ daily_rate: 999 }).error.message), 'même profil, pays et date : refusé');
-    [{ daily_rate: 0 }, { daily_rate: 'x' }, { country: 'ES' }, { profile: ' ' }, { effective_date: '2026-02-30' }].forEach((v) => eq(set(v).error.code, 'VALIDATION', JSON.stringify(v)));
-    eq(w.c.rateFor_('ingénieur', 'FR', '2026-09-30'), 520, 'avant la date d’effet : l’ancien taux');
-    eq(w.c.rateFor_('Ingénieur', 'FR', '2026-10-05'), 540, 'après : le nouveau');
-    eq(w.c.rateFor_('Ingénieur', 'DE', '2026-10-05'), null);
-    const people = w.call(CP, 'rates.people', {});
-    eq(people.find((x) => x.name === 'Rémi').rate_profile, 'Ingénieur');
-    ok(!people.some((x) => x.name === 'Xavier'), 'seules les personnes internes ont un profil');
-    eq(w.call(CP, 'rates.list', {}).profiles, ['Ingénieur']);
+  test('Coût d’un ETP : l’administrateur seul, un coût par pays et par an, conversion d’un montant en jours (jours ouvrés du pays)', () => {
+    const w = world(), c = w.c;
+    eq(w.raw(CP, 'etp.list', {}).error.code, 'FORBIDDEN', 'le chef de projet ne le voit pas');
+    eq(w.raw(DPL, 'etp.set', { values: { country: 'DE', year: 2026, annual_cost: 100000 } }).error.code, 'FORBIDDEN', 'ni ne le fixe');
+    eq(w.raw(RWP, 'etp.delete', { id: 'x' }).error.code, 'FORBIDDEN');
+    const set = (v, id) => w.raw(ADMIN, 'etp.set', { id, values: Object.assign({ country: 'DE', year: 2026, annual_cost: 140000 }, v) });
+    ok(set({}).ok, 'l’administrateur fixe le coût d’un ETP de l’Allemagne en 2026');
+    [{ country: 'ES' }, { year: 1999 }, { year: 2026.5 }, { year: '' }, { annual_cost: 0 }, { annual_cost: 'x' }, { annual_cost: -5 }].forEach((v) => eq(set(v).error.code, 'VALIDATION', JSON.stringify(v)));
+    const again = set({ annual_cost: 150000 });
+    ok(again.ok && w.call(ADMIN, 'etp.list', {}).costs.filter((x) => x.country === 'DE' && x.year === 2026).length === 1, 'un seul coût par pays et par an : le second remplace le premier');
+    eq(w.call(ADMIN, 'etp.list', {}).costs.map((x) => x.country + x.year + ':' + x.annual_cost), ['DE2026:150000', 'FR2026:130000']);
+    c.etpReset_();
+    const wd = c.etpWorkingDays_('DE', 2026);
+    ok(wd >= 240 && wd <= 261, 'jours ouvrés 2026 : du lundi au vendredi, fériés retirés (' + wd + ')');
+    const day = 150000 / wd;
+    eq([c.daysFromAmount_(day, 'DE', 2026), c.daysFromAmount_(day * 10, 'DE', 2026), c.daysFromAmount_(0, 'DE', 2026)], [1, 10, 0], 'un jour de coût = 1 jour ; dix jours = 10 ; zéro = 0');
+    eq([c.daysFromAmount_(1000, 'DE', 2027), c.daysFromAmount_(1000, 'UK', 2026)], [null, null], 'sans coût paramétré pour le pays et l’année : null (« à paramétrer »), jamais un faux chiffre');
+    c.repoInsert('HolidaySet', { country: 'DE', year: 2026, label: 'Essai', dates_json: JSON.stringify(['2026-03-04']) }, w.S);
+    c.etpReset_();
+    eq(c.etpWorkingDays_('DE', 2026), wd - 1, 'un férié en semaine retire un jour ouvré ; il change donc la conversion');
+    c.repoInsert('HolidaySet', { country: 'DE', year: 2026, label: 'Essai week-end', dates_json: JSON.stringify(['2026-03-07']) }, w.S);
+    c.etpReset_();
+    eq(c.etpWorkingDays_('DE', 2026), wd - 1, 'un férié un samedi ne change rien');
+    ok(w.raw(ADMIN, 'etp.delete', { id: w.call(ADMIN, 'etp.list', {}).costs.find((x) => x.country === 'DE').id }).ok, 'l’administrateur retire un coût');
+    c.etpReset_();
+    eq(c.daysFromAmount_(1000, 'DE', 2026), null, 'retiré : plus de conversion');
   });
 
-  test('Lignes de budget : taux figé, forfait externe, étalement, droits, doublons', () => {
+  test('Lignes de budget : part d’équipe en montant libre, forfait externe, étalement, droits, doublons', () => {
     const w = world();
-    const b = w.line(CP, { deliverable_id: w.b.id, resource_id: w.remi.id, planned_days: 10 });
+    const b = w.line(CP, { deliverable_id: w.b.id, team_id: w.t1.id, planned_amount: 5200 });
     ok(b.ok, JSON.stringify(b.error));
-    eq([b.data.cost_type, b.data.frozen_rate, b.data.planned_amount, b.data.phasing_mode, b.data.phasing], ['TJM', 520, 5200, 'auto', [{ month: '2026-10', amount: 5200 }]]);
-    const c = w.line(CP, { deliverable_id: w.cc.id, resource_id: w.remi.id, planned_days: 10 });
+    eq([b.data.cost_type, b.data.kind, b.data.team.name, b.data.planned_amount, b.data.phasing_mode, b.data.phasing], ['Équipe', 'team', 'T1A', 5200, 'auto', [{ month: '2026-10', amount: 5200 }]]);
+    ok(b.data.days_equivalent > 0 && b.data.days_equivalent === w.c.daysFromAmount_(5200, 'FR', 2026), 'la part dit son équivalent en jours (coût de l’ETP de la France en 2026) : ' + b.data.days_equivalent);
+    const c = w.line(CP, { deliverable_id: w.cc.id, team_id: w.t1.id, planned_amount: 5200 });
     eq(c.data.phasing, [{ month: '2026-10', amount: 2600 }, { month: '2026-11', amount: 2600 }], 'étalé au prorata des jours ouvrés de chaque mois');
     const x = w.line(CP, { deliverable_id: w.cc.id, resource_id: w.xavier.id, fixed_amount: 8000 });
-    eq([x.data.cost_type, x.data.frozen_rate, x.data.planned_amount, x.data.phasing], ['Forfait', null, 8000, [{ month: '2026-11', amount: 8000 }]], 'forfait : en totalité le mois de livraison');
-    ok(/Aucun taux journalier pour « Mia » : à renseigner dans Ressources/.test(w.line(CP, { deliverable_id: w.a.id, resource_id: w.mia.id, planned_days: 3 }).error.message), 'sans taux : message clair, qui renvoie vers Ressources');
-    ok(/déjà une ligne/.test(w.line(CP, { deliverable_id: w.b.id, resource_id: w.remi.id, planned_days: 2 }).error.message));
-    ok(/pas à un jalon/.test(w.line(CP, { deliverable_id: w.j.id, resource_id: w.remi.id, planned_days: 2 }).error.message));
-    eq(w.line(CP, { deliverable_id: w.a.id, resource_id: w.remi.id, planned_days: -1 }).error.code, 'VALIDATION');
-    eq(w.line(MEMBER, { deliverable_id: w.a.id, resource_id: w.remi.id, planned_days: 1 }).error.code, 'FORBIDDEN');
-    eq(w.line(RWP, { deliverable_id: w.cc.id, resource_id: w.remi.id, planned_days: 1 }).error.code, 'FORBIDDEN', 'Rémi n’agit pas sur le WP 2');
-    eq(w.line(RWP, { deliverable_id: w.a.id, resource_id: w.remi.id, planned_days: 2 }).data.planned_amount, 1040, 'mais sur son WP oui');
-    // le taux est figé à la création
-    w.call(CP, 'rates.set', { values: { profile: 'Ingénieur', country: 'FR', daily_rate: 600, effective_date: '2026-10-10' } });
-    const up = w.call(CP, 'budget.line.save', { id: b.data.id, values: { planned_days: 12 } });
-    eq([up.frozen_rate, up.planned_amount], [520, 6240], 'un changement de jours garde le taux figé');
-    const fresh = w.call(CP, 'budget.line.save', { id: b.data.id, values: { refresh_rate: true } });
-    eq([fresh.frozen_rate, fresh.planned_amount], [600, 7200], 'on ne prend le nouveau taux que sur demande');
-    // vues : le taux n'est vu que de ceux qui gèrent les taux
+    eq([x.data.cost_type, x.data.kind, x.data.planned_amount, x.data.phasing, x.data.days_equivalent], ['Forfait', 'forfait', 8000, [{ month: '2026-11', amount: 8000 }], null], 'forfait : en totalité le mois de livraison, pas d’équivalent en jours');
+    ok(/ressource externe : le budget interne se saisit par équipe/.test(w.line(CP, { deliverable_id: w.a.id, resource_id: w.mia.id, fixed_amount: 300 }).error.message), 'un forfait ne se passe qu’avec une ressource externe : le budget interne se saisit par équipe');
+    eq(w.line(CP, { deliverable_id: w.a.id, team_id: 'inconnue', planned_amount: 100 }).error.message, 'Équipe introuvable.');
+    ok(/déjà une part/.test(w.line(CP, { deliverable_id: w.b.id, team_id: w.t1.id, planned_amount: 100 }).error.message), 'une seule part par équipe et par livrable');
+    ok(/déjà une ligne/.test(w.line(CP, { deliverable_id: w.cc.id, resource_id: w.xavier.id, fixed_amount: 100 }).error.message), 'et un seul forfait par ressource');
+    ok(/pas à un jalon/.test(w.line(CP, { deliverable_id: w.j.id, team_id: w.t1.id, planned_amount: 100 }).error.message));
+    eq(w.line(CP, { deliverable_id: w.a.id, team_id: w.t1.id, planned_amount: -1 }).error.code, 'VALIDATION');
+    eq(w.line(CP, { deliverable_id: w.a.id, team_id: w.t1.id, planned_amount: '' }).error.code, 'VALIDATION', 'un montant est obligatoire');
+    eq(w.line(MEMBER, { deliverable_id: w.a.id, team_id: w.t1.id, planned_amount: 100 }).error.code, 'FORBIDDEN');
+    eq(w.line(RWP, { deliverable_id: w.cc.id, team_id: w.t1.id, planned_amount: 100 }).error.code, 'FORBIDDEN', 'Rémi n’agit pas sur le WP 2');
+    eq(w.line(RWP, { deliverable_id: w.a.id, team_id: w.t1.id, planned_amount: 1040 }).data.planned_amount, 1040, 'mais sur son WP oui');
+    ok(/ne change pas/.test(w.raw(CP, 'budget.line.save', { id: b.data.id, values: { resource_id: w.xavier.id, fixed_amount: 10 } }).error.message), 'le type d’une ligne ne change pas');
+    const up = w.call(CP, 'budget.line.save', { id: b.data.id, values: { planned_amount: 7200 } });
+    eq([up.planned_amount, up.phasing], [7200, [{ month: '2026-10', amount: 7200 }]], 'un nouveau montant : l’échéancier automatique le suit');
     const cp = w.call(CP, 'budget.get', { projectId: w.p1.id });
-    eq([cp.partial, cp.lines.length, cp.lines.find((l) => l.id === b.data.id).frozen_rate], [false, 4, 600]);
+    eq([cp.partial, cp.lines.length, cp.lines.find((l) => l.id === b.data.id).planned_amount], [false, 4, 7200]);
     eq(cp.totals.total, 7200 + 5200 + 8000 + 1040, 'total du projet');
-    eq([cp.totals.external, cp.totals.internal], [8000, 13440]);
+    eq([cp.totals.external, cp.totals.internal], [8000, 13440], 'forfaits externes / parts d’équipe');
+    ok(!JSON.stringify(cp).match(/frozen_rate|daily_rate|planned_days/), 'plus aucun taux dans ce que la page reçoit');
     const rwp = w.call(RWP, 'budget.get', { projectId: w.p1.id });
-    eq([rwp.partial, rwp.lines.map((l) => l.deliverable_id).sort(), rwp.lines.some((l) => l.frozen_rate !== null)], [true, [w.a.id, w.b.id].sort(), true], 'Rémi (Workpackage leader) : son WP seulement, avec les taux (tarifs lisibles à partir du Workpackage leader)');
+    eq([rwp.partial, rwp.lines.map((l) => l.deliverable_id).sort()], [true, [w.a.id, w.b.id].sort()], 'Rémi (Workpackage leader) : son WP seulement');
     eq(w.raw(MEMBER, 'budget.get', { projectId: w.p1.id }).error.code, 'FORBIDDEN');
     eq(w.raw(RWP, 'budget.balance', { projectId: w.p1.id }).error.code, 'FORBIDDEN', 'le bilan du projet n’est pas pour un responsable de WP');
     eq(cp.deliverables.find((d) => d.id === w.cc.id).cpn, 'CPN-200', 'le livrable relève du CPN de son sous-projet');
     eq(cp.deliverables.find((d) => d.id === w.b.id).cpn, 'CPN-100', 'à défaut, du CPN du projet');
+    ok(cp.teams.some((t) => t.name === 'T1A' && t.level === 3 && t.country === 'FR'), 'la liste des équipes que la page propose, avec leur niveau budgétaire');
   });
 
   test('Étalement : à la main (somme exacte), remis en automatique, suit les dates du livrable', () => {
     const w = world();
-    const c = w.line(CP, { deliverable_id: w.cc.id, resource_id: w.remi.id, planned_days: 10 }).data;
+    const c = w.line(CP, { deliverable_id: w.cc.id, team_id: w.t1.id, planned_amount: 5200 }).data;
     const set = (months) => w.raw(CP, 'budget.phasing.set', { lineId: c.id, months });
     ok(/doit égaler/.test(set([{ month: '2026-10', amount: 1000 }]).error.message));
     eq(set([{ month: '2026-13', amount: 5200 }]).error.code, 'VALIDATION');
@@ -104,7 +117,7 @@ module.exports = function () {
     const m = set([{ month: '2026-11', amount: 4200 }, { month: '2026-10', amount: 1000 }]);
     eq([m.data.mode, m.data.months.map((x) => x.month)], ['manuel', ['2026-10', '2026-11']]);
     // les dates d'un livrable changent : la ligne manuelle ne bouge pas, les lignes automatiques suivent
-    const b = w.line(CP, { deliverable_id: w.b.id, resource_id: w.remi.id, planned_days: 10 }).data;
+    const b = w.line(CP, { deliverable_id: w.b.id, team_id: w.t1.id, planned_amount: 5200 }).data;
     w.call(CP, 'wbs.update', { kind: 'item', id: w.b.id, patch: { planned_start: '2026-10-28', planned_finish: '2026-11-06' } });
     w.call(CP, 'wbs.update', { kind: 'item', id: w.cc.id, patch: { planned_start: '2026-11-02', planned_finish: '2026-11-13' } });
     const view = w.call(CP, 'budget.get', { projectId: w.p1.id }).lines;
@@ -114,7 +127,7 @@ module.exports = function () {
     eq([back.mode, back.months], ['auto', [{ month: '2026-11', amount: 5200 }]], 'retour à l’automatique : tout en novembre après le déplacement');
     // changer le montant d'une ligne manuelle la remet en automatique
     set([{ month: '2026-11', amount: 5200 }]);
-    eq(w.call(CP, 'budget.line.save', { id: c.id, values: { planned_days: 5 } }).phasing_mode, 'auto');
+    eq(w.call(CP, 'budget.line.save', { id: c.id, values: { planned_amount: 2600 } }).phasing_mode, 'auto');
     eq(w.raw(MEMBER, 'budget.phasing.set', { lineId: c.id, mode: 'auto' }).error.code, 'FORBIDDEN');
   });
 
@@ -164,7 +177,7 @@ module.exports = function () {
   test('PO : répartition en montants réglables, statuts, engagement en une fois, bilan par CPN', () => {
     const w = world();
     w.line(CP, { deliverable_id: w.cc.id, resource_id: w.xavier.id, fixed_amount: 8000 });
-    w.line(CP, { deliverable_id: w.b.id, resource_id: w.remi.id, planned_days: 10 });
+    w.line(CP, { deliverable_id: w.b.id, team_id: w.t1.id, planned_amount: 5200 });
     const sum = w.po(CP, { po_number: 'CB-A', amount: 5000 }, [{ deliverable_id: w.cc.id, amount: 3000 }]);
     ok(/doit égaler le montant de la PO/.test(sum.error.message), 'somme ≠ montant');
     eq(w.po(CP, { po_number: 'CB-A' }, [{ deliverable_id: w.cc.id, amount: 2500 }, { deliverable_id: w.cc.id, amount: 2500 }]).error.code, 'VALIDATION', 'livrable en double');

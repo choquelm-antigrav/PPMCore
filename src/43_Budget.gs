@@ -1,13 +1,11 @@
 /**
- * PPM Core — 0.9.0 : budget, taux, CPN (lot 3, première partie).
+ * PPM Core — 0.9.0 : budget, CPN (lot 3, première partie) ; 0.17.1 : plus de taux journalier, parts par équipe.
  *
  *  - CPN : code financier d'un projet, avec sa désignation. Un workpackage de premier niveau (le « sous-projet »)
  *    peut porter le sien. Un CPN ne couvre qu'un seul projet, au maximum. Les analyses budgétaires se font par CPN.
- *  - Grille de taux (RateCard) : taux journalier par profil et par pays, avec date d'effet. Réservée au chef de projet
- *    et au DPL (décision par défaut, à relâcher si besoin).
- *  - Lignes de budget par livrable : ressource interne = jours × taux (taux FIGÉ à la création de la ligne) ;
- *    ressource externe = forfait. Étalement automatique (interne : au prorata des jours ouvrés de chaque mois ;
- *    externe : en totalité le mois de la livraison), modifiable à la main.
+ *  - Lignes de budget par livrable : une PART PAR ÉQUIPE, en montant libre (la conversion en jours est un calcul à la demande, à partir du coût d'un ETP du pays de l'équipe : 60_Exercise.gs),
+ *    ou un FORFAIT auprès d'une ressource externe. Il n'y a plus aucun taux journalier. Étalement automatique (équipe : au prorata des jours ouvrés de chaque mois ; forfait : en totalité
+ *    le mois de la livraison), modifiable à la main. Un livrable appartient à un seul exercice budgétaire (voir exerciseForLine_).
  *  - Bilan par CPN : budget (interne, externe) face aux commandes d'achat engagées (44_Orders.gs).
  * Fonctions de calcul pures : phasingFor_, computeBalance_.
  */
@@ -104,65 +102,6 @@ function applyWpCpn_(ctx, wp, values, out) {
 
 // ---------------------------------------------------------------- grille de taux
 
-function rateFor_(profile, country, onDate) {
-  var p = String(profile || '').toLowerCase().trim();
-  var rows = repoList('RateCard', function (r) { return String(r.profile).toLowerCase().trim() === p && r.country === country; })
-    .filter(function (r) { return isBlank(r.effective_date) || String(r.effective_date) <= onDate; })
-    .sort(function (a, b) { return String(b.effective_date || '').localeCompare(String(a.effective_date || '')); });
-  return rows.length ? Number(rows[0].daily_rate) : null;
-}
-
-function requireRates_(ctx) {
-  if (!ctx.isAdmin && !can(ctx, 'ratecard.manage', { type: 'global' })) throw new PpmError('FORBIDDEN', 'Les taux journaliers sont réservés au chef de projet et au DPL.');
-}
-
-defineAction('rates.list', function (p, ctx) {
-  requireRates_(ctx);
-  var rows = repoList('RateCard').map(function (r) {
-    return { id: r.id, version: r.version, profile: r.profile, country: r.country, daily_rate: Number(r.daily_rate), effective_date: r.effective_date || '' };
-  }).sort(function (a, b) { return String(a.profile).localeCompare(String(b.profile), 'fr') || String(a.country).localeCompare(String(b.country)) || String(b.effective_date).localeCompare(String(a.effective_date)); });
-  var profiles = {};
-  rows.forEach(function (r) { profiles[r.profile] = true; });
-  repoList('Resource').forEach(function (r) { if (!isBlank(r.rate_profile)) profiles[r.rate_profile] = true; });
-  return { rates: rows, profiles: Object.keys(profiles).sort(function (a, b) { return a.localeCompare(b, 'fr'); }), countries: COUNTRIES };
-});
-
-defineAction('rates.set', function (p, ctx) {
-  requireRates_(ctx);
-  var v = p.values || {};
-  var profile = wbsShortText_(v.profile, 60, 'Profil');
-  if (!profile) throw new PpmError('VALIDATION', 'Le profil est obligatoire.');
-  if (COUNTRIES.indexOf(v.country) < 0) throw new PpmError('VALIDATION', 'Pays inconnu : ' + COUNTRIES.join(', ') + '.');
-  var rate = Number(v.daily_rate);
-  if (isBlank(v.daily_rate) || isNaN(rate) || rate <= 0 || rate > 100000) throw new PpmError('VALIDATION', 'Taux journalier : un nombre positif.');
-  var date = wbsDate_(v.effective_date, 'Date d’effet');
-  var values = { profile: profile, country: v.country, daily_rate: round2(rate), effective_date: date };
-  var dup = repoList('RateCard', function (r) {
-    return r.id !== p.id && String(r.profile).toLowerCase() === profile.toLowerCase() && r.country === v.country && String(r.effective_date || '') === date;
-  });
-  if (dup.length) throw new PpmError('VALIDATION', 'Ce profil a déjà un taux pour ce pays à cette date d’effet : modifiez-le.');
-  return isBlank(p.id) ? repoInsert('RateCard', values, ctx.actx) : repoUpdate('RateCard', p.id, values, p.version, ctx.actx);
-});
-
-defineAction('rates.delete', function (p, ctx) {
-  requireRates_(ctx);
-  return repoSoftDelete('RateCard', requireParam(p, 'id'), p.version, ctx.actx);
-});
-
-/** Profil tarifaire des personnes internes (réservé à ceux qui gèrent les taux). */
-defineAction('rates.people', function (p, ctx) {
-  requireRates_(ctx);
-  return repoList('Resource').filter(function (r) { return r.resource_type === 'Interne'; }).map(function (r) {
-    return { resource_id: r.id, name: r.name, country: r.country || '', rate_profile: r.rate_profile || '', version: r.version };
-  }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
-});
-
-defineAction('rates.assign', function (p, ctx) {
-  requireRates_(ctx);
-  var r = mustGet('Resource', requireParam(p, 'resource_id'));
-  return repoUpdate('Resource', r.id, { rate_profile: wbsShortText_(p.rate_profile, 60, 'Profil') }, p.version, ctx.actx);
-});
-
 // ---------------------------------------------------------------- étalement (fonction pure)
 
 function monthOf_(d) { return String(d).slice(0, 7); }
@@ -222,33 +161,37 @@ function hookRephase(before, rec) {
 /** Une ligne est « externe » si sa ressource l'est (jours × taux ou forfait) ; les anciennes lignes au forfait le sont par nature. */
 function lineIsExternal_(l) { return isTrue(l.is_external) || l.cost_type === 'Forfait'; }
 
-/** Taux journalier d'une personne : celui qu'on a saisi sur sa fiche ; à défaut, la grille (profil, pays, date d'effet), conservée en secours. */
-function dailyRateOf_(res, date) {
-  if (!isBlank(res.daily_rate) && Number(res.daily_rate) > 0) return Number(res.daily_rate);
-  return rateFor_(res.rate_profile, res.country, date);
-}
-
 function budgetNumber_(v, label, max) {
   var n = Number(v);
   if (isBlank(v) || isNaN(n) || n < 0 || n > (max || 1e9)) throw new PpmError('VALIDATION', label + ' : un nombre positif ou nul.');
   return n;
 }
 
-function lineView_(l, ctx, phasing, resById, projectId) {
-  var res = resById[l.resource_id];
-  var seeRate = ctx.isAdmin || can(ctx, 'sensitive.read', { type: 'project', id: projectId });
+/**
+ * La vue d'une ligne de budget. `lookups` : { resById, teamById }. Une part d'équipe dit son équivalent en jours (montant ÷ coût journalier de l'ETP du pays de l'équipe, pour l'année de l'exercice
+ * du livrable, à défaut celle de ses dates) ; `days_equivalent` est null tant que le coût d'un ETP du pays et de l'année n'est pas paramétré : on n'invente jamais un chiffre.
+ */
+function lineView_(l, ctx, phasing, lookups, deliverable) {
+  var res = lookups.resById[l.resource_id], team = lookups.teamById[l.team_id];
+  var isTeam = l.cost_type === 'Équipe';
+  var ex = deliverable && !isBlank(deliverable.exercise_id) && lookups.exById ? lookups.exById[deliverable.exercise_id] : null;
+  var year = ex ? Number(ex.year) : Number(String((deliverable && (deliverable.planned_finish || deliverable.planned_start)) || todayStr()).slice(0, 4));   // l'année de l'exercice, sinon celle des dates
+  var country = team ? (team.country || 'FR') : '';
   return {
     id: l.id, version: l.version, deliverable_id: l.deliverable_id,
-    resource: { id: l.resource_id, name: res ? res.name : '', type: res ? res.resource_type : '' },
-    external: lineIsExternal_(l), cost_type: l.cost_type, planned_days: isBlank(l.planned_days) ? null : Number(l.planned_days),
-    frozen_rate: seeRate && !isBlank(l.frozen_rate) ? Number(l.frozen_rate) : null,
+    kind: isTeam ? 'team' : 'forfait',
+    resource: { id: l.resource_id || '', name: res ? res.name : '', type: res ? res.resource_type : '' },
+    team: isTeam ? { id: l.team_id || '', name: team ? team.name : '', country: country } : null,
+    external: lineIsExternal_(l), cost_type: l.cost_type,
     fixed_amount: isBlank(l.fixed_amount) ? null : Number(l.fixed_amount), planned_amount: Number(l.planned_amount) || 0,
+    days_equivalent: isTeam && team ? daysFromAmount_(Number(l.planned_amount) || 0, country, year) : null,
     phasing_mode: l.phasing_mode === 'manuel' ? 'manuel' : 'auto',
     phasing: (phasing || []).map(function (x) { return { month: x.month, amount: Number(x.amount) || 0 }; }).sort(function (a, b) { return a.month < b.month ? -1 : 1; })
   };
 }
 
 defineAction('budget.line.save', function (p, ctx) {
+  etpReset_();
   var v = p.values || {};
   var isUpdate = !isBlank(p.id);
   var line = isUpdate ? mustGet('BudgetLine', p.id) : null;
@@ -256,37 +199,41 @@ defineAction('budget.line.save', function (p, ctx) {
   if (deliverable.item_type !== 'Livrable') throw new PpmError('VALIDATION', 'Le budget se rattache à un livrable, pas à un jalon.');
   requireCan(ctx, 'budget.edit', { type: 'planitem', id: deliverable.id });
   return withLock(function () {
-    var resId = 'resource_id' in v ? v.resource_id : (line ? line.resource_id : requireParam(v, 'resource_id'));
-    var res = repoGet('Resource', resId);
-    if (!res || isTrue(res.deleted)) throw new PpmError('VALIDATION', 'Ressource introuvable.');
-    if (repoList('BudgetLine', function (l) { return l.deliverable_id === deliverable.id && l.resource_id === resId && (!line || l.id !== line.id); }).length) {
-      throw new PpmError('VALIDATION', 'Cette ressource a déjà une ligne sur ce livrable : modifiez-la.');
-    }
-    var out = { resource_id: resId };
-    var resourceChanged = !line || line.resource_id !== resId;
-    var external = res.resource_type === 'Externe';
-    var given = function (k) { return k in v && !isBlank(v[k]); };
-    // Une ressource externe se budgète au forfait OU en jours × taux ; une ressource interne, toujours en jours × taux.
-    var fixed = external && (given('fixed_amount') || (!given('planned_days') && !!line && line.cost_type === 'Forfait'));
-    if (fixed) {
-      var amount = budgetNumber_('fixed_amount' in v ? v.fixed_amount : (line ? line.fixed_amount : ''), 'Forfait');
-      Object.assign(out, { cost_type: 'Forfait', fixed_amount: round2(amount), planned_days: '', frozen_rate: '', planned_amount: round2(amount), is_external: true });
-    } else {
-      var days = budgetNumber_('planned_days' in v ? v.planned_days : (line ? line.planned_days : ''), 'Jours prévus', 100000);
-      var rate = line && !resourceChanged && !v.refresh_rate && line.cost_type === 'TJM' ? Number(line.frozen_rate) : null;
-      if (rate === null || isNaN(rate)) {
-        rate = dailyRateOf_(res, todayStr());
-        if (rate === null) throw new PpmError('VALIDATION', 'Aucun taux journalier pour « ' + res.name + ' » : à renseigner dans Ressources (réservé au chef de projet et au DPL).');
+    var ex = exerciseForLine_(deliverable, p.exerciseId);
+    // une part d'équipe (team_id + montant libre) ou un forfait auprès d'une ressource externe (resource_id + forfait) ; le type d'une ligne existante ne change pas
+    var isTeam = line ? line.cost_type === 'Équipe' : !isBlank(v.team_id);
+    if (line && (isTeam ? !isBlank(v.resource_id) : !isBlank(v.team_id))) throw new PpmError('VALIDATION', 'Le type d’une ligne ne change pas : supprimez-la puis créez-en une autre.');
+    var out, who;
+    if (isTeam) {
+      var teamId = 'team_id' in v && !isBlank(v.team_id) ? v.team_id : (line ? line.team_id : requireParam(v, 'team_id'));
+      var team = repoGet('HierarchicalTeam', teamId);
+      if (!team || isTrue(team.deleted)) throw new PpmError('VALIDATION', 'Équipe introuvable.');
+      if (repoList('BudgetLine', function (l) { return l.deliverable_id === deliverable.id && l.team_id === teamId && (!line || l.id !== line.id); }).length) {
+        throw new PpmError('VALIDATION', 'Cette équipe a déjà une part sur ce livrable : modifiez-la.');
       }
-      Object.assign(out, { cost_type: 'TJM', planned_days: days, frozen_rate: rate, planned_amount: round2(days * rate), fixed_amount: '', is_external: external });
+      var amount = budgetNumber_('planned_amount' in v ? v.planned_amount : (line ? line.planned_amount : ''), 'Montant');
+      out = { team_id: teamId, resource_id: '', cost_type: 'Équipe', planned_amount: round2(amount), fixed_amount: '', is_external: false };
+    } else {
+      var resId = 'resource_id' in v && !isBlank(v.resource_id) ? v.resource_id : (line ? line.resource_id : requireParam(v, 'resource_id'));
+      var res = repoGet('Resource', resId);
+      if (!res || isTrue(res.deleted)) throw new PpmError('VALIDATION', 'Ressource introuvable.');
+      if (res.resource_type !== 'Externe') throw new PpmError('VALIDATION', 'Un forfait se passe auprès d’une ressource externe : le budget interne se saisit par équipe.');
+      if (repoList('BudgetLine', function (l) { return l.deliverable_id === deliverable.id && l.resource_id === resId && (!line || l.id !== line.id); }).length) {
+        throw new PpmError('VALIDATION', 'Cette ressource a déjà une ligne sur ce livrable : modifiez-la.');
+      }
+      var fixed = budgetNumber_('fixed_amount' in v ? v.fixed_amount : (line ? line.fixed_amount : ''), 'Forfait');
+      out = { resource_id: resId, team_id: '', cost_type: 'Forfait', fixed_amount: round2(fixed), planned_amount: round2(fixed), is_external: true };
+      who = res;
     }
     var amountChanged = !line || Number(line.planned_amount) !== out.planned_amount;
     if (!line || amountChanged || line.phasing_mode !== 'manuel') out.phasing_mode = 'auto';
     var rec = line ? repoUpdate('BudgetLine', line.id, out, p.version, ctx.actx)
       : repoInsert('BudgetLine', Object.assign({ deliverable_id: deliverable.id }, out), ctx.actx);
+    if (ex && isBlank(deliverable.exercise_id)) deliverable = repoUpdate('PlanItem', deliverable.id, { exercise_id: ex.id }, null, ctx.actx);   // un livrable n'a qu'un exercice : celui de sa première part
     if (out.phasing_mode === 'auto') rephaseLine_(rec, deliverable, ctx.actx);
     var phasing = repoList('BudgetPhasing', function (x) { return x.budget_line_id === rec.id; });
-    return lineView_(rec, ctx, phasing, indexBy_([res]), deliverable.project_id);
+    var teamById = indexBy_(repoList('HierarchicalTeam')), resById = who ? indexBy_([who]) : {};
+    return lineView_(rec, ctx, phasing, { resById: resById, teamById: teamById, exById: indexBy_(repoList('Exercise')) }, deliverable);
   });
 });
 
@@ -294,6 +241,7 @@ defineAction('budget.line.delete', function (p, ctx) {
   var line = mustGet('BudgetLine', requireParam(p, 'id'));
   requireCan(ctx, 'budget.edit', { type: 'planitem', id: line.deliverable_id });
   return withLock(function () {
+    exerciseForLine_(mustGet('PlanItem', line.deliverable_id), '');   // rien ne se retire d'un exercice clos
     repoList('BudgetPhasing', function (x) { return x.budget_line_id === line.id; }).forEach(function (x) { repoSoftDelete('BudgetPhasing', x.id, null, ctx.actx); });
     repoSoftDelete('BudgetLine', line.id, p.version, ctx.actx);
     return { deleted: true };
@@ -341,7 +289,7 @@ function budgetAccess_(ctx, projectId) {
     .some(function (i) { return can(ctx, 'budget.edit', { type: 'planitem', id: i.id }); });
   return {
     budget: all || hasWp, all: all, po: ctx.isAdmin || all || canPoView_(ctx, projectId),
-    rates: ctx.isAdmin || can(ctx, 'ratecard.manage', { type: 'global' }), cpn: can(ctx, 'cpn.edit', scope)
+    cpn: can(ctx, 'cpn.edit', scope), exercise: ctx.isAdmin || can(ctx, 'exercise.read', scope)
   };
 }
 
@@ -353,20 +301,25 @@ defineAction('budget.access', function (p, ctx) {
 
 /** Lignes de budget d'un projet, par livrable, avec étalement ; les lignes hors périmètre de l'utilisateur sont masquées. */
 defineAction('budget.get', function (p, ctx) {
+  etpReset_();
   var project = mustGet('Project', requireParam(p, 'projectId'));
   var access = budgetAccess_(ctx, project.id);
   if (!access.budget) throw new PpmError('FORBIDDEN', 'Le budget est réservé aux responsables de budget du projet.');
   var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; });
   var wpById = indexBy_(wps);
-  var items = repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable'; });
+  var exercises = repoList('Exercise'), exById = indexBy_(exercises), exFilter = String(p.exerciseId || '');
+  // exerciseId : un exercice (ses livrables), « __none » (les livrables sans exercice) ou vide (tous)
+  var allItems = repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable'; });
+  var items = allItems.filter(function (i) { return !exFilter || (exFilter === '__none' ? isBlank(i.exercise_id) : i.exercise_id === exFilter); });
   var editable = {};
   items.forEach(function (i) { if (access.all || can(ctx, 'budget.edit', { type: 'planitem', id: i.id })) editable[i.id] = true; });
   var lines = repoList('BudgetLine', function (l) { return editable[l.deliverable_id]; });
   var lineIds = {}; lines.forEach(function (l) { lineIds[l.id] = true; });
   var phasing = {};
   repoList('BudgetPhasing', function (x) { return lineIds[x.budget_line_id]; }).forEach(function (x) { (phasing[x.budget_line_id] = phasing[x.budget_line_id] || []).push(x); });
-  var resById = indexBy_(repoList('Resource'));
-  var views = lines.map(function (l) { return lineView_(l, ctx, phasing[l.id], resById, project.id); });
+  var resById = indexBy_(repoList('Resource')), teamList = repoList('HierarchicalTeam'), lookups = { resById: resById, teamById: indexBy_(teamList), exById: exById };
+  var itemsById = indexBy_(items);
+  var views = lines.map(function (l) { return lineView_(l, ctx, phasing[l.id], lookups, itemsById[l.deliverable_id]); });
   var topWp = function (item) {
     var w = item.wp_id ? wpById[item.wp_id] : null, guard = 0;
     while (w && w.parent_wp_id && wpById[w.parent_wp_id] && guard++ < 5) w = wpById[w.parent_wp_id];
@@ -388,14 +341,18 @@ defineAction('budget.get', function (p, ctx) {
     return normCpn_(project.cpn);
   };
   var wpLabel = function (item) { var w = item.wp_id ? wpById[item.wp_id] : null; return w ? (w.wbs_code ? w.wbs_code + ' ' : '') + w.name : ''; };
+  var unassigned = allItems.filter(function (i) { return isBlank(i.exercise_id) && (access.all || can(ctx, 'budget.edit', { type: 'planitem', id: i.id })); })
+    .map(function (i) { return { id: i.id, name: i.name, wp: wpLabel(i) }; }).sort(function (a, b) { return String(a.wp).localeCompare(String(b.wp), 'fr', { numeric: true }) || String(a.name).localeCompare(String(b.name), 'fr'); });
   var deliverables = items.filter(function (i) { return editable[i.id]; }).map(function (i) {
-    return { id: i.id, name: i.name, wp: wpLabel(i), cpn: cpnOf(i), start: i.planned_start || null, finish: i.planned_finish || null, has_budget: !!withBudget[i.id] };
+    return { id: i.id, name: i.name, wp: wpLabel(i), cpn: cpnOf(i), start: i.planned_start || null, finish: i.planned_finish || null, has_budget: !!withBudget[i.id],
+      exercise_id: i.exercise_id || '', exercise_year: i.exercise_id && exById[i.exercise_id] ? Number(exById[i.exercise_id].year) : null };
   }).sort(function (a, b) { return String(a.wp).localeCompare(String(b.wp), 'fr', { numeric: true }) || String(a.name).localeCompare(String(b.name), 'fr'); });
   var total = 0, ext = 0;
   views.forEach(function (l) { total = round2(total + l.planned_amount); if (l.external) ext = round2(ext + l.planned_amount); });
   return {
     project: { id: project.id, code: project.code, name: project.name }, partial: !access.all,
-    lines: views, deliverables: deliverables,
+    lines: views, deliverables: deliverables, unassigned: unassigned, exercises: exercises.map(exerciseView_).sort(function (a, b) { return b.year - a.year; }),
+    teams: teamList.map(function (t) { return { id: t.id, name: t.name, country: t.country || 'FR', level: teamLevel_(t) }; }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); }),
     totals: { total: total, external: ext, internal: round2(total - ext), by_wp: Object.keys(byWp).map(function (k) { return byWp[k]; }).sort(function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); }) },
     months: Object.keys(months).sort().map(function (m) { return { month: m, planned: months[m] }; }),
     missing: { deliverables_without_budget: deliverables.filter(function (d) { return !d.has_budget; }).length, undated_lines: views.filter(function (l) { return !l.phasing.length; }).length }

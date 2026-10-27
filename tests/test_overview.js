@@ -117,7 +117,6 @@ module.exports = function () {
   test('overview.get : portefeuille, détail, droits sur les montants, droit de créer', () => {
     const w = lot2World();
     at(w, '2026-10-14T08:00:00Z');
-    w.call(CP, 'rates.set', { values: { profile: 'Ingénieur', country: 'FR', daily_rate: 520, effective_date: '2026-01-01' } });
     w.call(CP, 'cpn.set', { projectId: w.p1.id, cpn: 'CPN-100', cpn_label: 'Nacelle' });
     w.call(CP, 'budget.line.save', { values: { deliverable_id: w.cc.id, resource_id: w.xavier.id, fixed_amount: 10000 } });
     w.call(CP, 'po.save', { values: { po_number: 'CB-1', cpn: 'CPN-100', resource_id: w.xavier.id, amount: 8800, status: 'Lancée', gr_due_date: '2026-12-01' }, links: [{ deliverable_id: w.cc.id, amount: 8800 }] });

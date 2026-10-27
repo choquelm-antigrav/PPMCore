@@ -149,7 +149,7 @@ function openPage(file, user, boot) {
   console.log('\nPage Administration (jsdom)');
   const denied = openPage('Admin.html', CP);
   await denied.until(() => /Réservé aux administrateurs/.test(denied.text('panel-reglages')));
-  check(['reglages', 'sante', 'feries', 'donnees', 'droits', 'journaux'].every((z) => denied.doc.getElementById('zone-' + z).hidden) && !denied.calls.some((a) => a.startsWith('admin.')), 'non-administrateur : message, aucune zone d’administration, aucune demande à l’administration');
+  check(['reglages', 'sante', 'feries', 'budget', 'donnees', 'droits', 'journaux'].every((z) => denied.doc.getElementById('zone-' + z).hidden) && !denied.calls.some((a) => a.startsWith('admin.')), 'non-administrateur : message, aucune zone d’administration, aucune demande à l’administration');
   check(denied.doc.getElementById('ppm-admin').hidden, 'lien « Administration » absent de sa bannière');
 
   // ---------------------------------------------------------------- Réglages
@@ -291,6 +291,42 @@ function openPage(file, user, boot) {
   // un non-administrateur ne voit pas la zone
   check(denied.doc.getElementById('zone-donnees').hidden, 'la zone est masquée à un non-administrateur');
 
+  // ---------------------------------------------------------------- 0.17.1 : exercices budgétaires et coût d'un ETP (administrateur)
+  await a.until(() => a.doc.getElementById('ex-empty') && a.doc.getElementById('etp-empty'));
+  check(!a.doc.getElementById('zone-budget').hidden && /Aucun exercice/.test(a.text('ex-empty')) && /Aucun coût paramétré/.test(a.text('etp-empty')), 'zone « Budget : exercices et coût d’un ETP » : rien au départ, et la page explique les deux paramètres');
+  const val = (id, v) => { a.doc.getElementById(id).value = v; };
+  val('ex-year', '2026'); a.click(a.doc.getElementById('ex-create'));
+  await a.until(() => c.repoList('Exercise').some((e) => Number(e.year) === 2026) && a.doc.querySelector('#panel-budget tr[data-exercise]'));
+  check(/2026/.test(a.text('panel-budget')) && /Préparation/.test(a.doc.querySelector('#panel-budget tr[data-exercise]').textContent) && !!a.doc.querySelector('.ex-next'), 'un exercice créé : en préparation, avec « Passer en exécution »');
+  val('ex-year', '2027'); a.click(a.doc.getElementById('ex-create'));
+  await a.until(() => a.doc.getElementById('toast') && a.doc.getElementById('toast').classList.contains('error'));
+  check(/déjà en préparation/.test(a.text('toast')) && c.repoList('Exercise').length === 1, 'un second exercice en préparation : refusé, message clair : ' + a.text('toast'));
+  a.click(a.doc.querySelector('.ex-next'));
+  await a.until(() => a.doc.querySelector('.ex-confirm'));
+  check(/définitif/.test(a.doc.querySelector('.ex-confirm').textContent) && c.repoList('Exercise')[0].status === 'Préparation', 'passer en exécution demande une confirmation, rien n’est changé avant');
+  a.click(a.doc.querySelector('.ex-confirm'));
+  await a.until(() => c.repoList('Exercise')[0].status === 'Exécution');
+  await a.until(() => /Clore l’exercice/.test(a.text('panel-budget')));
+  check(/Exécution/.test(a.doc.querySelector('#panel-budget tr[data-exercise]').textContent), 'l’exercice passe en exécution ; le bouton devient « Clore l’exercice »');
+  val('ex-year', '2027'); a.click(a.doc.getElementById('ex-create'));
+  await a.until(() => c.repoList('Exercise').some((e) => Number(e.year) === 2027));
+  await a.until(() => a.doc.querySelectorAll('#panel-budget tr[data-exercise]').length === 2);
+  check(a.doc.querySelectorAll('#panel-budget tr[data-exercise]').length === 2, 'un nouvel exercice en préparation (l’année qui vient) peut être créé une fois le précédent en exécution');
+  // coût d'un ETP
+  val('etp-country', 'FR'); val('etp-year', '2027'); val('etp-cost', '0'); a.click(a.doc.getElementById('etp-save'));
+  await a.until(() => a.doc.getElementById('toast').classList.contains('error'));
+  check(/positif/.test(a.text('toast')) && c.repoList('EtpCost').length === 0, 'un coût nul : refusé');
+  val('etp-cost', '130000'); a.click(a.doc.getElementById('etp-save'));
+  await a.until(() => c.repoList('EtpCost').length === 1 && a.doc.querySelector('#panel-budget tr[data-etp]'));
+  check(/France \(FR\)/.test(a.doc.querySelector('tr[data-etp]').textContent) && /130\s?000/.test(a.doc.querySelector('tr[data-etp]').textContent) && /j ouvrés/.test(a.doc.querySelector('tr[data-etp]').textContent), 'le coût est enregistré et dit ce que vaut un jour ouvré du pays : ' + a.doc.querySelector('tr[data-etp]').textContent.replace(/\s+/g, ' ').slice(0, 110));
+  val('etp-cost', '140000'); a.click(a.doc.getElementById('etp-save'));
+  await a.until(() => /140\s?000/.test(a.doc.querySelector('tr[data-etp]') ? a.doc.querySelector('tr[data-etp]').textContent : ''));
+  check(c.repoList('EtpCost').filter((r) => !c.isTrue(r.deleted)).length === 1 && Number(c.repoList('EtpCost').filter((r) => !c.isTrue(r.deleted))[0].annual_cost) === 140000, 'un seul coût par pays et par an : le second remplace le premier');
+  a.click(a.doc.querySelector('.etp-del'));
+  await a.until(() => a.doc.getElementById('etp-empty'));
+  check(c.repoList('EtpCost').every((r) => c.isTrue(r.deleted)), 'un coût se supprime');
+  check(!/taux journalier|Taux journalier/.test(a.text('panel-budget').replace(/Plus aucun taux journalier[^.]*\./, '')), 'plus aucun champ de taux journalier : seulement le coût d’un ETP');
+
   // ---------------------------------------------------------------- Droits par niveau (0.15.4)
   await a.until(() => a.doc.getElementById('rights-table'));
   const rt = a.doc.getElementById('rights-table');
@@ -300,7 +336,7 @@ function openPage(file, user, boot) {
   const marks = (tr) => [...tr.querySelectorAll('td.lvl')].map((td) => (td.classList.contains('yes') ? '✓' : '—')).join('');
   check(marks(rrow(/Supprimer un projet/)) === '✓✓——————' && marks(rrow(/Supprimer un livrable ou un jalon/)) === '✓✓✓✓✓✓——' && marks(rrow(/Déclarer l’avancement/)) === '✓✓✓✓✓✓✓—', 'les cases : supprimer un projet (PL, DPL), supprimer un livrable (jusqu’au Deliverable owner), déclarer l’avancement (jusqu’au Contributor)');
   check(marks(rrow(/Lire le WBS/)) === '✓✓✓✓✓✓✓✓' && /^—+$/.test(marks(rrow(/Poser le rôle « Program Leader »/))), 'seule la lecture est ouverte au Reader ; personne ne pose le Program Leader');
-  check(/Reader/.test(rrow(/Lire le WBS/).cells[0].textContent) && /en profondeur/.test(rrow(/tarifs journaliers/).cells[0].textContent), 'les précisions s’affichent sous le libellé (Reader, en profondeur)');
+  check(/Reader/.test(rrow(/Lire le WBS/).cells[0].textContent) && /en profondeur/.test(rrow(/comptes rendus de réunion/).cells[0].textContent) && /en profondeur|au global/.test(rrow(/exercice budgétaire/).cells[0].textContent), 'les précisions s’affichent sous le libellé (Reader, en profondeur)');
   check(!!a.doc.querySelector('#rights-table td.yes .sr') && a.doc.querySelector('#rights-table td.yes .sr').textContent === 'oui', 'chaque case a aussi un texte « oui » ou « non » pour les lecteurs d’écran');
   check(/strictement supérieur/.test(a.text('rights-rules')) && /administrateur du site a tous les droits/.test(a.text('rights-admin')), 'les règles et la note sur l’administrateur sont affichées');
   const filt = a.doc.getElementById('rights-filter');
@@ -400,7 +436,7 @@ function openPage(file, user, boot) {
   check(JSON.stringify(lk.dpl) === '{"roles":"can","budget":"can"}' && JSON.stringify(lk.admin) === '{"roles":"can","budget":"can"}', 'DPL et administrateur : les deux');
   const cpCard = openPage('Compte.html', CP); await cpCard.until(() => cpCard.doc.getElementById('sheet-locked'));
   const lis = [...cpCard.doc.querySelectorAll('#sheet-locked li')].map((li) => flat(li.textContent));
-  check(/Rôles et personnes \(RoleAssignment, Role, Resource\) : verrouillée pour vous, réservée aux administrateurs, Program Leader, Domain Program Leader\./.test(lis[0]) && /Budget et achats \(BudgetLine.*RateCard.*\) : vous pouvez la modifier\./.test(lis[1]), 'la liste nomme les feuilles, qui peut les modifier et ce que la personne peut faire : ' + lis[0].slice(0, 90));
+  check(/Rôles et personnes \(RoleAssignment, Role, Resource\) : verrouillée pour vous, réservée aux administrateurs, Program Leader, Domain Program Leader\./.test(lis[0]) && /Budget et achats \(BudgetLine.*EtpCost.*TeamBudget.*\) : vous pouvez la modifier\./.test(lis[1]), 'la liste nomme les feuilles, qui peut les modifier et ce que la personne peut faire : ' + lis[0].slice(0, 90));
   check(/Les autres feuilles \(planning, actualités…\) se modifient librement/.test(cpCard.doc.getElementById('sheet-locked-note').textContent) && /vous pouvez toujours lire/.test(cpCard.doc.getElementById('sheet-locked-note').textContent) && /suit vos rôles tout seul/.test(cpCard.doc.getElementById('sheet-locked-note').textContent), 'la note dit que le reste est libre, que la lecture reste possible et que le verrouillage suit les rôles');
   c.setProp(c.PROP.SHEET_PROTECT, 'non');
   const noLock = openPage('Compte.html', CP); await noLock.until(() => noLock.doc.getElementById('sheet-link'));

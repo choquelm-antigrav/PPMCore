@@ -1,17 +1,11 @@
 /**
  * PPM Core — 0.10.0 : page « Ressources ».
  *
- * Un seul écran pour les personnes, les équipes, le rôle dans le projet et le taux journalier :
- *   - ressources.get        : personnes (avec leur équipe, leurs rôles dans le projet choisi, leur taux si on y a droit) et équipes ;
- *   - people.setProjectRole : « Chef de projet » ou « Membre » sur un projet (met fin à l'ancien rôle de projet, garde le chef de projet du projet à jour) ;
- *   - people.setRate        : taux journalier d'une personne, interne ou externe (réservé au chef de projet et au DPL).
- * Le taux saisi sur la fiche remplace la grille profil × pays × date, qui ne sert plus que de secours.
+ * Un seul écran pour les personnes, les équipes et le rôle dans le projet (plus aucun taux journalier depuis 0.17.1 : voir 60_Exercise.gs) :
+ *   - ressources.get        : personnes (avec leur équipe et leurs rôles dans le projet choisi) et équipes ;
+ *   - people.setProjectRole : « Chef de projet » ou « Membre » sur un projet (met fin à l'ancien rôle de projet, garde le chef de projet du projet à jour).
  * La création et la modification des personnes et des équipes passent par resources.* et teams.* (42_Org.gs).
  */
-
-/** Les tarifs journaliers se lisent à partir du Workpackage leader ; les fixer reste réservé au chef de projet et au-dessus (ratecard.manage). */
-function canSeeRates_(ctx) { return ctx.isAdmin || can(ctx, 'sensitive.read', { type: 'global' }); }
-function canSetRates_(ctx) { return ctx.isAdmin || can(ctx, 'ratecard.manage', { type: 'global' }); }
 
 /** Équipes à plat, dans l'ordre de l'arborescence, avec leur profondeur et leur nombre de membres. */
 function teamsFlat_(teams, resources) {
@@ -24,13 +18,13 @@ function teamsFlat_(teams, resources) {
       if (seen[t.id]) return;
       seen[t.id] = true;
       var mgr = res[t.manager_resource_id];
-      out.push({ id: t.id, version: t.version, name: t.name, parent_team_id: t.parent_team_id || '', depth: depth, cost_center: t.cost_center || '',
+      out.push({ id: t.id, version: t.version, name: t.name, parent_team_id: t.parent_team_id || '', depth: depth, cost_center: t.cost_center || '', country: t.country || '', level: teamLevel_(t),
         manager_id: t.manager_resource_id || '', manager: mgr ? mgr.name : '', members: count[t.id] || 0 });
       walk(t.id, depth + 1);
     });
   };
   walk('', 0);
-  teams.forEach(function (t) { if (!seen[t.id]) { seen[t.id] = true; out.push({ id: t.id, version: t.version, name: t.name, parent_team_id: '', depth: 0, cost_center: t.cost_center || '', manager_id: '', manager: '', members: count[t.id] || 0 }); } });
+  teams.forEach(function (t) { if (!seen[t.id]) { seen[t.id] = true; out.push({ id: t.id, version: t.version, name: t.name, parent_team_id: '', depth: 0, cost_center: t.cost_center || '', country: t.country || '', level: teamLevel_(t), manager_id: '', manager: '', members: count[t.id] || 0 }); } });
   return out;
 }
 
@@ -57,7 +51,6 @@ defineAction('ressources.get', function (p, ctx) {
   var resources = repoList('Resource'), teams = repoList('HierarchicalTeam');
   var teamById = indexBy_(teams);
   var data = { programs: repoList('Program'), projects: repoList('Project'), workpackages: repoList('WorkPackage'), planitems: repoList('PlanItem') };
-  var canRates = canSeeRates_(ctx);
   var scope = project ? { type: 'project', id: project.id } : null;
   var wpIds = {};
   var itemIds = {};
@@ -122,30 +115,14 @@ defineAction('ressources.get', function (p, ctx) {
       access: isBlank(r.email) ? 'none' : (isAllowedEmail_(r.email) ? 'ok' : 'outside'),
       resource_type: r.resource_type, supplier: r.supplier || '', country: r.country || '', capacity: isBlank(r.capacity_days_month) ? '' : Number(r.capacity_days_month),
       team_id: r.team_id || '', team: teamById[r.team_id] ? teamById[r.team_id].name : '',
-      roles: mine.map(function (x) { return { code: x.code, label: x.label, scope: x.scope, scope_type: x.scope_type }; }),
-      daily_rate: canRates && !isBlank(r.daily_rate) ? Number(r.daily_rate) : null,
-      rate_source: canRates ? (!isBlank(r.daily_rate) ? 'fiche' : (rateFor_(r.rate_profile, r.country, today) !== null ? 'grille' : '')) : ''
+      roles: mine.map(function (x) { return { code: x.code, label: x.label, scope: x.scope, scope_type: x.scope_type }; })
     };
   }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
   return {
     project: project ? { id: project.id, code: project.code, name: project.name, manager_id: project.manager_resource_id || '' } : null,
     people: people, teams: projectTeams_(teams, resources, project ? participates : null), allTeams: teamsFlat_(teams, resources),
     teamsMode: project ? 'project' : 'all',
-    canEdit: editAll, canRates: canRates, canSetRates: canSetRates_(ctx),
+    canEdit: editAll,
     countries: COUNTRIES, domains: allowedDomains()
   };
-});
-
-/** Taux journalier d'une personne (vide pour l'effacer). Le chef de projet et le DPL seuls le voient et le fixent. */
-defineAction('people.setRate', function (p, ctx) {
-  if (!canSetRates_(ctx)) throw new PpmError('FORBIDDEN', 'Fixer les taux journaliers est réservé au chef de projet et aux niveaux au-dessus.');
-  var r = mustGet('Resource', requireParam(p, 'resourceId'));
-  var value = '';
-  if (!(p.daily_rate === null || p.daily_rate === undefined || String(p.daily_rate).trim() === '')) {
-    var n = Number(String(p.daily_rate).replace(',', '.'));
-    if (isNaN(n) || n <= 0 || n > 100000) throw new PpmError('VALIDATION', 'Taux journalier : un nombre positif en euros par jour.');
-    value = round2(n);
-  }
-  repoUpdate('Resource', r.id, { daily_rate: value }, p.version, ctx.actx);
-  return { resource_id: r.id, daily_rate: value === '' ? null : value };
 });

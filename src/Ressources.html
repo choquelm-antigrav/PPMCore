@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.17.0">
+<meta name="ppm-version" content="0.17.1">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <?!= include('CommonForms') ?>
@@ -192,21 +192,6 @@ var BOOT = <?!= boot ?>;
     return el('span', { text: p.roles.map(function (r) { return r.label + (r.scope ? ' (' + r.scope + ')' : ''); }).join(', ') });
   }
 
-  function rateCell(p) {
-    var d = state.data;
-    if (!d.canRates) return null;
-    // lire les tarifs : à partir du Workpackage leader ; les fixer : chef de projet et au-dessus
-    if (!d.canSetRates) return el('span', { class: 'rate-text', text: p.daily_rate === null ? '—' : String(p.daily_rate) + (p.rate_source === 'grille' ? ' (grille)' : '') });
-    var inp = el('input', { type: 'number', class: 'inline rate-input', min: '0', step: 'any', 'data-id': p.resource_id, 'aria-label': 'Taux journalier de ' + p.name, placeholder: '—' });
-    inp.value = p.daily_rate === null ? '' : p.daily_rate;
-    inp.addEventListener('change', function () {
-      call('people.setRate', { resourceId: p.resource_id, daily_rate: inp.value }, true)
-        .then(function (r) { p.daily_rate = r.daily_rate; toast('Taux de ' + p.name + ' enregistré.'); return load(); })
-        .catch(function (e) { fail(e); inp.value = p.daily_rate === null ? '' : p.daily_rate; });
-    });
-    return el('span', {}, [inp, p.rate_source === 'grille' ? el('small', { text: 'de la grille' }) : null]);
-  }
-
   function render() {
     var d = state.data;
     $('title').textContent = d.project ? 'Ressources de ' + d.project.name : 'Ressources';
@@ -223,10 +208,9 @@ var BOOT = <?!= boot ?>;
     if (!rows.length) host.appendChild(el('div', { class: 'empty' }, [el('strong', { text: d.people.length ? 'Aucune personne ne correspond.' : 'Aucune personne pour l’instant.' }), el('span', { text: d.canEdit && !d.people.length ? 'Ajoutez la première avec « Ajouter une personne ».' : '' })]));
     else {
       var head = ['Nom', 'Statut et accès', 'Équipe', 'Livrables', 'Rôles'];
-      if (d.canRates) head.push('Taux journalier (€)');
       if (d.canEdit) head.push('');
       host.appendChild(el('div', { class: 'table-wrap' }, [el('table', { id: 'res-table' }, [
-        el('thead', {}, [el('tr', {}, head.map(function (h, i) { return el('th', { scope: 'col', class: (h.indexOf('Taux') === 0 ? 'num' : '') + (h === '' ? ' sticky-r' : ''), text: h }); }))]),
+        el('thead', {}, [el('tr', {}, head.map(function (h, i) { return el('th', { scope: 'col', class: (h === '' ? ' sticky-r' : ''), text: h }); }))]),
         el('tbody', {}, rows.map(function (p) {
           var cells = [
             el('td', {}, [p.name, el('small', { text: [p.job_function, p.resource_type === 'Externe' ? (p.supplier || p.organization) : p.organization].filter(Boolean).join(' · ') || ' ' })]),
@@ -234,14 +218,13 @@ var BOOT = <?!= boot ?>;
             el('td', { text: p.team || '—' }), el('td', { class: 'deliv' }, [deliverablesCell(p)]),
             el('td', {}, [rolesCell(p), p.unplaced ? el('a', { href: (BOOT.baseUrl || '') + '?view=structure&project=' + state.projectId, title: 'Aucun rôle pour l’instant : un rôle se pose dans le WBS', text: 'poser un rôle' }) : null])
           ];
-          if (d.canRates) cells.push(el('td', { class: 'num' }, [rateCell(p)]));
           if (d.canEdit) cells.push(el('td', { class: 'sticky-r' }, [el('div', { class: 'actions-cell' }, [
             el('button', { type: 'button', class: 'btn person-edit', 'data-id': p.resource_id, text: 'Modifier', onclick: function () { openPersonForm(p); } }),
             el('button', { type: 'button', class: 'btn person-remove', 'data-id': p.resource_id, text: 'Retirer', onclick: function () { removePerson(p); } })])]));
           return el('tr', { 'data-id': p.resource_id }, cells);
         }))])]));
     }
-    $('people-note').textContent = 'Pour qu’une personne intervienne : une fiche avec son adresse e-mail professionnelle (créée ici, et seulement ici), puis des rôles posés dans la page WBS. ' + (d.canRates ? 'Le taux journalier de la fiche sert de base au budget, interne ou externe ; il est figé dans chaque ligne de budget à sa création. Il est visible à partir du Workpackage leader ; le fixer est réservé au chef de projet et au-dessus.' : '');
+    $('people-note').textContent = 'Pour qu’une personne intervienne : une fiche avec son adresse e-mail professionnelle (créée ici, et seulement ici), puis des rôles posés dans la page WBS. Il n’y a plus de taux journalier : le budget se saisit par équipe (page Budget) et se convertit en jours avec le coût d’un ETP du pays de l’équipe, paramétré par l’administrateur.';
     var tl = $('teams-list'); clear(tl);
     if (!shown.length) tl.appendChild(el('li', {}, [el('span', { class: 'muted', id: 'teams-empty', text: d.teamsMode === 'project' && !state.showAllTeams ? 'Aucune équipe : aucun membre d’une équipe ne participe encore à ce projet.' : 'Aucune équipe.' })]));
     // arbre imbriqué : l'équipe de profondeur k est rangée sous la dernière équipe de profondeur k − 1 (l'ordre du serveur est celui de l'arborescence)
@@ -283,7 +266,6 @@ var BOOT = <?!= boot ?>;
       { key: 'team_id', label: 'Équipe', type: 'select', value: p.team_id || '', options: teamOptions('Aucune'), half: true }
     ];
     if (create) fields.splice(1, 0, { key: 'email', label: 'Adresse e-mail (facultative)', value: '', maxlength: 120 });
-    if (d.canSetRates) fields.push({ key: 'daily_rate', label: 'Taux journalier (€, facultatif)', type: 'number', value: p.daily_rate === null || p.daily_rate === undefined ? '' : p.daily_rate });
     openForm({
       title: create ? 'Ajouter une personne' : 'Modifier ' + p.name, ok: create ? 'Ajouter' : 'Enregistrer',
       note: create ? 'L’adresse e-mail professionnelle (domaine : ' + d.domains.join(', ') + ') donne accès à l’outil. Sans rôle, la personne est Reader : elle lit tout et ne modifie rien. Ses rôles se posent ensuite dans la page WBS, sur chaque objet.' : 'L’adresse e-mail ne se modifie que par l’administrateur.',
@@ -293,11 +275,7 @@ var BOOT = <?!= boot ?>;
         var req;
         if (create) { if (v.email.trim()) values.email = v.email.trim(); req = call('resources.create', { values: values }, true); }
         else req = call('resources.update', { id: p.resource_id, version: p.version, patch: values }, true);
-        return req.then(function (rec) {
-          var id = create ? rec.id : p.resource_id;
-          var rate = v.daily_rate === undefined ? null : v.daily_rate;
-          if (d.canSetRates && rate !== null && String(rate) !== String(p.daily_rate === null || p.daily_rate === undefined ? '' : p.daily_rate)) return call('people.setRate', { resourceId: id, daily_rate: rate }, true);
-        }).then(function () { toast(create ? 'Personne ajoutée.' : 'Fiche enregistrée.'); return load(); });
+        return req.then(function () { toast(create ? 'Personne ajoutée.' : 'Fiche enregistrée.'); return load(); });
       }
     });
   }
@@ -325,7 +303,8 @@ var BOOT = <?!= boot ?>;
         { key: 'parent_team_id', label: 'Équipe parente', type: 'select', value: team ? team.parent_team_id : (parent ? parent.id : ''),
           options: [{ value: '', label: 'Aucune (racine)' }].concat(d.allTeams.filter(function (t) { return !team || t.id !== team.id; }).map(function (t) { return { value: t.id, label: new Array(t.depth + 1).join('— ') + t.name }; })) },
         { key: 'manager_resource_id', label: 'Responsable', type: 'select', value: team ? team.manager_id : '', options: [{ value: '', label: '—' }].concat(d.people.filter(function (p) { return p.resource_type === 'Interne'; }).map(function (p) { return { value: p.resource_id, label: p.name }; })) },
-        { key: 'cost_center', label: 'Centre de coût', value: team ? team.cost_center : '', maxlength: 40 }
+        { key: 'cost_center', label: 'Centre de coût', value: team ? team.cost_center : '', maxlength: 40, half: true },
+        { key: 'country', label: 'Pays (conversion en jours)', type: 'select', value: team ? (team.country || '') : '', options: [{ value: '', label: 'France (par défaut)' }].concat(d.countries.map(function (c) { return { value: c, label: c }; })), half: true }
       ],
       onSubmit: function (v) {
         var req = create ? call('teams.create', { values: v }, true) : call('teams.update', { id: team.id, version: team.version, patch: v }, true);

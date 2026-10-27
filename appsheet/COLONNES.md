@@ -72,6 +72,7 @@ Colonnes techniques de toutes les tables vivantes : `created_at`, `created_by`, 
 | `drive_url` | Url |  |
 | `calendar_event_id` | Text | Lecture seule (calculé par le Core) |
 | `last_progress_at` | Text | Lecture seule (calculé par le Core) |
+| `exercise_id` | Ref → Exercise |  |
 
 ## MilestoneRequirement
 
@@ -100,13 +101,11 @@ Colonnes techniques de toutes les tables vivantes : `created_at`, `created_by`, 
 | `name` | Text | Require ON ; Label |
 | `email` | Email |  |
 | `team_id` | Ref → HierarchicalTeam |  |
-| `rate_profile` | Text |  |
 | `supplier` | Text |  |
 | `capacity_days_month` | Number |  |
 | `country` | Enum | Valeurs : FR, DE, UK, IN |
 | `job_function` | Enum (Base type Text) | Allow other values ON ; Auto-add new values ON ; Suggested values : `SELECT(Resource[job_function], NOT(ISBLANK([job_function])), TRUE)` (liste sans doublon) |
 | `organization` | Enum (Base type Text) | Allow other values ON ; Auto-add new values ON ; Suggested values : `SELECT(Resource[organization], NOT(ISBLANK([organization])), TRUE)` (liste sans doublon) |
-| `daily_rate` | Price (EUR) |  |
 
 ## HierarchicalTeam
 
@@ -117,6 +116,7 @@ Colonnes techniques de toutes les tables vivantes : `created_at`, `created_by`, 
 | `parent_team_id` | Ref → HierarchicalTeam |  |
 | `manager_resource_id` | Ref → Resource |  |
 | `cost_center` | Text |  |
+| `country` | Text |  |
 
 ## HolidaySet
 
@@ -167,6 +167,7 @@ Colonnes techniques de toutes les tables vivantes : `created_at`, `created_by`, 
 | `candidates` | Text |  |
 | `dedupe_key` | Text |  |
 | `added_by` | Text |  |
+| `attachments` | Text |  |
 
 ## NewsAction
 
@@ -193,16 +194,35 @@ Colonnes techniques de toutes les tables vivantes : `created_at`, `created_by`, 
 | `digest_date` | Date | Require ON |
 | `text` | Text | Require ON |
 | `published_by` | Text |  |
+| `logo` | Text |  |
 
-## RateCard
+## EtpCost
 
 | Colonne | Type AppSheet | Réglages |
 | --- | --- | --- |
 | `id` | Text | Clé ; Initial value `UNIQUEID()` ; Masquée ; Lecture seule |
-| `profile` | Text | Require ON |
 | `country` | Enum | Valeurs : FR, DE, UK, IN ; Require ON |
-| `daily_rate` | Price (EUR) | Require ON |
-| `effective_date` | Date |  |
+| `year` | Number | Require ON |
+| `annual_cost` | Price (EUR) | Require ON |
+
+## Exercise
+
+| Colonne | Type AppSheet | Réglages |
+| --- | --- | --- |
+| `id` | Text | Clé ; Initial value `UNIQUEID()` ; Masquée ; Lecture seule |
+| `year` | Number | Require ON |
+| `status` | Enum | Valeurs : Préparation, Exécution, Clos ; Require ON |
+
+## TeamBudget
+
+| Colonne | Type AppSheet | Réglages |
+| --- | --- | --- |
+| `id` | Text | Clé ; Initial value `UNIQUEID()` ; Masquée ; Lecture seule |
+| `exercise_id` | Ref → Exercise | Require ON |
+| `project_id` | Ref → Project | Require ON |
+| `team_id` | Ref → HierarchicalTeam | Require ON |
+| `expected` | Price (EUR) |  |
+| `granted` | Price (EUR) |  |
 
 ## BudgetLine
 
@@ -210,10 +230,9 @@ Colonnes techniques de toutes les tables vivantes : `created_at`, `created_by`, 
 | --- | --- | --- |
 | `id` | Text | Clé ; Initial value `UNIQUEID()` ; Masquée ; Lecture seule |
 | `deliverable_id` | Ref → PlanItem | Require ON |
-| `resource_id` | Ref → Resource | Require ON |
-| `cost_type` | Enum | Valeurs : TJM, Forfait ; Require ON |
-| `planned_days` | Number |  |
-| `frozen_rate` | Text |  |
+| `resource_id` | Ref → Resource |  |
+| `team_id` | Ref → HierarchicalTeam |  |
+| `cost_type` | Enum | Valeurs : Équipe, Forfait ; Require ON |
 | `fixed_amount` | Price (EUR) |  |
 | `planned_amount` | Price (EUR) | Lecture seule (calculé par le Core) |
 | `phasing_mode` | Text |  |

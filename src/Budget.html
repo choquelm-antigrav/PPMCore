@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.17.0">
+<meta name="ppm-version" content="0.17.1">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <?!= include('CommonForms') ?>
@@ -38,13 +38,17 @@
     <span id="cpn-chip" class="badge" hidden></span>
     <button type="button" class="btn" id="cpn-edit" hidden>CPN</button>
   </div>
-  <div class="controls"><select id="picker" aria-label="Projet"></select></div>
+  <div class="controls"><select id="picker" aria-label="Projet"></select><select id="exercise-picker" aria-label="Exercice budgétaire"></select></div>
 </header>
 
 <main class="zones" style="--cell-min: 820px; --max-cols: 2">
   <div class="cell wide" id="cell-program">
     <div class="zone" id="zone-program" hidden><h2 class="sec">Vue programme : budget et achats de tous les projets</h2></div>
     <section class="panel" id="panel-program" aria-label="Vue programme" hidden></section>
+  </div>
+  <div class="cell wide" id="cell-exercice">
+    <div class="zone" id="zone-exercice" hidden><h2 class="sec">Exercice budgétaire : budget par équipe</h2></div>
+    <section class="panel" id="panel-exercice" aria-label="Exercice budgétaire" hidden></section>
   </div>
   <div class="cell" id="cell-bilan">
     <div class="zone" id="zone-bilan" hidden><h2 class="sec">Bilan par CPN</h2></div>
@@ -109,9 +113,9 @@ var BOOT = <?!= boot ?>;
   'use strict';
   var el = ppm.el, clear = ppm.clear, uuid = ppm.uuid, plural = ppm.plural, toast = ppm.toast, call = ppm.call, openDialog = ppm.openDialog, closeDialog = ppm.closeDialog, frDate = ppm.frDate;
 
-  var TABS = ['bilan', 'po', 'enveloppe', 'budget'];
-  var ACCESS_KEY = { bilan: 'all', po: 'po', enveloppe: 'budget', budget: 'budget' };
-  var state = { projectId: '', catalog: null, access: null, balance: null, po: null, envelope: null, budget: null, rates: null, people: null, outside: null, resources: null, seq: 0 };
+  var TABS = ['exercice', 'bilan', 'po', 'enveloppe', 'budget'];
+  var ACCESS_KEY = { exercice: 'exercise', bilan: 'all', po: 'po', enveloppe: 'budget', budget: 'budget' };
+  var state = { projectId: '', catalog: null, access: null, balance: null, po: null, envelope: null, budget: null, exercises: null, exerciseId: '', exercise: null, outside: null, resources: null, seq: 0 };
   var $ = function (id) { return document.getElementById(id); };
   var STATUS_TONE = { 'À faire': '', 'Lancée': 'warn', 'GR': 'ok', 'Terminée': 'ok' };
   var STATUSES = ['À faire', 'Lancée', 'GR', 'Terminée'];
@@ -150,12 +154,13 @@ var BOOT = <?!= boot ?>;
   }
   function loadAll() {
     var a = state.access || {}, jobs = [];
+    if (a.exercise) jobs.push(loadExercise());
     if (a.all) jobs.push(loadBalance());
     if (a.po) jobs.push(loadPo());
     if (a.budget) { jobs.push(loadEnvelope()); jobs.push(loadBudget()); }
     return Promise.all(jobs);
   }
-  function invalidate() { state.balance = null; state.po = null; state.envelope = null; state.budget = null; state.outside = null; }
+  function invalidate() { state.balance = null; state.po = null; state.envelope = null; state.budget = null; state.exercise = null; state.outside = null; }
   function renderHeader() {
     var p = state.access.project;
     $('title').textContent = p.code + ' ' + p.name;
@@ -167,7 +172,7 @@ var BOOT = <?!= boot ?>;
     $('cpn-edit').textContent = p.cpn ? 'Modifier le CPN' : 'Définir le CPN';
   }
   function loadProject(id) {
-    state.projectId = id; invalidate(); state.rates = null; state.people = null;
+    state.projectId = id; invalidate();
     $('picker').value = id;
     var ticket = ++state.seq;
     return call('budget.access', { projectId: id }).then(function (a) {
@@ -436,36 +441,37 @@ var BOOT = <?!= boot ?>;
     var panel = $('panel-budget');
     if (state.budget) { renderBudget(); return Promise.resolve(); }
     loading(panel);
-    return call('budget.get', { projectId: state.projectId }).then(function (b) { state.budget = b; renderBudget(); }).catch(function (e) { failed(panel, e); });
+    return call('budget.get', { projectId: state.projectId, exerciseId: state.exerciseId }).then(function (b) { state.budget = b; renderBudget(); }).catch(function (e) { failed(panel, e); });
   }
   function ensureResources() {
     if (state.resources) return Promise.resolve(state.resources);
     return call('resources.list', { limit: 500 }).then(function (r) { state.resources = r; return r; }).catch(function () { return []; });
   }
   function renderBudget() {
-    var panel = $('panel-budget'), b = state.budget;
+    var panel = $('panel-budget'), b = state.budget, ex = currentExercise();
     clear(panel);
     var cards = el('div', { class: 'cards' });
-    cards.appendChild(card(b.partial ? 'Budget de votre périmètre' : 'Budget du projet', eur(b.totals.total), 'dont ' + eur(b.totals.external) + ' externe, ' + eur(b.totals.internal) + ' interne'));
+    cards.appendChild(card(b.partial ? 'Budget de votre périmètre' : 'Budget du projet', eur(b.totals.total), 'dont ' + eur(b.totals.external) + ' de forfaits externes, ' + eur(b.totals.internal) + ' de parts d’équipe' + (ex ? ' · exercice ' + ex.year : state.exerciseId === '__none' ? ' · livrables sans exercice' : '')));
     if (b.missing.deliverables_without_budget) cards.appendChild(card('Livrables sans budget', String(b.missing.deliverables_without_budget), 'à renseigner', 'alert'));
     if (b.missing.undated_lines) cards.appendChild(card('Lignes sans échéancier', String(b.missing.undated_lines), 'livrable sans dates', 'alert'));
+    if (b.unassigned.length) cards.appendChild(card('Livrables sans exercice', String(b.unassigned.length), ex ? 'à rattacher à l’exercice ' + ex.year : 'un livrable n’a qu’un exercice'));
     panel.appendChild(cards);
-    panel.appendChild(el('div', { class: 'row' }, [el('button', { type: 'button', class: 'btn primary', id: 'line-add', text: 'Ajouter une ligne de budget', onclick: function () { openLineForm(null); } })]));
-    if (!b.lines.length) { panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucune ligne de budget.' }), el('span', { text: 'Chaque ligne relie un livrable à une ressource : jours × taux pour un interne, forfait pour un externe.' })])); return; }
+    var bar = el('div', { class: 'row' }, [el('button', { type: 'button', class: 'btn primary', id: 'line-add', text: 'Ajouter une part ou un forfait', onclick: function () { openLineForm(null); } })]);
+    if (b.unassigned.length && ex && ex.status !== 'Clos') bar.appendChild(el('button', { type: 'button', class: 'btn', id: 'assign-open', text: 'Rattacher des livrables à l’exercice ' + ex.year, onclick: openAssign }));
+    panel.appendChild(bar);
+    if (!b.lines.length) { panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucune ligne de budget.' }), el('span', { text: 'Chaque ligne relie un livrable à une équipe (sa part, en montant) ou à une ressource externe (un forfait). Il n’y a plus de taux journalier : le montant se convertit en jours avec le coût d’un ETP du pays de l’équipe.' })])); return; }
     var dById = {}; b.deliverables.forEach(function (d) { dById[d.id] = d; });
-    var seeRate = b.lines.some(function (l) { return l.frozen_rate !== null; });
-    var head = ['Livrable', 'Ressource', 'Type', { t: 'Jours' }]; if (seeRate) head.push({ t: 'Taux figé' });
-    head = head.concat([{ t: 'Montant' }, 'Échéancier', '']);
+    var head = ['Livrable', 'Exercice', 'Équipe ou ressource', 'Type', { t: 'Montant' }, { t: 'Jours (équiv.)' }, 'Échéancier', ''];
     var sorted = b.lines.slice().sort(function (x, y) {
       var a = dById[x.deliverable_id] || {}, c = dById[y.deliverable_id] || {};
       return String(a.wp || '').localeCompare(String(c.wp || ''), 'fr', { numeric: true }) || String(a.name || '').localeCompare(String(c.name || ''), 'fr');
     });
     panel.appendChild(table('lines-table', head, sorted.map(function (l) {
-      var d = dById[l.deliverable_id] || { name: '(livrable)', wp: '' };
-      var cells = [cell([d.name, d.wp ? el('small', { text: d.wp + (d.cpn ? ' · ' + d.cpn : '') }) : null]), cell(l.resource.name), cell(l.cost_type === 'Forfait' ? 'Forfait (externe)' : 'Jours × taux' + (l.external ? ' (externe)' : '')),
-        cell(l.planned_days === null ? '—' : String(l.planned_days), 'num')];
-      if (seeRate) cells.push(cell(l.frozen_rate === null ? '—' : eur(l.frozen_rate), 'num'));
-      cells.push(cell(eur(l.planned_amount), 'num'));
+      var d = dById[l.deliverable_id] || { name: '(livrable)', wp: '' }, isTeam = l.kind === 'team';
+      var cells = [cell([d.name, d.wp ? el('small', { text: d.wp + (d.cpn ? ' · ' + d.cpn : '') }) : null]), cell(d.exercise_year ? String(d.exercise_year) : '—'),
+        cell(isTeam ? [l.team.name, el('small', { text: l.team.country })] : l.resource.name), cell(isTeam ? 'Part d’équipe' : 'Forfait (externe)'),
+        cell(eur(l.planned_amount), 'num'),
+        cell(isTeam ? (l.days_equivalent === null ? el('span', { class: 'muted', title: 'Le coût d’un ETP de ce pays et de cette année n’est pas paramétré (Administration).', text: 'à paramétrer' }) : l.days_equivalent + ' j') : '', 'num')];
       cells.push(cell([l.phasing.length ? l.phasing.map(function (m) { return frMonth(m.month) + ' ' + eur(m.amount); }).join(' · ') : el('span', { class: 'late', text: 'aucun (livrable sans dates)' }), el('small', { text: l.phasing_mode === 'manuel' ? 'à la main' : 'automatique' })]));
       cells.push(cell(el('div', { class: 'actions-cell' }, [
         el('button', { type: 'button', class: 'btn line-edit', 'data-id': l.id, text: 'Modifier', onclick: function () { openLineForm(l); } }),
@@ -475,45 +481,68 @@ var BOOT = <?!= boot ?>;
     })));
     if (b.totals.by_wp.length > 1) {
       panel.appendChild(el('h2', { class: 'sec', text: 'Par workpackage' }));
-      panel.appendChild(table('wp-table', ['Workpackage', { t: 'Interne' }, { t: 'Externe' }, { t: 'Total' }], b.totals.by_wp.map(function (w) {
+      panel.appendChild(table('wp-table', ['Workpackage', { t: 'Équipes' }, { t: 'Forfaits externes' }, { t: 'Total' }], b.totals.by_wp.map(function (w) {
         return el('tr', {}, [cell((w.code ? w.code + ' ' : '') + w.name), cell(eur(w.internal), 'num'), cell(eur(w.external), 'num'), cell(eur(w.total), 'num')]);
       })));
     }
   }
+  function teamLabel(t) { return t.name + ' — ' + (t.level === 3 ? '3 caractères' : t.level === 4 ? '4 caractères' : 'hors règle') + ' · ' + t.country; }
   function openLineForm(l) {
     ensureResources().then(function (people) {
-      var create = !l, b = state.budget;
-      var typeOf = {}; people.forEach(function (p) { typeOf[p.resource_id] = p.resource_type; });
+      var create = !l, b = state.budget, ex = currentExercise();
+      var externals = people.filter(function (p) { return p.resource_type === 'Externe'; });
+      var live = ex && ex.status !== 'Clos' ? ex : null;
+      var deliverableOptions = create
+        ? b.deliverables.map(function (d) { return { value: d.id, label: d.name + (d.wp ? ' (' + d.wp + ')' : '') }; }).concat(live ? b.unassigned.map(function (d) { return { value: d.id, label: d.name + (d.wp ? ' (' + d.wp + ')' : '') + ' — sans exercice' }; }) : [])
+        : b.deliverables.filter(function (d) { return d.id === l.deliverable_id; }).map(function (d) { return { value: d.id, label: d.name }; });
+      var kind = create ? 'team' : l.kind;
       openForm({
-        title: create ? 'Nouvelle ligne de budget' : 'Modifier la ligne de budget', ok: create ? 'Ajouter' : 'Enregistrer',
-        note: 'Interne : jours × taux journalier de sa fiche (Ressources), figé à la création de la ligne. Externe : un forfait, ou des jours × son taux. L’échéancier se calcule seul et reste modifiable.',
+        title: create ? 'Nouvelle part ou nouveau forfait' : 'Modifier la ligne de budget', ok: create ? 'Ajouter' : 'Enregistrer',
+        note: 'Une part d’équipe est un montant libre : la conversion en jours est un calcul (coût d’un ETP du pays de l’équipe). Un forfait se passe auprès d’une ressource externe. ' + (live ? 'Un livrable sans exercice rejoint l’exercice ' + live.year + ' avec sa première ligne.' : '') + ' L’échéancier se calcule seul et reste modifiable.',
         fields: [
-          create ? { key: 'deliverable_id', label: 'Livrable', type: 'select', value: '', options: [{ value: '', label: 'Choisir un livrable' }].concat(b.deliverables.map(function (d) { return { value: d.id, label: d.name + (d.wp ? ' (' + d.wp + ')' : '') }; })) }
-            : { key: 'deliverable_id', label: 'Livrable', type: 'select', value: l.deliverable_id, options: b.deliverables.filter(function (d) { return d.id === l.deliverable_id; }).map(function (d) { return { value: d.id, label: d.name }; }) },
-          { key: 'resource_id', label: 'Ressource', type: 'select', value: create ? '' : l.resource.id, options: [{ value: '', label: 'Choisir une ressource' }].concat(people.map(function (p) { return { value: p.resource_id, label: p.name + ' (' + (p.resource_type === 'Externe' ? 'externe' : 'interne') + ')' }; })) },
-          { key: 'planned_days', label: 'Jours prévus', type: 'number', value: create || l.planned_days === null ? '' : l.planned_days, half: true },
-          { key: 'fixed_amount', label: 'Forfait en € (externe seulement)', type: 'number', value: create || l.fixed_amount === null ? '' : l.fixed_amount, half: true }
-        ],
+          { key: 'deliverable_id', label: 'Livrable', type: 'select', value: create ? '' : l.deliverable_id, options: (create ? [{ value: '', label: 'Choisir un livrable' }] : []).concat(deliverableOptions) },
+          create ? { key: 'kind', label: 'Type', type: 'select', value: 'team', options: [{ value: 'team', label: 'Part d’équipe (montant)' }, { value: 'forfait', label: 'Forfait (ressource externe)' }] } : null,
+          { key: 'team_id', label: 'Équipe', type: 'select', value: create || kind !== 'team' ? '' : l.team.id, options: [{ value: '', label: 'Choisir une équipe' }].concat(b.teams.map(function (t) { return { value: t.id, label: teamLabel(t) }; })) },
+          { key: 'resource_id', label: 'Ressource externe', type: 'select', value: create || kind !== 'forfait' ? '' : l.resource.id, options: [{ value: '', label: 'Choisir une ressource externe' }].concat(externals.map(function (p) { return { value: p.resource_id, label: p.name + (p.supplier ? ' — ' + p.supplier : '') }; })) },
+          { key: 'amount', label: 'Montant (€)', type: 'number', value: create ? '' : l.planned_amount }
+        ].filter(Boolean),
         after: function (i) {
           var sync = function () {
-            var ext = typeOf[i.resource_id.value] === 'Externe', chosen = !!i.resource_id.value;
-            i.fixed_amount.parentNode.hidden = chosen && !ext;
+            var k = i.kind ? i.kind.value : kind;
+            i.team_id.parentNode.hidden = k !== 'team'; i.resource_id.parentNode.hidden = k !== 'forfait';
           };
-          i.resource_id.addEventListener('change', sync); sync();
+          if (i.kind) i.kind.addEventListener('change', sync); sync();
         },
         onSubmit: function (v) {
+          var k = v.kind || kind;
           if (create && !v.deliverable_id) return Promise.reject({ message: 'Choisissez un livrable.' });
-          if (!v.resource_id) return Promise.reject({ message: 'Choisissez une ressource.' });
-          var values = { resource_id: v.resource_id };
-          if (typeOf[v.resource_id] === 'Externe' && v.fixed_amount !== '') values.fixed_amount = v.fixed_amount; else values.planned_days = v.planned_days;
+          if (k === 'team' && !v.team_id) return Promise.reject({ message: 'Choisissez une équipe.' });
+          if (k === 'forfait' && !v.resource_id) return Promise.reject({ message: 'Choisissez une ressource externe.' });
+          var values = k === 'team' ? { team_id: v.team_id, planned_amount: v.amount } : { resource_id: v.resource_id, fixed_amount: v.amount };
           if (create) values.deliverable_id = v.deliverable_id;
-          return call('budget.line.save', { id: create ? '' : l.id, version: create ? undefined : l.version, values: values }, true).then(function () { toast(create ? 'Ligne ajoutée.' : 'Ligne enregistrée.'); return reload(); });
+          var params = { id: create ? '' : l.id, version: create ? undefined : l.version, values: values };
+          if (live) params.exerciseId = live.id;
+          return call('budget.line.save', params, true).then(function () { toast(create ? 'Ligne ajoutée.' : 'Ligne enregistrée.'); return reload(); });
         }
       });
     });
   }
+  /** Rattacher des livrables sans exercice à l'exercice choisi (un livrable n'a qu'un exercice). */
+  function openAssign() {
+    var b = state.budget, ex = currentExercise();
+    openForm({
+      title: 'Rattacher à l’exercice ' + ex.year, ok: 'Rattacher',
+      note: 'Un livrable n’a qu’un exercice : celui pour lequel il est budgété. Une fois qu’il a du budget, il ne change plus d’exercice.',
+      fields: [{ key: 'deliverable_id', label: 'Livrable', type: 'select', value: '__all', options: [{ value: '__all', label: 'Tous les livrables sans exercice (' + b.unassigned.length + ')' }].concat(b.unassigned.map(function (d) { return { value: d.id, label: d.name + (d.wp ? ' (' + d.wp + ')' : '') }; })) }],
+      onSubmit: function (v) {
+        var ids = v.deliverable_id === '__all' ? b.unassigned.map(function (d) { return d.id; }) : [v.deliverable_id];
+        return ids.reduce(function (p, id) { return p.then(function () { return call('budget.deliverable.exercise', { deliverableId: id, exerciseId: ex.id }, true); }); }, Promise.resolve())
+          .then(function () { toast(plural(ids.length, 'livrable rattaché', 'livrables rattachés') + ' à l’exercice ' + ex.year + '.'); return reload(); });
+      }
+    });
+  }
   function deleteLine(l, d) {
-    openConfirm('Supprimer cette ligne de budget ?', 'La ligne de « ' + l.resource.name + ' » sur « ' + d.name + ' » (' + eur(l.planned_amount) + ') sera supprimée avec son échéancier.', 'Supprimer', function () {
+    openConfirm('Supprimer cette ligne de budget ?', 'La ligne de « ' + (l.kind === 'team' ? l.team.name : l.resource.name) + ' » sur « ' + d.name + ' » (' + eur(l.planned_amount) + ') sera supprimée avec son échéancier.', 'Supprimer', function () {
       return call('budget.line.delete', { id: l.id, version: l.version }, true).then(function () { toast('Ligne supprimée.'); return reload(); });
     });
   }
@@ -531,10 +560,107 @@ var BOOT = <?!= boot ?>;
     });
   }
 
+
+  // ------------------------------------------------------------ exercice budgétaire : budget par équipe
+  /**
+   * Un exercice = une année. Le tableau par équipe (3 caractères = porte le budget, 4 = détail rattaché) compare ce qui est ATTENDU (avant l'été), ACCORDÉ (décembre, février, avril) et la somme des
+   * PARTS des livrables ; les écarts s'affichent, rien ne bloque. L'accordé inférieur aux parts est le clash, résorbé en redéfinissant les livrables.
+   */
+  function currentExercise() { return (state.exercises || []).filter(function (e) { return e.id === state.exerciseId; })[0] || null; }
+  function exerciseText(e) { return e.status + ' ' + e.year; }
+  function gapText(g) { return g === null || g === undefined ? '—' : (g >= 0 ? '+' : '−') + eur(Math.abs(g)); }
+  function loadExercise() {
+    var panel = $('panel-exercice'), ex = currentExercise();
+    if (!ex) {
+      clear(panel);
+      panel.appendChild(el('div', { class: 'empty', id: 'exercise-empty' }, [el('strong', { text: state.exercises && state.exercises.length ? 'Choisissez un exercice.' : 'Aucun exercice.' }),
+        el('span', { text: state.exercises && state.exercises.length ? 'La liste « Exercice » en haut de la page choisit celui qui s’affiche ici.' : 'L’administrateur crée les exercices et paramètre le coût d’un ETP (page Administration).' })]));
+      return Promise.resolve();
+    }
+    if (state.exercise && state.exercise.exercise.id === ex.id) { renderExercise(); return Promise.resolve(); }
+    loading(panel);
+    return call('exercise.get', { projectId: state.projectId, exerciseId: ex.id }).then(function (v) { state.exercise = v; renderExercise(); }).catch(function (e) { failed(panel, e); });
+  }
+  function saveTeamBudget(teamId, field, val, input, before) {
+    var params = { projectId: state.projectId, exerciseId: state.exercise.exercise.id, teamId: teamId };
+    params[field] = val;
+    call('exercise.set', params, true).then(function () { toast('Budget enregistré.'); state.exercise = null; return loadExercise(); }).catch(function (e) { if (input) input.value = before; fail(e); });
+  }
+  function teamAmount(id, value, label, field, teamId, enabled, days) {
+    var kids = [];
+    if (!enabled) kids.push(el('span', { text: value === null ? '—' : eur(value) }));
+    else {
+      var i = el('input', { type: 'number', class: 'inline env-input', id: id, min: '0', step: 'any', placeholder: '—', 'aria-label': label });
+      i.value = value === null ? '' : value;
+      var before = i.value;
+      i.addEventListener('change', function () { saveTeamBudget(teamId, field, i.value, i, before); });
+      kids.push(i);
+    }
+    if (days !== null && days !== undefined) kids.push(el('small', { text: days + ' j' }));
+    return el('td', { class: 'num' }, kids);
+  }
+  function renderExercise() {
+    var panel = $('panel-exercice'), v = state.exercise, ex = v.exercise, t = v.totals;
+    clear(panel);
+    var cards = el('div', { class: 'cards' });
+    cards.appendChild(card('Budget attendu', t.expected === null ? '—' : eur(t.expected), 'ce que les équipes attendent (avant l’été)'));
+    cards.appendChild(card('Budget accordé', t.granted === null ? 'Pas encore' : eur(t.granted), 'décembre, puis février et avril'));
+    cards.appendChild(card('Parts des livrables', eur(t.parts), plural(v.deliverables, 'livrable', 'livrables') + ' dans l’exercice'));
+    cards.appendChild(card('Écart avec l’attendu', gapText(t.gap_expected), t.gap_expected === null ? '' : (t.gap_expected < 0 ? 'les livrables dépassent l’attendu' : 'reste à répartir'), t.gap_expected !== null && t.gap_expected < 0 ? 'alert' : ''));
+    cards.appendChild(card('Écart avec l’accordé', gapText(t.gap_granted), t.clash ? 'clash : les livrables dépassent l’accordé' : (t.gap_granted === null ? '' : 'dans l’accordé'), t.clash ? 'alert' : ''));
+    panel.appendChild(cards);
+    panel.appendChild(el('p', { class: 'note', id: 'exercise-note', text: 'Exercice ' + ex.year + ' (' + ex.status.toLowerCase() + '). ' + (ex.status === 'Préparation' ? 'Saisissez le budget attendu par équipe (3 caractères ; une équipe à 4 caractères est un détail qui s’additionne dans sa parente), puis les livrables avec leur part par équipe : l’écart se résorbe en les ajustant.' : ex.status === 'Exécution' ? 'Le budget attendu est figé ; l’accordé se révise (février, avril) et les écarts se recalculent.' : 'Exercice clos : plus rien ne change.') + (v.can_edit ? '' : ' Lecture seule : la saisie est réservée au chef de projet et aux niveaux au-dessus.') }));
+    if (v.etp_missing.length) panel.appendChild(el('p', { class: 'note late', id: 'etp-missing', text: 'Coût d’un ETP non paramétré pour ' + v.etp_missing.join(', ') + ' en ' + ex.year + ' : les équivalents en jours ne s’affichent pas (l’administrateur les paramètre dans la page Administration).' }));
+    var rows = [];
+    var line = function (opts) {
+      var r = opts.r, name = el('td', {}, [el('span', { class: 'env-indent', style: 'padding-left:' + (opts.indent || 0) + 'px', text: opts.label }), opts.sub ? el('small', { text: opts.sub }) : null]);
+      var tr = el('tr', { 'data-team': opts.teamId || r.team_id, class: opts.total ? 'total' : '' }, [name,
+        opts.readonly ? el('td', { class: 'num' }, [el('span', { text: r.expected === null ? '—' : eur(r.expected) }), opts.days ? el('small', { text: (r.expected_days === null ? '' : r.expected_days + ' j') }) : null])
+          : teamAmount('exp-' + opts.teamId, r.expected, 'Attendu ' + opts.label, 'expected', opts.teamId, v.can_edit_expected, null),
+        opts.readonly ? el('td', { class: 'num', text: r.granted === null ? '—' : eur(r.granted) })
+          : teamAmount('grt-' + opts.teamId, r.granted, 'Accordé ' + opts.label, 'granted', opts.teamId, v.can_edit_granted, null),
+        el('td', { class: 'num' }, [el('span', { text: eur(r.parts) }), opts.days && r.parts_days !== null && r.parts_days !== undefined ? el('small', { text: r.parts_days + ' j' }) : null]),
+        el('td', { class: 'num' + (r.gap_expected !== null && r.gap_expected !== undefined && r.gap_expected < 0 ? ' late' : ''), text: gapText(r.gap_expected) }),
+        el('td', { class: 'num' + (r.clash ? ' late' : ''), text: r.gap_granted === null || r.gap_granted === undefined ? '—' : gapText(r.gap_granted) + (r.clash ? ' · clash' : '') })]);
+      rows.push(tr);
+    };
+    v.rows.forEach(function (r) {
+      var cn = r.children.length;
+      if (!cn) { line({ r: r, label: r.name, sub: r.country, teamId: r.team_id, days: true, own: true }); return; }
+      line({ r: r, label: r.name + ' (total avec le détail)', sub: r.country, teamId: r.team_id + '-total', readonly: true, total: true, days: true });
+      line({ r: Object.assign({}, r, { expected: r.own.expected, granted: r.own.granted, parts: r.own.parts, gap_expected: r.own.expected === null ? null : Math.round((r.own.expected - r.own.parts) * 100) / 100, gap_granted: r.own.granted === null ? null : Math.round((r.own.granted - r.own.parts) * 100) / 100, clash: r.own.granted !== null && r.own.parts > r.own.granted }), label: r.name + ' (équipe seule)', teamId: r.team_id, indent: 16 });
+      r.children.forEach(function (c) {
+        line({ r: { expected: c.expected, granted: c.granted, parts: c.parts, gap_expected: c.expected === null ? null : Math.round((c.expected - c.parts) * 100) / 100, gap_granted: c.granted === null ? null : Math.round((c.granted - c.parts) * 100) / 100, clash: c.granted !== null && c.parts > c.granted, team_id: c.team_id }, label: c.name, teamId: c.team_id, indent: 16 });
+      });
+    });
+    if (v.rows.length) {
+      panel.appendChild(table('exercise-table', ['Équipe', { t: 'Attendu' }, { t: 'Accordé' }, { t: 'Livrables (parts)' }, { t: 'Écart attendu' }, { t: 'Écart accordé' }], rows));
+    } else {
+      panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucun budget d’équipe pour cet exercice.' }), el('span', { text: v.can_edit ? 'Ajoutez les équipes (3 caractères) et leur budget attendu.' : '' })]));
+    }
+    // équipes qui ne s'additionnent nulle part
+    if (v.orphans.length) panel.appendChild(el('p', { class: 'note late', id: 'exercise-orphans', text: 'Équipes à 4 caractères sans équipe parente à 3 caractères (non additionnées) : ' + v.orphans.map(function (o) { return o.name + ' (attendu ' + (o.expected === null ? '—' : eur(o.expected)) + ', parts ' + eur(o.parts) + ')'; }).join(' ; ') + '.' }));
+    if (v.unruled.length) panel.appendChild(el('p', { class: 'note late', id: 'exercise-unruled', text: 'Parts sur des équipes dont le nom n’a pas 3 ou 4 caractères (hors règle, non comptées dans les équipes ci-dessus) : ' + v.unruled.map(function (o) { return o.name + ' ' + eur(o.parts); }).join(' ; ') + '.' }));
+    // ajouter une équipe au tableau
+    if (v.can_edit) {
+      var inTable = {};
+      v.rows.forEach(function (r) { inTable[r.team_id] = true; r.children.forEach(function (c) { inTable[c.team_id] = true; }); });
+      var choices = v.teams.filter(function (c) { return !c.orphan && !inTable[c.id]; });
+      if (choices.length) {
+        var sel = el('select', { id: 'exercise-team-pick', class: 'inline', 'aria-label': 'Équipe à ajouter' }, [el('option', { value: '', text: 'Ajouter une équipe…' })].concat(choices.map(function (c) { return el('option', { value: c.id, text: c.name + (c.level === 4 ? ' (détail de ' + c.parent + ')' : '') + ' · ' + c.country }); })));
+        var add = el('button', { type: 'button', class: 'btn', id: 'exercise-team-add', text: 'Ajouter', onclick: function () {
+          if (!sel.value) return;
+          saveTeamBudget(sel.value, ex.status === 'Préparation' ? 'expected' : 'granted', '0', null, '');
+        } });
+        panel.appendChild(el('div', { class: 'row' }, [sel, add]));
+      }
+    }
+  }
+
   // ------------------------------------------------------------ événements et démarrage
   // vue programme (PL et DPL) : une ligne par projet, reprise de leur bilan ; un clic sur un projet ouvre son budget
   var pv = ppm.programView({
-    hide: ['cell-bilan', 'cell-po', 'cell-enveloppe', 'cell-budget'], zone: 'zone-program', panel: 'panel-program', action: 'budget.program',
+    hide: ['cell-exercice', 'cell-bilan', 'cell-po', 'cell-enveloppe', 'cell-budget'], zone: 'zone-program', panel: 'panel-program', action: 'budget.program',
     render: function (d, host) {
       host.appendChild(el('p', { class: 'program-note', text: 'Programme ' + d.program.code + ' — ' + d.program.name + '. Montants repris du bilan de chaque projet ; cliquez sur un projet pour le détail.' }));
       var open = function (row) { pv.leave(); loadProject(row.id); };
@@ -552,10 +678,42 @@ var BOOT = <?!= boot ?>;
           total: function (t) { return t.overruns ? plural(t.overruns, 'dépassement', 'dépassements') : ''; } }
       ];
       host.appendChild(ppm.table(cols, d.projects, { open: open, total: d.totals }));
+      var ex = currentExercise();
+      if (ex) {
+        call('exercise.program', { programId: d.program.id, exerciseId: ex.id }).then(function (x) {
+          var gap = function (g) { return g === null || g === undefined ? '—' : gapText(g); };
+          host.appendChild(el('h2', { class: 'sec', id: 'program-exercise-title', text: 'Exercice ' + ex.year + ' (' + ex.status.toLowerCase() + ') : budget par projet' }));
+          host.appendChild(ppm.table([
+            { label: 'Projet', get: function (r) { return r.code + ' ' + r.name; } },
+            { label: 'Attendu', num: true, get: function (r) { return r.expected === null ? '—' : ppm.eur(r.expected); }, total: function () { return x.totals.expected === null ? '—' : ppm.eur(x.totals.expected); } },
+            { label: 'Accordé', num: true, get: function (r) { return r.granted === null ? '—' : ppm.eur(r.granted); }, total: function () { return x.totals.granted === null ? '—' : ppm.eur(x.totals.granted); } },
+            { label: 'Livrables (parts)', num: true, get: function (r) { return ppm.eur(r.parts); }, total: function () { return ppm.eur(x.totals.parts); } },
+            { label: 'Écart attendu', num: true, get: function (r) { return gap(r.gap_expected); }, total: function () { return gap(x.totals.gap_expected); } },
+            { label: 'Écart accordé', num: true, cls: function (r) { return r.clash ? 'bad' : ''; }, get: function (r) { return gap(r.gap_granted) + (r.clash ? ' · clash' : ''); }, total: function () { return gap(x.totals.gap_granted); } }
+          ], x.projects, { open: open }));
+          host.appendChild(el('h2', { class: 'sec', text: 'Exercice ' + ex.year + ' : budget par équipe, tous projets' }));
+          host.appendChild(ppm.table([
+            { label: 'Équipe', get: function (r) { return r.name + ' · ' + r.country; } },
+            { label: 'Attendu', num: true, get: function (r) { return r.expected === null ? '—' : ppm.eur(r.expected); } },
+            { label: 'Accordé', num: true, get: function (r) { return r.granted === null ? '—' : ppm.eur(r.granted); } },
+            { label: 'Livrables (parts)', num: true, get: function (r) { return ppm.eur(r.parts); } },
+            { label: 'Écart attendu', num: true, get: function (r) { return gap(r.gap_expected); } },
+            { label: 'Écart accordé', num: true, cls: function (r) { return r.clash ? 'bad' : ''; }, get: function (r) { return gap(r.gap_granted) + (r.clash ? ' · clash' : ''); } }
+          ], x.rows, {}));
+        }).catch(function () { /* l'exercice n'est pas lisible : la vue programme reste celle du budget */ });
+      }
     },
     onEnter: function (d) { $('title').textContent = 'Budget — Programme ' + d.program.code; $('cpn-chip').hidden = true; $('cpn-edit').hidden = true; try { google.script.history.replace(null, { view: 'budget', program: d.program.id }); } catch (e) { /* hors web app */ } }
   });
   $('picker').addEventListener('change', function () { if (pv.isProgram(this.value)) pv.enter(this.value); else { pv.leave(); loadProject(this.value); } });
+  $('exercise-picker').addEventListener('change', function () {
+    state.exerciseId = this.value; state.exercise = null; state.budget = null;
+    if (!state.projectId || pv.isProgram($('picker').value)) { if (pv.isProgram($('picker').value)) pv.enter($('picker').value); return; }
+    var a = state.access || {}, jobs = [];
+    if (a.exercise) jobs.push(loadExercise());
+    if (a.budget) jobs.push(loadBudget());
+    return Promise.all(jobs);
+  });
   $('cpn-edit').addEventListener('click', editCpn);
   $('gf-form').addEventListener('submit', function (e) { e.preventDefault(); submitForm(); });
   $('gf-cancel').addEventListener('click', function () { closeDialog($('genform')); });
@@ -564,7 +722,17 @@ var BOOT = <?!= boot ?>;
   $('confirm-cancel').addEventListener('click', function () { closeDialog($('confirm')); });
   $('confirm-ok').addEventListener('click', function () { if (state.confirmAction) state.confirmAction(); });
 
-  call('planning.catalog', {}).then(function (cat) {
+  /** L'exercice affiché au départ : celui en préparation (l'année qui vient), sinon celui en exécution. */
+  function fillExercises(list) {
+    state.exercises = list;
+    var sel = $('exercise-picker'); clear(sel);
+    list.forEach(function (e) { sel.appendChild(el('option', { value: e.id, text: 'Exercice ' + exerciseText(e) })); });
+    if (list.length) sel.appendChild(el('option', { value: '__none', text: 'Livrables sans exercice' }));
+    var first = list.filter(function (e) { return e.status === 'Préparation'; })[0] || list.filter(function (e) { return e.status === 'Exécution'; })[0] || list[0];
+    state.exerciseId = first ? first.id : '';
+    sel.value = state.exerciseId; sel.hidden = !list.length;
+  }
+  call('exercise.list', {}).catch(function () { return { exercises: [] }; }).then(function (r) { fillExercises(r.exercises); return call('planning.catalog', {}); }).then(function (cat) {
     state.catalog = cat;
     var sel = $('picker'); clear(sel);
     var sortCode = function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); };

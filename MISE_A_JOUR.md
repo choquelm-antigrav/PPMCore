@@ -92,3 +92,11 @@ Il y a trois statuts différents, et on peut en cumuler plusieurs (c'est le cas 
 L'outil identifie chaque utilisateur par son adresse Google. **Google ne la transmet que si le propriétaire du déploiement et l'utilisateur sont dans le même domaine Google Workspace.** Avec un propriétaire sur un compte **Gmail personnel**, les collègues d'un autre domaine peuvent apparaître comme « compte non identifié » et se voir refuser l'accès (voir « Dépannage : Accès réservé » dans `PREMIERS_PAS.md` ; `A4_DIAGNOSTIC_ACCES` montre le compte détecté). Le manifeste déclare un accès « tous les utilisateurs du domaine », prévu pour Workspace.
 
 Pour un usage avec une vraie équipe, **déployez depuis le compte Workspace de l'entreprise** : c'est aussi ce qui devrait retirer le bandeau « créée par un utilisateur de Google Apps Script » (non vérifié). Le passage d'un compte à l'autre demande de **reprendre les mêmes classeurs** : voir le piège « ne copiez jamais le projet » ci-dessus, et faites-le d'abord sur une copie, jamais sur vos données de production.
+
+## Passer à la 0.17.1 (exercice budgétaire, plus de taux journalier)
+
+1. Remplacer les fichiers de l'outil, puis relancer **`A1_INSTALLER_PPM`** : il ajoute les feuilles `EtpCost`, `Exercise`, `TeamBudget` et les colonnes `country` (équipes), `exercise_id` (livrables) et `team_id` (lignes de budget).
+2. Les colonnes `daily_rate` et `rate_profile` des personnes, les colonnes `planned_days` et `frozen_rate` des lignes de budget et la feuille `RateCard` ne servent plus : elles restent dans le classeur, inutilisées (on peut les supprimer à la main). **Les anciennes lignes de budget « TJM » ne sont plus reconnues** : l'outil étant en phase de test, il n'y a pas de reprise ; à ressaisir en parts d'équipe.
+3. Page **Administration**, zone « Budget : exercices et coût d'un ETP » : créer l'exercice en préparation (et celui en exécution), et saisir le coût annuel d'un ETP des pays utilisés.
+4. Page **Ressources** : donner un **pays** aux équipes (France par défaut) ; nommer les équipes avec leur code (3 caractères : porte le budget, 4 : détail rattaché).
+5. Classeurs d'import d'avant la 0.17.1 : l'onglet **Budget** a changé (Équipe ou Forfait, un montant) et l'onglet **Personnes** n'a plus de taux (une colonne Équipe) ; regénérer le modèle depuis la page.

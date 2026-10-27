@@ -170,12 +170,19 @@ function teamManager_(id) {
   return String(id);
 }
 
+/** Le pays d'une équipe, qui sert à convertir un montant en jours (coût d'un ETP du pays) ; vide : la France. */
+function teamCountry_(v) {
+  var c = isBlank(v) ? '' : String(v).trim();
+  if (c && COUNTRIES.indexOf(c) < 0) throw new PpmError('VALIDATION', 'Pays inconnu : ' + COUNTRIES.join(', ') + ' (ou vide).');
+  return c;
+}
+
 defineAction('teams.create', function (p, ctx) {
   requireTeamEditor_(ctx);
   var v = p.values || {};
   return repoInsert('HierarchicalTeam', {
     name: teamName_(v.name), parent_team_id: teamParent_(v.parent_team_id, ''), manager_resource_id: teamManager_(v.manager_resource_id),
-    cost_center: wbsShortText_(v.cost_center, 40, 'Centre de coût')
+    cost_center: wbsShortText_(v.cost_center, 40, 'Centre de coût'), country: teamCountry_(v.country)
   }, ctx.actx);
 });
 
@@ -188,6 +195,7 @@ defineAction('teams.update', function (p, ctx) {
   if ('parent_team_id' in patch) out.parent_team_id = teamParent_(patch.parent_team_id, id);
   if ('manager_resource_id' in patch) out.manager_resource_id = teamManager_(patch.manager_resource_id);
   if ('cost_center' in patch) out.cost_center = wbsShortText_(patch.cost_center, 40, 'Centre de coût');
+  if ('country' in patch) out.country = teamCountry_(patch.country);
   return repoUpdate('HierarchicalTeam', id, out, p.version, ctx.actx);
 });
 

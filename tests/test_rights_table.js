@@ -82,11 +82,14 @@ module.exports = function () {
     eq(who(row('Suppression', /un livrable ou un jalon/)), ['PL', 'DPL', 'CP', 'WPL', 'SWPL', 'DO'], 'supprimer un livrable : son Deliverable owner aussi');
     eq(who(row('Structure du projet (WBS)', /Modifier un projet/)), ['PL', 'DPL', 'CP'], 'modifier un projet : chef de projet et au-dessus');
     eq(who(row('Structure du projet (WBS)', /Modifier un livrable/)), ['PL', 'DPL', 'CP', 'WPL', 'SWPL', 'DO'], 'modifier un livrable : jusqu’au Deliverable owner');
-    eq(who(row('Lire', /tarifs journaliers/)), ['PL', 'DPL', 'CP', 'WPL'], 'les tarifs et comptes rendus se lisent à partir du Workpackage leader');
+    eq(who(row('Lire', /comptes rendus de réunion/)), ['PL', 'DPL', 'CP', 'WPL'], 'les comptes rendus se lisent à partir du Workpackage leader');
+    eq(who(row('Budget et achats', /Voir l’exercice budgétaire/)), ['PL', 'DPL', 'CP', 'WPL'], 'l’exercice budgétaire se lit à partir du Workpackage leader, au global du projet');
+    eq(who(row('Budget et achats', /Saisir le budget attendu et accordé/)), ['PL', 'DPL', 'CP'], 'sa saisie : chef de projet et au-dessus');
+    ok(!t.groups.some((g) => g.rows.some((r) => /tarifs journaliers|Fixer les tarifs/.test(r.label))), 'plus aucun droit sur les tarifs : ils n’existent plus');
     eq(who(row('Planning et avancement', /Figer une baseline sur un projet/)), ['PL', 'DPL', 'CP'], 'figer une baseline du projet : chef de projet et au-dessus');
     eq(who(row('Planning et avancement', /Figer une baseline sur un workpackage/)), ['PL', 'DPL', 'CP', 'WPL'], 'figer celle d’un workpackage : jusqu’au Workpackage leader');
     eq(who(row('Planning et avancement', /Figer une baseline sur un sous-workpackage/)), ['PL', 'DPL', 'CP', 'WPL', 'SWPL'], 'celle d’un sous-workpackage : jusqu’au Sub-workpackage leader');
     ok(!t.groups.some((g) => g.rows.some((r) => /Figer une baseline sur un livrable/.test(r.label))), 'jamais sur un livrable ou un jalon');
-    ok(row('Lire', /tarifs journaliers/).deep && /en profondeur/.test(row('Lire', /tarifs journaliers/).where), 'et la ligne dit que c’est « en profondeur »');
+    ok(row('Lire', /comptes rendus de réunion/).deep && /en profondeur/.test(row('Lire', /comptes rendus de réunion/).where) && row('Budget et achats', /Voir l’exercice budgétaire/).deep, 'et les lignes disent que c’est « en profondeur »');
   });
 };

@@ -61,7 +61,7 @@ module.exports = function () {
     eq(rights('do', 'wbs.delete', [I1, I1b]), [true, false], 'supprime son livrable (à valider), pas le voisin');
     ok(can('do', 'progress.declare', ...I1), 'et déclare son avancement (niveaux du dessus)');
     ok(!can('do', 'budget.edit', ...I1), 'le budget commence au Workpackage leader');
-    ok(!can('do', 'sensitive.read', ...P), 'budgets, tarifs et comptes rendus : Workpackage leader et au-dessus');
+    ok(!can('do', 'sensitive.read', ...P) && !can('do', 'exercise.read', ...P), 'budgets, exercice budgétaire et comptes rendus : Workpackage leader et au-dessus');
   });
 
   test('Sub-workpackage leader (4) : son sous-WP et dedans ; pas le WP, pas le budget', () => {
@@ -75,15 +75,16 @@ module.exports = function () {
     eq(rights('wpl', 'wbs.edit', [W1, W1a, I1, I1b, I4, W2, I2, P]), [true, true, true, true, true, false, false, false], 'modifie tout son WP, rien d’autre, pas le projet');
     eq(rights('wpl', 'wbs.delete', [W1, W1a, I1, I4]), [false, true, true, true], 'supprime sous-WP et livrables, pas son propre WP (niveau du dessus : chef de projet)');
     eq(rights('wpl', 'budget.edit', [I1, I4, I2]), [true, true, false], 'budget : son WP');
-    ok(can('wpl', 'sensitive.read', ...P) && !can('wpl', 'sensitive.read', 'project', 'P2'), 'budgets, tarifs et comptes rendus : lisibles pour son projet seulement');
+    ok(can('wpl', 'sensitive.read', ...P) && !can('wpl', 'sensitive.read', 'project', 'P2') && can('wpl', 'exercise.read', ...P) && !can('wpl', 'exercise.read', 'project', 'P2'), 'budgets, exercice budgétaire et comptes rendus : lisibles pour son projet seulement');
+    ok(!can('wpl', 'exercise.edit', ...P), 'mais il ne saisit pas l’exercice : c’est le chef de projet');
     eq(rights('wpl', 'baseline.manage', [P]).concat(rights('wpl', 'cpn.edit', [P]), rights('wpl', 'resource.edit', [['global']])), [false, false, false], 'ni baselines, ni CPN, ni création de personnes');
   });
 
-  test('Chef de projet (2) : son projet et tout dedans ; baselines, CPN, personnes, tarifs', () => {
+  test('Chef de projet (2) : son projet et tout dedans ; baselines, CPN, personnes, exercice', () => {
     eq(rights('cp', 'wbs.edit', [P, W1, W1a, W2, I1, I4, I2, I5]), [true, true, true, true, true, true, true, true], 'modifie le projet (et crée des WP dedans) et tout ce qu’il contient');
     eq(rights('cp', 'wbs.delete', [W1, W1a, I1, P]), [true, true, true, false], 'supprime workpackages, sous-WP et livrables, pas le projet (niveau du dessus : DPL)');
     eq(rights('cp', 'wbs.edit', [['project', 'P2'], ['workpackage', 'W3']]), [false, false], 'rien dans un autre projet');
-    ok(c.can(ctx('cp'), 'baseline.manage', S('project', 'P1')) && can('cp', 'cpn.edit', ...P) && can('cp', 'resource.edit', 'global') && can('cp', 'ratecard.manage', 'global') && can('cp', 'sensitive.read', ...P), 'baselines, CPN, personnes, tarifs, lecture sensible');
+    ok(c.can(ctx('cp'), 'baseline.manage', S('project', 'P1')) && can('cp', 'cpn.edit', ...P) && can('cp', 'resource.edit', 'global') && can('cp', 'exercise.edit', ...P) && can('cp', 'exercise.read', ...P) && can('cp', 'sensitive.read', ...P), 'baselines, CPN, personnes, saisie de l’exercice, lecture sensible');
     ok(!can('cp', 'project.create', 'program', 'PG1') && !can('cp', 'sheet.roles', 'global'), 'mais ni création de projet ni feuilles « Rôles »');
     ok(can('cp', 'risk.edit', 'risk', 'R1') && can('cp', 'changes.ack', ...P) && can('cp', 'sheet.budget', 'global'), 'risques, validation des changements, feuilles « Budget »');
   });
@@ -130,7 +131,7 @@ module.exports = function () {
     ok(!can('gone', 'wbs.edit', 'project', 'P2'));
     ok(c.can(ctx(null, true), 'program.create', S('global')) && c.can(ctx(null, true), 'wbs.delete', S('project', 'P1')), 'l’administrateur peut tout');
     ok(c.can(ctx(null), 'addon.install', S('global')) && !c.can(ctx(null), 'wbs.edit', S('project', 'P1')), 'sans fiche : seulement les droits ouverts à tous');
-    ok(can('cp', 'ratecard.manage', 'global') && !can('wpl', 'ratecard.manage', 'global') && !can('do', 'resource.edit', 'global'), 'portée globale : accordée si le niveau est détenu quelque part');
+    ok(can('cp', 'resource.edit', 'global') && !can('wpl', 'resource.edit', 'global') && !can('do', 'resource.edit', 'global'), 'portée globale : accordée si le niveau est détenu quelque part');
     eq(c.can(ctx('wpl'), 'wbs.edit', null), true, 'sans périmètre : un rôle de niveau suffisant n’importe où suffit');
   });
 

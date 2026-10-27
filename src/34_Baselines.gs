@@ -18,7 +18,7 @@ var BASELINE_FIELDS = {
   WorkPackage: ['name', 'wbs_code', 'parent_wp_id', 'owner_resource_id', 'charge_code'],
   PlanItem: ['name', 'item_type', 'wp_id', 'owner_resource_id', 'planned_start', 'planned_finish', 'milestone_category'],
   Dependency: ['predecessor_id', 'successor_id', 'dep_type', 'lag_days'],
-  BudgetLine: ['deliverable_id', 'resource_id', 'cost_type', 'planned_days', 'frozen_rate', 'fixed_amount', 'planned_amount']
+  BudgetLine: ['deliverable_id', 'resource_id', 'team_id', 'cost_type', 'fixed_amount', 'planned_amount']
 };
 
 var FIELD_LABELS = {
@@ -27,7 +27,7 @@ var FIELD_LABELS = {
   item_type: 'type', wp_id: 'workpackage', planned_start: 'début prévu', planned_finish: 'fin prévue',
   milestone_category: 'catégorie de jalon', predecessor_id: 'prédécesseur', successor_id: 'successeur',
   dep_type: 'type de lien', lag_days: 'décalage', deliverable_id: 'livrable', resource_id: 'ressource',
-  cost_type: 'type de coût', planned_days: 'jours prévus', frozen_rate: 'taux figé', fixed_amount: 'forfait',
+  cost_type: 'type de coût', team_id: 'équipe', fixed_amount: 'forfait',
   planned_amount: 'montant prévu', progress_pct: 'avancement', baseline_frozen: 'baseline figée', budget_authorized: 'budget autorisé', budget_allocated: 'enveloppe budgétaire', deleted: 'suppression', '*': 'création ou suppression'
 };
 

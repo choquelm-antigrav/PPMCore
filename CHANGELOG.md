@@ -1,5 +1,15 @@
 # Journal des versions
 
+## 0.17.1 — l'exercice budgétaire annuel ; plus aucun taux journalier
+
+- **Plus de taux journalier dans tout l'outil** : ni sur les personnes, ni profil tarifaire, ni grille de taux, ni taux figé, ni colonne d'import ou d'export, ni droit « fixer les tarifs ». Le seul coût du personnel est le **coût annuel d'un ETP par pays et par an** (administrateur) ; un montant se convertit en jours par `montant ÷ (coût ÷ jours ouvrés du pays)`, avec le pays de l'équipe et l'année de l'exercice ; sans coût paramétré : « à paramétrer ».
+- **Lignes de budget** : une **part d'équipe** en montant libre (pays de l'équipe) ou un **forfait** pour une ressource externe ; un livrable n'a qu'un **exercice**. Les imports de projets en tiennent compte (onglet Budget : Équipe ou Forfait, un montant ; onglet Personnes : colonne Équipe). Le pays d'une équipe se saisit dans la page Ressources et dans l'import d'équipes.
+- **Exercices** (préparation, exécution, clos), **budget attendu et accordé par équipe** (3 caractères = porte le budget, 4 = détail rattaché), **écarts et clash** affichés sans rien bloquer, vue programme ; **page Budget** avec sélecteur d'exercice (l'exercice en préparation au départ) et zone « Exercice budgétaire » ; **page Administration** : exercices (avec confirmation) et coût d'un ETP. Droits : lecture à partir du Workpackage leader, saisie par le chef de projet et au-dessus.
+- **Démo** : équipes à code (`DTE`, `STR`, `ESSB`…), un exercice en exécution (avec un clash) et un exercice en préparation (un dépassement, un budget non réparti), coût d'un ETP des quatre pays. Les livrables de l'exercice en préparation y ont des dates dans le planning existant (datés de l'an prochain, ils déplaceraient le chemin critique et ses constats).
+- **Défaut corrigé en route** : un livrable chiffré avant l'existence des exercices ne pouvait être rattaché à aucun exercice.
+- Tests : `test_exercise.js` (6) ; `ui_budget.js` (75), `ui_compte.js` (121), `ui_ressources.js` (55) ; vingt sabotages vérifiés. Mise à jour : voir `MISE_A_JOUR.md`.
+- **Pas encore** : versions figées de l'exercice et leur validation, suivi accordé / engagé / avancement, révisions de février et d'avril en versions, passage automatique d'un exercice à l'autre.
+
 ## 0.17.0 — structure des équipes importée, équipes du projet
 
 - **Import de la structure des équipes** par un classeur Google Sheet dédié (onglets Équipes et Membres), depuis la page Ressources (« Importer des équipes ») : modèle prérempli (aussi un export), analyse sans écriture avec chaque erreur à son onglet et sa ligne, import par lots, **copie de sécurité** si des équipes ou personnes existantes changent. **Rien n'est supprimé ni écrasé** (champs vides complétés, personne déjà dans une autre équipe non déplacée), clé = nom d'équipe sans accent ni casse, boucles refusées. Module `59_TeamImport.gs`.

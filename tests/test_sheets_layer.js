@@ -51,8 +51,10 @@ module.exports = function () {
     t.appendRows([{ id: 'i1', project_id: 'p', wp_id: 'w', item_type: 'Livrable', name: 'X', planned_start: '2026-10-05', planned_finish: '2026-10-09', progress_pct: 40, status: 'À faire', deleted: false, version: 3 }]);
     const r = t.readAll()[0];
     eq([r.progress_pct, typeof r.progress_pct, r.planned_start, r.planned_finish, r.deleted, r.version], [40, 'number', '2026-10-05', '2026-10-09', false, 3], 'nombre, dates normalisées en texte, booléen');
-    const rc = c.sheetTable_('Resource'); rc.appendRows([{ id: 'r1', resource_type: 'Interne', name: 'Zoé', daily_rate: 650, capacity_days_month: 18 }]);
-    eq([rc.readAll()[0].daily_rate, rc.readAll()[0].capacity_days_month], [650, 18], 'taux et capacité restent des nombres');
+    const rc = c.sheetTable_('Resource'); rc.appendRows([{ id: 'r1', resource_type: 'Interne', name: 'Zoé', capacity_days_month: 18 }]);
+    eq([rc.readAll()[0].capacity_days_month], [18], 'la capacité reste un nombre');
+    const tb = c.sheetTable_('TeamBudget'); tb.appendRows([{ id: 'b1', exercise_id: 'e', project_id: 'p', team_id: 't', expected: 650000, granted: 600000.5 }]);
+    eq([tb.readAll()[0].expected, tb.readAll()[0].granted], [650000, 600000.5], 'l’attendu et l’accordé d’une équipe restent des nombres');
   });
 
   test('Anciennes cellules : un code devenu nombre avant la protection est relu comme du texte', () => {

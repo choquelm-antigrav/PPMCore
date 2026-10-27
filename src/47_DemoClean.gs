@@ -57,6 +57,7 @@ function demoInventory_() {
   var meetingIds = idsOf(del.Meeting);
   del.NewsAction = repoList('NewsAction', function (a) { return projectIds[a.project_id] || meetingIds[a.meeting_id]; });
   del.NewsDigest = repoList('NewsDigest', function (d) { return projectIds[d.project_id]; });
+  del.TeamBudget = repoList('TeamBudget', function (b) { return projectIds[b.project_id]; });   // les exercices et les coûts d'un ETP sont des paramètres globaux : ils restent
   del.PlanItem = items; del.WorkPackage = wps; del.Project = projects; del.Program = programs;
   // les personnes fictives : sans adresse, reconnues par nom, fonction et organisation, et plus citées nulle part ailleurs
   var gone = {}; Object.keys(del).forEach(function (t) { gone[t] = idsOf(del[t]); });
@@ -94,7 +95,7 @@ function demoInventory_() {
   del.HierarchicalTeam = teams.filter(function (t) { return teamNames[t.name] && !keepTeam[t.id]; });
   var teamGone = idsOf(del.HierarchicalTeam);
   detach = detach.filter(function (r) { return teamGone[r.team_id]; });
-  var order = ['NewsAction', 'NewsDigest', 'Meeting', 'Dependency', 'MilestoneRequirement', 'BudgetPhasing', 'BudgetLine', 'PurchaseOrderLink', 'PurchaseOrder', 'ProgressUpdate', 'RiskOpportunity', 'Insight',
+  var order = ['NewsAction', 'NewsDigest', 'Meeting', 'Dependency', 'MilestoneRequirement', 'BudgetPhasing', 'BudgetLine', 'TeamBudget', 'PurchaseOrderLink', 'PurchaseOrder', 'ProgressUpdate', 'RiskOpportunity', 'Insight',
     'Baseline', 'RoleAssignment', 'PlanItem', 'WorkPackage', 'Project', 'Program', 'HierarchicalTeam', 'Resource'];
   var total = 0; order.forEach(function (t) { total += del[t].length; });
   if (!total && detach.length) total = detach.length;
@@ -103,7 +104,7 @@ function demoInventory_() {
 
 var OLD_DEMO_LABELS = { // [au singulier, au pluriel]
   Program: ['programme', 'programmes'], Project: ['projet', 'projets'], WorkPackage: ['workpackage', 'workpackages'], PlanItem: ['livrable ou jalon', 'livrables ou jalons'],
-  Dependency: ['dépendance', 'dépendances'], MilestoneRequirement: ['exigence de jalon', 'exigences de jalon'], BudgetLine: ['ligne de budget', 'lignes de budget'],
+  Dependency: ['dépendance', 'dépendances'], MilestoneRequirement: ['exigence de jalon', 'exigences de jalon'], BudgetLine: ['ligne de budget', 'lignes de budget'], TeamBudget: ['budget d’équipe', 'budgets d’équipe'],
   BudgetPhasing: ['étalement', 'étalements'], PurchaseOrder: ['commande d’achat', 'commandes d’achat'], PurchaseOrderLink: ['lien de commande', 'liens de commande'],
   ProgressUpdate: ['mise à jour d’avancement', 'mises à jour d’avancement'], RiskOpportunity: ['risque ou opportunité', 'risques ou opportunités'], Insight: ['constat', 'constats'],
   Baseline: ['baseline', 'baselines'], RoleAssignment: ['rôle', 'rôles'], Resource: ['personne fictive', 'personnes fictives'], HierarchicalTeam: ['équipe', 'équipes'],

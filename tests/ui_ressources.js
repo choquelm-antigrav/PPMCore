@@ -1,5 +1,5 @@
 /**
- * Essai de la page Ressources : personnes, équipes, rôle dans le projet, taux journalier (jsdom, vrai Core).
+ * Essai de la page Ressources : personnes, équipes, rôle dans le projet ; plus aucun taux journalier depuis 0.17.1 (jsdom, vrai Core).
  *   npm i --no-save jsdom@24 && node tests/ui_ressources.js
  */
 const fs = require('fs');
@@ -66,7 +66,7 @@ function openPage(user) {
   await p.until(() => p.$('res-table'));
   check(p.text('title') === 'Ressources de Projet 1' && !p.$('person-add').hidden && !p.$('team-add').hidden, 'titre et boutons d’ajout pour le chef de projet');
   check(['Carla', 'Dora', 'Mia', 'Rémi', 'Xavier'].every((n) => p.names().includes(n)), 'personnes listées : ' + p.names().join(', '));
-  check(/Rôles/.test(p.text('res-table')) && !/Rôle dans le projet/.test(p.text('res-table')) && /Taux journalier/.test(p.text('res-table')), 'colonnes des rôles et du taux');
+  check(/Rôles/.test(p.text('res-table')) && !/Rôle dans le projet/.test(p.text('res-table')) && !/Taux/.test(p.text('res-table')), 'colonnes des rôles, plus de colonne de taux');
   check(!p.doc.querySelector('.role-select'), 'plus de choix de rôle dans le tableau : les rôles se posent dans le WBS');
   check(/Chef de projet \(P1/.test(flat(p.row(w.carla.id).textContent)) && /Contributor \(4 livrables ou jalons\)/.test(flat(p.row(w.mia.id).textContent)), 'rôles en lecture seule : Carla chef de projet, Mia Contributor de quatre livrables ou jalons');
   check(/Workpackage leader \(1 Conception\)/.test(flat(p.row(w.remi.id).textContent)) && /Deliverable owner/.test(flat(p.row(w.remi.id).textContent)), 'Rémi : Workpackage leader du WP 1 et Deliverable owner de ses livrables');
@@ -80,19 +80,8 @@ function openPage(user) {
   const access = (id) => [...p.row(id).querySelectorAll('.badge')].map((b) => b.textContent).find((t) => /connecter|domaine|adresse/i.test(t));
   check(access(w.carla.id) === 'Peut se connecter' && access(w.xavier.id) === 'Hors domaine', 'colonne Accès : adresse du domaine = peut se connecter, autre domaine = hors domaine');
 
-  // taux journalier
-  const rate = () => p.row(w.remi.id).querySelector('.rate-input');
-  rate().value = '520'; p.change(rate());
-  await p.until(() => Number(c.repoGet('Resource', w.remi.id).daily_rate) === 520);
-  await p.until(() => /Taux de Rémi enregistré/.test(p.text('toast')));
-  check(/Taux de Rémi enregistré/.test(p.text('toast')), 'taux saisi directement dans le tableau');
-  rate().value = '0'; p.change(rate());
-  await p.until(() => p.$('toast').classList.contains('error'));
-  check(/positif/.test(p.text('toast')) && rate().value === '520', 'taux nul refusé, valeur précédente rétablie : ' + p.text('toast'));
-  const xr = p.row(w.xavier.id).querySelector('.rate-input');
-  xr.value = '450'; p.change(xr);
-  await p.until(() => Number(c.repoGet('Resource', w.xavier.id).daily_rate) === 450);
-  check(true, 'un externe a aussi son taux');
+  // plus de taux journalier : ni colonne, ni champ, ni appel
+  check(!p.doc.querySelector('.rate-input') && !p.doc.querySelector('.rate-text'), 'aucun champ de taux dans le tableau');
 
   // ajouter une personne
   p.click(p.$('person-add'));
@@ -100,12 +89,12 @@ function openPage(user) {
   p.submit();
   await p.until(() => !p.$('gf-error').hidden);
   check(/Nom/.test(p.text('gf-error')), 'nom vide refusé, champ nommé : ' + p.text('gf-error'));
-  p.set('name', 'Léo Martin'); p.set('email', 'Leo@Entreprise.com'); p.set('resource_type', 'Externe'); p.set('country', 'DE'); p.set('job_function', 'Ingénieur essais'); p.set('supplier', 'Alpha Test GmbH'); p.set('daily_rate', '480');
+  p.set('name', 'Léo Martin'); p.set('email', 'Leo@Entreprise.com'); p.set('resource_type', 'Externe'); p.set('country', 'DE'); p.set('job_function', 'Ingénieur essais'); p.set('supplier', 'Alpha Test GmbH');
   p.submit();
   await p.until(() => c.repoList('Resource').some((r) => r.name === 'Léo Martin'));
   const leo = c.repoList('Resource').find((r) => r.name === 'Léo Martin');
   await p.until(() => p.row(leo.id));
-  check(leo.email === 'leo@entreprise.com' && leo.resource_type === 'Externe' && Number(leo.daily_rate) === 480, 'personne ajoutée avec son statut, son adresse et son taux');
+  check(leo.email === 'leo@entreprise.com' && leo.resource_type === 'Externe' && !('daily_rate' in leo), 'personne ajoutée avec son statut et son adresse (et aucun taux)');
   check(/Alpha Test GmbH/.test(flat(p.row(leo.id).textContent)), 'fournisseur affiché pour un externe');
   check(/Reader/.test(p.row(leo.id).textContent) && /view=structure&project=/.test(p.row(leo.id).querySelector('a').getAttribute('href')) && !/Reader/.test(p.row(w.carla.id).textContent), 'une personne sans rôle est Reader, avec un lien vers le WBS pour lui en poser un ; celles qui ont un rôle ne le sont pas');
   check(access(leo.id) === 'Peut se connecter' && /adresse e-mail professionnelle/.test(p.text('people-note')), 'une adresse du domaine donne l’accès aussitôt ; la page explique comment faire intervenir quelqu’un');
@@ -126,7 +115,7 @@ function openPage(user) {
   await p.until(() => p.doc.querySelector('#teams-list [data-team="' + calc.id + '"]'));
   p.click(p.row(w.remi.id).querySelector('.person-edit'));
   await p.until(() => p.$('genform').open && p.$('gf-team_id'));
-  check(p.$('gf-name').value === 'Rémi' && Number(p.$('gf-daily_rate').value) === 520, 'fiche préremplie, avec le taux');
+  check(p.$('gf-name').value === 'Rémi' && !p.$('gf-daily_rate'), 'fiche préremplie, sans champ de taux');
   p.set('team_id', calc.id); p.submit();
   await p.until(() => c.repoGet('Resource', w.remi.id).team_id === calc.id);
   await p.until(() => /Calcul/.test(flat(p.row(w.remi.id).textContent)));
@@ -158,14 +147,14 @@ function openPage(user) {
   // droits
   const m = openPage(MEMBER);
   await m.until(() => m.$('res-table'));
-  check(m.$('person-add').hidden && m.$('team-add').hidden && m.$('teams-import').hidden && !m.doc.querySelector('.rate-input') && !/Taux journalier/.test(m.text('res-table')), 'un membre : liste en lecture seule, ni rôles à choisir, ni taux, ni ajout');
+  check(m.$('person-add').hidden && m.$('team-add').hidden && m.$('teams-import').hidden && !/Taux/.test(m.text('res-table')), 'un membre : liste en lecture seule, ni rôles à choisir, ni ajout');
   check(/Chef de projet/.test(flat(m.row(w.carla.id).textContent)) && /Workpackage leader/.test(flat(m.row(w.remi.id).textContent)), 'mais il voit les rôles de chacun');
   const r = openPage(RWP);
   await r.until(() => r.$('res-table'));
-  check(r.$('person-add').hidden && !r.doc.querySelector('.rate-input') && /Taux journalier/.test(r.text('res-table')) && !!r.doc.querySelector('.rate-text'), 'un Workpackage leader : voit les tarifs, ne peut pas les modifier, ni ajouter de personne');
+  check(r.$('person-add').hidden && !/Taux/.test(r.text('res-table')), 'un Workpackage leader : ne peut pas ajouter de personne, et ne voit aucun taux (ils n’existent plus)');
   const d = openPage(DPL);
   await d.until(() => d.$('res-table'));
-  check(!!d.doc.querySelector('.rate-input') && !d.$('person-add').hidden, 'le DPL fixe les taux et ajoute des personnes');
+  check(!d.$('person-add').hidden && !d.doc.querySelector('.rate-input'), 'le DPL ajoute des personnes');
 
   // ---------------------------------------------------------------- 0.14.1 : l'arbre des équipes est un organigramme (25 % de la largeur), la liste des ressources a 75 %
   const team = (values) => w.call(CP, 'teams.create', { values });

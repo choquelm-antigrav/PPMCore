@@ -6,7 +6,7 @@
  *                                un réseau de dépendances, des retards, des dépendances non respectées, trois baselines (B0 archivée,
  *                                B1 active, une demande en attente), du budget, 3 CPN, des commandes d'achat (GR en retard, dépassement), des risques,
  *                                un fil d'actualités (réunions de l'agenda et saisies, actions à tous les états, synthèse du jour).
- * Autour : 11 équipes en arbre, 38 personnes plus vous (internes et externes, quatre pays) avec leur taux journalier, des rôles à tous les niveaux
+ * Autour : 11 équipes en arbre (le nom d'une équipe est son code : 3 caractères = budget, 4 = détail), 38 personnes plus vous (internes et externes, quatre pays), des rôles à tous les niveaux
  * (programme, projet, workpackage), trois personnes sans aucun rôle (Reader par défaut : sans rôle).
  *
  * Aucune personne fictive n'a d'adresse e-mail : rien n'est envoyé, aucune invitation ne part, personne ne peut s'y connecter.
@@ -81,14 +81,14 @@ function demoPeople_(d) {
   });
   DEMO_PEOPLE.forEach(function (p) {
     repoInsert('Resource', {
-      resource_type: p[1], name: p[0], team_id: teams[p[2]].id, job_function: p[3], organization: p[4], country: p[5], daily_rate: p[6],
-      supplier: p[7] || '', capacity_days_month: p[1] === 'Interne' ? 18 : 20
+      resource_type: p[1], name: p[0], team_id: teams[p[2]].id, job_function: p[3], organization: p[4], country: p[5],
+      supplier: p[6] || '', capacity_days_month: p[1] === 'Interne' ? 18 : 20
     }, d.a);
   });
   DEMO_TEAMS.forEach(function (t) { repoUpdate('HierarchicalTeam', teams[t[0]].id, { manager_resource_id: d.person(t[3]).id }, null, d.a); });
   if (!findResourceByEmail(d.me)) {
     repoInsert('Resource', {
-      resource_type: 'Interne', name: d.me.split('@')[0].split(/[._-]+/).map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(' '), email: d.me, team_id: teams['Direction technique'].id, country: 'FR', capacity_days_month: 18,
+      resource_type: 'Interne', name: d.me.split('@')[0].split(/[._-]+/).map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(' '), email: d.me, team_id: teams['DTE'].id, country: 'FR', capacity_days_month: 18,
       job_function: 'Directeur de programme', organization: 'Maison mère'
     }, d.a);
   }
@@ -268,11 +268,61 @@ function demoRisks_(d) {
   });
 }
 
+/** L'équipe de la démo par son code. */
+function demoTeam_(code) { return repoList('HierarchicalTeam', function (t) { return t.name === code; })[0]; }
+
+/**
+ * Les exercices de la démo : l'année en cours en exécution, la suivante en préparation, avec le coût d'un ETP par pays. Ce sont des paramètres globaux : s'ils existent déjà (exercice réel,
+ * coût saisi par l'administrateur), la démo les réutilise et n'y touche pas.
+ */
+function demoExercises_() {
+  var year = Number(todayStr().slice(0, 4));
+  var find = function (y, status) { return repoList('Exercise', function (e) { return Number(e.year) === y; })[0] || repoInsert('Exercise', { year: y, status: status }, SETUP_ACTX); };
+  var out = { year: year, exec: find(year, 'Exécution'), prep: find(year + 1, 'Préparation') };
+  [[year, 1], [year + 1, 1.03]].forEach(function (yr) {
+    [['FR', 118000], ['DE', 132000], ['UK', 126000], ['IN', 38000]].forEach(function (c) {
+      if (!repoList('EtpCost', function (r) { return r.country === c[0] && Number(r.year) === yr[0]; })[0]) repoInsert('EtpCost', { country: c[0], year: yr[0], annual_cost: Math.round(c[1] * yr[1]) }, SETUP_ACTX);
+    });
+  });
+  return out;
+}
+
+/**
+ * Budget par équipe de NAC-1. Exercice en exécution : attendu et accordé d'après les parts existantes (l'équipe ESS est accordée en dessous de ses parts : un clash). Exercice en préparation :
+ * cinq livrables de l'année suivante avec leurs parts par équipe, et un budget attendu par équipe (une équipe a de l'argent non réparti, une autre est en dépassement).
+ */
+function demoExercise_(d) {
+  var ex = demoExercises_(), project = d.project('NAC-1');
+  var rootOf = function (t) { return teamLevel_(t) === 4 && t.parent_team_id ? repoGet('HierarchicalTeam', t.parent_team_id) : t; };
+  var ids = {};
+  repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable' && i.exercise_id === ex.exec.id; }).forEach(function (i) { ids[i.id] = true; });
+  var parts = {};
+  repoList('BudgetLine', function (l) { return l.cost_type === 'Équipe' && ids[l.deliverable_id]; }).forEach(function (l) { var r = rootOf(repoGet('HierarchicalTeam', l.team_id)); parts[r.id] = (parts[r.id] || 0) + Number(l.planned_amount); });
+  Object.keys(parts).forEach(function (tid) {
+    var t = repoGet('HierarchicalTeam', tid), p = parts[tid];
+    repoInsert('TeamBudget', { exercise_id: ex.exec.id, project_id: project.id, team_id: tid,
+      expected: Math.round(p * 1.12 / 1000) * 1000, granted: Math.round(p * (t.name === 'ESS' ? 0.82 : 1.04) / 1000) * 1000 }, d.a);
+  });
+  var wp = repoList('WorkPackage', function (w) { return w.project_id === project.id && isBlank(w.parent_wp_id); })[0];
+  // dates indicatives, dans la fenêtre du planning existant : des livrables datés de l'an prochain déplaceraient le chemin critique du projet (et ses constats)
+  var last = repoList('PlanItem', function (i) { return i.project_id === project.id; }).reduce(function (m, i) { return String(i.planned_finish || '') > m ? String(i.planned_finish) : m; }, '');
+  DEMO_NEXT_YEAR.forEach(function (n) {
+    var finish = d.day(n[3]) > last ? last : d.day(n[3]);
+    var item = repoInsert('PlanItem', { project_id: project.id, wp_id: wp ? wp.id : '', item_type: 'Livrable', name: n[0], status: 'À faire', progress_pct: 0,
+      planned_start: d.day(n[2]) > finish ? finish : d.day(n[2]), planned_finish: finish, exercise_id: ex.prep.id }, d.a);
+    n[1].forEach(function (s) { d.call('budget.line.save', { values: { deliverable_id: item.id, team_id: demoTeam_(s[0]).id, planned_amount: s[1] }, exerciseId: ex.prep.id }); });
+  });
+  DEMO_EXPECTED.forEach(function (e) {
+    repoInsert('TeamBudget', { exercise_id: ex.prep.id, project_id: project.id, team_id: demoTeam_(e[0]).id, expected: e[1] }, d.a);
+  });
+}
+
 function demoBudget_(d, from, to) {
   DEMO_BUDGET.slice(from, to).forEach(function (b) {
-    var values = { deliverable_id: d.item(b[0], b[1]).id, resource_id: d.person(b[2]).id };
-    if (b[3] === 'f') values.fixed_amount = b[4]; else values.planned_days = b[4];
-    d.call('budget.line.save', { values: values });
+    var values = { deliverable_id: d.item(b[0], b[1]).id };
+    if (b[2] === 'f') { values.resource_id = d.person(b[3]).id; values.fixed_amount = b[4]; }
+    else { values.team_id = demoTeam_(b[3]).id; values.planned_amount = b[4]; }
+    d.call('budget.line.save', { values: values, exerciseId: demoExercises_().exec.id });   // les livrables de la démo sont ceux de l'exercice en exécution
   });
 }
 
@@ -298,7 +348,7 @@ function demoFindings_(d) {
 }
 
 var DEMO_STEPS = [
-  { name: 'Équipes et personnes (taux journaliers)', run: function (d) { demoPeople_(d); } },
+  { name: 'Équipes et personnes', run: function (d) { demoPeople_(d); } },
   { name: 'Programme et projets', run: function (d) { demoProjects_(d); } },
   { name: 'Rôles de l’organigramme', run: function (d) { demoRoles_(d); } },
   { name: 'Découpage et planning de NAC-1', run: function (d) { demoPlan_(d, ['NAC-1']); } },
@@ -309,6 +359,7 @@ var DEMO_STEPS = [
   { name: 'Risques et opportunités', run: function (d) { demoRisks_(d); } },
   { name: 'Budget de NAC-1 (1/2)', run: function (d) { demoBudget_(d, 0, 20); } },
   { name: 'Budget de NAC-1 (2/2)', run: function (d) { demoBudget_(d, 20, 60); } },
+  { name: 'Budget par équipe : exercices en exécution et en préparation', run: function (d) { demoExercise_(d); } },
   { name: 'Enveloppe budgétaire de NAC-1', run: function (d) { demoEnvelope_(d); } },
   { name: 'Commandes d’achat', run: function (d) { demoOrders_(d); } },
   { name: 'Actualités de NAC-1 : réunions', run: function (d) { demoNewsMeetings_(d); } },

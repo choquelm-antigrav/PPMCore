@@ -40,7 +40,7 @@ var SCHEMA = {
     book: 'data',
     cols: ['id', 'project_id', 'wp_id', 'item_type', 'name', 'owner_resource_id', 'planned_start',
       'planned_finish', 'actual_finish', 'progress_pct', 'status', 'milestone_category', 'drive_url',
-      'calendar_event_id', 'last_progress_at'],
+      'calendar_event_id', 'last_progress_at', 'exercise_id'],   // exercise_id : l'exercice budgétaire du livrable (un seul)
     required: ['project_id', 'item_type', 'name'],
     enums: {
       item_type: ['Livrable', 'Jalon'],
@@ -63,14 +63,14 @@ var SCHEMA = {
   // ---------- Classeur Données : personnes et OBS ----------
   Resource: {
     book: 'data',
-    cols: ['id', 'resource_type', 'name', 'email', 'team_id', 'rate_profile', 'supplier',
-      'capacity_days_month', 'country', 'job_function', 'organization', 'daily_rate'],
+    cols: ['id', 'resource_type', 'name', 'email', 'team_id', 'supplier',
+      'capacity_days_month', 'country', 'job_function', 'organization'],
     required: ['resource_type', 'name'],
     enums: { resource_type: ['Interne', 'Externe'], country: COUNTRIES }
   },
   HierarchicalTeam: {
     book: 'data',
-    cols: ['id', 'name', 'parent_team_id', 'manager_resource_id', 'cost_center'],
+    cols: ['id', 'name', 'parent_team_id', 'manager_resource_id', 'cost_center', 'country'],   // country : le pays qui sert à convertir un montant en jours (coût d'un ETP)
     required: ['name']
   },
   HolidaySet: {
@@ -115,18 +115,35 @@ var SCHEMA = {
   },
 
   // ---------- Classeur Données : budget ----------
-  RateCard: {
+  /**
+   * Le coût annuel d'un ETP (équivalent temps plein) par pays et par année : le SEUL paramètre de coût du personnel (plus de taux journalier). Fixé par l'administrateur. Un montant se convertit
+   * en jours par : montant ÷ (coût annuel ÷ jours ouvrés de l'année dans le pays).
+   */
+  EtpCost: {
     book: 'data',
-    cols: ['id', 'profile', 'country', 'daily_rate', 'effective_date'],
-    required: ['profile', 'country', 'daily_rate'],
+    cols: ['id', 'country', 'year', 'annual_cost'],
+    required: ['country', 'year', 'annual_cost'],
     enums: { country: COUNTRIES }
+  },
+  /** L'exercice budgétaire : une année. Au plus un en préparation (l'année qui vient) et un en exécution (l'année en cours). */
+  Exercise: {
+    book: 'data',
+    cols: ['id', 'year', 'status'],
+    required: ['year', 'status'],
+    enums: { status: ['Préparation', 'Exécution', 'Clos'] }
+  },
+  /** Le budget d'une équipe sur un projet pour un exercice : ce qui est ATTENDU (avant l'été) et ce qui est ACCORDÉ (décembre, révisions de février et d'avril). */
+  TeamBudget: {
+    book: 'data',
+    cols: ['id', 'exercise_id', 'project_id', 'team_id', 'expected', 'granted'],
+    required: ['exercise_id', 'project_id', 'team_id']
   },
   BudgetLine: {
     book: 'data',
-    cols: ['id', 'deliverable_id', 'resource_id', 'cost_type', 'planned_days', 'frozen_rate',
-      'fixed_amount', 'planned_amount', 'phasing_mode', 'is_external'],
-    required: ['deliverable_id', 'resource_id', 'cost_type'],
-    enums: { cost_type: ['TJM', 'Forfait'] }
+    // « Équipe » : la part d'une équipe sur un livrable, un montant libre (team_id) ; « Forfait » : un forfait auprès d'une ressource externe (resource_id)
+    cols: ['id', 'deliverable_id', 'resource_id', 'team_id', 'cost_type', 'fixed_amount', 'planned_amount', 'phasing_mode', 'is_external'],
+    required: ['deliverable_id', 'cost_type'],
+    enums: { cost_type: ['Équipe', 'Forfait'] }
   },
   /** Commande d'achat auprès d'une ressource externe. Rattachée à un projet par son CPN ; engagée en une fois à son lancement. */
   PurchaseOrder: {
@@ -247,7 +264,7 @@ var SCHEMA = {
 var REF_TARGETS = {
   program_id: 'Program', project_id: 'Project', wp_id: 'WorkPackage', parent_wp_id: 'WorkPackage',
   leader_resource_id: 'Resource', manager_resource_id: 'Resource', owner_resource_id: 'Resource',
-  resource_id: 'Resource', team_id: 'HierarchicalTeam', parent_team_id: 'HierarchicalTeam',
+  resource_id: 'Resource', team_id: 'HierarchicalTeam', parent_team_id: 'HierarchicalTeam', exercise_id: 'Exercise',
   milestone_id: 'PlanItem', deliverable_id: 'PlanItem', predecessor_id: 'PlanItem',
   successor_id: 'PlanItem', linked_item_id: 'PlanItem', budget_line_id: 'BudgetLine',
   active_baseline_id: 'Baseline', baseline_id: 'Baseline', addon_id: 'Addon', import_id: 'ActualImport'
@@ -264,8 +281,9 @@ var NUMBER_RULES = {
   probability: { min: 1, max: 5, integer: true },
   impact: { min: 1, max: 5, integer: true },
   lag_days: { integer: true },
-  planned_days: { min: 0 },
-  daily_rate: { min: 0 },
+  annual_cost: { min: 0 },
+  expected: { min: 0 },
+  granted: { min: 0 },
   capacity_days_month: { min: 0 },
   fixed_amount: { min: 0 },
   financial_value: {}
@@ -307,9 +325,8 @@ function applyComputed(table, rec) {
     rec.score = (p >= 1 && i >= 1) ? p * i : '';
   }
   if (table === 'BudgetLine') {
-    if (rec.cost_type === 'TJM') {
-      var days = Number(rec.planned_days || 0), rate = Number(rec.frozen_rate || 0);
-      rec.planned_amount = round2(days * rate);
+    if (rec.cost_type === 'Équipe') {
+      rec.planned_amount = round2(Number(rec.planned_amount || 0));
     } else if (rec.cost_type === 'Forfait') {
       rec.planned_amount = round2(Number(rec.fixed_amount || 0));
     }

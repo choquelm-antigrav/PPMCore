@@ -4,10 +4,10 @@ const path = require('path');
 const { loadCore } = require('./harness');
 const c = loadCore();
 const tech = { created_at: 'Text', created_by: 'Email', updated_at: 'Text', updated_by: 'Email', version: 'Number', deleted: 'Yes/No' };
-const numbers = ['progress_pct', 'lag_days', 'planned_days', 'daily_rate', 'capacity_days_month', 'fixed_amount',
+const numbers = ['progress_pct', 'lag_days', 'capacity_days_month', 'fixed_amount', 'annual_cost', 'expected', 'granted',
   'planned_amount', 'financial_value', 'probability', 'impact', 'score', 'amount', 'year', 'number'];
 const pct = ['progress_pct'];
-const price = ['daily_rate', 'fixed_amount', 'planned_amount', 'financial_value', 'amount'];
+const price = ['fixed_amount', 'planned_amount', 'financial_value', 'amount', 'annual_cost', 'expected', 'granted'];
 const computed = { RiskOpportunity: ['score'], BudgetLine: ['planned_amount'],
   PlanItem: ['progress_pct', 'status', 'last_progress_at', 'actual_finish', 'calendar_event_id'],
   ProgressUpdate: ['declared_at'] };

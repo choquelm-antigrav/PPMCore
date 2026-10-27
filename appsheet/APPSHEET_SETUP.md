@@ -237,7 +237,7 @@ Pour la personne elle-même, limiter l'édition aux deux colonnes : **Editable_I
 
 **Contrôle par le Core** : le bot de `Resource` (section 4 de ce guide) revérifie chaque saisie. Une modification non permise est annulée champ par champ, et son auteur reçoit un mail. Une personne ajoutée par quelqu'un qui n'en a pas le droit est annulée.
 
-Le profil tarifaire (`rate_profile`) n'est jamais affiché sur la page Structure : la visibilité des TJM reste une question ouverte.
+Il n'y a plus de taux journalier ni de profil tarifaire (0.17.1) : rien de tel à protéger. Les budgets (`BudgetLine`, `TeamBudget`, `Exercise`, `EtpCost`) restent dans le groupe « Budget et achats » des feuilles protégées.
 
 ### 11.2 Ouvrir la page Structure depuis AppSheet
 

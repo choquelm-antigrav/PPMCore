@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.17.0">
+<meta name="ppm-version" content="0.17.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -600,6 +600,10 @@
     <div class="zone" id="zone-feries"><h2 class="sec">Jours fériés</h2></div>
     <section class="panel" id="panel-feries" aria-label="Jours fériés"></section>
   </div>
+  <div class="cell wide" id="cell-budget">
+    <div class="zone" id="zone-budget"><h2 class="sec">Budget : exercices et coût d’un ETP</h2></div>
+    <section class="panel" id="panel-budget" aria-label="Budget : exercices et coût d’un ETP"></section>
+  </div>
   <div class="cell wide" id="cell-donnees">
     <div class="zone" id="zone-donnees"><h2 class="sec">Projets : export et import</h2></div>
     <section class="panel" id="panel-donnees" aria-label="Projets : export et import"></section>
@@ -624,7 +628,7 @@ var BOOT = <?!= boot ?>;
   'use strict';
   var el = ppm.el, clear = ppm.clear, uuid = ppm.uuid, plural = ppm.plural, toast = ppm.toast, call = ppm.call, frDate = ppm.frDate;
 
-  var state = { cfg: null, health: null, holidays: null, logs: null, rights: null, catalog: null, pf: { book: '', report: null, busy: false, backup: null }, editing: '' };
+  var state = { cfg: null, health: null, holidays: null, budget: null, confirm: '', logs: null, rights: null, catalog: null, pf: { book: '', report: null, busy: false, backup: null }, editing: '' };
   var $ = function (id) { return document.getElementById(id); };
   var COUNTRY_NAMES = { FR: 'France', DE: 'Allemagne', UK: 'Royaume-Uni', IN: 'Inde' };
   var STEP_LABELS = { reconcile: 'Réconciliation du journal', rules: 'Moteur de règles', workspace: 'Agenda et Drive', directory: 'Annuaire', backup: 'Sauvegarde des classeurs' };
@@ -655,6 +659,7 @@ var BOOT = <?!= boot ?>;
     renderSettings();
     loadHealth();
     loadHolidays();
+    loadBudgetParams();
     loadPortfolio();
     loadRights();
     loadLogs();
@@ -1005,6 +1010,62 @@ var BOOT = <?!= boot ?>;
     }
   }
 
+  // ------------------------------------------------------------ Budget : exercices et coût d'un ETP
+  /**
+   * L'exercice budgétaire est une année : on le crée en préparation (l'année qui vient), on le passe en exécution quand l'année commence, puis on le clôt. Il n'y a plus de taux journalier : le seul
+   * paramètre de coût du personnel est le coût annuel d'un ETP par pays et par année ; un montant se convertit en jours avec le coût d'un jour ouvré du pays de l'équipe.
+   */
+  function loadBudgetParams() {
+    var panel = $('panel-budget');
+    loading(panel);
+    Promise.all([call('exercise.list', {}), call('etp.list', {})]).then(function (r) { state.budget = { exercises: r[0].exercises, etp: r[1] }; renderBudgetParams(); }).catch(function (e) { failed(panel, e); });
+  }
+  function eur0(n) { return Number(n).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }); }
+  function renderBudgetParams() {
+    var panel = $('panel-budget'), b = state.budget;
+    clear(panel);
+    var fail = function (e) { toast(window.ppmErrorText ? ppmErrorText(e) : (e && e.message) || 'Opération impossible.', true); };
+    // ---- exercices
+    var NEXT = { 'Préparation': 'Exécution', 'Exécution': 'Clos' };
+    var rows = b.exercises.map(function (e) {
+      var key = e.id + ':' + NEXT[e.status], confirming = state.confirm === key, actions = [];
+      if (NEXT[e.status]) {
+        if (!confirming) actions.push(el('button', { type: 'button', class: 'btn ex-next', 'data-id': e.id, text: NEXT[e.status] === 'Exécution' ? 'Passer en exécution' : 'Clore l’exercice', onclick: function () { state.confirm = key; renderBudgetParams(); } }));
+        else {
+          actions.push(el('button', { type: 'button', class: 'btn primary ex-confirm', 'data-id': e.id, text: 'Confirmer : ' + (NEXT[e.status] === 'Exécution' ? 'passer en exécution' : 'clore') + ' (définitif)', onclick: function () {
+            call('exercise.setStatus', { id: e.id, version: e.version, status: NEXT[e.status] }, true).then(function () { state.confirm = ''; toast('Exercice ' + e.year + ' : ' + NEXT[e.status].toLowerCase() + '.'); loadBudgetParams(); }).catch(function (x) { state.confirm = ''; fail(x); renderBudgetParams(); });
+          } }));
+          actions.push(el('button', { type: 'button', class: 'btn', text: 'Annuler', onclick: function () { state.confirm = ''; renderBudgetParams(); } }));
+        }
+      }
+      return el('tr', { 'data-exercise': e.id }, [el('td', { text: String(e.year) }), el('td', {}, [el('span', { class: 'badge' + (e.status === 'Exécution' ? ' ok' : e.status === 'Clos' ? '' : ' warn'), text: e.status })]), el('td', {}, actions)]);
+    });
+    var year = el('input', { type: 'number', id: 'ex-year', min: '2000', max: '2100', 'aria-label': 'Année du nouvel exercice', placeholder: 'ex. ' + (new Date().getFullYear() + 1), style: 'padding:8px 10px;border:1px solid var(--rule);border-radius:6px;width:130px' });
+    panel.appendChild(box('Exercices budgétaires', [
+      el('p', { class: 'note', text: 'Un exercice est une année. Au plus un en préparation (l’année qui vient : budget attendu par équipe, livrables) et un en exécution (l’année en cours : suivi, accordé révisé en février et avril). On ne revient pas en arrière.' }),
+      b.exercises.length ? table(['Année', 'État', ''], rows) : el('p', { class: 'muted', id: 'ex-empty', text: 'Aucun exercice pour l’instant.' }),
+      el('div', { class: 'row', style: 'margin-top:12px' }, [year, el('button', { type: 'button', class: 'btn', id: 'ex-create', text: 'Créer l’exercice (en préparation)', onclick: function () {
+        call('exercise.create', { year: year.value }, true).then(function () { toast('Exercice créé.'); loadBudgetParams(); }).catch(fail);
+      } })])]));
+    // ---- coût d'un ETP
+    var etp = b.etp, ctry = el('select', { id: 'etp-country', 'aria-label': 'Pays', style: 'padding:8px 10px;border:1px solid var(--rule);border-radius:6px' }, etp.countries.map(function (c) { return el('option', { value: c, text: (COUNTRY_NAMES[c] || c) + ' (' + c + ')' }); }));
+    var eyear = el('input', { type: 'number', id: 'etp-year', min: '2000', max: '2100', 'aria-label': 'Année', value: String(new Date().getFullYear() + 1), style: 'padding:8px 10px;border:1px solid var(--rule);border-radius:6px;width:110px' });
+    var cost = el('input', { type: 'number', id: 'etp-cost', min: '0', step: 'any', 'aria-label': 'Coût annuel d’un ETP (€)', placeholder: 'coût annuel (€)', style: 'padding:8px 10px;border:1px solid var(--rule);border-radius:6px;width:160px' });
+    var erows = etp.costs.map(function (r) {
+      return el('tr', { 'data-etp': r.id }, [el('td', { text: (COUNTRY_NAMES[r.country] || r.country) + ' (' + r.country + ')' }), el('td', { text: String(r.year) }), el('td', { class: 'num', text: eur0(r.annual_cost) }),
+        el('td', { class: 'num', text: r.day_cost === null ? '—' : eur0(r.day_cost) + ' (' + r.working_days + ' j ouvrés)' }),
+        el('td', {}, [el('button', { type: 'button', class: 'btn etp-del', 'data-id': r.id, text: 'Supprimer', onclick: function () {
+          call('etp.delete', { id: r.id, version: r.version }, true).then(function () { toast('Coût supprimé.'); loadBudgetParams(); }).catch(fail);
+        } })])]);
+    });
+    panel.appendChild(box('Coût annuel d’un ETP', [
+      el('p', { class: 'note', text: 'Plus aucun taux journalier : le seul paramètre de coût du personnel est le coût annuel d’un ETP par pays et par année. Un montant se convertit en jours par : montant ÷ (coût annuel ÷ jours ouvrés de l’année dans le pays de l’équipe). Sans coût paramétré pour un pays et une année, la page affiche « à paramétrer » au lieu d’un chiffre.' }),
+      etp.costs.length ? table(['Pays', 'Année', 'Coût annuel d’un ETP', 'Un jour ouvré', ''], erows) : el('p', { class: 'muted', id: 'etp-empty', text: 'Aucun coût paramétré pour l’instant.' }),
+      el('div', { class: 'row', style: 'margin-top:12px' }, [ctry, eyear, cost, el('button', { type: 'button', class: 'btn', id: 'etp-save', text: 'Enregistrer le coût', onclick: function () {
+        call('etp.set', { values: { country: ctry.value, year: eyear.value, annual_cost: cost.value } }, true).then(function () { toast('Coût enregistré.'); loadBudgetParams(); }).catch(fail);
+      } })])]));
+  }
+
   // ------------------------------------------------------------ Journaux
   function loadLogs() {
     var panel = $('panel-journaux');
@@ -1030,7 +1091,7 @@ var BOOT = <?!= boot ?>;
 
   // ------------------------------------------------------------ démarrage
   if (!BOOT.isAdmin) {
-    ['sante', 'feries', 'donnees', 'droits', 'journaux'].forEach(function (t) { $('panel-' + t).hidden = true; $('zone-' + t).hidden = true; });
+    ['sante', 'feries', 'budget', 'donnees', 'droits', 'journaux'].forEach(function (t) { $('panel-' + t).hidden = true; $('zone-' + t).hidden = true; });
     $('zone-reglages').hidden = true;
     empty($('panel-reglages'), 'Réservé aux administrateurs.', 'Vos réglages personnels sont dans « Mon compte ».');
   } else {

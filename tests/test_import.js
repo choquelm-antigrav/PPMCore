@@ -12,7 +12,7 @@ module.exports = function () {
     w.c.SpreadsheetApp = makeFakeSheets();
     w.shared = [];
     w.c.IMPORT_DRIVE = { share: (id, email) => w.shared.push([id, email]), moveToProjectFolder() {} };
-    w.call(CP, 'people.setRate', { resourceId: w.remi.id, daily_rate: 500 });
+    w.team = w.call(CP, 'teams.create', { values: { name: 'T1A', country: 'FR' } });   // l'équipe des parts de budget (0.17.1 : plus de taux journalier)
     w.template = (who, extra) => w.call(who || CP, 'import.template', Object.assign({ projectId: w.p1.id }, extra || {}));
     w.book = (t) => w.c.SpreadsheetApp.openById(t.id || t);
     w.analyze = (t, who, extra) => w.raw(who || CP, 'import.analyze', Object.assign({ projectId: w.p1.id, book: t.id || t }, extra || {}));
@@ -95,10 +95,10 @@ module.exports = function () {
       ['P1', '1', 'Spécification', '2', 'Essais', 'ZZ', 0]                             // type inconnu
     ]);
     w.add(t, 'Budget', [
-      ['P1', '1', 'Spécification', 'xavier@alpha-sous-traitance.com', 'Heures', '', ''],       // type inconnu
-      ['P1', '1', 'Spécification', 'mia@entreprise.com', 'TJM', '5', ''],                       // Mia n'a pas de taux
-      ['P1', '1', 'Spécification', 'mia@entreprise.com', 'Forfait', '', '1000'],                // forfait interne
-      ['P1', '1', 'Introuvable', 'remi@entreprise.com', 'TJM', '3', '']                         // livrable inconnu
+      ['P1', '1', 'Spécification', 'xavier@alpha-sous-traitance.com', 'Heures', 500],          // type inconnu
+      ['P1', '1', 'Spécification', 'Équipe fantôme', 'Équipe', 500],                            // équipe introuvable
+      ['P1', '1', 'Spécification', 'mia@entreprise.com', 'Forfait', 1000],                      // forfait interne
+      ['P1', '1', 'Introuvable', 'T1A', 'Équipe', 300]                                          // livrable inconnu
     ]);
     const before = JSON.stringify(['WorkPackage', 'PlanItem', 'BudgetLine', 'Dependency'].map((x) => w.c.repoList(x).length));
     const rep = w.analyze(t).data, m = msgs(rep).join('\n');
@@ -121,7 +121,7 @@ module.exports = function () {
     ok(/Dépendances l\.7 : Cette dépendance fermerait une boucle/.test(m), 'dépendance : une boucle dans le planning');
     ok(/Dépendances l\.8 : Type « ZZ »/.test(m), 'dépendance : type inconnu');
     ok(/Budget l\.2 : Type « Heures »/.test(m), 'type de budget inconnu');
-    ok(/Budget l\.3 : Aucun taux journalier pour « Mia »/.test(m), 'taux manquant : à renseigner avant');
+    ok(/Budget l\.3 : Équipe « Équipe fantôme » : introuvable/.test(m), 'équipe inconnue : on dit d’importer d’abord la structure des équipes');
     ok(/Budget l\.4 : « Mia » est interne : un forfait est réservé/.test(m), 'forfait interne refusé');
     ok(/Budget l\.5 : Livrable « Introuvable »/.test(m), 'livrable inconnu');
     eq(JSON.stringify(['WorkPackage', 'PlanItem', 'BudgetLine', 'Dependency'].map((x) => w.c.repoList(x).length)), before, 'l’analyse n’écrit rien');
@@ -151,7 +151,7 @@ module.exports = function () {
   function filled(w) {
     const t = w.template();
     w.setCell(t, 'Projets', 2, 7, 20000);
-    w.add(t, 'Personnes', [['Nina Roux', 'nina@entreprise.com', 'Interne', 'Ingénieure outillage', 'Bureau d’études', 'FR', '', 400]]);
+    w.add(t, 'Personnes', [['Nina Roux', 'nina@entreprise.com', 'Interne', 'Ingénieure outillage', 'Bureau d’études', 'FR', '', 'T1A']]);
     w.add(t, 'Workpackages', [
       ['P1', '3', '', 'Industrialisation', 'dora@entreprise.com', 'IMP-3', 9000],
       ['P1', '3.1', '', 'Outillage', 'nina@entreprise.com', '', 4000]
@@ -163,9 +163,9 @@ module.exports = function () {
     w.add(t, 'Jalons', [['P1', '3', 'Revue d’industrialisation', '2026-11-30', 'Revue', 'carla@entreprise.com']]);
     w.add(t, 'Dépendances', [['P1', '3', 'Gammes', '3.1', 'Gabarits', 'FS', 2], ['P1', '3.1', 'Gabarits', '3', 'Revue d’industrialisation', 'FS', 0]]);
     w.add(t, 'Budget', [
-      ['P1', '3', 'Gammes', 'remi@entreprise.com', 'TJM', 6, ''],                              // 6 j × 500 € = 3 000 €
-      ['P1', '3', 'Gammes', 'xavier@alpha-sous-traitance.com', 'Forfait', '', 1500],
-      ['P1', '3.1', 'Gabarits', 'nina@entreprise.com', 'TJM', 4, '']                           // une personne créée par le même classeur : 4 j × 400 €
+      ['P1', '3', 'Gammes', 'T1A', 'Équipe', 3000],                                              // la part de l’équipe : un montant libre
+      ['P1', '3', 'Gammes', 'xavier@alpha-sous-traitance.com', 'Forfait', 1500],
+      ['P1', '3.1', 'Gabarits', 'T1A', 'Équipe', 1600]
     ]);
     // existant modifié : une date de livrable, le nom d'un workpackage
     w.book(t).getSheetByName('Livrables').getRange(4, 5).setValue('2026-11-13');   // « Essais » : fin 2026-11-06 → 2026-11-13
@@ -191,7 +191,7 @@ module.exports = function () {
     ok(r.ok, JSON.stringify(r.error));
     eq([r.data.done, r.data.remaining], [true, 0], 'terminé, plus rien à faire');
     const nina = w.c.findResourceByEmail('nina@entreprise.com');
-    ok(nina && nina.name === 'Nina Roux' && Number(nina.daily_rate) === 400, 'la personne du classeur est créée, avec son taux');
+    ok(nina && nina.name === 'Nina Roux' && nina.team_id === w.team.id, 'la personne du classeur est créée, dans l’équipe qui existe déjà');
     const wp = (code) => w.c.repoList('WorkPackage').find((x) => String(x.wbs_code) === code && x.project_id === w.p1.id);
     const wp3 = wp('3'), wp31 = wp('3.1');
     eq([wp3.name, wp3.owner_resource_id, wp3.charge_code, wp31.parent_wp_id, wp31.owner_resource_id, wp('2').name], ['Industrialisation', w.dora.id, 'IMP-3', wp3.id, nina.id, 'Essais en vol'], 'workpackages créés (un sous-workpackage rattaché à son parent), un renommé');
@@ -208,8 +208,8 @@ module.exports = function () {
     eq(item('Calcul').planned_finish, '2026-10-23', 'un livrable non touché reste en place');
     const dep = w.c.repoList('Dependency').find((d) => d.predecessor_id === gammes.id && d.successor_id === item('Gabarits').id);
     eq([!!dep, dep && dep.dep_type, dep && Number(dep.lag_days)], [true, 'FS', 2], 'dépendance créée, avec son décalage');
-    eq(w.c.repoList('BudgetLine').filter((l) => l.deliverable_id === gammes.id).map((l) => l.cost_type + ':' + l.planned_amount).sort(), ['Forfait:1500', 'TJM:3000'], 'budget de Gammes : 6 jours à 500 € et un forfait externe');
-    eq(w.c.repoList('BudgetLine').filter((l) => l.deliverable_id === item('Gabarits').id).map((l) => l.planned_amount), [1600], 'et celui d’une personne créée par le même classeur : 4 jours à 400 €');
+    eq(w.c.repoList('BudgetLine').filter((l) => l.deliverable_id === gammes.id).map((l) => l.cost_type + ':' + l.planned_amount).sort(), ['Forfait:1500', 'Équipe:3000'], 'budget de Gammes : la part de l’équipe et un forfait externe');
+    eq(w.c.repoList('BudgetLine').filter((l) => l.deliverable_id === item('Gabarits').id).map((l) => l.planned_amount), [1600], 'et la part de l’équipe sur Gabarits');
     eq([Number(w.c.repoGet('Project', w.p1.id).budget_authorized), Number(w.c.repoGet('WorkPackage', wp3.id).budget_allocated), Number(w.c.repoGet('WorkPackage', wp31.id).budget_allocated)], [20000, 9000, 4000], 'enveloppes posées');
     // idempotence
     const events = w.c.repoList('ChangeEvent').length, rows = ['WorkPackage', 'PlanItem', 'BudgetLine', 'RoleAssignment', 'Dependency', 'Resource'].map((x) => w.c.repoList(x).length);
@@ -239,23 +239,22 @@ module.exports = function () {
   test('Personnes du classeur : créées si elles manquent, jamais modifiées si elles existent ; erreurs lisibles', () => {
     const w = world(), t = w.template();
     w.add(t, 'Personnes', [
-      ['Zoé Martin', 'zoe@entreprise.com', 'Externe', 'Ingénieure', 'Alpha', 'FR', 'Alpha SAS', 650],
+      ['Zoé Martin', 'zoe@entreprise.com', 'Externe', 'Ingénieure', 'Alpha', 'FR', 'Alpha SAS', 'T1A'],
       ['Faux Mail', 'pas-un-mail', 'Interne', '', '', '', '', ''],
       ['Type Fou', 'type@entreprise.com', 'Stagiaire', '', '', '', '', ''],
-      ['Pays Fou', 'pays@entreprise.com', 'Interne', '', '', 'ZZ', '', ''],
-      ['Taux Fou', 'taux@entreprise.com', 'Interne', '', '', '', '', 'cher']
+      ['Pays Fou', 'pays@entreprise.com', 'Interne', '', '', 'ZZ', '', '']
     ]);
     const m = msgs(w.analyze(t).data).join('\n');
-    ok(/Personnes l\.6 : Adresse e-mail illisible/.test(m) && /Personnes l\.7 : Type « Stagiaire »/.test(m) && /Personnes l\.8 : Pays « ZZ »/.test(m) && /Personnes l\.9 : Taux journalier/.test(m), 'erreurs par ligne\n' + m);
+    ok(/Personnes l\.6 : Adresse e-mail illisible/.test(m) && /Personnes l\.7 : Type « Stagiaire »/.test(m) && /Personnes l\.8 : Pays « ZZ »/.test(m) && !/Taux/.test(m), 'erreurs par ligne\n' + m);
     const ok1 = w.template();
-    w.add(ok1, 'Personnes', [['Zoé Martin', 'zoe@entreprise.com', 'Externe', 'Ingénieure', 'Alpha', 'FR', 'Alpha SAS', 650]]);
+    w.add(ok1, 'Personnes', [['Zoé Martin', 'zoe@entreprise.com', 'Externe', 'Ingénieure', 'Alpha', 'FR', 'Alpha SAS', 'T1A']]);
     // Rémi existe déjà : sa ligne du classeur est changée, la fiche de l'outil ne l'est pas
     const remiRow = w.rowsOf(ok1, 'Personnes').findIndex((r) => r[1] === 'remi@entreprise.com') + 1;
     w.setCell(ok1, 'Personnes', remiRow, 4, 'Fonction inventée');
     const r = w.run(ok1);
     ok(r.ok, JSON.stringify(r.error));
     const zoe = w.c.findResourceByEmail('zoe@entreprise.com');
-    eq([zoe.resource_type, zoe.organization, zoe.supplier, Number(zoe.daily_rate)], ['Externe', 'Alpha', 'Alpha SAS', 650], 'la personne est créée avec ses informations et son taux');
+    eq([zoe.resource_type, zoe.organization, zoe.supplier, zoe.team_id], ['Externe', 'Alpha', 'Alpha SAS', w.team.id], 'la personne est créée avec ses informations et son équipe');
     ok(w.c.repoGet('Resource', w.remi.id).job_function !== 'Fonction inventée', 'une personne qui existe déjà n’est jamais modifiée par l’import');
   });
 
@@ -308,7 +307,7 @@ module.exports = function () {
     it('Plan de qualification', 'Livrable', '2026-11-02', '2026-11-13', w.mia.id); it('Essai final', 'Livrable', '2026-11-16', '2026-11-27', w.remi.id); it('Qualifié', 'Jalon', '2026-11-27', '2026-11-27', w.carla.id);
     const items2 = w.c.repoList('PlanItem').filter((i) => i.project_id === w.p2.id);
     w.call(ADMIN, 'dependencies.create', { values: { predecessor_id: items2.find((i) => i.name === 'Plan de qualification').id, successor_id: items2.find((i) => i.name === 'Essai final').id, dep_type: 'SS', lag_days: 3 } });
-    w.call(ADMIN, 'budget.line.save', { values: { deliverable_id: items2.find((i) => i.name === 'Essai final').id, resource_id: w.remi.id, cost_type: 'TJM', planned_days: 8 } });
+    w.call(ADMIN, 'budget.line.save', { values: { deliverable_id: items2.find((i) => i.name === 'Essai final').id, team_id: w.team.id, planned_amount: 4000 } });
     w.call(ADMIN, 'budget.line.save', { values: { deliverable_id: items2.find((i) => i.name === 'Plan de qualification').id, resource_id: w.xavier.id, cost_type: 'Forfait', fixed_amount: 2500 } });
     w.call(ADMIN, 'budget.envelope.set', { projectId: w.p2.id, authorized: 10000, allocations: [{ wpId: wpId, amount: 7000 }] });
     w.call(CP, 'budget.envelope.set', { projectId: w.p1.id, authorized: 30000 });
@@ -318,6 +317,11 @@ module.exports = function () {
     d.Session = { getActiveUser: () => ({ getEmail: () => ADMIN }), getEffectiveUser: () => ({ getEmail: () => ADMIN }), getScriptTimeZone: () => 'Europe/Paris' };
     d.SpreadsheetApp = w.c.SpreadsheetApp; d.IMPORT_DRIVE = { share() {}, moveToProjectFolder() {} };
     const call = (a, p) => { const r = d.handleRequest({ action: a, params: p, apiVersion: d.PPM_API_VERSION }, ADMIN); if (!r.ok) throw new Error(a + ' : ' + JSON.stringify(r.error)); return r.data; };
+    // la structure des équipes d'abord (les parts de budget désignent des équipes qui doivent exister) : classeur dédié exporté de l'ancienne installation
+    const tbook = w.call(ADMIN, 'teams.import.template', {});
+    let tr = call('teams.import.run', { book: tbook.id }), tn = 1;
+    while (!tr.done && tn < 20) { tr = call('teams.import.run', { book: tbook.id, resume: true }); tn++; }
+    ok(tr.done, 'structure des équipes importée d’abord');
     const rep = call('import.analyze', { book: book.id });
     ok(rep.ok, JSON.stringify(rep.errors.slice(0, 3)));
     eq([rep.counts.programs.create, rep.counts.projects.create, rep.counts.people.create], [1, 2, 4], 'dans l’installation neuve : un programme, deux projets, les personnes à créer');
@@ -335,11 +339,11 @@ module.exports = function () {
       c.repoList('WorkPackage').forEach((x) => lines.push('W|' + c.repoGet('Project', x.project_id).code + '|' + x.wbs_code + '|' + wpName(x.parent_wp_id) + '|' + x.name + '|' + who(x.owner_resource_id) + '|' + (x.charge_code || '') + '|' + Number(x.budget_allocated || 0)));
       c.repoList('PlanItem').forEach((i) => lines.push('I|' + c.repoGet('Project', i.project_id).code + '|' + wpName(i.wp_id) + '|' + i.name + '|' + i.item_type + '|' + i.planned_start + '|' + i.planned_finish + '|' + who(i.owner_resource_id) + '|' + (i.milestone_category || '')));
       c.repoList('Dependency').forEach((x) => lines.push('D|' + c.repoGet('PlanItem', x.predecessor_id).name + '|' + c.repoGet('PlanItem', x.successor_id).name + '|' + x.dep_type + '|' + Number(x.lag_days || 0)));
-      c.repoList('BudgetLine').forEach((l) => lines.push('B|' + c.repoGet('PlanItem', l.deliverable_id).name + '|' + who(l.resource_id) + '|' + l.cost_type + '|' + Number(l.planned_days || 0) + '|' + Number(l.fixed_amount || 0) + '|' + Number(l.planned_amount || 0)));
+      c.repoList('BudgetLine').forEach((l) => lines.push('B|' + c.repoGet('PlanItem', l.deliverable_id).name + '|' + (l.cost_type === 'Équipe' ? 'T:' + c.repoGet('HierarchicalTeam', l.team_id).name : who(l.resource_id)) + '|' + l.cost_type + '|' + Number(l.fixed_amount || 0) + '|' + Number(l.planned_amount || 0)));
       // les rôles que le classeur porte : leader, owner et contributors (les rôles de projet et de programme ne s'exportent pas : voir « Lisez-moi »)
       c.repoList('RoleAssignment').filter((a) => !a.end_date && (a.scope_type === 'planitem' || a.scope_type === 'workpackage')).forEach((a) => lines.push('A|' + a.role_code + '|' + (a.scope_type === 'planitem' ? c.repoGet('PlanItem', a.scope_id).name : 'WP ' + c.repoGet('WorkPackage', a.scope_id).wbs_code) + '|' + who(a.resource_id)));
       // les personnes citées par les projets (une personne que rien ne cite, comme un DPL, n'est pas dans le classeur)
-      c.repoList('Resource').filter((r) => used[r.id]).forEach((r) => lines.push('R|' + r.name + '|' + (r.email || '') + '|' + r.resource_type + '|' + (r.job_function || '') + '|' + Number(r.daily_rate || 0)));
+      c.repoList('Resource').filter((r) => used[r.id]).forEach((r) => lines.push('R|' + r.name + '|' + (r.email || '') + '|' + r.resource_type + '|' + (r.job_function || '') + '|' + (r.team_id ? c.repoGet('HierarchicalTeam', r.team_id).name : '')));
       return lines.sort();
     };
     const src = sig(w.c), dst = sig(d);

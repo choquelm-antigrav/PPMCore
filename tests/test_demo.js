@@ -54,12 +54,12 @@ module.exports = function () {
     ok(c.repoList('Dependency').length >= 40 && ['FS', 'SS', 'FF'].every((t) => c.repoList('Dependency').some((d) => d.dep_type === t)) && c.repoList('Dependency').some((d) => Number(d.lag_days) < 0), 'un réseau de dépendances de plusieurs types, avec décalages');
     const people = c.repoList('Resource');
     ok(people.length === 39 && people.filter((r) => r.resource_type === 'Externe').length === 8, '38 personnes plus le compte qui lance la démo, dont 8 externes');
-    ok(people.filter((r) => Number(r.daily_rate) > 0).length === 38, 'tout le panel a un taux journalier');
+    ok(!people.some((r) => 'daily_rate' in r || 'rate_profile' in r), 'plus aucun taux journalier sur les personnes');
     eq([...new Set(people.map((r) => r.country))].sort(), ['DE', 'FR', 'IN', 'UK'], 'quatre pays');
-    const rates = people.filter((r) => Number(r.daily_rate) > 0).map((r) => Number(r.daily_rate));
-    ok(Math.min(...rates) < 400 && Math.max(...rates) > 800, 'taux de ' + Math.min(...rates) + ' à ' + Math.max(...rates) + ' € par jour');
+    const etp = c.repoList('EtpCost');
+    ok(['FR', 'DE', 'UK', 'IN'].every((k) => etp.some((r) => r.country === k)) && new Set(etp.map((r) => Number(r.year))).size === 2, 'le coût d’un ETP des quatre pays, pour l’année en cours et la suivante : ' + etp.length + ' lignes');
     const teams = c.repoList('HierarchicalTeam'), depth = (t) => (t.parent_team_id ? 1 + depth(teams.find((x) => x.id === t.parent_team_id)) : 0);
-    ok(teams.length === 11 && Math.max(...teams.map(depth)) === 2 && teams.every((t) => t.manager_resource_id), 'équipes en arbre sur trois niveaux, toutes avec un responsable');
+    ok(teams.length === 11 && Math.max(...teams.map(depth)) === 2 && teams.every((t) => t.manager_resource_id) && teams.every((t) => [3, 4].includes(t.name.length)), 'équipes en arbre sur trois niveaux, toutes avec un responsable, et un nom de 3 ou 4 caractères (leur niveau budgétaire)');
   });
 
   test('Organigramme : des rôles à tous les niveaux et trois personnes à positionner', () => {
@@ -120,7 +120,7 @@ module.exports = function () {
     eq(bal.cpns.filter((g) => g.overrun).map((g) => g.cpn), ['CPN-2403'], 'dépassement sur le CPN des outillages');
     ok(bal.cpns.every((g) => g.budget.external > 0 && g.budget.internal > 0 && g.po.committed > 0), 'budget interne et externe, engagements : sur chaque CPN');
     const lines = c.repoList('BudgetLine');
-    ok(lines.length >= 35 && lines.some((l) => l.cost_type === 'Forfait') && lines.some((l) => l.cost_type === 'TJM' && isTrue(l.is_external)) && lines.some((l) => l.cost_type === 'TJM' && !isTrue(l.is_external)), lines.length + ' lignes : forfaits, externes en jours, internes en jours');
+    ok(lines.length >= 35 && lines.some((l) => l.cost_type === 'Forfait') && lines.some((l) => l.cost_type === 'Équipe') && !lines.some((l) => l.cost_type === 'TJM') && lines.some((l) => l.cost_type === 'Équipe' && !isTrue(l.is_external)), lines.length + ' lignes : forfaits externes et parts d’équipe, plus aucun jours × taux');
     const po = call(c, 'po.list', { projectId: p1.id });
     eq([...new Set(po.orders.map((o) => o.status))].sort(), ['GR', 'Lancée', 'Terminée', 'À faire'], 'les quatre statuts de PO');
     eq(po.orders.filter((o) => o.gr_flag === 'late').length, 2, 'deux GR en retard');
@@ -202,7 +202,7 @@ module.exports = function () {
     ins('Dependency', { predecessor_id: l1.id, successor_id: l2.id, dep_type: 'FS', lag_days: 0 });
     ins('MilestoneRequirement', { milestone_id: j1.id, deliverable_id: l2.id });
     // ajouts faits en essayant les versions suivantes : budget, étalement, baseline, commande d'achat
-    const line = ins('BudgetLine', { deliverable_id: l1.id, resource_id: camille.id, cost_type: 'TJM', planned_days: 5, frozen_rate: 600, planned_amount: 3000, phasing_mode: 'auto', is_external: false });
+    const line = ins('BudgetLine', { deliverable_id: l1.id, resource_id: camille.id, cost_type: 'Forfait', fixed_amount: 3000, planned_amount: 3000, phasing_mode: 'auto', is_external: false });
     ins('BudgetPhasing', { budget_line_id: line.id, month: '2026-11', amount: 3000 });
     ins('Baseline', { project_id: proj.id, number: 0, label: 'B0', justification: 'Planning validé', status: 'Active' });
     const po = ins('PurchaseOrder', { po_number: 'CB-PILOTE', cpn: 'CPN-0001', resource_id: sam.id, amount: 1000, status: 'À faire', gr_due_date: w.todayStr() });

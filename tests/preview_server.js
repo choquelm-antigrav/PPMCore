@@ -87,11 +87,10 @@ call('admin@entreprise.com', 'admin.set', { values: { ai_quota: 40, logo_url: 'h
   const res = (n) => c.repoList('Resource').find((r) => r.name === n);
   const wp = (n) => c.repoList('WorkPackage').find((x) => x.name === n && !x.parent_wp_id);
   const pid = byName('Note de calcul primaire').project_id;
-  call(A, 'rates.set', { values: { profile: 'Ingénieur', country: 'FR', daily_rate: 540, effective_date: '2026-01-01' } });
-  call(A, 'rates.assign', { resource_id: res('Fay Colin').id, rate_profile: 'Ingénieur' });
+  const t1 = call(A, 'teams.create', { values: { name: 'T1A', country: 'FR' } });
   call(A, 'cpn.set', { projectId: pid, cpn: 'CPN-2401', cpn_label: 'Nacelle NAC-1 — conception' });
   call(A, 'wbs.update', { kind: 'wp', id: wp('Essais').id, patch: { cpn: 'CPN-2402', cpn_label: 'Nacelle NAC-1 — essais' } });
-  call(A, 'budget.line.save', { values: { deliverable_id: byName('Note de calcul primaire').id, resource_id: res('Fay Colin').id, planned_days: 22 } });
+  call(A, 'budget.line.save', { values: { deliverable_id: byName('Note de calcul primaire').id, team_id: t1.id, planned_amount: 11000 } });
   call(A, 'budget.line.save', { values: { deliverable_id: byName('Rapport d’essais statiques').id, resource_id: res('Carl Weber').id, fixed_amount: 18000 } });
   call(A, 'budget.line.save', { values: { deliverable_id: byName('Plan d’essais statiques').id, resource_id: res('Carl Weber').id, fixed_amount: 6000 } });
   const link = (name, amount) => ({ deliverable_id: byName(name).id, amount });
