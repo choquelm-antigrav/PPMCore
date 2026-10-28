@@ -291,6 +291,37 @@ function openPage(file, user, boot) {
   // un non-administrateur ne voit pas la zone
   check(denied.doc.getElementById('zone-donnees').hidden, 'la zone est masquée à un non-administrateur');
 
+  // ---------------------------------------------------------------- 0.19.1 : créer un programme depuis la page Administration
+  const pgAdm = openPage('Admin.html', ADMIN);
+  await pgAdm.until(() => pgAdm.doc.getElementById('pg-create'));
+  check(/Programmes/.test(pgAdm.doc.getElementById('zone-programmes').textContent) && !pgAdm.doc.getElementById('panel-programmes').hidden && /Programmes existants/.test(pgAdm.text('panel-programmes')) && /Créer un programme/.test(pgAdm.text('panel-programmes')), 'la page Administration a une zone « Programmes » : les programmes existants et le formulaire');
+  check(/Program Leader dans la page WBS/.test(pgAdm.text('panel-programmes')), 'le formulaire dit où désigner le Program Leader');
+  pgAdm.click(pgAdm.doc.getElementById('pg-create'));
+  await pgAdm.until(() => /obligatoire/.test(pgAdm.text('toast')));
+  check(/code du programme est obligatoire/.test(pgAdm.text('toast')), 'sans code : refusé, message clair : ' + pgAdm.text('toast'));
+  (pgAdm.doc.getElementById('pg-code').value = 'NAC2'); (pgAdm.doc.getElementById('pg-name').value = 'Programme nacelle 2'); (pgAdm.doc.getElementById('pg-desc').value = 'Créé depuis l’écran');
+  pgAdm.click(pgAdm.doc.getElementById('pg-create'));
+  await pgAdm.until(() => c.repoList('Program').some((g) => g.code === 'NAC2'));
+  await pgAdm.until(() => pgAdm.doc.querySelector('#panel-programmes tr[data-program]') && /NAC2/.test(pgAdm.text('panel-programmes')));
+  const made = c.repoList('Program').find((g) => g.code === 'NAC2');
+  check(made.name === 'Programme nacelle 2' && made.status === 'Actif' && made.description === 'Créé depuis l’écran' && /Programme « NAC2 » créé/.test(pgAdm.text('toast')), 'créé (statut Actif par défaut), confirmé, et la liste est rafraîchie');
+  (pgAdm.doc.getElementById('pg-code').value = 'nac2'); (pgAdm.doc.getElementById('pg-name').value = 'Doublon');
+  pgAdm.click(pgAdm.doc.getElementById('pg-create'));
+  await pgAdm.until(() => /déjà utilisé/.test(pgAdm.text('toast')));
+  check(c.repoList('Program').filter((g) => g.code.toLowerCase() === 'nac2').length === 1, 'un code déjà pris (même en minuscules) : refusé, rien de créé');
+  check(!denied.doc.getElementById('pg-create'), 'un non-administrateur n’a pas ce formulaire');
+  // le logo : le format attendu est dit, avec un aperçu tel qu'il s'affichera
+  const lg = pgAdm.doc.getElementById('f-logo');
+  check(/Logo de l’entreprise/.test(lg.closest('label').textContent) && !/Airbus/.test(lg.closest('label').textContent), 'le champ s’appelle « Logo de l’entreprise »');
+  const fmt = pgAdm.text('logo-format');
+  check(/https:\/\//.test(fmt) && /SVG/.test(fmt) && /PNG/.test(fmt) && /22 px de haut/.test(fmt) && /fond transparent/.test(fmt) && /barre bleue/.test(fmt) && /500 caractères/.test(fmt) && /lien Drive privé/.test(fmt), 'le format attendu est dit : https, SVG ou PNG, 22 px de haut, fond transparent version claire, 500 caractères, pas de lien Drive privé');
+  lg.value = 'http://exemple.org/logo.png'; lg.dispatchEvent(new pgAdm.win.Event('input', { bubbles: true }));
+  check(/Adresse invalide : https:\/\/ attendu/.test(pgAdm.text('logo-preview-msg')) && pgAdm.doc.getElementById('logo-preview').hidden, 'une adresse non https : refusée à la saisie, sans attendre l’enregistrement');
+  lg.value = 'https://exemple.org/logo.svg'; lg.dispatchEvent(new pgAdm.win.Event('input', { bubbles: true }));
+  check(pgAdm.doc.getElementById('logo-preview').getAttribute('src') === 'https://exemple.org/logo.svg' && !pgAdm.doc.getElementById('logo-strip').hidden && pgAdm.text('logo-preview-msg') === '', 'une adresse https : l’aperçu se charge sur la barre bleue');
+  lg.value = ''; lg.dispatchEvent(new pgAdm.win.Event('input', { bubbles: true }));
+  check(pgAdm.doc.getElementById('logo-strip').hidden, 'sans adresse : pas d’aperçu');
+
   // ---------------------------------------------------------------- 0.17.3 : « Mes jalons » : le responsable déclare ses jalons passés depuis son compte
   const msLate = w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name: 'Revue échue de Rémi', item_type: 'Jalon', planned_start: '2026-10-01', planned_finish: '2026-10-01', wp_id: w.w1.id, owner_resource_id: w.remi.id } });
   const msSoon = w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name: 'Revue à venir de Rémi', item_type: 'Jalon', planned_start: '2026-10-20', planned_finish: '2026-10-20', wp_id: w.w1.id, owner_resource_id: w.remi.id } });

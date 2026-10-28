@@ -31,7 +31,7 @@ var RIGHTS_ROWS = [
   { group: 'Planning et avancement', perm: 'milestone.pass', label: 'Marquer un jalon passé (ou le rouvrir)', where: 'le responsable du jalon (Deliverable owner) et les niveaux au-dessus' },
   { group: 'Planning et avancement', perm: 'baseline.request', label: 'Demander une baseline' },
   { group: 'Planning et avancement', perm: 'baseline.manage', label: 'Réactiver une baseline du projet, refuser une demande de baseline du projet' },
-  { group: 'Planning et avancement', perm: 'import.run', label: 'Exporter et importer un ou plusieurs projets par classeur Google Sheet', where: 'pour chaque projet touché ; créer un programme : l’administrateur ; créer un projet : le DPL du programme' },
+  { group: 'Planning et avancement', perm: 'import.run', label: 'Exporter et importer son projet par classeur Google Sheet (page WBS)', where: 'chef de projet et au-dessus, projet par projet ; plusieurs projets, programmes et personnes (page Administration) : l’administrateur seul' },
   { group: 'Budget et achats', perm: 'budget.authorize', label: 'Fixer l’enveloppe budgétaire du projet et des workpackages', where: 'celle d’un sous-workpackage : son Workpackage leader et au-dessus' },
   { group: 'Budget et achats', perm: 'exercise.read', label: 'Voir l’exercice budgétaire (attendu, accordé, parts par équipe)', where: 'en entier, au global du projet' },
   { group: 'Budget et achats', perm: 'exercise.edit', label: 'Saisir le budget attendu et accordé par équipe d’un projet (à la main ou par import d’un classeur Google Sheet)' },

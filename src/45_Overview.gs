@@ -19,10 +19,11 @@ function pl_(n, one, many) { return n + ' ' + (n > 1 ? many : one); }
 
 // ---------------------------------------------------------------- indicateurs (fonctions pures)
 
-/** Avancement attendu à la date du jour : pour chaque livrable, part du temps écoulé entre son début et sa fin, pondérée par sa durée. */
+/** Avancement attendu à la date du jour : pour chaque livrable, part du temps écoulé entre son début et sa fin, pondérée par sa durée ; un jalon pèse un jour et est attendu à 100 % à sa date (comme dans weightedProgress_). */
 function plannedProgress_(items, today, holFor) {
   var w = 0, acc = 0;
   items.forEach(function (it) {
+    if (it.item_type === 'Jalon' && !isBlank(it.planned_finish)) { w += 1; acc += today >= it.planned_finish ? 100 : 0; return; }
     if (it.item_type !== 'Livrable' || isBlank(it.planned_finish)) return;
     var d = Math.max(1, itemDuration(it, holFor(it.project_id)));
     var start = it.planned_start || it.planned_finish, finish = it.planned_finish;

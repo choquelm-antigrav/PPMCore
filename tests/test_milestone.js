@@ -124,4 +124,36 @@ module.exports = function () {
     const prompt = w.call(CP, 'news.digest.prompt', { projectId: w.p1.id }).prompt;
     ok(!/Jalons à venir :.*Revue \(/.test(prompt), 'le prompt des actualités ne l’annonce plus comme à venir');
   });
+
+  test('L’avancement d’un workpackage ou d’un sous-workpackage est hérité de ses livrables ET de ses jalons : un workpackage qui n’a qu’un jalon passé est à 100 %', () => {
+    const w = world();
+    const wp = (name, code, parent) => w.call(CP, 'wbs.create', { projectId: w.p1.id, kind: 'wp', parentId: parent ? parent.id : undefined, values: { name, wbs_code: code } });
+    const ms = (wpx, name, date) => w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name, item_type: 'Jalon', planned_start: date, planned_finish: date, wp_id: wpx.id, owner_resource_id: w.mia.id } });
+    const node = (kind, id) => w.call(CP, 'wbs.tree', { projectId: w.p1.id }).nodes.find((n) => n.ref === id && n.kind === kind);
+    const ganttWp = (id) => w.call(CP, 'gantt.project', { projectId: w.p1.id }).rows.find((r) => r.kind === 'wp' && r.wp_id === id);
+    // un workpackage qui n'a qu'un jalon
+    const alone = wp('Jalons seuls', 'J1'), only = ms(alone, 'Revue seule', '2026-10-02');
+    eq([node('wp', alone.id).progress, ganttWp(alone.id).progress], [0, 0], 'un jalon pas encore passé : le workpackage est à 0 %');
+    ok(w.raw(MEMBER, 'milestone.pass', { id: only.id }).ok);
+    eq([node('wp', alone.id).progress, ganttWp(alone.id).progress], [100, 100], 'le jalon est passé : le workpackage est à 100 % (arbre du WBS et planning)');
+    w.raw(MEMBER, 'milestone.pass', { id: only.id, passed: false });
+    eq(node('wp', alone.id).progress, 0, 'rouvert : retour à 0 %');
+    // un sous-workpackage qui n'a qu'un jalon passé : son parent en hérite
+    const parent = wp('Parent', 'P9'), child = wp('Enfant', 'P9.1', parent), cm = ms(child, 'Jalon enfant', '2026-10-02');
+    w.raw(MEMBER, 'milestone.pass', { id: cm.id });
+    eq([node('wp', child.id).progress, node('wp', parent.id).progress], [100, 100], 'le sous-workpackage est à 100 % et son parent, qui n’a que lui, aussi');
+    // un mélange : un livrable de 5 jours ouvrés à 50 % et un jalon passé (un jour) : (5 × 50 + 1 × 100) / 6 = 42
+    const mix = wp('Mélange', 'M1');
+    const del = w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name: 'Livrable mélange', item_type: 'Livrable', planned_start: '2026-10-12', planned_finish: '2026-10-16', wp_id: mix.id, owner_resource_id: w.mia.id } });
+    const mm = ms(mix, 'Jalon mélange', '2026-10-16');
+    w.call(MEMBER, 'progress.declare', { planItemId: del.id, progressPct: 50 });
+    eq(node('wp', mix.id).progress, 42, 'livrable à 50 % et jalon pas passé : (5 × 50 + 1 × 0) / 6 = 42');
+    w.raw(MEMBER, 'milestone.pass', { id: mm.id });
+    eq(node('wp', mix.id).progress, 58, 'jalon passé : (5 × 50 + 1 × 100) / 6 = 58');
+    // un livrable seul n'est pas changé : un workpackage de livrables garde son avancement pondéré par la durée
+    const dl = wp('Livrables seuls', 'L1');
+    const d2 = w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name: 'Livrable seul', item_type: 'Livrable', planned_start: '2026-10-12', planned_finish: '2026-10-16', wp_id: dl.id, owner_resource_id: w.mia.id } });
+    w.call(MEMBER, 'progress.declare', { planItemId: d2.id, progressPct: 40 });
+    eq(node('wp', dl.id).progress, 40, 'sans jalon : l’avancement du livrable, comme avant');
+  });
 };

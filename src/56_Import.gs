@@ -124,18 +124,26 @@ function importAnalyze_(parsed, existing) {
   var wpRows = parsed.Workpackages || [], seen = {};
   if (wpRows.length > IMPORT_LIMITS.workpackages) err('Workpackages', wpRows[IMPORT_LIMITS.workpackages]._row, 'Au plus ' + IMPORT_LIMITS.workpackages + ' workpackages par import.');
   var byCode = {}; existing.wps.forEach(function (w) { byCode[String(w.wbs_code)] = w; });
+  /**
+   * Le code d'un workpackage est une ÉTIQUETTE libre, comme dans la page WBS (20 caractères au plus, unique dans le projet) : « 1 », « 1.2 », « wp1.2 »… La hiérarchie vient de la colonne
+   * « Parent (code WBS) », jamais du code. (Avant la 0.19.1 l'import exigeait « 1 » ou « 1.2 » et refusait donc des codes que la page WBS accepte, même exportés tels quels.)
+   * Parent vide : un workpackage qui existe déjà garde son parent dans l'outil (on ne le déplace pas) ; un nouveau workpackage dont le code est « X.n » se range sous « X » si « X » existe.
+   */
+  var sheetCodes = {}; wpRows.forEach(function (r) { if (r['Code WBS']) sheetCodes[r['Code WBS']] = true; });
   wpRows.forEach(function (r) {
     var code = r['Code WBS'], parent = r['Parent (code WBS)'], row = r._row, bad = false;
     var rawCode = r._raw['Code WBS'];
-    if (!/^\d+(\.\d+)?$/.test(code)) { err('Workpackages', row, 'Code WBS « ' + code + ' » : « 1 » ou « 1.2 » (deux niveaux au plus).'); bad = true; }
+    if (!code) { err('Workpackages', row, 'Code WBS obligatoire.'); bad = true; }
+    else if (code.length > 20) { err('Workpackages', row, 'Code WBS « ' + code + ' » : 20 caractères au plus (la règle de la page WBS).'); bad = true; }
     else if (typeof rawCode === 'number' && code.indexOf('.') >= 0) warn('Workpackages', row, 'Le code « ' + code + ' » a été lu comme un nombre : si vous vouliez un code se terminant par un zéro (« 1.10 »), mettez la colonne au format « Texte brut » (le modèle le fait).');
     if (code && seen[code]) { err('Workpackages', row, 'Le code « ' + code + ' » est déjà à la ligne ' + seen[code] + '.'); bad = true; }
     seen[code] = row;
-    if (!parent && code.indexOf('.') > 0) parent = code.slice(0, code.lastIndexOf('.'));
-    if (parent) {
-      if (!/^\d+$/.test(parent)) { err('Workpackages', row, 'Parent « ' + parent + ' » : un code de workpackage de premier niveau.'); bad = true; }
-      else if (code && code.indexOf(parent + '.') !== 0) { err('Workpackages', row, 'Le code « ' + code + ' » doit commencer par celui de son parent (« ' + parent + '. »).'); bad = true; }
-    } else if (/\./.test(code)) { bad = true; }
+    var exCur = code ? byCode[code] : null;
+    if (!parent) {
+      if (exCur) parent = exCur.parent_wp_id ? String((existing.wps.filter(function (x) { return x.id === exCur.parent_wp_id; })[0] || {}).wbs_code || '') : '';
+      else if (code.indexOf('.') > 0) { var guess = code.slice(0, code.lastIndexOf('.')); if (byCode[guess] || sheetCodes[guess]) parent = guess; }
+    }
+    if (parent && parent === code) { err('Workpackages', row, 'Un workpackage ne peut pas être son propre parent.'); bad = true; }
     if (!r['Nom']) { err('Workpackages', row, 'Nom obligatoire.'); bad = true; }
     var leader = person('Workpackages', row, r['Leader (e-mail)'], 'Leader', false);
     var env = importAmount_(r._raw['Enveloppe (€)']);
@@ -147,8 +155,8 @@ function importAnalyze_(parsed, existing) {
   var planCodes = {}; plan.wps.forEach(function (w) { planCodes[w.code] = w; });
   plan.wps.forEach(function (w) {
     if (w.parent && !planCodes[w.parent] && !byCode[w.parent]) err('Workpackages', w.row, 'Parent « ' + w.parent + ' » : ce workpackage n’existe ni dans le classeur ni dans le projet.');
-    if (w.parent && byCode[w.parent] && !isBlank(byCode[w.parent].parent_wp_id)) err('Workpackages', w.row, 'Parent « ' + w.parent + ' » est déjà un sous-workpackage : deux niveaux au plus.');
-    if (w.parent && planCodes[w.parent] && planCodes[w.parent].parent) err('Workpackages', w.row, 'Parent « ' + w.parent + ' » est déjà un sous-workpackage : deux niveaux au plus.');
+    if (w.parent && byCode[w.parent] && !isBlank(byCode[w.parent].parent_wp_id)) err('Workpackages', w.row, 'Parent « ' + w.parent + ' » est lui-même un sous-workpackage : l’outil n’a que deux niveaux (workpackage, sous-workpackage).');
+    if (w.parent && planCodes[w.parent] && planCodes[w.parent].parent) err('Workpackages', w.row, 'Parent « ' + w.parent + ' » est lui-même un sous-workpackage : l’outil n’a que deux niveaux (workpackage, sous-workpackage).');
     if (w.existing) {
       var exParent = w.existing.parent_wp_id ? (existing.wps.filter(function (x) { return x.id === w.existing.parent_wp_id; })[0] || {}).wbs_code : '';
       if (String(exParent || '') !== w.parent) warn('Workpackages', w.row, 'Le workpackage « ' + w.code + ' » est rattaché à « ' + (exParent || 'la racine') + ' » dans l’outil : l’import ne le déplace pas.');
@@ -271,8 +279,8 @@ function importAnalyze_(parsed, existing) {
   if (plan.project && plan.project.authorized !== '' && Number(existing.project.budget_authorized) !== plan.project.authorized) counts.envelope++;
   // pas dans le classeur
   var inSheetWps = {}; plan.wps.forEach(function (w) { inSheetWps[w.code] = true; });
-  var onlyInTool = existing.wps.filter(function (w) { return parsed.Workpackages && parsed.Workpackages.length && !inSheetWps[String(w.wbs_code)]; }).length;
-  if (onlyInTool) warnings.push({ tab: 'Workpackages', row: 0, message: onlyInTool + ' workpackage(s) du projet ne sont pas dans le classeur : ils sont laissés tels quels (l’import ne supprime jamais rien).' });
+  var missing = existing.wps.filter(function (w) { return parsed.Workpackages && parsed.Workpackages.length && !inSheetWps[String(w.wbs_code)]; }).map(function (w) { return String(w.wbs_code); });
+  if (missing.length) warnings.push({ tab: 'Workpackages', row: 0, message: missing.length + ' workpackage(s) du projet n’apparaissent pas dans l’onglet Workpackages du classeur (' + missing.slice(0, 5).join(', ') + (missing.length > 5 ? '…' : '') + ') : ils sont laissés tels quels, l’import ne supprime jamais rien.' });
   return { errors: errors, warnings: warnings, plan: plan, counts: counts };
 }
 
@@ -350,6 +358,16 @@ function importPersonId_(r) {
 
 function importCan_(ctx, project) {
   return !!ctx.isAdmin || can(ctx, 'import.run', { type: 'project', id: project.id });
+}
+
+/**
+ * L'import et l'export de PLUSIEURS projets (page Administration : aucun `projectId`) sont réservés à l'administrateur (0.19.1) : ils créent des programmes, des projets et des personnes.
+ * Un chef de projet (ou au-dessus) exporte et importe SON projet depuis la page WBS, avec `projectId`.
+ */
+function importRequireAdminUnlessSingle_(p, ctx) {
+  if (isBlank(p.projectId) && !ctx.isAdmin) {
+    throw new PpmError('FORBIDDEN', 'L’import et l’export de plusieurs projets (page Administration) sont réservés à l’administrateur. Un chef de projet importe son projet depuis la page WBS.');
+  }
 }
 
 function importRequire_(ctx, projectId) {
@@ -690,6 +708,7 @@ function importSelectProjects_(p, ctx) {
 }
 
 defineAction('import.template', function (p, ctx) {
+  importRequireAdminUnlessSingle_(p, ctx);
   var sel = importSelectProjects_(p, ctx);
   var title = 'PPM — ' + (sel.projects.length === 1 ? 'Export du projet ' + sel.projects[0].code : 'Export de ' + sel.projects.length + ' projets') + ' — ' + todayStr();
   var wb = importBuildWorkbook_(ctx, sel.projects, title, sel.projects.length === 1 ? sel.projects[0] : null);
@@ -699,6 +718,7 @@ defineAction('import.template', function (p, ctx) {
 
 /** Les programmes et projets de l'outil, avec ce que l'appelant peut exporter : pour choisir quoi exporter, et savoir ce qu'il peut créer. */
 defineAction('import.catalog', function (p, ctx) {
+  if (!ctx.isAdmin) throw new PpmError('FORBIDDEN', 'Le catalogue d’import et d’export de plusieurs projets est réservé à l’administrateur (page Administration).');
   var programs = repoList('Program'), projects = repoList('Project');
   var view = function (x) { return { id: x.id, code: x.code, name: x.name, status: x.status || '', canExport: importCan_(ctx, x) }; };
   var byProgram = {}; projects.forEach(function (x) { (byProgram[x.program_id || ''] = byProgram[x.program_id || ''] || []).push(view(x)); });
@@ -713,6 +733,7 @@ defineAction('import.catalog', function (p, ctx) {
 // ---------------------------------------------------------------- analyse
 
 defineAction('import.analyze', function (p, ctx) {
+  importRequireAdminUnlessSingle_(p, ctx);
   var single = !isBlank(p.projectId) ? importRequire_(ctx, p.projectId) : null;
   var book = importReadBook_(requireParam(p, 'book'));
   var all = importAnalyzeAll_(book, ctx, { projectId: single ? single.id : '' });
@@ -845,6 +866,7 @@ function importApplyProject_(ctx, project, bp, io) {
  * (sans `resume`), une copie de sécurité des projets existants est enregistrée d'abord : si elle échoue, rien n'est écrit.
  */
 defineAction('import.run', function (p, ctx) {
+  importRequireAdminUnlessSingle_(p, ctx);
   var single = !isBlank(p.projectId) ? importRequire_(ctx, p.projectId) : null;
   var opts = { projectId: single ? single.id : '' };
   var book = importReadBook_(requireParam(p, 'book'));

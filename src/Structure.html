@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.19.0">
+<meta name="ppm-version" content="0.19.1">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <?!= include('CommonForms') ?>
@@ -83,6 +83,12 @@
   dialog[id^="confirm"] { width: min(460px, calc(100% - 32px)); }
   .btn.danger:hover { filter: brightness(.92); background: var(--red); }
   #wbs-actions { margin: 4px 0 16px; padding-top: 12px; border-top: 1px solid var(--rule); }
+  #wbs-actions > h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
+  .act-group { margin: 0 0 14px; }
+  .act-group h4 { margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .act-group .btn { display: flex; width: 100%; justify-content: flex-start; margin: 0 0 6px; text-align: left; }
+  .act-group.danger h4 { color: var(--alert-ink, var(--red)); }
+  .act-group.danger .btn { color: var(--alert-ink, var(--red)); }
   dialog[id^="genform"] { width: min(520px, calc(100% - 32px)); max-width: none; }
   .deps h3 { margin: 4px 0 8px; font-size: 15px; font-weight: 600; }
   .dep-row, aside ul.member-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; }

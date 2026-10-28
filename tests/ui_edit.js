@@ -297,6 +297,39 @@ function openPage(user) {
   await rw.pick('item:' + lateMs.id, 'Revue dépassée');
   check(!!rw.$('pass-milestone') && rw.text('pass-milestone') === 'Marquer le jalon passé', 'le Workpackage leader du workpackage peut aussi le déclarer');
 
+  // ---------------------------------------------------------------- 0.19.1 : les actions du panneau de droite, l'une sous l'autre, par catégorie
+  const mineDel = w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name: 'Livrable de Mia', item_type: 'Livrable', planned_start: '2026-10-12', planned_finish: '2026-10-16', wp_id: wpx.id, owner_resource_id: w.mia.id } });
+  const carlaDel = w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name: 'Livrable de Carla', item_type: 'Livrable', planned_start: '2026-10-12', planned_finish: '2026-10-16', wp_id: wpx.id, owner_resource_id: w.carla.id } });
+  c.repoInsert('RoleAssignment', { resource_id: w.mia.id, role_code: 'CONTRIB', scope_type: 'planitem', scope_id: carlaDel.id }, { actor: 'setup', source: 'setup' });
+  const y = openPage(MEMBER);
+  await y.until(() => y.doc.querySelector('#canvas-wbs .node[data-id="item:' + mineDel.id + '"]'));
+  const groups = (pg) => [...pg.doc.querySelectorAll('#wbs-actions .act-group')].map((g) => g.querySelector('h4').textContent + ':' + [...g.querySelectorAll('button')].map((b) => b.textContent).join('/'));
+  await y.pick('item:' + mineDel.id, 'Livrable de Mia');
+  check(y.doc.querySelector('#wbs-actions').tagName === 'SECTION' && y.doc.querySelector('#wbs-actions > h3').textContent === 'Actions', 'le panneau d’actions a son titre « Actions »');
+  check(JSON.stringify(groups(y)) === JSON.stringify(['Avancement:Marquer terminé (100 %)/Déclarer l’avancement…', 'Édition:Modifier', 'Zone sensible:Supprimer']), 'un livrable : catégories Avancement, Édition, Zone sensible ; boutons l’un sous l’autre : ' + JSON.stringify(groups(y)));
+  check(y.doc.querySelector('.act-group.danger h4').textContent === 'Zone sensible' && y.doc.querySelectorAll('.act-group.danger button').length === 1, 'la suppression est isolée dans une catégorie « Zone sensible »');
+  check(!!(y.doc.getElementById('wbs-actions').compareDocumentPosition(y.doc.getElementById('roles-box')) & 4), 'les actions viennent avant les rôles dans le panneau');
+  y.click(y.$('mark-done'));
+  await y.until(() => Number(c.repoGet('PlanItem', mineDel.id).progress_pct) === 100);
+  await y.until(() => y.$('declare-progress') && /Corriger l’avancement/.test(y.text('declare-progress')));
+  check(c.repoGet('PlanItem', mineDel.id).status === 'Terminé' && !y.$('mark-done'), 'terminé d’un clic : le bouton disparaît, « Déclarer » devient « Corriger l’avancement… »');
+  y.click(y.$('declare-progress'));
+  await y.until(() => y.$('genform').open && y.$('gf-pct'));
+  y.fill('gf-pct', '150'); y.$('gf-form').dispatchEvent(new y.win.Event('submit', { cancelable: true }));
+  await y.until(() => !y.$('gf-error').hidden);
+  check(/entre 0 et 100/.test(y.text('gf-error')), 'un pourcentage hors de 0 à 100 : refusé');
+  y.fill('gf-pct', '40'); y.fill('gf-comment', 'repris'); y.$('gf-form').dispatchEvent(new y.win.Event('submit', { cancelable: true }));
+  await y.until(() => Number(c.repoGet('PlanItem', mineDel.id).progress_pct) === 40);
+  check(c.repoGet('PlanItem', mineDel.id).status !== 'Terminé', 'corrigé à 40 % : le livrable n’est plus terminé');
+  await y.pick('item:' + carlaDel.id, 'Livrable de Carla');
+  check(JSON.stringify(groups(y)) === JSON.stringify(['Avancement:Marquer terminé (100 %)/Déclarer l’avancement…']), 'un Contributor : seulement la catégorie Avancement, ni Modifier ni Supprimer : ' + JSON.stringify(groups(y)));
+  await y.pick('wp:' + wpx.id, 'Jalons de revue');
+  check(groups(y).length === 0 || !y.doc.getElementById('wbs-actions'), 'un Contributor sur un workpackage : pas de panneau d’actions');
+  const rr = openPage(RWP);
+  await rr.until(() => rr.doc.querySelector('#canvas-wbs .node[data-id="wp:' + wpx.id + '"]'));
+  await rr.pick('wp:' + wpx.id, 'Jalons de revue');
+  check(JSON.stringify(groups(rr)) === JSON.stringify(['Ajouter:Ajouter un sous-workpackage/Ajouter un livrable/Ajouter un jalon', 'Édition:Modifier', 'Zone sensible:Supprimer']), 'un workpackage : Ajouter (sous-workpackage, livrable, jalon), Édition, Zone sensible : ' + JSON.stringify(groups(rr)));
+
   console.log(failed ? '\n' + failed + ' échec(s).' : '\nÉdition du WBS : tout est conforme.');
   process.exit(failed ? 1 : 0);
 })();

@@ -74,14 +74,21 @@ function isDone_(it) {
   return it.status === 'Terminé' || Number(it.progress_pct) >= 100;
 }
 
-/** Avancement pondéré par la durée (jours ouvrés) des livrables. */
+/**
+ * Avancement d'un ensemble d'éléments (un workpackage, un sous-workpackage, un projet) : il est HÉRITÉ de ses livrables ET de ses jalons. Un livrable pèse sa durée en jours ouvrés et vaut son
+ * avancement ; un jalon pèse un jour et vaut 100 % s'il est passé (statut Terminé : voir `milestone.pass`), 0 % sinon. Un workpackage qui n'a qu'un jalon passé est donc à 100 %.
+ */
 function weightedProgress_(items, holFor) {
   var w = 0, acc = 0;
   items.forEach(function (it) {
-    if (it.item_type !== 'Livrable') return;
-    var d = Math.max(1, itemDuration(it, holFor(it.project_id)));
-    w += d;
-    acc += d * Math.min(100, Math.max(0, Number(it.progress_pct) || 0));
+    if (it.item_type === 'Livrable') {
+      var d = Math.max(1, itemDuration(it, holFor(it.project_id)));
+      w += d;
+      acc += d * Math.min(100, Math.max(0, Number(it.progress_pct) || 0));
+    } else if (it.item_type === 'Jalon') {
+      w += 1;
+      acc += isDone_(it) ? 100 : 0;
+    }
   });
   return w ? Math.round(acc / w) : 0;
 }
@@ -165,7 +172,8 @@ function buildProjectGantt(data, projectId, ctx, today) {
       violated: !!violatedItem[it.id], version: it.version,
       mine: !isBlank(it.owner_resource_id) && it.owner_resource_id === uctx.resourceId, // « les miens » : responsable de l'élément (0.15.2)
       canEdit: can(uctx, 'wbs.edit', { type: 'planitem', id: it.id }),
-      canDeclare: it.item_type === 'Livrable' && can(uctx, 'progress.declare', { type: 'planitem', id: it.id })
+      canDeclare: it.item_type === 'Livrable' && can(uctx, 'progress.declare', { type: 'planitem', id: it.id }),
+      canPass: it.item_type === 'Jalon' && can(uctx, 'milestone.pass', { type: 'planitem', id: it.id })   // jalon : le déclarer passé (0.19.1)
     }, baselineOf(it));
   }
 

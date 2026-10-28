@@ -1,5 +1,5 @@
 /**
- * PPM Core 0.19.0 — fichier unique à installer (fabriqué par tools/build.js, empreinte 0734d7c8c691).
+ * PPM Core 0.19.1 — fichier unique à installer (fabriqué par tools/build.js, empreinte 50970adb87fe).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
  * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs, 53_Roles.gs, 54_Validation.gs, 55_Envelope.gs, 56_Import.gs, 57_Rights.gs, 58_ScopeBaselines.gs, 59_TeamImport.gs, 60_Exercise.gs, 61_ExerciseImport.gs, 62_ExerciseVersion.gs, 63_ExerciseRules.gs, 64_ExerciseTracking.gs.
  */
@@ -47,7 +47,7 @@ function A9_MIGRER_ROLES_SIMULATION() { return migrerRoles_(true); }
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.19.0';
+var PPM_VERSION = '0.19.1';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -3190,9 +3190,21 @@ defineAction('me.roles', function (p, ctx) {
 
 defineAction('programs.list', function (p) { return paginate(repoList('Program'), p); });
 
+/**
+ * Créer un programme : l'administrateur (ou un Program Leader : droit program.create). Code et nom obligatoires, code unique sans tenir compte de la casse. Le Program Leader du programme se désigne
+ * ensuite dans la page WBS (carte du programme) : seul l'administrateur le pose. Formulaire « Créer un programme » de la page Administration (0.19.1) ; l'import de projets passe par la même action.
+ */
 defineAction('programs.create', function (p, ctx) {
   requireCan(ctx, 'program.create', { type: 'global' });
-  return repoInsert('Program', p.values || {}, ctx.actx);
+  var v = p.values || {}, code = String(v.code || '').trim(), name = String(v.name || '').trim();
+  if (!code) throw new PpmError('VALIDATION', 'Le code du programme est obligatoire.');
+  if (code.length > 20) throw new PpmError('VALIDATION', 'Code du programme : 20 caractères au plus.');
+  if (!name) throw new PpmError('VALIDATION', 'Le nom du programme est obligatoire.');
+  if (name.length > 120) throw new PpmError('VALIDATION', 'Nom du programme : 120 caractères au plus.');
+  if (repoList('Program', function (x) { return !isTrue(x.deleted) && String(x.code).trim().toLowerCase() === code.toLowerCase(); }).length) {
+    throw new PpmError('VALIDATION', 'Le code « ' + code + ' » est déjà utilisé par un autre programme.');
+  }
+  return repoInsert('Program', { code: code, name: name, status: isBlank(v.status) ? 'Actif' : v.status, description: String(v.description || '').trim().slice(0, 500), leader_resource_id: v.leader_resource_id || '' }, ctx.actx);
 });
 
 defineAction('projects.list', function (p) {
@@ -3652,14 +3664,21 @@ function isDone_(it) {
   return it.status === 'Terminé' || Number(it.progress_pct) >= 100;
 }
 
-/** Avancement pondéré par la durée (jours ouvrés) des livrables. */
+/**
+ * Avancement d'un ensemble d'éléments (un workpackage, un sous-workpackage, un projet) : il est HÉRITÉ de ses livrables ET de ses jalons. Un livrable pèse sa durée en jours ouvrés et vaut son
+ * avancement ; un jalon pèse un jour et vaut 100 % s'il est passé (statut Terminé : voir `milestone.pass`), 0 % sinon. Un workpackage qui n'a qu'un jalon passé est donc à 100 %.
+ */
 function weightedProgress_(items, holFor) {
   var w = 0, acc = 0;
   items.forEach(function (it) {
-    if (it.item_type !== 'Livrable') return;
-    var d = Math.max(1, itemDuration(it, holFor(it.project_id)));
-    w += d;
-    acc += d * Math.min(100, Math.max(0, Number(it.progress_pct) || 0));
+    if (it.item_type === 'Livrable') {
+      var d = Math.max(1, itemDuration(it, holFor(it.project_id)));
+      w += d;
+      acc += d * Math.min(100, Math.max(0, Number(it.progress_pct) || 0));
+    } else if (it.item_type === 'Jalon') {
+      w += 1;
+      acc += isDone_(it) ? 100 : 0;
+    }
   });
   return w ? Math.round(acc / w) : 0;
 }
@@ -3743,7 +3762,8 @@ function buildProjectGantt(data, projectId, ctx, today) {
       violated: !!violatedItem[it.id], version: it.version,
       mine: !isBlank(it.owner_resource_id) && it.owner_resource_id === uctx.resourceId, // « les miens » : responsable de l'élément (0.15.2)
       canEdit: can(uctx, 'wbs.edit', { type: 'planitem', id: it.id }),
-      canDeclare: it.item_type === 'Livrable' && can(uctx, 'progress.declare', { type: 'planitem', id: it.id })
+      canDeclare: it.item_type === 'Livrable' && can(uctx, 'progress.declare', { type: 'planitem', id: it.id }),
+      canPass: it.item_type === 'Jalon' && can(uctx, 'milestone.pass', { type: 'planitem', id: it.id })   // jalon : le déclarer passé (0.19.1)
     }, baselineOf(it));
   }
 
@@ -4204,7 +4224,8 @@ function buildWbsTree(data, projectId, today, ctx) {
       late: !isDone_(i) && !isBlank(itemFinish(i)) && itemFinish(i) < today,
       ref: i.id, version: i.version, owner_id: i.owner_resource_id || '', wp_ref: i.wp_id || '', raw_start: i.planned_start || '', raw_finish: i.planned_finish || '',
       milestone_category: i.milestone_category || '', dep_count: depCount[i.id] || 0, canEdit: canEdit('planitem', i.id),
-      canPass: i.item_type === 'Jalon' && !!ctx && can(ctx, 'milestone.pass', { type: 'planitem', id: i.id }), passed_on: i.item_type === 'Jalon' && !isBlank(i.actual_finish) ? String(i.actual_finish) : ''
+      canPass: i.item_type === 'Jalon' && !!ctx && can(ctx, 'milestone.pass', { type: 'planitem', id: i.id }),
+      canDeclare: i.item_type === 'Livrable' && !!ctx && can(ctx, 'progress.declare', { type: 'planitem', id: i.id }), passed_on: i.item_type === 'Jalon' && !isBlank(i.actual_finish) ? String(i.actual_finish) : ''
     }, ownerOf(i.owner_resource_id)));
   };
   (childrenOfWp[''] || []).slice().sort(byWbs_).forEach(function (w) { emitWp(w, rootId); });
@@ -8839,10 +8860,11 @@ function pl_(n, one, many) { return n + ' ' + (n > 1 ? many : one); }
 
 // ---------------------------------------------------------------- indicateurs (fonctions pures)
 
-/** Avancement attendu à la date du jour : pour chaque livrable, part du temps écoulé entre son début et sa fin, pondérée par sa durée. */
+/** Avancement attendu à la date du jour : pour chaque livrable, part du temps écoulé entre son début et sa fin, pondérée par sa durée ; un jalon pèse un jour et est attendu à 100 % à sa date (comme dans weightedProgress_). */
 function plannedProgress_(items, today, holFor) {
   var w = 0, acc = 0;
   items.forEach(function (it) {
+    if (it.item_type === 'Jalon' && !isBlank(it.planned_finish)) { w += 1; acc += today >= it.planned_finish ? 100 : 0; return; }
     if (it.item_type !== 'Livrable' || isBlank(it.planned_finish)) return;
     var d = Math.max(1, itemDuration(it, holFor(it.project_id)));
     var start = it.planned_start || it.planned_finish, finish = it.planned_finish;
@@ -12167,18 +12189,26 @@ function importAnalyze_(parsed, existing) {
   var wpRows = parsed.Workpackages || [], seen = {};
   if (wpRows.length > IMPORT_LIMITS.workpackages) err('Workpackages', wpRows[IMPORT_LIMITS.workpackages]._row, 'Au plus ' + IMPORT_LIMITS.workpackages + ' workpackages par import.');
   var byCode = {}; existing.wps.forEach(function (w) { byCode[String(w.wbs_code)] = w; });
+  /**
+   * Le code d'un workpackage est une ÉTIQUETTE libre, comme dans la page WBS (20 caractères au plus, unique dans le projet) : « 1 », « 1.2 », « wp1.2 »… La hiérarchie vient de la colonne
+   * « Parent (code WBS) », jamais du code. (Avant la 0.19.1 l'import exigeait « 1 » ou « 1.2 » et refusait donc des codes que la page WBS accepte, même exportés tels quels.)
+   * Parent vide : un workpackage qui existe déjà garde son parent dans l'outil (on ne le déplace pas) ; un nouveau workpackage dont le code est « X.n » se range sous « X » si « X » existe.
+   */
+  var sheetCodes = {}; wpRows.forEach(function (r) { if (r['Code WBS']) sheetCodes[r['Code WBS']] = true; });
   wpRows.forEach(function (r) {
     var code = r['Code WBS'], parent = r['Parent (code WBS)'], row = r._row, bad = false;
     var rawCode = r._raw['Code WBS'];
-    if (!/^\d+(\.\d+)?$/.test(code)) { err('Workpackages', row, 'Code WBS « ' + code + ' » : « 1 » ou « 1.2 » (deux niveaux au plus).'); bad = true; }
+    if (!code) { err('Workpackages', row, 'Code WBS obligatoire.'); bad = true; }
+    else if (code.length > 20) { err('Workpackages', row, 'Code WBS « ' + code + ' » : 20 caractères au plus (la règle de la page WBS).'); bad = true; }
     else if (typeof rawCode === 'number' && code.indexOf('.') >= 0) warn('Workpackages', row, 'Le code « ' + code + ' » a été lu comme un nombre : si vous vouliez un code se terminant par un zéro (« 1.10 »), mettez la colonne au format « Texte brut » (le modèle le fait).');
     if (code && seen[code]) { err('Workpackages', row, 'Le code « ' + code + ' » est déjà à la ligne ' + seen[code] + '.'); bad = true; }
     seen[code] = row;
-    if (!parent && code.indexOf('.') > 0) parent = code.slice(0, code.lastIndexOf('.'));
-    if (parent) {
-      if (!/^\d+$/.test(parent)) { err('Workpackages', row, 'Parent « ' + parent + ' » : un code de workpackage de premier niveau.'); bad = true; }
-      else if (code && code.indexOf(parent + '.') !== 0) { err('Workpackages', row, 'Le code « ' + code + ' » doit commencer par celui de son parent (« ' + parent + '. »).'); bad = true; }
-    } else if (/\./.test(code)) { bad = true; }
+    var exCur = code ? byCode[code] : null;
+    if (!parent) {
+      if (exCur) parent = exCur.parent_wp_id ? String((existing.wps.filter(function (x) { return x.id === exCur.parent_wp_id; })[0] || {}).wbs_code || '') : '';
+      else if (code.indexOf('.') > 0) { var guess = code.slice(0, code.lastIndexOf('.')); if (byCode[guess] || sheetCodes[guess]) parent = guess; }
+    }
+    if (parent && parent === code) { err('Workpackages', row, 'Un workpackage ne peut pas être son propre parent.'); bad = true; }
     if (!r['Nom']) { err('Workpackages', row, 'Nom obligatoire.'); bad = true; }
     var leader = person('Workpackages', row, r['Leader (e-mail)'], 'Leader', false);
     var env = importAmount_(r._raw['Enveloppe (€)']);
@@ -12190,8 +12220,8 @@ function importAnalyze_(parsed, existing) {
   var planCodes = {}; plan.wps.forEach(function (w) { planCodes[w.code] = w; });
   plan.wps.forEach(function (w) {
     if (w.parent && !planCodes[w.parent] && !byCode[w.parent]) err('Workpackages', w.row, 'Parent « ' + w.parent + ' » : ce workpackage n’existe ni dans le classeur ni dans le projet.');
-    if (w.parent && byCode[w.parent] && !isBlank(byCode[w.parent].parent_wp_id)) err('Workpackages', w.row, 'Parent « ' + w.parent + ' » est déjà un sous-workpackage : deux niveaux au plus.');
-    if (w.parent && planCodes[w.parent] && planCodes[w.parent].parent) err('Workpackages', w.row, 'Parent « ' + w.parent + ' » est déjà un sous-workpackage : deux niveaux au plus.');
+    if (w.parent && byCode[w.parent] && !isBlank(byCode[w.parent].parent_wp_id)) err('Workpackages', w.row, 'Parent « ' + w.parent + ' » est lui-même un sous-workpackage : l’outil n’a que deux niveaux (workpackage, sous-workpackage).');
+    if (w.parent && planCodes[w.parent] && planCodes[w.parent].parent) err('Workpackages', w.row, 'Parent « ' + w.parent + ' » est lui-même un sous-workpackage : l’outil n’a que deux niveaux (workpackage, sous-workpackage).');
     if (w.existing) {
       var exParent = w.existing.parent_wp_id ? (existing.wps.filter(function (x) { return x.id === w.existing.parent_wp_id; })[0] || {}).wbs_code : '';
       if (String(exParent || '') !== w.parent) warn('Workpackages', w.row, 'Le workpackage « ' + w.code + ' » est rattaché à « ' + (exParent || 'la racine') + ' » dans l’outil : l’import ne le déplace pas.');
@@ -12314,8 +12344,8 @@ function importAnalyze_(parsed, existing) {
   if (plan.project && plan.project.authorized !== '' && Number(existing.project.budget_authorized) !== plan.project.authorized) counts.envelope++;
   // pas dans le classeur
   var inSheetWps = {}; plan.wps.forEach(function (w) { inSheetWps[w.code] = true; });
-  var onlyInTool = existing.wps.filter(function (w) { return parsed.Workpackages && parsed.Workpackages.length && !inSheetWps[String(w.wbs_code)]; }).length;
-  if (onlyInTool) warnings.push({ tab: 'Workpackages', row: 0, message: onlyInTool + ' workpackage(s) du projet ne sont pas dans le classeur : ils sont laissés tels quels (l’import ne supprime jamais rien).' });
+  var missing = existing.wps.filter(function (w) { return parsed.Workpackages && parsed.Workpackages.length && !inSheetWps[String(w.wbs_code)]; }).map(function (w) { return String(w.wbs_code); });
+  if (missing.length) warnings.push({ tab: 'Workpackages', row: 0, message: missing.length + ' workpackage(s) du projet n’apparaissent pas dans l’onglet Workpackages du classeur (' + missing.slice(0, 5).join(', ') + (missing.length > 5 ? '…' : '') + ') : ils sont laissés tels quels, l’import ne supprime jamais rien.' });
   return { errors: errors, warnings: warnings, plan: plan, counts: counts };
 }
 
@@ -12393,6 +12423,16 @@ function importPersonId_(r) {
 
 function importCan_(ctx, project) {
   return !!ctx.isAdmin || can(ctx, 'import.run', { type: 'project', id: project.id });
+}
+
+/**
+ * L'import et l'export de PLUSIEURS projets (page Administration : aucun `projectId`) sont réservés à l'administrateur (0.19.1) : ils créent des programmes, des projets et des personnes.
+ * Un chef de projet (ou au-dessus) exporte et importe SON projet depuis la page WBS, avec `projectId`.
+ */
+function importRequireAdminUnlessSingle_(p, ctx) {
+  if (isBlank(p.projectId) && !ctx.isAdmin) {
+    throw new PpmError('FORBIDDEN', 'L’import et l’export de plusieurs projets (page Administration) sont réservés à l’administrateur. Un chef de projet importe son projet depuis la page WBS.');
+  }
 }
 
 function importRequire_(ctx, projectId) {
@@ -12733,6 +12773,7 @@ function importSelectProjects_(p, ctx) {
 }
 
 defineAction('import.template', function (p, ctx) {
+  importRequireAdminUnlessSingle_(p, ctx);
   var sel = importSelectProjects_(p, ctx);
   var title = 'PPM — ' + (sel.projects.length === 1 ? 'Export du projet ' + sel.projects[0].code : 'Export de ' + sel.projects.length + ' projets') + ' — ' + todayStr();
   var wb = importBuildWorkbook_(ctx, sel.projects, title, sel.projects.length === 1 ? sel.projects[0] : null);
@@ -12742,6 +12783,7 @@ defineAction('import.template', function (p, ctx) {
 
 /** Les programmes et projets de l'outil, avec ce que l'appelant peut exporter : pour choisir quoi exporter, et savoir ce qu'il peut créer. */
 defineAction('import.catalog', function (p, ctx) {
+  if (!ctx.isAdmin) throw new PpmError('FORBIDDEN', 'Le catalogue d’import et d’export de plusieurs projets est réservé à l’administrateur (page Administration).');
   var programs = repoList('Program'), projects = repoList('Project');
   var view = function (x) { return { id: x.id, code: x.code, name: x.name, status: x.status || '', canExport: importCan_(ctx, x) }; };
   var byProgram = {}; projects.forEach(function (x) { (byProgram[x.program_id || ''] = byProgram[x.program_id || ''] || []).push(view(x)); });
@@ -12756,6 +12798,7 @@ defineAction('import.catalog', function (p, ctx) {
 // ---------------------------------------------------------------- analyse
 
 defineAction('import.analyze', function (p, ctx) {
+  importRequireAdminUnlessSingle_(p, ctx);
   var single = !isBlank(p.projectId) ? importRequire_(ctx, p.projectId) : null;
   var book = importReadBook_(requireParam(p, 'book'));
   var all = importAnalyzeAll_(book, ctx, { projectId: single ? single.id : '' });
@@ -12888,6 +12931,7 @@ function importApplyProject_(ctx, project, bp, io) {
  * (sans `resume`), une copie de sécurité des projets existants est enregistrée d'abord : si elle échoue, rien n'est écrit.
  */
 defineAction('import.run', function (p, ctx) {
+  importRequireAdminUnlessSingle_(p, ctx);
   var single = !isBlank(p.projectId) ? importRequire_(ctx, p.projectId) : null;
   var opts = { projectId: single ? single.id : '' };
   var book = importReadBook_(requireParam(p, 'book'));
@@ -12991,7 +13035,7 @@ var RIGHTS_ROWS = [
   { group: 'Planning et avancement', perm: 'milestone.pass', label: 'Marquer un jalon passé (ou le rouvrir)', where: 'le responsable du jalon (Deliverable owner) et les niveaux au-dessus' },
   { group: 'Planning et avancement', perm: 'baseline.request', label: 'Demander une baseline' },
   { group: 'Planning et avancement', perm: 'baseline.manage', label: 'Réactiver une baseline du projet, refuser une demande de baseline du projet' },
-  { group: 'Planning et avancement', perm: 'import.run', label: 'Exporter et importer un ou plusieurs projets par classeur Google Sheet', where: 'pour chaque projet touché ; créer un programme : l’administrateur ; créer un projet : le DPL du programme' },
+  { group: 'Planning et avancement', perm: 'import.run', label: 'Exporter et importer son projet par classeur Google Sheet (page WBS)', where: 'chef de projet et au-dessus, projet par projet ; plusieurs projets, programmes et personnes (page Administration) : l’administrateur seul' },
   { group: 'Budget et achats', perm: 'budget.authorize', label: 'Fixer l’enveloppe budgétaire du projet et des workpackages', where: 'celle d’un sous-workpackage : son Workpackage leader et au-dessus' },
   { group: 'Budget et achats', perm: 'exercise.read', label: 'Voir l’exercice budgétaire (attendu, accordé, parts par équipe)', where: 'en entier, au global du projet' },
   { group: 'Budget et achats', perm: 'exercise.edit', label: 'Saisir le budget attendu et accordé par équipe d’un projet (à la main ou par import d’un classeur Google Sheet)' },

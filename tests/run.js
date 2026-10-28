@@ -25,6 +25,7 @@ require('./test_exercise_version')();
 require('./test_exercise_rules')();
 require('./test_exercise_tracking')();
 require('./test_milestone')();
+require('./test_programs')();
 require('./test_rights_table')();
 require('./test_baseline_scopes')();
 require('./test_reminders')();

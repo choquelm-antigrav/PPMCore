@@ -41,7 +41,7 @@ module.exports = function () {
     ok(rep.ok && rep.data.ok && rep.data.nothing_to_do, 'le classeur non modifié ne change rien : ' + JSON.stringify(rep.data && rep.data.counts));
   });
 
-  test('Plusieurs projets : un export de tout un programme, ou une sélection, avec ce que chacun peut exporter', () => {
+  test('Plusieurs projets (page Administration) : l’administrateur exporte tout un programme ou une sélection', () => {
     const w = world();
     w.call(ADMIN, 'wbs.create', { projectId: w.p2.id, kind: 'wp', values: { name: 'Qualification', wbs_code: '1' } });
     const all = w.template(ADMIN, { projectId: '', programId: w.prog.id });
@@ -49,13 +49,9 @@ module.exports = function () {
     eq(w.rowsOf(all, 'Programmes').slice(1).map((r) => r[0]), ['PG'], 'avec leur programme, une seule fois');
     ok(w.rowsOf(all, 'Workpackages').slice(1).some((r) => r[0] === 'P2' && r[3] === 'Qualification'), 'et le découpage de chacun');
     eq(w.template(ADMIN, { projectId: '', projectIds: [w.p2.id] }).prefilled.projets, 1, 'ou une sélection de projets');
-    const mine = w.call(CP, 'import.template', { programId: w.prog.id });
-    eq([mine.prefilled.projets, mine.skipped.map((s) => s.code)], [1, ['P2']], 'un chef de projet n’exporte que ses projets : les autres sont listés avec leur raison, sans bloquer');
-    eq(w.raw(CP, 'import.template', { projectIds: [w.p2.id] }).error.code, 'FORBIDDEN', 'et si rien n’est exportable : refusé');
-    eq(w.raw(CP, 'import.template', {}).error.code, 'VALIDATION', 'sans choix : on le dit');
-    const cat = w.call(CP, 'import.catalog', {});
-    eq([cat.programs.map((g) => g.code), cat.programs[0].projects.map((x) => x.code + ':' + x.canExport), cat.canCreateProgram], [['PG'], ['P1:true', 'P2:false'], false], 'le catalogue : ce que l’appelant peut exporter, et s’il peut créer un programme');
-    eq(w.call(ADMIN, 'import.catalog', {}).canCreateProgram, true, 'l’administrateur le peut');
+    eq(w.raw(ADMIN, 'import.template', {}).error.code, 'VALIDATION', 'sans choix : on le dit');
+    const cat = w.call(ADMIN, 'import.catalog', {});
+    eq([cat.programs.map((g) => g.code), cat.programs[0].projects.map((x) => x.code + ':' + x.canExport), cat.canCreateProgram], [['PG'], ['P1:true', 'P2:true'], true], 'le catalogue : tous les projets exportables, et la création de programme');
   });
 
   test('Droits : chef de projet et au-dessus seulement', () => {
@@ -74,9 +70,9 @@ module.exports = function () {
       ['P1', '3', '', 'Industrialisation', 'inconnu@entreprise.com', '', ''],       // l.5 : personne inconnue
       ['P1', '2', '', 'Doublon de code', '', '', ''],                               // l.6 : code déjà pris
       ['P1', '9.1', '9', 'Orphelin', '', '', ''],                                   // l.7 : parent introuvable
-      ['P1', 'x', '', 'Code illisible', '', '', ''],                                // l.8
+      ['P1', 'x'.repeat(21), '', 'Code trop long', '', '', ''],                    // l.8
       ['P1', '5', '', '', '', '', 'beaucoup'],                                      // l.9 : nom manquant, montant illisible
-      ['P1', '4.1', '2', 'Mal numéroté', '', '', ''],                               // l.10 : le code ne commence pas par celui du parent
+      ['P1', '4.1', '2', 'Code libre', '', '', ''],                                 // l.10 : le code ne commence pas par celui du parent : accepté (le code est une étiquette)
       ['P9', '6', '', 'Projet inconnu', '', '', ''],                                // l.11 : projet absent de l'onglet Projets
       ['', '7', '', 'Sans projet', '', '', '']                                      // l.12 : projet manquant
     ]);
@@ -106,9 +102,9 @@ module.exports = function () {
     ok(/Workpackages l\.5 : Leader : « inconnu@entreprise\.com » n’est pas dans Ressources/.test(m), 'personne inconnue, avec la marche à suivre\n' + m);
     ok(/Workpackages l\.6 : Le code « 2 » est déjà à la ligne 4/.test(m), 'doublon de code, avec la ligne de l’autre');
     ok(/Workpackages l\.7 : Parent « 9 » : ce workpackage n’existe ni/.test(m), 'parent introuvable');
-    ok(/Workpackages l\.8 : Code WBS « x »/.test(m), 'code illisible');
+    ok(/Workpackages l\.8 : Code WBS « x{21} » : 20 caractères au plus/.test(m), 'code trop long (la règle de la page WBS : 20 caractères)');
     ok(/Workpackages l\.9 : Nom obligatoire/.test(m) && /Workpackages l\.9 : Enveloppe : un montant/.test(m), 'nom manquant et montant illisible, sur la même ligne');
-    ok(/Workpackages l\.10 : Le code « 4\.1 » doit commencer par celui de son parent/.test(m), 'code qui ne commence pas par celui du parent');
+    ok(!/Workpackages l\.10/.test(m), 'un code qui ne commence pas par celui de son parent est accepté : la hiérarchie vient de la colonne Parent, pas du code');
     ok(/Workpackages l\.11 : Projet « P9 » : absent de l’onglet Projets/.test(m) && /Workpackages l\.12 : Projet obligatoire/.test(m), 'projet inconnu ou manquant');
     ok(/Livrables l\.5 : La fin \(2026-12-01\) précède le début/.test(m), 'fin avant début');
     ok(/Livrables l\.6 : Workpackage « 77 » : introuvable/.test(m), 'workpackage introuvable');
@@ -128,6 +124,38 @@ module.exports = function () {
     const bad = w.run(t);
     eq([bad.error.code, bad.error.details.rule], ['VALIDATION', 'IMPORT_ERRORS'], 'importer un classeur en erreur est refusé en entier');
     eq(JSON.stringify(['WorkPackage', 'PlanItem', 'BudgetLine', 'Dependency'].map((x) => w.c.repoList(x).length)), before, 'sans rien écrire');
+  });
+
+  test('Codes de workpackage libres (« wp1.2 »…) : un export non modifié se réimporte sans erreur, comme la page WBS les accepte ; les absents du classeur sont nommés', () => {
+    const w = world();
+    // des workpackages créés dans la page WBS avec des codes libres : ni « 1 » ni « 1.2 »
+    const top = w.call(CP, 'wbs.create', { projectId: w.p1.id, kind: 'wp', values: { name: 'Voilure', wbs_code: 'wp1' } });
+    w.call(CP, 'wbs.create', { projectId: w.p1.id, kind: 'wp', parentId: top.id, values: { name: 'Nervures', wbs_code: 'wp1.2' } });
+    w.call(CP, 'wbs.create', { projectId: w.p1.id, kind: 'wp', values: { name: 'Fuselage', wbs_code: 'wp1.3' } });          // un point dans le code, mais au premier niveau
+    w.call(CP, 'wbs.create', { projectId: w.p1.id, kind: 'wp', values: { name: 'Train', wbs_code: 'WP-A' } });
+    const t = w.template();
+    const rep = w.analyze(t).data;
+    eq([rep.ok, rep.errors, rep.warnings.filter((x) => /Workpackage|workpackage/.test(x.message))], [true, [], []], 'aucune erreur ni avertissement sur les workpackages d’un export non modifié : ' + JSON.stringify(msgs(rep)));
+    ok(rep.nothing_to_do, 'et rien à importer : ' + JSON.stringify(rep.counts));
+    // le code ne fixe pas la hiérarchie : « wp1.3 » reste au premier niveau, « wp1.2 » sous « wp1 »
+    const rows = w.rowsOf(t, 'Workpackages').slice(1).map((r) => r[1] + '>' + r[2]);
+    ok(rows.includes('wp1.2>wp1') && rows.includes('wp1.3>') && rows.includes('WP-A>'), 'l’export écrit le parent de chacun : ' + rows.join(' | '));
+    // un nouveau workpackage « X.n » se range sous « X » s'il existe, sinon il est au premier niveau
+    w.add(t, 'Workpackages', [['P1', 'wp1.9', '', 'Carénage', '', '', ''], ['P1', 'zz.4', '', 'Orphelin', '', '', '']]);
+    const rep2 = w.analyze(t).data;
+    ok(rep2.ok, JSON.stringify(msgs(rep2)));
+    ok(w.run(t).ok, 'importé');
+    const wp = (code) => w.c.repoList('WorkPackage').find((x) => x.project_id === w.p1.id && String(x.wbs_code) === code);
+    eq([wp('wp1.9').parent_wp_id === wp('wp1').id, wp('zz.4').parent_wp_id || ''], [true, ''], 'wp1.9 sous wp1 (qui existe) ; zz.4 au premier niveau (zz n’existe pas)');
+    // les vraies erreurs restent : code trop long, parent inconnu, sous-niveau de sous-niveau, son propre parent
+    const t2 = w.template();
+    w.add(t2, 'Workpackages', [['P1', 'x'.repeat(21), '', 'Trop long', '', '', ''], ['P1', 'n1', 'inconnu', 'Parent inconnu', '', '', ''], ['P1', 'n2', 'wp1.2', 'Niveau trois', '', '', ''], ['P1', 'n3', 'n3', 'Son propre parent', '', '', '']]);
+    const m = msgs(w.analyze(t2).data).join('\n');
+    ok(/20 caractères au plus/.test(m) && /ce workpackage n’existe ni dans le classeur ni dans le projet/.test(m) && /est lui-même un sous-workpackage : l’outil n’a que deux niveaux/.test(m) && /ne peut pas être son propre parent/.test(m), 'les vraies erreurs sont dites clairement\n' + m);
+    // les absents du classeur sont nommés
+    const t3 = w.template(); w.book(t3).getSheetByName('Workpackages').getRange(2, 1, 1, 7).setValues([['', '', '', '', '', '', '']]);
+    const warn = w.analyze(t3).data.warnings.find((x) => /n’apparaissent pas dans l’onglet Workpackages/.test(x.message));
+    ok(warn && /\(.*\)/.test(warn.message) && /laissés tels quels/.test(warn.message), 'workpackages absents : leurs codes sont nommés : ' + (warn && warn.message));
   });
 
   test('Analyse : en-têtes modifiés, onglet manquant, classeur illisible', () => {
@@ -258,14 +286,18 @@ module.exports = function () {
     ok(w.c.repoGet('Resource', w.remi.id).job_function !== 'Fonction inventée', 'une personne qui existe déjà n’est jamais modifiée par l’import');
   });
 
-  test('Plusieurs projets, droits : seul qui peut créer crée ; en mode « un projet », rien n’est créé hors du projet', () => {
+  test('Seul l’administrateur importe et exporte plusieurs projets (page Administration) ; un chef de projet le fait pour son projet depuis la page WBS', () => {
     const w = world(), t = w.template(ADMIN, { projectId: '', programId: w.prog.id });
+    [['chef de projet', CP], ['DPL', DPL], ['Workpackage leader', WPL]].forEach(([nom, who]) => {
+      eq([w.raw(who, 'import.template', { programId: w.prog.id }).error.code, w.raw(who, 'import.template', { projectIds: [w.p1.id] }).error.code, w.raw(who, 'import.analyze', { book: t.id }).error.code, w.raw(who, 'import.run', { book: t.id }).error.code, w.raw(who, 'import.catalog', {}).error.code],
+        ['FORBIDDEN', 'FORBIDDEN', 'FORBIDDEN', 'FORBIDDEN', 'FORBIDDEN'], nom + ' : ni export, ni analyse, ni import, ni catalogue de plusieurs projets');
+    });
+    const msg = w.raw(CP, 'import.analyze', { book: t.id }).error.message;
+    ok(/réservés à l’administrateur/.test(msg) && /page WBS/.test(msg), 'le message dit pourquoi et où aller : ' + msg);
+    const mine = w.template(CP);
+    ok(w.analyze(mine, CP).ok && w.analyze(mine, CP).data.ok, 'un chef de projet exporte et analyse SON projet (page WBS, avec projectId)');
     w.add(t, 'Programmes', [['NEW', 'Nouveau programme', 'Actif', 'Créé par l’import']]);
     w.add(t, 'Projets', [['N1', 'Projet nouveau', 'NEW', 'Préparation', 'FR', '', ''], ['N2', 'Projet dans PG', 'PG', 'Préparation', 'FR', '', '']]);
-    const asCp = w.raw(CP, 'import.analyze', { book: t.id }).data, m = msgs(asCp).join('\n');
-    ok(!asCp.ok && /Programmes l\.3 : Créer un programme est réservé à l’administrateur/.test(m) && /Projets l\.4 : Programme « NEW » : introuvable/.test(m) && /Projets l\.5 : Créer le projet « N2 »/.test(m) && /Projets l\.3 : Vous ne pouvez pas importer dans le projet « P2 »/.test(m), 'un chef de projet : ni programme, ni projet nouveau, ni projet des autres\n' + m);
-    const asDpl = w.raw(DPL, 'import.analyze', { book: t.id }).data, m2 = msgs(asDpl).join('\n');
-    ok(/Programmes l\.3 : Créer un programme est réservé/.test(m2) && /Projets l\.4 : Programme « NEW » : introuvable/.test(m2) && !/Projets l\.5/.test(m2), 'un DPL crée un projet dans son programme (ligne 5 acceptée), pas un programme\n' + m2);
     const asAdmin = w.raw(ADMIN, 'import.analyze', { book: t.id });
     ok(asAdmin.ok && asAdmin.data.ok, JSON.stringify(asAdmin.error || msgs(asAdmin.data)));
     eq([asAdmin.data.counts.programs.create, asAdmin.data.counts.projects.create], [1, 2], 'l’administrateur : un programme et deux projets à créer');

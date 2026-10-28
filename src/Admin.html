@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.19.0">
+<meta name="ppm-version" content="0.19.1">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <style>
@@ -83,6 +83,10 @@
     <div class="zone" id="zone-feries"><h2 class="sec">Jours fériés</h2></div>
     <section class="panel" id="panel-feries" aria-label="Jours fériés"></section>
   </div>
+  <div class="cell wide" id="cell-programmes">
+    <div class="zone" id="zone-programmes"><h2 class="sec">Programmes</h2></div>
+    <section class="panel" id="panel-programmes" aria-label="Programmes"></section>
+  </div>
   <div class="cell wide" id="cell-budget">
     <div class="zone" id="zone-budget"><h2 class="sec">Budget : exercices et coût d’un ETP</h2></div>
     <section class="panel" id="panel-budget" aria-label="Budget : exercices et coût d’un ETP"></section>
@@ -111,7 +115,7 @@ var BOOT = <?!= boot ?>;
   'use strict';
   var el = ppm.el, clear = ppm.clear, uuid = ppm.uuid, plural = ppm.plural, toast = ppm.toast, call = ppm.call, frDate = ppm.frDate;
 
-  var state = { cfg: null, health: null, holidays: null, budget: null, confirm: '', logs: null, rights: null, catalog: null, pf: { book: '', report: null, busy: false, backup: null }, editing: '' };
+  var state = { cfg: null, health: null, holidays: null, programs: null, budget: null, confirm: '', logs: null, rights: null, catalog: null, pf: { book: '', report: null, busy: false, backup: null }, editing: '' };
   var $ = function (id) { return document.getElementById(id); };
   var COUNTRY_NAMES = { FR: 'France', DE: 'Allemagne', UK: 'Royaume-Uni', IN: 'Inde' };
   var STEP_LABELS = { reconcile: 'Réconciliation du journal', rules: 'Moteur de règles', workspace: 'Agenda et Drive', directory: 'Annuaire', backup: 'Sauvegarde des classeurs' };
@@ -142,6 +146,7 @@ var BOOT = <?!= boot ?>;
     renderSettings();
     loadHealth();
     loadHolidays();
+    loadPrograms();
     loadBudgetParams();
     loadPortfolio();
     loadRights();
@@ -172,7 +177,25 @@ var BOOT = <?!= boot ?>;
     var domainsInput = el('input', { type: 'text', id: 'f-domains', 'aria-label': 'Domaines autorisés', autocomplete: 'off' });
     domainsInput.value = initialDomains;
     var appsheet = el('input', { type: 'text', id: 'f-appsheet', value: c.appsheet_url, placeholder: 'https://…' });
-    var logo = el('input', { type: 'text', id: 'f-logo', value: c.logo_url, placeholder: 'https://… (logo officiel, portail de marque)' });
+    var logo = el('input', { type: 'text', id: 'f-logo', value: c.logo_url, placeholder: 'https://… (adresse de l’image du logo)', 'aria-describedby': 'f-logo-help' });
+    /** Le format attendu du logo, et un aperçu tel qu'il s'affichera : sur la barre bleue, à 22 px de haut. */
+    var preview = el('img', { id: 'logo-preview', alt: 'Aperçu du logo', style: 'height:22px;width:auto;display:block' });
+    var previewMsg = el('span', { id: 'logo-preview-msg', class: 'note', style: 'margin-left:10px' });
+    var strip = el('div', { id: 'logo-strip', style: 'display:inline-flex;align-items:center;background:#00205b;padding:10px 14px;border-radius:8px' }, [preview]);
+    var showPreview = function () {
+      var u = String(logo.value || '').trim();
+      preview.hidden = !u; strip.hidden = !u; previewMsg.textContent = '';
+      if (!u) return;
+      if (!/^https:\/\/[^\s"'<>\\]+$/.test(u)) { preview.hidden = true; previewMsg.textContent = 'Adresse invalide : https:// attendu, sans espace ni guillemet.'; return; }
+      preview.onerror = function () { preview.hidden = true; previewMsg.textContent = 'Cette image ne se charge pas : vérifiez l’adresse et que l’image est publique (un lien Drive privé ne marche pas).'; };
+      preview.onload = function () { preview.hidden = false; previewMsg.textContent = Math.round(preview.naturalWidth * 22 / Math.max(1, preview.naturalHeight)) + ' × 22 px à l’affichage.'; };
+      preview.src = u;
+    };
+    logo.addEventListener('input', showPreview);
+    var logoHelp = el('div', { class: 'logo-help', id: 'f-logo-help' }, [
+      el('p', { class: 'note', id: 'logo-format', text: 'Format attendu : l’adresse https:// d’une image en ligne (500 caractères au plus, sans espace), en SVG de préférence, sinon PNG, WebP ou JPEG. Le logo s’affiche à 22 px de haut, largeur automatique, sur la barre bleue foncée de l’outil : prenez la version claire ou blanche, sur fond transparent, plutôt large que haute (ex. 300 × 70 px au minimum pour rester net sur écran haute résolution). L’image doit être accessible sans connexion depuis le navigateur des utilisateurs : un lien Drive privé ne fonctionne pas. Vide : aucun logo.' }),
+      el('div', { class: 'row' }, [strip, previewMsg])]);
+    showPreview();
     var folder = el('input', { type: 'text', id: 'f-folder', value: c.projects_folder_id, placeholder: 'identifiant du dossier Drive' });
     var save = el('button', { type: 'submit', class: 'btn primary', id: 'save-cfg', text: 'Enregistrer les réglages' });
     var form = el('form', { class: 'form', onsubmit: function (e) {
@@ -236,7 +259,7 @@ var BOOT = <?!= boot ?>;
         el('label', { class: 'opt' }, [remOn, el('span', { text: 'Ajouter un rappel dans l’agenda du responsable de chaque livrable' })]),
         field('Délai par défaut, en jours ouvrés avant la livraison (chacun peut régler le sien)', remDays)]),
       el('section', { class: 'grp' }, [el('h3', { text: 'Adresses (facultatives)' }),
-        field('Application AppSheet', appsheet), field('Logo Airbus', logo), field('Dossier Drive des projets', folder)]),
+        field('Application AppSheet', appsheet), field('Logo de l’entreprise', logo), logoHelp, field('Dossier Drive des projets', folder)]),
       el('div', { class: 'row' }, [save])
     ]);
     panel.appendChild(box('Réglages de l’outil', [form,
@@ -493,6 +516,38 @@ var BOOT = <?!= boot ?>;
     }
   }
 
+  // ------------------------------------------------------------ Programmes : liste et création
+  /**
+   * Un programme regroupe des projets ; il n'avait pas d'écran de création (seulement l'import). L'administrateur le crée ici : code et nom (obligatoires), statut, description. Le Program Leader
+   * se désigne ensuite dans la page WBS, sur la carte du programme (seul l'administrateur le pose).
+   */
+  function loadPrograms() {
+    var panel = $('panel-programmes');
+    loading(panel);
+    call('planning.catalog', {}).then(function (cat) { state.programs = cat; renderPrograms(); }).catch(function (e) { failed(panel, e); });
+  }
+  function renderPrograms() {
+    var panel = $('panel-programmes'), cat = state.programs;
+    clear(panel);
+    var fail = function (e) { toast(window.ppmErrorText ? ppmErrorText(e) : (e && e.message) || 'Opération impossible.', true); };
+    var count = {}; cat.projects.forEach(function (p) { if (p.program_id) count[p.program_id] = (count[p.program_id] || 0) + 1; });
+    var rows = cat.programs.slice().sort(function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); }).map(function (g) {
+      return el('tr', { 'data-program': g.id }, [el('td', { text: g.code }), el('td', { text: g.name }), el('td', {}, [el('span', { class: 'badge' + (g.status === 'Actif' ? ' ok' : ''), text: g.status || '—' })]), el('td', { class: 'num', text: String(count[g.id] || 0) })]);
+    });
+    var code = el('input', { type: 'text', id: 'pg-code', maxlength: '20', 'aria-label': 'Code du programme', placeholder: 'Code (ex. NAC)', style: 'padding:8px 10px;border:1px solid var(--rule);border-radius:6px;width:150px' });
+    var name = el('input', { type: 'text', id: 'pg-name', maxlength: '120', 'aria-label': 'Nom du programme', placeholder: 'Nom (ex. Programme nacelle)', style: 'padding:8px 10px;border:1px solid var(--rule);border-radius:6px;min-width:260px;flex:1' });
+    var status = el('select', { id: 'pg-status', 'aria-label': 'Statut', style: 'padding:8px 10px;border:1px solid var(--rule);border-radius:6px' }, ['Actif', 'En pause', 'Clos'].map(function (x) { return el('option', { value: x, text: x }); }));
+    var desc = el('input', { type: 'text', id: 'pg-desc', maxlength: '500', 'aria-label': 'Description', placeholder: 'Description (facultative)', style: 'padding:8px 10px;border:1px solid var(--rule);border-radius:6px;width:100%;box-sizing:border-box' });
+    panel.appendChild(box('Programmes existants', [
+      cat.programs.length ? table(['Code', 'Nom', 'Statut', 'Projets'], rows) : el('p', { class: 'muted', id: 'pg-empty', text: 'Aucun programme pour l’instant : sans programme, il n’y a pas de carte programme dans le WBS.' })]));
+    panel.appendChild(box('Créer un programme', [
+      el('p', { class: 'note', text: 'Un programme regroupe des projets : il donne la carte programme du WBS et les vues consolidées (Actualités, Suivi, Budget). Après sa création, désignez son Program Leader dans la page WBS (carte du programme, panneau des rôles) : seul l’administrateur le pose ; rattachez ensuite les projets au programme.' }),
+      el('div', { class: 'row' }, [code, name, status]), el('div', { class: 'row', style: 'margin-top:8px' }, [desc]),
+      el('div', { class: 'row', style: 'margin-top:8px' }, [el('button', { type: 'button', class: 'btn primary', id: 'pg-create', text: 'Créer le programme', onclick: function () {
+        call('programs.create', { values: { code: code.value, name: name.value, status: status.value, description: desc.value } }, true).then(function (g) { toast('Programme « ' + g.code + ' » créé.'); loadPrograms(); }).catch(fail);
+      } })])]));
+  }
+
   // ------------------------------------------------------------ Budget : exercices et coût d'un ETP
   /**
    * L'exercice budgétaire est une année : on le crée en préparation (l'année qui vient), on le passe en exécution quand l'année commence, puis on le clôt. Il n'y a plus de taux journalier : le seul
@@ -574,7 +629,7 @@ var BOOT = <?!= boot ?>;
 
   // ------------------------------------------------------------ démarrage
   if (!BOOT.isAdmin) {
-    ['sante', 'feries', 'budget', 'donnees', 'droits', 'journaux'].forEach(function (t) { $('panel-' + t).hidden = true; $('zone-' + t).hidden = true; });
+    ['sante', 'feries', 'programmes', 'budget', 'donnees', 'droits', 'journaux'].forEach(function (t) { $('panel-' + t).hidden = true; $('zone-' + t).hidden = true; });
     $('zone-reglages').hidden = true;
     empty($('panel-reglages'), 'Réservé aux administrateurs.', 'Vos réglages personnels sont dans « Mon compte ».');
   } else {

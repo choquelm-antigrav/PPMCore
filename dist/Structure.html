@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.19.0">
+<meta name="ppm-version" content="0.19.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -524,6 +524,12 @@
   dialog[id^="confirm"] { width: min(460px, calc(100% - 32px)); }
   .btn.danger:hover { filter: brightness(.92); background: var(--red); }
   #wbs-actions { margin: 4px 0 16px; padding-top: 12px; border-top: 1px solid var(--rule); }
+  #wbs-actions > h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
+  .act-group { margin: 0 0 14px; }
+  .act-group h4 { margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .act-group .btn { display: flex; width: 100%; justify-content: flex-start; margin: 0 0 6px; text-align: left; }
+  .act-group.danger h4 { color: var(--alert-ink, var(--red)); }
+  .act-group.danger .btn { color: var(--alert-ink, var(--red)); }
   dialog[id^="genform"] { width: min(520px, calc(100% - 32px)); max-width: none; }
   .deps h3 { margin: 4px 0 8px; font-size: 15px; font-weight: 600; }
   .dep-row, aside ul.member-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; }
@@ -1282,8 +1288,9 @@ var BOOT = <?!= boot ?>;
     if (n.late) nodes.push(el('p', { class: 'flag alert', text: 'Au moins un élément est en retard sur sa date de fin prévue.' }));
     if (state.data.scope === 'program') { if (n.kind !== 'program') nodes.push(openProjectActions(n)); }
     else {
+      // les actions d'abord (ce qu'on fait le plus souvent), rangées par catégorie ; puis les rôles et les dépendances
+      if (n.canEdit || n.canPass || n.canDeclare) nodes.push(wbsActions(n));
       if (n.kind === 'project' || n.kind === 'wp' || n.kind === 'item') nodes.push(rolesBlock(n));
-      if (n.canEdit || n.canPass) nodes.push(wbsActions(n));
     }
     if (n.kind === 'item' && state.data.scope !== 'program') nodes.push(depsBlock(n));
     if (BOOT.appsheetUrl) nodes.push(el('div', { class: 'links' }, [el('a', { class: 'btn', href: BOOT.appsheetUrl, target: '_blank', rel: 'noopener', text: 'Modifier dans AppSheet' })]));
@@ -1318,25 +1325,59 @@ var BOOT = <?!= boot ?>;
     return box;
   }
 
-  /** Boutons du panneau de détail : seulement ceux que le serveur autorise pour cette carte. */
+  /**
+   * Les actions possibles sur la carte choisie, dans le panneau de droite : l'une sous l'autre, rangées par catégorie (Ajouter, Avancement ou Jalon, Édition, Zone sensible). Seulement celles que le
+   * serveur autorise pour cette carte ; une catégorie vide n'est pas affichée.
+   */
   function wbsActions(n) {
-    var box = el('div', { class: 'links', id: 'wbs-actions' });
-    var add = function (label, kind, id) {
-      box.appendChild(el('button', { type: 'button', class: 'btn', id: id, text: label, onclick: function () { openEditor({ mode: 'create', kind: kind, parent: n }); } }));
+    var box = el('section', { class: 'actions-panel', id: 'wbs-actions', 'aria-label': 'Actions' }, [el('h3', { text: 'Actions' })]);
+    var group = function (title, cls) {
+      var g = el('div', { class: 'act-group' + (cls ? ' ' + cls : ''), role: 'group', 'aria-label': title }, [el('h4', { text: title })]);
+      box.appendChild(g); return g;
     };
-    if (n.kind === 'project') { add('Ajouter un workpackage', 'wp', 'add-wp'); add('Ajouter un livrable', 'Livrable', 'add-deliverable'); add('Ajouter un jalon', 'Jalon', 'add-milestone'); }
-    if (n.kind === 'wp') {
-      if (!n.parent_ref) add('Ajouter un sous-workpackage', 'wp', 'add-subwp');
+    var button = function (g, label, id, cls, fn) { g.appendChild(el('button', { type: 'button', class: 'btn' + (cls ? ' ' + cls : ''), id: id, text: label, onclick: fn })); };
+    var isItem = n.kind === 'item', done = n.status === 'Terminé' || n.progress >= 100;
+    if (n.canEdit && (n.kind === 'project' || n.kind === 'wp')) {
+      var g = group('Ajouter');
+      var add = function (label, kind, id) { button(g, label, id, '', function () { openEditor({ mode: 'create', kind: kind, parent: n }); }); };
+      if (n.kind === 'wp' && !n.parent_ref) add('Ajouter un sous-workpackage', 'wp', 'add-subwp');
+      if (n.kind === 'project') add('Ajouter un workpackage', 'wp', 'add-wp');
       add('Ajouter un livrable', 'Livrable', 'add-deliverable'); add('Ajouter un jalon', 'Jalon', 'add-milestone');
     }
-    if (n.kind === 'item' && n.item_type === 'Jalon' && n.canPass) {
-      box.appendChild(el('button', { type: 'button', class: 'btn' + (n.passed_on ? '' : ' primary'), id: 'pass-milestone', text: n.passed_on ? 'Rouvrir le jalon' : 'Marquer le jalon passé', onclick: function () { openPassMilestone(n); } }));
+    if (isItem && n.item_type === 'Jalon' && n.canPass) {
+      var gj = group('Jalon');
+      button(gj, n.passed_on ? 'Rouvrir le jalon' : 'Marquer le jalon passé', 'pass-milestone', n.passed_on ? '' : 'primary', function () { openPassMilestone(n); });
+    }
+    if (isItem && n.item_type === 'Livrable' && n.canDeclare) {
+      var ga = group('Avancement');
+      if (!done) button(ga, 'Marquer terminé (100 %)', 'mark-done', 'primary', function () { declareNode(n, 100, ''); });
+      button(ga, done ? 'Corriger l’avancement…' : 'Déclarer l’avancement…', 'declare-progress', '', function () { openDeclare(n); });
     }
     if (n.kind !== 'project' && n.canEdit) {
-      box.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'edit-node', text: 'Modifier', onclick: function () { openEditor({ mode: 'edit', kind: n.kind === 'wp' ? 'wp' : n.item_type, node: n }); } }));
-      box.appendChild(el('button', { type: 'button', class: 'btn', id: 'delete-node', text: 'Supprimer', onclick: function () { openDelete(n); } }));
+      button(group('Édition'), 'Modifier', 'edit-node', 'primary', function () { openEditor({ mode: 'edit', kind: n.kind === 'wp' ? 'wp' : n.item_type, node: n }); });
+      button(group('Zone sensible', 'danger'), 'Supprimer', 'delete-node', '', function () { openDelete(n); });
     }
     return box;
+  }
+
+  /** Déclarer l'avancement d'un livrable depuis le WBS : 100 % d'un clic, ou un pourcentage et un commentaire. */
+  function declareNode(n, pct, comment) {
+    call('progress.declare', { planItemId: n.ref, progressPct: pct, comment: comment || '' }, true).then(function () {
+      toast(pct >= 100 ? 'Livrable marqué terminé.' : 'Avancement déclaré : ' + pct + ' %.');
+      state.pendingSelect = n.id;   // la carte reste choisie : le panneau se met à jour au lieu de se fermer
+      return load(true);
+    }).catch(function (err) { toast(ppmErrorText(err), true); });
+  }
+  function openDeclare(n) {
+    openForm({
+      title: 'Avancement de « ' + n.name + ' »', ok: 'Déclarer',
+      fields: [{ key: 'pct', label: 'Avancement (%)', type: 'number', value: String(n.progress || 0) }, { key: 'comment', label: 'Commentaire (facultatif)', type: 'textarea', value: '' }],
+      onSubmit: function (f) {
+        var v = Number(f.pct);
+        if (!(v >= 0 && v <= 100)) throw new Error('L’avancement doit être compris entre 0 et 100 %.');
+        return call('progress.declare', { planItemId: n.ref, progressPct: v, comment: f.comment || '' }, true).then(function () { toast('Avancement déclaré : ' + v + ' %.'); state.pendingSelect = n.id; return load(true); });
+      }
+    });
   }
 
   // ---------------------------------------------------------------- rôles d'un objet (0.15.3)
@@ -1517,6 +1558,7 @@ var BOOT = <?!= boot ?>;
       call('milestone.pass', { id: n.ref, passed: !reopen }, true).then(function () {
         closeDialog($('confirm')); state.confirmAction = null;
         toast(reopen ? 'Jalon rouvert.' : 'Jalon marqué passé.');
+        state.pendingSelect = n.id;
         return load(true);
       }).catch(function (err) {
         $('confirm-ok').disabled = false;

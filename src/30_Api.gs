@@ -180,9 +180,21 @@ defineAction('me.roles', function (p, ctx) {
 
 defineAction('programs.list', function (p) { return paginate(repoList('Program'), p); });
 
+/**
+ * Créer un programme : l'administrateur (ou un Program Leader : droit program.create). Code et nom obligatoires, code unique sans tenir compte de la casse. Le Program Leader du programme se désigne
+ * ensuite dans la page WBS (carte du programme) : seul l'administrateur le pose. Formulaire « Créer un programme » de la page Administration (0.19.1) ; l'import de projets passe par la même action.
+ */
 defineAction('programs.create', function (p, ctx) {
   requireCan(ctx, 'program.create', { type: 'global' });
-  return repoInsert('Program', p.values || {}, ctx.actx);
+  var v = p.values || {}, code = String(v.code || '').trim(), name = String(v.name || '').trim();
+  if (!code) throw new PpmError('VALIDATION', 'Le code du programme est obligatoire.');
+  if (code.length > 20) throw new PpmError('VALIDATION', 'Code du programme : 20 caractères au plus.');
+  if (!name) throw new PpmError('VALIDATION', 'Le nom du programme est obligatoire.');
+  if (name.length > 120) throw new PpmError('VALIDATION', 'Nom du programme : 120 caractères au plus.');
+  if (repoList('Program', function (x) { return !isTrue(x.deleted) && String(x.code).trim().toLowerCase() === code.toLowerCase(); }).length) {
+    throw new PpmError('VALIDATION', 'Le code « ' + code + ' » est déjà utilisé par un autre programme.');
+  }
+  return repoInsert('Program', { code: code, name: name, status: isBlank(v.status) ? 'Actif' : v.status, description: String(v.description || '').trim().slice(0, 500), leader_resource_id: v.leader_resource_id || '' }, ctx.actx);
 });
 
 defineAction('projects.list', function (p) {

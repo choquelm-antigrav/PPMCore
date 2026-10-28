@@ -206,7 +206,8 @@ function buildWbsTree(data, projectId, today, ctx) {
       late: !isDone_(i) && !isBlank(itemFinish(i)) && itemFinish(i) < today,
       ref: i.id, version: i.version, owner_id: i.owner_resource_id || '', wp_ref: i.wp_id || '', raw_start: i.planned_start || '', raw_finish: i.planned_finish || '',
       milestone_category: i.milestone_category || '', dep_count: depCount[i.id] || 0, canEdit: canEdit('planitem', i.id),
-      canPass: i.item_type === 'Jalon' && !!ctx && can(ctx, 'milestone.pass', { type: 'planitem', id: i.id }), passed_on: i.item_type === 'Jalon' && !isBlank(i.actual_finish) ? String(i.actual_finish) : ''
+      canPass: i.item_type === 'Jalon' && !!ctx && can(ctx, 'milestone.pass', { type: 'planitem', id: i.id }),
+      canDeclare: i.item_type === 'Livrable' && !!ctx && can(ctx, 'progress.declare', { type: 'planitem', id: i.id }), passed_on: i.item_type === 'Jalon' && !isBlank(i.actual_finish) ? String(i.actual_finish) : ''
     }, ownerOf(i.owner_resource_id)));
   };
   (childrenOfWp[''] || []).slice().sort(byWbs_).forEach(function (w) { emitWp(w, rootId); });

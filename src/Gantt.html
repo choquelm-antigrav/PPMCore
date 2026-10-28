@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.19.0">
+<meta name="ppm-version" content="0.19.1">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.css">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
@@ -1078,12 +1078,61 @@ var BOOT = <?!= boot ?>;
         plural(v.gap_days, 'jour ouvré', 'jours ouvrés') + ', date requise le ' + frDate(v.required) + '.' }));
     });
     nodes.push(depsSection(r));
-    if (r.canDeclare && r.status !== 'Terminé') nodes.push(declareForm(r));
+    if (r.item_type === 'Livrable' && r.canDeclare) nodes.push(progressSection(r));
+    if (r.item_type === 'Jalon' && r.canPass) nodes.push(milestoneSection(r));
     if (BOOT.appsheetUrl) nodes.push(el('div', { class: 'links' }, [el('a', { class: 'btn', href: BOOT.appsheetUrl, target: '_blank', rel: 'noopener', text: 'Modifier dans AppSheet' })]));
     openDetails(nodes);
   }
 
-  function declareForm(r) {
+  /**
+   * Avancement d'un livrable, depuis le planning : « Marquer terminé » (100 % d'un clic) et la déclaration d'un pourcentage ; un livrable terminé se corrige aussi (en le baissant).
+   * Chaque action est optimiste (l'écran bouge tout de suite) et se défait si le serveur refuse.
+   */
+  function declareProgress(r, v, text) {
+    var old = { progress: r.progress, status: r.status };
+    r.progress = v; if (v >= 100) r.status = 'Terminé';
+    redrawKeep(r.id); toast(v >= 100 ? 'Livrable marqué terminé.' : 'Avancement déclaré : ' + v + ' %.');
+    write({
+      run: function () { return call('progress.declare', { planItemId: r.id, progressPct: v, comment: text || '' }, true); },
+      revert: function (err) { r.progress = old.progress; r.status = old.status; redrawKeep(r.id); toast(err.message || 'Déclaration impossible.', true); }
+    });
+  }
+  function progressSection(r) {
+    var done = r.status === 'Terminé' || r.progress >= 100;
+    var box = el('section', { class: 'actions-group', id: 'progress-section', 'aria-label': 'Avancement' }, [el('h3', { text: 'Avancement' })]);
+    if (done) box.appendChild(el('p', { class: 'note', id: 'progress-done', text: 'Livrable terminé (100 %). Une erreur se corrige en déclarant un autre avancement.' }));
+    else box.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'mark-done', text: 'Marquer terminé (100 %)', onclick: function () { declareProgress(r, 100, ''); } }));
+    box.appendChild(declareForm(r, done));
+    return box;
+  }
+  /** Un jalon n'a pas d'avancement : il est passé ou non. Le déclarer passé (confirmation en deux temps) ou le rouvrir ; son workpackage en hérite aussitôt (rechargement). */
+  function milestoneSection(r) {
+    var passed = r.status === 'Terminé';
+    var box = el('section', { class: 'actions-group', id: 'milestone-section', 'aria-label': 'Jalon' }, [el('h3', { text: 'Jalon' })]);
+    box.appendChild(el('p', { class: 'note', id: 'milestone-state', text: passed ? 'Jalon passé.' : (r.late ? 'Échéance dépassée : le jalon n’est pas encore déclaré passé.' : 'Jalon à venir.') }));
+    var apply = function (toPassed) {
+      var old = { progress: r.progress, status: r.status };
+      r.status = toPassed ? 'Terminé' : 'À faire'; r.progress = toPassed ? 100 : 0;
+      redrawKeep(r.id); toast(toPassed ? 'Jalon marqué passé : plus d’alerte d’échéance.' : 'Jalon rouvert.');
+      write({
+        run: function () { return call('milestone.pass', { id: r.id, passed: toPassed }, true); },
+        revert: function (err) { r.status = old.status; r.progress = old.progress; redrawKeep(r.id); toast(err.message || 'Opération impossible.', true); }
+      });
+    };
+    var actions = el('div', { class: 'row' });
+    var draw = function (confirming) {
+      clear(actions);
+      if (passed) { actions.appendChild(el('button', { type: 'button', class: 'btn', id: 'milestone-reopen', text: 'Rouvrir le jalon', onclick: function () { apply(false); } })); return; }
+      if (!confirming) { actions.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'milestone-pass', text: 'Marquer le jalon passé', onclick: function () { draw(true); } })); return; }
+      actions.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'milestone-pass-ok', text: 'Confirmer : passé aujourd’hui', onclick: function () { apply(true); } }));
+      actions.appendChild(el('button', { type: 'button', class: 'btn', id: 'milestone-pass-cancel', text: 'Annuler', onclick: function () { draw(false); } }));
+    };
+    draw(false);
+    box.appendChild(actions);
+    return box;
+  }
+
+  function declareForm(r, correcting) {
     var input = el('input', { type: 'number', min: '0', max: '100', step: '5', value: String(r.progress || 0), id: 'pct', required: 'required' });
     var comment = el('textarea', { id: 'pct-comment', placeholder: 'Ce qui a avancé, ce qui bloque (facultatif)' });
     var submit = el('button', { type: 'submit', class: 'btn primary', text: 'Déclarer l’avancement' });
@@ -1092,15 +1141,9 @@ var BOOT = <?!= boot ?>;
       var v = Number(input.value);
       if (!(v >= 0 && v <= 100)) { toast('L’avancement doit être compris entre 0 et 100 %.', true); return; }
       submit.disabled = true;
-      var old = { progress: r.progress, status: r.status }, text = comment.value.trim();
-      r.progress = v;
-      redrawKeep(r.id); toast('Avancement déclaré : ' + v + ' %.');
-      write({
-        run: function () { return call('progress.declare', { planItemId: r.id, progressPct: v, comment: text }, true); },
-        revert: function (err) { r.progress = old.progress; r.status = old.status; redrawKeep(r.id); toast(err.message || 'Déclaration impossible.', true); }
-      });
+      declareProgress(r, v, comment.value.trim());
     } }, [
-      el('h3', { text: 'Déclarer l’avancement' }),
+      el('h4', { text: correcting ? 'Corriger l’avancement' : 'Déclarer un avancement' }),
       el('div', { class: 'row' }, [el('label', { for: 'pct', text: 'Avancement' }), input, document.createTextNode('%')]),
       el('label', { for: 'pct-comment', text: 'Commentaire' }), comment, submit
     ]);

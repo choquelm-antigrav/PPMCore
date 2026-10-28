@@ -1,5 +1,14 @@
 # Journal des versions
 
+## 0.19.1 — planning, avancement hérité, programmes, import, WBS
+
+- **Planning** : « Marquer terminé » et déclaration d'avancement (avec correction) pour les livrables ; « Marquer le jalon passé » / « Rouvrir » pour les jalons (droit `milestone.pass`) ; mises à jour optimistes.
+- **Avancement hérité** : un workpackage, un sous-workpackage ou un projet hérite de ses livrables **et de ses jalons** (un jalon pèse un jour, 100 % s'il est passé) ; un workpackage qui n'a qu'un jalon passé est à 100 %. L'avancement attendu de l'Overview compte aussi les jalons.
+- **Administration** : formulaire **« Créer un programme »** (`programs.create` : code et nom obligatoires, code unique sans tenir compte de la casse) avec la liste des programmes ; champ **« Logo de l'entreprise »** avec le format attendu (https, SVG de préférence, 22 px de haut, version claire sur fond transparent) et un aperçu.
+- **Import** : **le code d'un workpackage est une étiquette libre** (20 caractères au plus, comme la page WBS), la hiérarchie vient de la colonne Parent : un export non modifié se réimporte sans erreur (« wp1.2 », « 1 », « 1.2 »…) ; les workpackages absents du classeur sont nommés ; messages d'erreur clarifiés. L'import et l'export de **plusieurs projets** sont **réservés à l'administrateur** côté serveur ; un chef de projet importe son projet depuis la page WBS.
+- **WBS** : panneau d'actions de la carte **rangé par catégories, l'une sous l'autre** (Ajouter, Avancement ou Jalon, Édition, Zone sensible) avant les rôles et les dépendances ; avancement des livrables depuis le WBS ; la carte reste choisie après une action.
+- Tests : `ui_gantt_jalons.js` (nouveau), `test_programs.js`, `test_import.js`, `test_milestone.js`, `ui_edit.js` (71), `ui_compte.js` (139) ; dix sabotages vérifiés.
+
 ## 0.19.0 — page Budget en onglets et suivi budgétaire
 
 - **Trois onglets** : « Suivi budgétaire N » (première page visible), « OP N+1 », « Archives » (si des exercices sont clos) ; l'année vient de l'exercice. Les engagements et enveloppes (bilan par CPN, achats, enveloppe par workpackage) font partie du suivi budgétaire. Le sélecteur d'exercice disparaît.

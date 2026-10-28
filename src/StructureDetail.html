@@ -46,8 +46,9 @@
     if (n.late) nodes.push(el('p', { class: 'flag alert', text: 'Au moins un élément est en retard sur sa date de fin prévue.' }));
     if (state.data.scope === 'program') { if (n.kind !== 'program') nodes.push(openProjectActions(n)); }
     else {
+      // les actions d'abord (ce qu'on fait le plus souvent), rangées par catégorie ; puis les rôles et les dépendances
+      if (n.canEdit || n.canPass || n.canDeclare) nodes.push(wbsActions(n));
       if (n.kind === 'project' || n.kind === 'wp' || n.kind === 'item') nodes.push(rolesBlock(n));
-      if (n.canEdit || n.canPass) nodes.push(wbsActions(n));
     }
     if (n.kind === 'item' && state.data.scope !== 'program') nodes.push(depsBlock(n));
     if (BOOT.appsheetUrl) nodes.push(el('div', { class: 'links' }, [el('a', { class: 'btn', href: BOOT.appsheetUrl, target: '_blank', rel: 'noopener', text: 'Modifier dans AppSheet' })]));
