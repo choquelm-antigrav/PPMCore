@@ -204,7 +204,7 @@ defineAction('overview.get', function (p, ctx) {
       milestones: items.filter(function (i) { return i.item_type === 'Jalon' && !done(i) && !isBlank(i.planned_finish) && i.planned_finish >= today && i.planned_finish <= horizon; })
         .sort(function (a, b) { return String(a.planned_finish).localeCompare(String(b.planned_finish)); }).slice(0, 4)
         .map(function (m) { return { name: m.name, date: m.planned_finish, in_days: Math.round((parseYmd(m.planned_finish) - parseYmd(today)) / DAY_MS) }; }),
-      alerts: data.insights.filter(function (x) { return x.project_id === pr.id && !isTrue(x.deleted) && x.status === 'Nouveau' && x.severity !== 'Info'; })
+      alerts: data.insights.filter(function (x) { return x.project_id === pr.id && !isTrue(x.deleted) && x.status === 'Nouveau' && x.severity !== 'Info' && insightReadable_(ctx, x); })
         .sort(function (a, b) { return (a.severity === 'Alerte' ? 0 : 1) - (b.severity === 'Alerte' ? 0 : 1); }).slice(0, 5)
         .map(function (x) { return { severity: x.severity, message: x.message }; }),
       people: projectMemberIds_({ projects: data.projects, workpackages: data.workpackages, planitems: data.planitems, resources: data.resources, assignments: repoList('RoleAssignment') }, pr.id, today).length

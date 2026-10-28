@@ -1,7 +1,7 @@
 /**
- * PPM Core 0.18.0 — fichier unique à installer (fabriqué par tools/build.js, empreinte 1eeb848237a3).
+ * PPM Core 0.18.1 — fichier unique à installer (fabriqué par tools/build.js, empreinte ba89930434b5).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
- * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs, 53_Roles.gs, 54_Validation.gs, 55_Envelope.gs, 56_Import.gs, 57_Rights.gs, 58_ScopeBaselines.gs, 59_TeamImport.gs, 60_Exercise.gs, 61_ExerciseImport.gs, 62_ExerciseVersion.gs.
+ * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs, 53_Roles.gs, 54_Validation.gs, 55_Envelope.gs, 56_Import.gs, 57_Rights.gs, 58_ScopeBaselines.gs, 59_TeamImport.gs, 60_Exercise.gs, 61_ExerciseImport.gs, 62_ExerciseVersion.gs, 63_ExerciseRules.gs.
  */
 
 // ======================================================================
@@ -47,7 +47,7 @@ function A9_MIGRER_ROLES_SIMULATION() { return migrerRoles_(true); }
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.18.0';
+var PPM_VERSION = '0.18.1';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -57,6 +57,7 @@ var TECH_COLS = ['created_at', 'created_by', 'updated_at', 'updated_by', 'versio
 var THRESHOLDS = {
   staleProgressDays: 30,
   dueSoonDays: 7,
+  exerciseVersionPendingDays: 7, // une version figée de l'exercice qui attend sa validation depuis plus de N jours est signalée (63_ExerciseRules.gs)
   milestoneStaleDays: 7,        // un jalon échu depuis plus de N jours sans avoir été déclaré passé est signalé à ceux qui pilotent le projet (récapitulatif du matin)
   criticalSlipDays: 5,
   cpiWarn: 0.95,
@@ -1464,6 +1465,11 @@ function evaluateRules(data, today, holFor) {
 
   // Commandes d'achat : GR à faire, PO à lancer, dépassement du budget externe (calculés par poFindings_, sans montant).
   (data.poFindings || []).forEach(function (f) {
+    if (activeProject[f.projectId]) push(f.projectId, f.rule, f.severity, f.targetType, f.targetId, f.message, f.suggestion);
+  });
+
+  // Exercice budgétaire et enveloppes : clash, dépassements, équipes sans budget, versions à valider (calculés par exerciseFindings_, sans montant).
+  (data.exerciseFindings || []).forEach(function (f) {
     if (activeProject[f.projectId]) push(f.projectId, f.rule, f.severity, f.targetType, f.targetId, f.message, f.suggestion);
   });
 
@@ -3372,9 +3378,9 @@ defineAction('changes.since', function (p) {
   return { __page: true, items: items, cursor: last ? last.at + '|' + last.id : (p.cursor || null) };
 });
 
-defineAction('insights.list', function (p) {
+defineAction('insights.list', function (p, ctx) {
   return paginate(repoList('Insight', function (i) {
-    return (isBlank(p.projectId) || i.project_id === p.projectId) && (isBlank(p.status) || i.status === p.status);
+    return (isBlank(p.projectId) || i.project_id === p.projectId) && (isBlank(p.status) || i.status === p.status) && insightReadable_(ctx, i);
   }), p);
 });
 
@@ -6574,7 +6580,7 @@ defineAction('insights.decide', function (p, ctx) {
 defineAction('copilot.suggestions', function (p, ctx) {
   requireCopilot_();
   var projectId = requireParam(p, 'projectId');
-  var all = repoList('Insight', function (x) { return x.project_id === projectId; });
+  var all = repoList('Insight', function (x) { return x.project_id === projectId && insightReadable_(ctx, x); });
   var order = { Alerte: 0, Vigilance: 1, Info: 2 };
   var pending = all.filter(function (x) { return x.status === 'Nouveau'; })
     .sort(function (a, b) { return (order[a.severity] - order[b.severity]) || String(a.message).localeCompare(String(b.message)); });
@@ -7372,6 +7378,7 @@ function runRules() {
   };
   addBaselineContext_(data, holFor);
   data.poFindings = poFindings_(poRuleInputs_(), todayStr());
+  data.exerciseFindings = exerciseFindings_(todayStr());
   var fresh = evaluateRules(data, todayStr(), holFor);
   var merged = mergeInsights(repoList('Insight', null, { includeDeleted: true }), fresh, JOB_ACTX.actor);
   withLock(function () { getTable('Insight').replaceAll(merged); });
@@ -9017,7 +9024,7 @@ defineAction('overview.get', function (p, ctx) {
       milestones: items.filter(function (i) { return i.item_type === 'Jalon' && !done(i) && !isBlank(i.planned_finish) && i.planned_finish >= today && i.planned_finish <= horizon; })
         .sort(function (a, b) { return String(a.planned_finish).localeCompare(String(b.planned_finish)); }).slice(0, 4)
         .map(function (m) { return { name: m.name, date: m.planned_finish, in_days: Math.round((parseYmd(m.planned_finish) - parseYmd(today)) / DAY_MS) }; }),
-      alerts: data.insights.filter(function (x) { return x.project_id === pr.id && !isTrue(x.deleted) && x.status === 'Nouveau' && x.severity !== 'Info'; })
+      alerts: data.insights.filter(function (x) { return x.project_id === pr.id && !isTrue(x.deleted) && x.status === 'Nouveau' && x.severity !== 'Info' && insightReadable_(ctx, x); })
         .sort(function (a, b) { return (a.severity === 'Alerte' ? 0 : 1) - (b.severity === 'Alerte' ? 0 : 1); }).slice(0, 5)
         .map(function (x) { return { severity: x.severity, message: x.message }; }),
       people: projectMemberIds_({ projects: data.projects, workpackages: data.workpackages, planitems: data.planitems, resources: data.resources, assignments: repoList('RoleAssignment') }, pr.id, today).length
@@ -14290,3 +14297,95 @@ defineAction('exercise.version.decide', function (p, ctx) {
     return exverView_(rec, ctx);
   });
 });
+
+// ======================================================================
+// 63_ExerciseRules.gs
+// ======================================================================
+
+/**
+ * PPM Core — 0.18.1 : les CONSTATS du moteur de règles sur l'exercice budgétaire et les enveloppes.
+ *
+ * Le moteur (06_Rules.gs) transforme un écart en un constat que le chef de projet voit dans sa routine (page Suivi, récapitulatif du matin) : il ne bloque rien. Ces règles regardent les
+ * mêmes chiffres que la page Budget (exerciseData_ et exerciseTable_) : le constat et le tableau ne peuvent pas se contredire. Un constat disparaît tout seul quand l'écart est résorbé ;
+ * « Accepté » ou « Ignoré » n'est pas recréé (clé : règle + objet, l'exercice et le projet étant dans l'objet).
+ *
+ *   EXERCISE_CLASH           Alerte     l'accordé d'une équipe est inférieur à ses parts de livrables (le clash de décembre, des révisions de février et d'avril) ;
+ *   EXERCISE_OVER_EXPECTED   Vigilance  en préparation : les parts d'une équipe dépassent son budget attendu ;
+ *   EXERCISE_UNFUNDED        Vigilance  une équipe a des parts mais ni attendu ni accordé ;
+ *   EXERCISE_NO_PARTS        Info       en préparation, une fois les livrables commencés : une équipe a un attendu mais aucune part ;
+ *   EXERCISE_TEAM_RULE       Vigilance  des parts ou un budget sur une équipe dont le nom n'a pas 3 ou 4 caractères, ou à 4 caractères sans parente à 3 : ils ne comptent nulle part ;
+ *   EXERCISE_VERSION_PENDING Vigilance  une version figée attend sa validation depuis plus de THRESHOLDS.exerciseVersionPendingDays jours ;
+ *   ENVELOPE_WP_EXCEEDED     Vigilance  les lignes de budget des livrables d'un workpackage dépassent son enveloppe ;
+ *   ENVELOPE_PROJECT_EXCEEDED Vigilance le coût prévu du projet dépasse son budget autorisé.
+ *
+ * AUCUN MONTANT dans un constat (comme pour les commandes d'achat) : il part dans le récapitulatif du matin ; les chiffres sont dans la page Budget. Un constat de l'exercice ne se lit que par
+ * qui peut lire l'exercice (Workpackage leader et au-dessus), un constat d'enveloppe que par qui lit le budget du projet (`insightReadable_`).
+ */
+
+/** Les constats de l'exercice et des enveloppes, au format de `data.poFindings` : { projectId, rule, severity, targetType, targetId, message, suggestion }. */
+function exerciseFindings_(today) {
+  var out = [], live = function (r) { return !isTrue(r.deleted); };
+  var projects = repoList('Project', function (p) { return live(p) && p.status !== 'Clos'; });
+  var exercises = repoList('Exercise', function (e) { return live(e) && e.status !== 'Clos'; });
+  etpReset_();
+  exercises.forEach(function (ex) {
+    projects.forEach(function (pr) {
+      var data = exerciseData_(ex, [pr.id]);
+      if (!data.budgets.length && !data.lines.length) return;
+      var t = exerciseTable_(ex, data, pr.id), where = ' de l’exercice ' + ex.year + ' du projet ' + pr.code, prep = ex.status === 'Préparation';
+      var push = function (rule, sev, teamId, msg, sug) {
+        out.push({ projectId: pr.id, rule: rule, severity: sev, targetType: 'ExerciseTeam', targetId: ex.id + ':' + pr.id + ':' + teamId, message: msg, suggestion: sug });
+      };
+      var seeBudget = 'L’écart est dans la page Budget, zone « Exercice budgétaire ».';
+      t.rows.forEach(function (r) {
+        var team = 'L’équipe « ' + r.name + ' »';
+        if (r.granted !== null && r.parts > r.granted) push('EXERCISE_CLASH', 'Alerte', r.team_id, 'Clash : les livrables de ' + team + ' dépassent son budget accordé' + where + '.', 'Redéfinir les livrables (retirer, reporter ou rechiffrer) ou obtenir une révision de l’accordé. ' + seeBudget);
+        if (prep && r.expected !== null && r.parts > r.expected) push('EXERCISE_OVER_EXPECTED', 'Vigilance', r.team_id, team + ' dépasse son budget attendu avec les parts de ses livrables' + where + '.', 'Rechiffrer ou retirer des livrables, ou demander plus de budget. ' + seeBudget);
+        if (r.expected === null && r.granted === null && r.parts > 0) push('EXERCISE_UNFUNDED', 'Vigilance', r.team_id, team + ' porte des parts de livrables' + where + ' mais n’a ni budget attendu ni budget accordé.', 'Saisir son budget attendu (ou accordé) dans la page Budget, ou déplacer ses parts vers une équipe budgétée.');
+        if (prep && t.totals.parts > 0 && r.expected !== null && r.expected > 0 && r.parts === 0) push('EXERCISE_NO_PARTS', 'Info', r.team_id, team + ' a un budget attendu' + where + ' mais aucun livrable chiffré.', 'Chiffrer ses livrables avant la convergence, ou revoir son budget attendu.');
+      });
+      t.orphans.concat(t.unruled).forEach(function (r) {
+        var orphan = String(r.name).trim().length === 4;
+        push('EXERCISE_TEAM_RULE', 'Vigilance', r.team_id, 'L’équipe « ' + r.name + ' » porte des parts ou un budget' + where + (orphan ? ' mais, à 4 caractères, elle n’a pas d’équipe parente à 3 caractères' : ' mais son nom n’a pas 3 ou 4 caractères') + ' : ils ne comptent dans aucune équipe du tableau.',
+          orphan ? 'La rattacher à une équipe de 3 caractères (page Ressources) ou la renommer.' : 'La renommer selon sa place (3 caractères : elle porte le budget ; 4 : détail rattaché à une équipe de 3) ou déplacer ses parts.');
+      });
+    });
+  });
+  // versions figées qui attendent leur validation
+  var exById = indexBy_(repoList('Exercise')), prById = indexBy_(projects);
+  repoList('ExerciseVersion', function (v) { return live(v) && v.status === 'À valider'; }).forEach(function (v) {
+    var pr = prById[v.project_id], ex = exById[v.exercise_id];
+    if (!pr || !ex) return;
+    var since = String(v.created_at || '').slice(0, 10);
+    if (!since) return;
+    var days = Math.round((parseYmd(today) - parseYmd(since)) / DAY_MS);
+    if (days < THRESHOLDS.exerciseVersionPendingDays) return;
+    out.push({ projectId: pr.id, rule: 'EXERCISE_VERSION_PENDING', severity: 'Vigilance', targetType: 'ExerciseVersion', targetId: v.id,
+      message: 'La version ' + v.number + ' (« ' + v.label + ' ») de l’exercice ' + ex.year + ' du projet ' + pr.code + ' attend sa validation depuis ' + days + ' jours.',
+      suggestion: 'Le niveau au-dessus de ' + v.author + ' la valide ou la refuse (page Budget, zone « Versions figées »).' });
+  });
+  // enveloppes : workpackages et projet
+  projects.forEach(function (pr) {
+    var wps = repoList('WorkPackage', function (w) { return live(w) && w.project_id === pr.id; }), wpById = indexBy_(wps), costs = envelopeCosts_(pr.id, wpById);
+    wps.forEach(function (w) {
+      if (isBlank(w.budget_allocated) || !((costs.byWp[w.id] || 0) > Number(w.budget_allocated))) return;
+      out.push({ projectId: pr.id, rule: 'ENVELOPE_WP_EXCEEDED', severity: 'Vigilance', targetType: 'WorkPackage', targetId: w.id,
+        message: 'Les lignes de budget des livrables du workpackage « ' + w.name + ' » (' + pr.code + ') dépassent son enveloppe.',
+        suggestion: 'Rechiffrer ou retirer des livrables, ou revoir l’enveloppe du workpackage (page Budget, zone « Enveloppe budgétaire »).' });
+    });
+    if (!isBlank(pr.budget_authorized)) {
+      var total = costs.none; Object.keys(costs.byWp).forEach(function (k) { if (wpById[k] && !wpById[k].parent_wp_id) total = round2(total + costs.byWp[k]); });
+      if (total > Number(pr.budget_authorized)) out.push({ projectId: pr.id, rule: 'ENVELOPE_PROJECT_EXCEEDED', severity: 'Vigilance', targetType: 'Project', targetId: pr.id,
+        message: 'Le coût prévu du projet ' + pr.code + ' dépasse son budget autorisé.', suggestion: 'Rechiffrer ou retirer des livrables, ou revoir le budget autorisé du projet (page Budget, zone « Enveloppe budgétaire »).' });
+    }
+  });
+  return out;
+}
+
+/** Ce constat est-il lisible par cette personne ? Exercice : qui lit l'exercice du projet ; enveloppe : qui lit le budget du projet ; tout le reste : oui. */
+function insightReadable_(ctx, i) {
+  var code = String(i.rule_code || '');
+  if (code.indexOf('EXERCISE_') === 0) return !!ctx.isAdmin || can(ctx, 'exercise.read', { type: 'project', id: i.project_id });
+  if (code.indexOf('ENVELOPE_') === 0) return !!ctx.isAdmin || !!budgetAccess_(ctx, i.project_id).budget;
+  return true;
+}

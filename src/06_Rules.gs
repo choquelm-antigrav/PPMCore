@@ -84,6 +84,11 @@ function evaluateRules(data, today, holFor) {
     if (activeProject[f.projectId]) push(f.projectId, f.rule, f.severity, f.targetType, f.targetId, f.message, f.suggestion);
   });
 
+  // Exercice budgétaire et enveloppes : clash, dépassements, équipes sans budget, versions à valider (calculés par exerciseFindings_, sans montant).
+  (data.exerciseFindings || []).forEach(function (f) {
+    if (activeProject[f.projectId]) push(f.projectId, f.rule, f.severity, f.targetType, f.targetId, f.message, f.suggestion);
+  });
+
   // Projet actif, planifié, sans baseline : les écarts ne peuvent pas être mesurés.
   projects.forEach(function (p) {
     if (p.status !== 'Actif' || !isBlank(p.active_baseline_id)) return;

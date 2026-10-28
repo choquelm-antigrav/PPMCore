@@ -368,8 +368,8 @@ defineAction('changes.since', function (p) {
   return { __page: true, items: items, cursor: last ? last.at + '|' + last.id : (p.cursor || null) };
 });
 
-defineAction('insights.list', function (p) {
+defineAction('insights.list', function (p, ctx) {
   return paginate(repoList('Insight', function (i) {
-    return (isBlank(p.projectId) || i.project_id === p.projectId) && (isBlank(p.status) || i.status === p.status);
+    return (isBlank(p.projectId) || i.project_id === p.projectId) && (isBlank(p.status) || i.status === p.status) && insightReadable_(ctx, i);
   }), p);
 });

@@ -5,7 +5,7 @@
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.18.0';
+var PPM_VERSION = '0.18.1';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -15,6 +15,7 @@ var TECH_COLS = ['created_at', 'created_by', 'updated_at', 'updated_by', 'versio
 var THRESHOLDS = {
   staleProgressDays: 30,
   dueSoonDays: 7,
+  exerciseVersionPendingDays: 7, // une version figée de l'exercice qui attend sa validation depuis plus de N jours est signalée (63_ExerciseRules.gs)
   milestoneStaleDays: 7,        // un jalon échu depuis plus de N jours sans avoir été déclaré passé est signalé à ceux qui pilotent le projet (récapitulatif du matin)
   criticalSlipDays: 5,
   cpiWarn: 0.95,

@@ -377,7 +377,7 @@ defineAction('insights.decide', function (p, ctx) {
 defineAction('copilot.suggestions', function (p, ctx) {
   requireCopilot_();
   var projectId = requireParam(p, 'projectId');
-  var all = repoList('Insight', function (x) { return x.project_id === projectId; });
+  var all = repoList('Insight', function (x) { return x.project_id === projectId && insightReadable_(ctx, x); });
   var order = { Alerte: 0, Vigilance: 1, Info: 2 };
   var pending = all.filter(function (x) { return x.status === 'Nouveau'; })
     .sort(function (a, b) { return (order[a.severity] - order[b.severity]) || String(a.message).localeCompare(String(b.message)); });

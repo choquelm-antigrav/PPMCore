@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.18.0)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.18.1)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -53,6 +53,7 @@ Référence fonctionnelle : la spécification (sections 3 à 14).
 | `48_NewsText.gs`, `49_NewsCollect.gs` | 0.12.2 : lecture des textes et rattachement des réunions (calcul sans service Google) ; collecteur d'agenda et déclencheur. Le reste du module est dans `48_News.gs` |
 | `48_News.gs` | 0.12.0 : fil d'actualités du projet (lecture des comptes rendus, rattachement des réunions, actions, synthèse du matin, journal du projet, collecteur d'agenda) |
 | `44_Orders.gs` | 0.9.0 : commandes d'achat (PO) : saisie, statuts, répartition par livrable, constats et rappels de GR |
+| `63_ExerciseRules.gs` | 0.18.1 : constats du moteur de règles sur l'exercice (clash, dépassements, équipes sans budget, versions à valider) et les enveloppes, filtre de lecture |
 | `62_ExerciseVersion.gs` | 0.18.0 : versions figées de l'exercice : instantané, comparaison, validation par le niveau du dessus |
 | `61_ExerciseImport.gs` | 0.17.4 : export et import de l'exercice (budget attendu et accordé par équipe, parts des livrables) par un classeur Google Sheet : analyse, copie de sécurité, application par lots |
 | `BACKLOG.md` | Ce qui reste à faire, dans l'ordre proposé, avec les raisons de l'ordre |
@@ -307,6 +308,20 @@ Le besoin : chaque année, passer d'un **budget attendu par équipe** à une **l
   - **Comparer** deux versions, ou une version et l'état actuel : écart de l'attendu, de l'accordé et des parts par équipe, et **livrables ajoutés, retirés ou rechiffrés** (avant, après, écart) ; « aucun écart » si rien n'a bougé. C'est ce qui rend lisibles le challenge de décembre et les révisions de février et d'avril.
   - **Validation par le niveau du dessus de l'auteur**, comme les changements du WBS : le niveau de l'auteur est son meilleur rang sur le projet au moment où il fige (une version du chef de projet est à valider par le DPL ou le Program Leader) ; **personne ne valide sa propre version** ; une version figée par l'administrateur ou un Program Leader est **validée d'emblée** ; **refuser demande un motif** ; une décision est définitive. Le récapitulatif du matin signale « N versions de l'exercice figées : à valider » à ceux qui peuvent les valider, pas à leur auteur. Rien n'est modifié ni supprimé : une version fautive se refuse, on en fige une autre.
   - On fige tant que l'exercice n'est pas clos (en exécution aussi : révisions). Lecture de la liste et de la comparaison : Workpackage leader et au-dessus. Nouvelles feuilles `ExerciseVersion` (protégée avec le budget) et `ExerciseVersionLine` (historique).
+- **Constats du moteur de règles (0.18.1)** : l'exercice et les enveloppes alimentent le moteur de règles (page Suivi, récapitulatif du matin) avec les mêmes chiffres que la page Budget. Ils ne bloquent rien et disparaissent seuls quand l'écart est résorbé ; « Accepté » ou « Ignoré » n'est pas recréé.
+
+  | Règle | Gravité | Quand |
+  |---|---|---|
+  | `EXERCISE_CLASH` | Alerte | l'accordé d'une équipe est inférieur à ses parts de livrables |
+  | `EXERCISE_OVER_EXPECTED` | Vigilance | en préparation : les parts d'une équipe dépassent son attendu |
+  | `EXERCISE_UNFUNDED` | Vigilance | une équipe a des parts mais ni attendu ni accordé |
+  | `EXERCISE_NO_PARTS` | Info | en préparation, une fois les livrables commencés : une équipe a un attendu sans aucune part |
+  | `EXERCISE_TEAM_RULE` | Vigilance | des parts ou un budget sur une équipe hors règle (nom ≠ 3 ou 4 caractères) ou à 4 caractères sans parente à 3 |
+  | `EXERCISE_VERSION_PENDING` | Vigilance | une version figée attend sa validation depuis plus de 7 jours (`THRESHOLDS.exerciseVersionPendingDays`) |
+  | `ENVELOPE_WP_EXCEEDED` | Vigilance | le coût des livrables d'un workpackage dépasse son enveloppe |
+  | `ENVELOPE_PROJECT_EXCEEDED` | Vigilance | le coût prévu du projet dépasse son budget autorisé |
+
+  **Aucun montant dans un constat** (il part dans le récapitulatif du matin) : les chiffres sont dans la page Budget. **Qui les lit** : les constats de l'exercice, qui peut lire l'exercice (Workpackage leader et au-dessus) ; ceux des enveloppes, qui lit le budget du projet ; un Contributor n'en voit aucun, ni dans la liste des constats, ni dans l'Overview, ni dans le Copilote (`insightReadable_`). Un projet clos ou un exercice clos n'en produit plus. Les règles de l'exercice ne concernent que les exercices en préparation ou en exécution.
 - Actions : `exercise.version.create`, `exercise.version.list`, `exercise.version.compare`, `exercise.version.decide`, `exercise.list`, `exercise.create`, `exercise.setStatus`, `exercise.get`, `exercise.program`, `exercise.set`, `exercise.import.template`, `exercise.import.analyze`, `exercise.import.run` (paramètre `resume`), `etp.list`, `etp.set`, `etp.delete`, `budget.deliverable.exercise`.
 - **Pas encore** (voir le plan et `BACKLOG.md`) : suivi accordé / engagé / avancement, passage automatique d'un exercice à l'autre.
 - **Mise à jour d'une installation existante** : relancer `A1_INSTALLER_PPM` ajoute les nouvelles feuilles (`EtpCost`, `Exercise`, `TeamBudget`) et colonnes (pays d'une équipe, exercice d'un livrable, équipe d'une ligne de budget). Les anciennes colonnes de taux restent dans les feuilles, inutilisées ; les anciennes lignes de budget « TJM » ne sont plus reconnues : l'outil étant en phase de test, il n'y a pas de reprise de données.

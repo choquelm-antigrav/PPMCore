@@ -1,5 +1,12 @@
 # Journal des versions
 
+## 0.18.1 — constats du moteur de règles sur l'exercice et les enveloppes
+
+- **Huit règles** (`63_ExerciseRules.gs`) : `EXERCISE_CLASH` (Alerte : accordé inférieur aux parts), `EXERCISE_OVER_EXPECTED` (parts au-delà de l'attendu, en préparation), `EXERCISE_UNFUNDED` (parts sans attendu ni accordé), `EXERCISE_NO_PARTS` (Info : attendu sans livrable, une fois les livrables commencés), `EXERCISE_TEAM_RULE` (équipe hors règle ou à 4 caractères sans parente à 3), `EXERCISE_VERSION_PENDING` (version figée non validée depuis plus de 7 jours), `ENVELOPE_WP_EXCEEDED` et `ENVELOPE_PROJECT_EXCEEDED` (la règle de dépassement d'enveloppe prévue de longue date).
+- **Mêmes chiffres que la page Budget** (`exerciseData_`, `exerciseTable_`) ; **aucun montant dans un constat** (récapitulatif du matin) ; ils disparaissent quand l'écart est résorbé ; « Ignoré » n'est pas recréé ; rien ne bloque.
+- **Lecture filtrée** (`insightReadable_`) : constats de l'exercice pour qui lit l'exercice, d'enveloppe pour qui lit le budget ; appliqué à la liste des constats, à l'Overview et au Copilote.
+- Tests : `test_exercise_rules.js` (8) ; treize sabotages vérifiés (dont un cas ajouté en route). **Backlog** : cette étape est faite (`BACKLOG.md`).
+
 ## 0.18.0 — versions figées de l'exercice
 
 - **Figer, comparer, valider** : `exercise.version.create` (chef de projet et au-dessus, motif obligatoire) fige un instantané du budget attendu, de l'accordé et des parts des livrables par équipe ; `exercise.version.compare` donne l'écart par équipe et les livrables ajoutés, retirés ou rechiffrés entre deux versions ou avec l'état actuel ; `exercise.version.decide` valide ou refuse (motif obligatoire pour refuser). Une version ne change jamais.

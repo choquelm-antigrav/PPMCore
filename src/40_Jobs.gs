@@ -183,6 +183,7 @@ function runRules() {
   };
   addBaselineContext_(data, holFor);
   data.poFindings = poFindings_(poRuleInputs_(), todayStr());
+  data.exerciseFindings = exerciseFindings_(todayStr());
   var fresh = evaluateRules(data, todayStr(), holFor);
   var merged = mergeInsights(repoList('Insight', null, { includeDeleted: true }), fresh, JOB_ACTX.actor);
   withLock(function () { getTable('Insight').replaceAll(merged); });
