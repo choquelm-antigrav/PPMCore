@@ -1,5 +1,12 @@
 # Journal des versions
 
+## 0.18.0 — versions figées de l'exercice
+
+- **Figer, comparer, valider** : `exercise.version.create` (chef de projet et au-dessus, motif obligatoire) fige un instantané du budget attendu, de l'accordé et des parts des livrables par équipe ; `exercise.version.compare` donne l'écart par équipe et les livrables ajoutés, retirés ou rechiffrés entre deux versions ou avec l'état actuel ; `exercise.version.decide` valide ou refuse (motif obligatoire pour refuser). Une version ne change jamais.
+- **Validation par le niveau du dessus de l'auteur** : personne ne valide sa propre version ; une version figée par l'administrateur ou un Program Leader est validée d'emblée ; le récapitulatif du matin la signale à ceux qui peuvent la valider.
+- **Page Budget** : zone « Versions figées » (liste avec statut, auteur, totaux ; figer ; comparer deux versions ou avec l'état actuel ; valider ou refuser selon son niveau). Nouvelles feuilles `ExerciseVersion` (protégée avec le budget : douze feuilles sensibles) et `ExerciseVersionLine`.
+- Tests : `test_exercise_version.js` (5), `ui_budget.js` (93), `test_sheet_protect.js` ; douze sabotages vérifiés. **Backlog** : l'étape des versions est faite (`BACKLOG.md`).
+
 ## 0.17.4 — l'exercice dans un classeur Google Sheet : export et import
 
 - **Export** (`exercise.import.template`) : un classeur créé dans Drive et partagé avec vous, prérempli avec l'exercice choisi pour vos projets : onglet **Budget par équipe** (projet, équipe, attendu, accordé) et onglet **Parts des livrables** (projet, code WBS du workpackage, livrable, équipe, montant). **Import** en trois temps : **analyse** sans écriture (`exercise.import.analyze`, chaque erreur avec son onglet et sa ligne), puis **application par lots** reprenables (`exercise.import.run`, paramètre `resume`).

@@ -359,6 +359,38 @@ function openPage(user, startTab) {
   ex.click(ex.$('eximp-close'));
   await ex.until(() => ex.$('exp-' + vm.id) && ex.$('exp-' + vm.id).value === '130000');
   check(ex.$('exp-' + vm.id).value === '130000', 'le tableau de l’exercice est rafraîchi après l’import : 1vm à 130 000 €');
+  // versions figées de l'exercice : figer, comparer, valider par le niveau du dessus
+  await ex.until(() => ex.$('version-create'));
+  check(/Aucune version figée/.test(ex.text('versions-empty')), 'avant toute version : le bloc explique à quoi elles servent');
+  ex.click(ex.$('version-create'));
+  await ex.until(() => ex.$('genform').open && ex.$('gf-justification'));
+  ex.set('gf-label', 'Attendu'); ex.submitGf();
+  await ex.until(() => !ex.$('gf-error').hidden);
+  check(/motif est obligatoire/.test(ex.text('gf-error')), 'sans motif : refusé, message clair : ' + ex.text('gf-error'));
+  ex.set('gf-justification', 'Attendu avant l’été'); ex.submitGf();
+  await ex.until(() => ex.doc.querySelector('#versions-table tr[data-version]'));
+  const vrow = () => flat(ex.doc.querySelector('#versions-table tr[data-version]').textContent);
+  check(/1/.test(vrow()) && /Attendu/.test(vrow()) && /À valider/.test(vrow()) && /carla@entreprise\.com/.test(vrow()), 'la version est figée : numéro, libellé, auteur, « À valider » : ' + vrow().slice(0, 120));
+  check(!ex.doc.querySelector('.ver-validate'), 'l’auteur n’a pas de bouton pour valider sa propre version');
+  ex.click(ex.$('compare-run'));
+  await ex.until(() => ex.$('diff-same'));
+  check(/Aucun écart/.test(ex.text('diff-same')), 'comparée à l’état actuel juste après : aucun écart');
+  w.call(CP, 'exercise.set', { projectId: w.p1.id, exerciseId: prep.id, teamId: vm.id, expected: 140000 });
+  ex.click(ex.$('compare-run'));
+  await ex.until(() => ex.$('diff-totals'));
+  check(/Attendu \+\d+/.test(ex.text('diff-totals').replace(/\s/g, ' ').replace(/\u202f|\u00a0/g, '')) && !!ex.$('diff-teams') && /1vm/.test(ex.text('diff-teams')), 'après un changement : l’écart par équipe et au total : ' + ex.text('diff-totals'));
+  const dpl = openPage('dora@entreprise.com');
+  await dpl.until(() => dpl.doc.querySelector('.ver-validate'));
+  check(!!dpl.doc.querySelector('.ver-refuse'), 'le DPL (niveau au-dessus) a les boutons Valider et Refuser');
+  dpl.click(dpl.doc.querySelector('.ver-refuse'));
+  await dpl.until(() => dpl.$('genform').open && dpl.$('gf-note'));
+  dpl.submitGf();
+  await dpl.until(() => !dpl.$('gf-error').hidden);
+  check(/motif du refus est obligatoire/.test(dpl.text('gf-error')), 'refuser sans motif : refusé');
+  dpl.set('gf-note', 'Trop haut'); dpl.submitGf();
+  await dpl.until(() => c.repoList('ExerciseVersion').some((v) => v.status === 'Refusée'));
+  await dpl.until(() => /Refusée/.test(flat(dpl.doc.querySelector('#versions-table tr[data-version]').textContent)));
+  check(/Trop haut/.test(flat(dpl.doc.querySelector('#versions-table tr[data-version]').textContent)) && !dpl.doc.querySelector('.ver-validate'), 'refusée avec son motif ; une décision est définitive (plus de boutons)');
   // lecture seule pour un Workpackage leader
   const wl2 = openPage(RWP);
   await wl2.until(() => wl2.$('exercise-table'));

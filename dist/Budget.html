@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.17.4">
+<meta name="ppm-version" content="0.18.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -1365,6 +1365,8 @@ var BOOT = <?!= boot ?>;
     // équipes qui ne s'additionnent nulle part
     if (v.orphans.length) panel.appendChild(el('p', { class: 'note late', id: 'exercise-orphans', text: 'Équipes à 4 caractères sans équipe parente à 3 caractères (non additionnées) : ' + v.orphans.map(function (o) { return o.name + ' (attendu ' + (o.expected === null ? '—' : eur(o.expected)) + ', parts ' + eur(o.parts) + ')'; }).join(' ; ') + '.' }));
     if (v.unruled.length) panel.appendChild(el('p', { class: 'note late', id: 'exercise-unruled', text: 'Parts sur des équipes dont le nom n’a pas 3 ou 4 caractères (hors règle, non comptées dans les équipes ci-dessus) : ' + v.unruled.map(function (o) { return o.name + ' ' + eur(o.parts); }).join(' ; ') + '.' }));
+    // versions figées de l'exercice (instantanés à comparer et à valider)
+    var vbox = el('div', { id: 'exercise-versions' }); panel.appendChild(vbox); renderVersions(vbox, ex);
     // exporter / importer l'exercice dans un classeur Google Sheet (la préparation se fait dans un tableur)
     if (v.can_edit) panel.appendChild(el('div', { class: 'row' }, [el('button', { type: 'button', class: 'btn', id: 'exercise-import', text: 'Exporter ou importer l’exercice (Google Sheet)', onclick: openExerciseImport })]));
     // ajouter une équipe au tableau
@@ -1381,6 +1383,71 @@ var BOOT = <?!= boot ?>;
         panel.appendChild(el('div', { class: 'row' }, [sel, add]));
       }
     }
+  }
+
+  // ------------------------------------------------------------ exercice : versions figées
+  /**
+   * Une version figée est un instantané de l'exercice du projet (budget attendu, accordé, parts des livrables par équipe) qui ne change plus ; on la compare à une autre ou à l'état actuel ;
+   * elle est à valider par le niveau du dessus de son auteur (le DPL pour un chef de projet). Les écarts s'affichent, rien ne bloque.
+   */
+  function frDay(iso) { return iso ? String(iso).slice(8, 10) + '/' + String(iso).slice(5, 7) + '/' + String(iso).slice(0, 4) : ''; }
+  function deltaText(x) { return x.delta === null || x.delta === undefined ? '—' : (x.delta > 0 ? '+' : x.delta < 0 ? '−' : '') + eur(Math.abs(x.delta)); }
+  function renderVersions(box, ex) {
+    call('exercise.version.list', { projectId: state.projectId, exerciseId: ex.id }).then(function (r) {
+      clear(box);
+      box.appendChild(el('h2', { class: 'sec', text: 'Versions figées' }));
+      var head = el('div', { class: 'row' });
+      if (r.can_create) head.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'version-create', text: 'Figer une version', onclick: function () { openFreeze(box, ex); } }));
+      box.appendChild(head);
+      if (!r.versions.length) { box.appendChild(el('p', { class: 'note', id: 'versions-empty', text: 'Aucune version figée. Figez l’exercice à chaque étape (attendu avant l’été, livrables, accordé, révisions) pour pouvoir comparer.' })); return; }
+      var reload = function () { renderVersions(box, ex); };
+      var decide = function (v, decision) {
+        openForm({
+          title: (decision === 'validate' ? 'Valider' : 'Refuser') + ' la version ' + v.number + ' (' + v.label + ')', ok: decision === 'validate' ? 'Valider' : 'Refuser',
+          note: 'Figée par ' + v.author + ' : ' + v.justification,
+          fields: [{ key: 'note', label: decision === 'validate' ? 'Note (facultative)' : 'Motif du refus (obligatoire)', type: 'textarea', value: '' }],
+          onSubmit: function (f) { return call('exercise.version.decide', { id: v.id, version: v.version, decision: decision, note: f.note }, true).then(function () { toast(decision === 'validate' ? 'Version validée.' : 'Version refusée.'); reload(); }); }
+        });
+      };
+      box.appendChild(table('versions-table', ['N°', 'Libellé', 'Figée le', 'Par', 'Statut', { t: 'Attendu' }, { t: 'Accordé' }, { t: 'Parts' }, ''], r.versions.map(function (v) {
+        var btns = [];
+        if (v.can_decide) { btns.push(el('button', { type: 'button', class: 'btn ver-validate', 'data-id': v.id, text: 'Valider', onclick: function () { decide(v, 'validate'); } })); btns.push(el('button', { type: 'button', class: 'btn ver-refuse', 'data-id': v.id, text: 'Refuser', onclick: function () { decide(v, 'refuse'); } })); }
+        return el('tr', { 'data-version': v.id }, [
+          el('td', { text: String(v.number) }), el('td', {}, [v.label, el('small', { style: 'display:block;color:var(--muted)', text: v.justification })]), el('td', { text: frDay(v.created_at || v.decided_at) }), el('td', { text: v.author }),
+          el('td', {}, [el('span', { class: 'badge ' + (v.status === 'Validée' ? 'ok' : v.status === 'Refusée' ? 'alert' : 'warn'), text: v.status }), v.decided_by ? el('small', { style: 'display:block;color:var(--muted)', text: 'par ' + v.decided_by + (v.decision_note ? ' : ' + v.decision_note : '') }) : null]),
+          el('td', { class: 'num', text: v.totals.expected === null ? '—' : eur(v.totals.expected) }), el('td', { class: 'num', text: v.totals.granted === null ? '—' : eur(v.totals.granted) }), el('td', { class: 'num', text: eur(v.totals.parts) }),
+          el('td', {}, [el('div', { class: 'actions-cell' }, btns)])]);
+      })));
+      // comparer deux versions, ou une version et l'état actuel
+      var opts = function (withCurrent) { return r.versions.map(function (v) { return el('option', { value: v.id, text: 'V' + v.number + ' · ' + v.label }); }).concat(withCurrent ? [el('option', { value: 'current', text: 'État actuel' })] : []); };
+      var selA = el('select', { id: 'compare-a', class: 'inline', 'aria-label': 'Comparer la version' }, opts(false)), selB = el('select', { id: 'compare-b', class: 'inline', 'aria-label': 'avec' }, opts(true));
+      selA.value = r.versions[0].id; selB.value = r.versions.length > 1 ? r.versions[0].id : 'current'; if (r.versions.length > 1) { selA.value = r.versions[1].id; }
+      var out = el('div', { id: 'version-diff' });
+      box.appendChild(el('div', { class: 'row', style: 'margin-top:10px' }, [el('span', { text: 'Comparer' }), selA, el('span', { text: 'avec' }), selB, el('button', { type: 'button', class: 'btn', id: 'compare-run', text: 'Comparer', onclick: function () {
+        call('exercise.version.compare', { projectId: state.projectId, exerciseId: ex.id, a: selA.value, b: selB.value }).then(function (d) { renderDiff(out, d); }).catch(function (e) { toast(ppmErrorText(e), true); });
+      } })]));
+      box.appendChild(out);
+    }).catch(function (e) { clear(box); box.appendChild(el('p', { class: 'note', text: 'Versions indisponibles : ' + ppmErrorText(e) })); });
+  }
+  function renderDiff(out, d) {
+    clear(out);
+    out.appendChild(el('h3', { class: 'imp-sub', id: 'diff-title', text: d.a.label + ' → ' + d.b.label }));
+    if (d.identical) { out.appendChild(el('p', { class: 'note', id: 'diff-same', text: 'Aucun écart entre ces deux états.' })); return; }
+    out.appendChild(el('p', { class: 'note', id: 'diff-totals', text: 'Attendu ' + deltaText(d.totals.expected) + ' · Accordé ' + deltaText(d.totals.granted) + ' · Parts des livrables ' + deltaText(d.totals.parts) }));
+    if (d.teams.length) out.appendChild(table('diff-teams', ['Équipe', { t: 'Attendu' }, { t: 'Accordé' }, { t: 'Parts' }], d.teams.map(function (t) {
+      return el('tr', {}, [el('td', { text: t.name }), el('td', { class: 'num', text: t.expected.delta ? deltaText(t.expected) : '—' }), el('td', { class: 'num', text: t.granted.delta ? deltaText(t.granted) : '—' }), el('td', { class: 'num', text: t.parts.delta ? deltaText(t.parts) : '—' })]);
+    })));
+    if (d.parts.length) out.appendChild(table('diff-parts', ['Livrable', 'Équipe', { t: 'Avant' }, { t: 'Après' }, 'Écart'], d.parts.map(function (x) {
+      return el('tr', { class: 'diff-' + x.status }, [el('td', { text: x.deliverable }), el('td', { text: x.team }), el('td', { class: 'num', text: x.a === null ? '—' : eur(x.a) }), el('td', { class: 'num', text: x.b === null ? '—' : eur(x.b) }), el('td', {}, [el('span', { class: 'badge ' + (x.status === 'retirée' ? 'alert' : x.status === 'ajoutée' ? 'ok' : 'warn'), text: x.status })])]);
+    })));
+  }
+  function openFreeze(box, ex) {
+    openForm({
+      title: 'Figer une version de l’exercice ' + ex.year, ok: 'Figer',
+      note: 'Un instantané du budget attendu, de l’accordé et des parts des livrables de ce projet, qui ne changera plus. Il est à valider par le niveau du dessus de son auteur.',
+      fields: [{ key: 'label', label: 'Libellé (ex. Attendu, Accordé, Révision de février)', type: 'text', value: '', maxlength: 60 }, { key: 'justification', label: 'Motif (obligatoire)', type: 'textarea', value: '' }],
+      onSubmit: function (f) { return call('exercise.version.create', { projectId: state.projectId, exerciseId: ex.id, label: f.label, justification: f.justification }, true).then(function () { toast('Version figée.'); renderVersions(box, ex); }); }
+    });
   }
 
   // ------------------------------------------------------------ exercice : export et import par classeur Google Sheet

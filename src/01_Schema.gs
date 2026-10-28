@@ -231,6 +231,22 @@ var SCHEMA = {
     cols: ['id', 'at', 'table_name', 'entity_id', 'project_id', 'field', 'old_value', 'new_value',
       'actor', 'source', 'acknowledged', 'acknowledged_by', 'acknowledged_at', 'actor_level']   // actor_level : niveau de l'auteur sur l'objet (54_Validation.gs)
   },
+  /**
+   * Une VERSION FIGÉE de l'exercice d'un projet (0.18.0) : un instantané du budget attendu, de l'accordé et des parts des livrables par équipe, à comparer à la précédente. Elle est à valider
+   * par le niveau du dessus de son auteur (`author_level` : son meilleur rang sur le projet quand il l'a figée ; 0 = personne au-dessus, validée d'emblée). Jamais modifiée ni supprimée.
+   */
+  ExerciseVersion: {
+    book: 'data',
+    cols: ['id', 'exercise_id', 'project_id', 'number', 'label', 'justification', 'author', 'author_level', 'status', 'decided_by', 'decided_at', 'decision_note',
+      'total_expected', 'total_granted', 'total_parts'],
+    required: ['exercise_id', 'project_id', 'justification'],
+    enums: { status: ['À valider', 'Validée', 'Refusée'] }
+  },
+  /** Les lignes d'une version figée : kind « team » (une équipe : attendu, accordé, total de ses parts) ou « part » (une équipe sur un livrable : montant). */
+  ExerciseVersionLine: {
+    book: 'history', tech: false,
+    cols: ['id', 'version_id', 'kind', 'team_id', 'deliverable_id', 'label', 'expected', 'granted', 'amount']
+  },
   BaselineItem: {
     book: 'history', tech: false,
     cols: ['id', 'baseline_id', 'entity_type', 'entity_id', 'snapshot_json']

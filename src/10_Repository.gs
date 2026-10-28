@@ -234,7 +234,7 @@ function openBook_(book) {
  * colonne de texte (cellule écrite avant cette protection) redevient du texte.
  */
 var SHEET_PARSED_COLS = {};
-['ac', 'amount', 'annual_cost', 'bac', 'capacity_days_month', 'cpi', 'days', 'eac', 'ev', 'expected', 'financial_value', 'fixed_amount', 'granted', 'impact', 'lag_days', 'number',
+['ac', 'amount', 'annual_cost', 'author_level', 'bac', 'capacity_days_month', 'cpi', 'days', 'eac', 'ev', 'expected', 'financial_value', 'fixed_amount', 'granted', 'total_expected', 'total_granted', 'total_parts', 'impact', 'lag_days', 'number',
   'planned_amount', 'probability', 'progress_pct', 'pv', 'reminder_days', 'score', 'spi', 'version', 'year', 'deleted', 'acknowledged', 'enabled',
   'is_external', 'news_on', 'reminder_off', 'unverified', 'status_date', 'at', 'budget_authorized', 'budget_allocated'].concat(DATE_COLS).forEach(function (c) { SHEET_PARSED_COLS[c] = true; });
 

@@ -4,7 +4,7 @@
  * Deux groupes de feuilles sont verrouillés en ÉDITION (la lecture reste ouverte à qui ouvre le classeur : voir la note en fin de fichier) :
  *   - « Rôles et personnes » (RoleAssignment, Role, Resource) : modifiables par les Program Leader, Domain Program Leader et administrateurs.
  *     Resource en fait partie : une personne est reconnue par l'adresse de sa fiche, la modifier reviendrait à prendre le rôle d'une autre.
- *   - « Budget et achats » (BudgetLine, BudgetPhasing, PurchaseOrder, PurchaseOrderLink, EtpCost, Exercise, TeamBudget, ActualImport) : en plus, les chefs de projet.
+ *   - « Budget et achats » (BudgetLine, BudgetPhasing, PurchaseOrder, PurchaseOrderLink, EtpCost, Exercise, TeamBudget, ExerciseVersion, ActualImport) : en plus, les chefs de projet.
  *
  * Personne ne gère ces accès à la main : la liste de ceux qui peuvent modifier chaque groupe se DÉDUIT des rôles actifs (droits `sheet.roles` et `sheet.budget` de
  * la table PERMISSIONS, 00_Config.gs) et des administrateurs, et se recalcule seule quand un rôle ou une fiche change (hook de invalidateTable_), la nuit, et à la demande.
@@ -19,7 +19,7 @@ var _protectDirty = false;
 var SHEET_PROTECT_GROUPS = [
   { key: 'roles', label: 'Rôles et personnes', perm: 'sheet.roles', tables: ['RoleAssignment', 'Role', 'Resource'],
     why: 'qui a quel rôle, et à quelle adresse correspond chaque personne (donc qui est qui)' },
-  { key: 'budget', label: 'Budget et achats', perm: 'sheet.budget', tables: ['BudgetLine', 'BudgetPhasing', 'PurchaseOrder', 'PurchaseOrderLink', 'EtpCost', 'Exercise', 'TeamBudget', 'ActualImport'],
+  { key: 'budget', label: 'Budget et achats', perm: 'sheet.budget', tables: ['BudgetLine', 'BudgetPhasing', 'PurchaseOrder', 'PurchaseOrderLink', 'EtpCost', 'Exercise', 'TeamBudget', 'ExerciseVersion', 'ActualImport'],
     why: 'lignes de budget, étalement, commandes d’achat et grilles de taux' }
 ];
 
