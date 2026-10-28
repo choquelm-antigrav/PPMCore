@@ -1,5 +1,13 @@
 # Journal des versions
 
+## 0.19.0 — page Budget en onglets et suivi budgétaire
+
+- **Trois onglets** : « Suivi budgétaire N » (première page visible), « OP N+1 », « Archives » (si des exercices sont clos) ; l'année vient de l'exercice. Les engagements et enveloppes (bilan par CPN, achats, enveloppe par workpackage) font partie du suivi budgétaire. Le sélecteur d'exercice disparaît.
+- **Sections rétractables**, avec résumé sur le titre, dans la même présentation que la page Actualités ; versions figées en deux colonnes (liste, comparaison).
+- **Suivi budgétaire** (`exercise.tracking`) : synthèse, **graphique** SVG des courbes cumulées (prévu, budget accordé, engagé, valeur acquise ; par équipe au choix), tableau par équipe (reste, clash, prévu à ce jour, valeur acquise, écart), livrables en cours. La **projection de fin d'année** attend le réalisé, qui n'est pas encore importé.
+- Réponses asynchrones d'un onglet quitté ignorées (`state.epoch`).
+- Tests : `test_exercise_tracking.js` (5), `ui_budget.js` (107) ; onze sabotages vérifiés (dont un cas ajouté en route). **Backlog** : prochaine étape, le réalisé et la projection.
+
 ## 0.18.1 — constats du moteur de règles sur l'exercice et les enveloppes
 
 - **Huit règles** (`63_ExerciseRules.gs`) : `EXERCISE_CLASH` (Alerte : accordé inférieur aux parts), `EXERCISE_OVER_EXPECTED` (parts au-delà de l'attendu, en préparation), `EXERCISE_UNFUNDED` (parts sans attendu ni accordé), `EXERCISE_NO_PARTS` (Info : attendu sans livrable, une fois les livrables commencés), `EXERCISE_TEAM_RULE` (équipe hors règle ou à 4 caractères sans parente à 3), `EXERCISE_VERSION_PENDING` (version figée non validée depuis plus de 7 jours), `ENVELOPE_WP_EXCEEDED` et `ENVELOPE_PROJECT_EXCEEDED` (la règle de dépassement d'enveloppe prévue de longue date).

@@ -23,6 +23,7 @@ require('./test_exercise')();
 require('./test_exercise_import')();
 require('./test_exercise_version')();
 require('./test_exercise_rules')();
+require('./test_exercise_tracking')();
 require('./test_milestone')();
 require('./test_rights_table')();
 require('./test_baseline_scopes')();
