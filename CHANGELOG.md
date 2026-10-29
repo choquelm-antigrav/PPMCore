@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 0.19.4 — les valeurs d'avant des enveloppes sont reprises, l'écart s'affiche en direct
+
+- **Plus rien à ressaisir** : les anciennes enveloppes (budget autorisé du projet, enveloppes de workpackages), saisies avant qu'elles soient par exercice, sont **reprises en brouillon** dans la décomposition de chaque exercice qui n'a pas encore de valeur à lui ; « Valider » les adopte pour cet exercice seulement. Elles ne comptent dans aucun calcul tant qu'elles ne sont pas adoptées (`legacy` de `budget.envelope.get`).
+- **Écart en direct** : à côté de chaque champ, « +500 € vs avant (2 500 €) » (rouge en hausse, vert en baisse), contre la valeur de l'exercice si elle existe, sinon contre l'ancienne ; le brouillon ne passe jamais d'un exercice à l'autre.
+- Tests : `test_envelope.js` (11), `ui_budget.js` (131) ; trois sabotages vérifiés.
+
 ## 0.19.3 — étanchéité par exercice, projection, graphique, baselines et leur carte
 
 - **Étanchéité** : enveloppes (projet et workpackages) **par exercice** ; décomposition, bilan par CPN et achats limités aux livrables et aux commandes de l'exercice demandé ; livrables sans exercice hors budget (bouton de rattachement) ; exercice clos en lecture seule ; import et export sur l'exercice en exécution.

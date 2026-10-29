@@ -1,5 +1,5 @@
 /**
- * PPM Core 0.19.3 — fichier unique à installer (fabriqué par tools/build.js, empreinte ec2f83962ccb).
+ * PPM Core 0.19.4 — fichier unique à installer (fabriqué par tools/build.js, empreinte 8513b989160b).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
  * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs, 53_Roles.gs, 54_Validation.gs, 55_Envelope.gs, 56_Import.gs, 57_Rights.gs, 58_ScopeBaselines.gs, 59_TeamImport.gs, 60_Exercise.gs, 61_ExerciseImport.gs, 63_ExerciseRules.gs, 64_ExerciseTracking.gs.
  */
@@ -47,7 +47,7 @@ function A9_MIGRER_ROLES_SIMULATION() { return migrerRoles_(true); }
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.19.3';
+var PPM_VERSION = '0.19.4';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -12179,6 +12179,12 @@ function envelopeView_(ctx, project, ex) {
       over_cost: authorized !== null && total > authorized, over_alloc: authorized !== null && allocated > authorized,
       over_by: authorized === null ? 0 : round2(Math.max(0, total - authorized, allocated - authorized)) };
   }
+  // les « valeurs d'avant » (0.19.3) : les anciennes enveloppes, qui n'étaient pas par exercice. Elles ne comptent dans aucun calcul ; la page les reprend en brouillon (rien à ressaisir) et affiche
+  // l'écart de ce qu'on saisit avec elles. Seulement là où l'exercice n'a pas encore de valeur à lui.
+  var oldNum = function (v) { return isBlank(v) ? null : Number(v); };
+  out.legacy = { authorized: access.all && envAmount_(project, envKey_(ex)) === null ? oldNum(project.budget_authorized) : null, by_wp: {} };
+  rows.forEach(function (r) { var w0 = wpById[r.wp_id]; if (w0 && envAmount_(w0, envKey_(ex)) === null && oldNum(w0.budget_allocated) !== null) out.legacy.by_wp[r.wp_id] = oldNum(w0.budget_allocated); });
+
   // les livrables et jalons, sous leur workpackage : la décomposition du budget. ÉTANCHE (0.19.3) : seuls les livrables DE CET EXERCICE (et les jalons de son année) y figurent ; les livrables d'un autre
   // exercice, ou sans exercice, n'y sont pas et leur coût n'est pas compté. Un livrable porte le coût de ses lignes ; un jalon n'a pas de coût.
   var wpVisible = {}; rows.forEach(function (r) { wpVisible[r.wp_id] = true; });

@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.19.3">
+<meta name="ppm-version" content="0.19.4">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <?!= include('CommonForms') ?>
@@ -71,6 +71,10 @@
   .save-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 12px 0 0; padding-top: 12px; border-top: 1px solid var(--rule); }
   .save-bar .btn:disabled { opacity: .55; cursor: default; }
   .save-hint { margin: 0; color: var(--accent, #1f6feb); font-weight: 600; }
+  .env-field { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+  .env-delta { font-size: 12px; color: var(--muted); min-height: 14px; }
+  .env-delta.up { color: var(--alert-ink, #c62828); }
+  .env-delta.down { color: var(--ok-ink, #1a7f4b); }
   .env-input.changed { border-color: var(--accent, #1f6feb); box-shadow: 0 0 0 1px var(--accent, #1f6feb); }
   .env-table tr.over td, #env-table tr.over td { background: color-mix(in srgb, var(--red, #c62828) 6%, transparent); }
   #env-table tr.item-row td { background: transparent; }
@@ -321,7 +325,7 @@ var BOOT = <?!= boot ?>;
   /** Changer d'onglet : l'exercice affiché est celui de l'onglet ; les zones de l'autre onglet sont vidées (aucun identifiant en double). */
   function setTab(t, silent) {
     state.tab = t; state.epoch++;   // les réponses attendues de l'onglet précédent sont ignorées à leur arrivée
-    state.exercise = null; state.budget = null; state.tracking = null;
+    state.exercise = null; state.budget = null; state.tracking = null; state.envDraft = null; state.exDraft = {};   // un brouillon ne passe jamais d'un exercice à l'autre
     var ex = activeExercise(); state.exerciseId = ex ? ex.id : '';
     ['enveloppe', 'proj', 'graph', 'track', 'exercice'].forEach(function (id) { clear($('panel-' + id)); });
     try { sessionStorage.setItem('ppm-budget-tab', t); } catch (e) { /* stockage indisponible */ }
@@ -365,6 +369,7 @@ var BOOT = <?!= boot ?>;
     $('cpn-edit').textContent = p.cpn ? 'Modifier le CPN' : 'Définir le CPN';
   }
   function loadProject(id) {
+    state.envDraft = null; state.exDraft = {};
     state.projectId = id; invalidate();
     $('picker').value = id;
     var ticket = ++state.seq;
@@ -623,19 +628,42 @@ var BOOT = <?!= boot ?>;
     };
     return bar;
   }
-  function moneyInput(id, value, label, onDraft) {
+  /**
+   * Un champ de montant en brouillon. `ref` : la valeur d'avant (celle de l'exercice si elle existe, à défaut l'ancienne enveloppe) ; l'écart avec ce qui est saisi s'affiche EN DIRECT à côté du champ.
+   */
+  function moneyInput(id, value, label, onDraft, ref) {
     var i = el('input', { type: 'number', class: 'inline env-input', id: id, min: '0', step: 'any', placeholder: 'pas de plafond', 'aria-label': label });
     var server = value === null || value === undefined ? '' : String(value);
+    var delta = el('small', { class: 'env-delta', id: id + '-delta' });
+    var showDelta = function () {
+      var v = i.value === '' ? null : Number(String(i.value).replace(',', '.'));
+      if (ref === null || ref === undefined || v === null || isNaN(v) || Math.abs(v - ref) < 0.005) { delta.textContent = ''; delta.className = 'env-delta'; return; }
+      var d = Math.round((v - ref) * 100) / 100;
+      delta.textContent = (d > 0 ? '+' : '−') + eur(Math.abs(d)) + ' vs avant (' + eur(ref) + ')';
+      delta.className = 'env-delta ' + (d > 0 ? 'up' : 'down');
+    };
     i.value = state.envDraft && onDraft.key !== undefined && onDraft.get() !== undefined ? onDraft.get() : server;
     i.classList.toggle('changed', !sameMoney(i.value, server));
-    i.addEventListener('input', function () { onDraft.set(i.value, server); i.classList.toggle('changed', !sameMoney(i.value, server)); });
-    return i;
+    i.addEventListener('input', function () { onDraft.set(i.value, server); i.classList.toggle('changed', !sameMoney(i.value, server)); showDelta(); });
+    showDelta();
+    var wrap = el('span', { class: 'env-field' }, [i, delta]);
+    wrap.input = i;
+    return wrap;
   }
   function renderEnvelope() {
     var panel = $('panel-enveloppe'), v = state.envelope;
     clear(panel);
     if (!state.envDraft) state.envDraft = { alloc: {} };
-    var draft = state.envDraft, t = v.totals, items = v.items || [];
+    var draft = state.envDraft, t = v.totals, items = v.items || [], lg = v.legacy || { authorized: null, by_wp: {} }, seededNow = false;
+    // les valeurs d'avant (anciennes enveloppes, qui n'étaient pas par exercice) sont REPRISES EN BROUILLON : rien à ressaisir, il suffit de valider ; l'écart avec elles s'affiche en direct
+    if (!draft.seeded) {
+      draft.seeded = true;
+      if (v.can_edit) {
+        if (t && v.canSetProject && lg.authorized !== null && t.authorized === null && draft.authorized === undefined) { draft.authorized = String(lg.authorized); seededNow = true; }
+        v.rows.forEach(function (r) { if (r.canSet && r.allocated === null && lg.by_wp[r.wp_id] !== undefined && draft.alloc[r.wp_id] === undefined) { draft.alloc[r.wp_id] = String(lg.by_wp[r.wp_id]); seededNow = true; } });
+      }
+    }
+    var hasSeed = seededNow || (draft.authorized !== undefined && lg.authorized !== null && String(lg.authorized) === draft.authorized) || Object.keys(draft.alloc).some(function (k) { return lg.by_wp[k] !== undefined && String(lg.by_wp[k]) === draft.alloc[k]; });
     var bar = null;
     var touch = function () { if (bar) bar.sync(envDirty()); };
     var overText = function (by) { return by ? ' · ' + eur(by) + ' au-delà' : ''; };
@@ -647,7 +675,7 @@ var BOOT = <?!= boot ?>;
       cards.appendChild(card('Coût prévu des livrables', eur(t.cost), t.remaining === null ? '' : (t.remaining < 0 ? 'dépasse l’enveloppe de ' + eur(-t.remaining) : 'il reste ' + eur(t.remaining) + ' sur l’enveloppe'), t.remaining !== null && t.remaining < 0 ? 'alert' : ''));
       panel.appendChild(cards);
       if (v.canSetProject && v.can_edit) {
-        var ai = moneyInput('env-authorized', t.authorized, 'Budget autorisé du projet', { key: 'authorized', get: function () { return draft.authorized; }, set: function (val, server) { if (sameMoney(val, server)) delete draft.authorized; else draft.authorized = val; touch(); } });
+        var ai = moneyInput('env-authorized', t.authorized, 'Budget autorisé du projet', { key: 'authorized', get: function () { return draft.authorized; }, set: function (val, server) { if (sameMoney(val, server)) delete draft.authorized; else draft.authorized = val; touch(); } }, t.authorized !== null ? t.authorized : (lg.authorized !== null ? lg.authorized : null));
         panel.appendChild(el('label', { class: 'field env-project' }, ['Budget autorisé du projet (€) ', ai]));
       }
     } else {
@@ -688,7 +716,7 @@ var BOOT = <?!= boot ?>;
     };
     v.rows.forEach(function (r) {
       var name = el('td', {}, [el('span', { class: 'env-indent', style: 'padding-left:' + (r.depth * 18) + 'px', text: (r.code ? r.code + ' ' : '') + r.name })]);
-      var cell = r.canSet && v.can_edit ? moneyInput('env-' + r.wp_id, r.allocated, 'Enveloppe de ' + r.name, { key: r.wp_id, get: function () { return draft.alloc[r.wp_id]; }, set: function (val, server) { if (sameMoney(val, server)) delete draft.alloc[r.wp_id]; else draft.alloc[r.wp_id] = val; touch(); } })
+      var cell = r.canSet && v.can_edit ? moneyInput('env-' + r.wp_id, r.allocated, 'Enveloppe de ' + r.name, { key: r.wp_id, get: function () { return draft.alloc[r.wp_id]; }, set: function (val, server) { if (sameMoney(val, server)) delete draft.alloc[r.wp_id]; else draft.alloc[r.wp_id] = val; touch(); } }, r.allocated !== null ? r.allocated : (lg.by_wp[r.wp_id] !== undefined ? lg.by_wp[r.wp_id] : null))
         : el('span', { text: r.allocated === null ? 'Non fixée' : eur(r.allocated) });
       var status = r.allocated === null ? badge('Pas de plafond') : r.over ? badge('En dépassement', 'alert') : badge('Dans l’enveloppe', 'ok');
       var extra = r.over && r.over_by ? el('small', { class: 'late', text: '+' + eur(r.over_by) + (r.over_alloc ? ' (sous-workpackages)' : '') }) : null;
@@ -704,6 +732,7 @@ var BOOT = <?!= boot ?>;
     }
     panel.appendChild(table('env-table', ['Élément', 'Enveloppe (€)', 'Coût prévu', 'Reste', 'À répartir', 'État'].concat(baseline ? ['Depuis la baseline ' + baseline.label] : []), trs));
     panel.appendChild(el('p', { class: 'note', text: 'Les sous-workpackages se répartissent l’enveloppe de leur workpackage ; les workpackages, celle du projet. On peut dépasser : l’état devient « En dépassement ». Le coût prévu d’un livrable est celui de ses lignes : le bouton € ouvre son coût (parts d’équipe et forfaits).' }));
+    if (hasSeed && v.can_edit) panel.appendChild(el('p', { class: 'note env-legacy', id: 'env-legacy-note', text: 'Les valeurs d’avant (enveloppes saisies avant qu’elles soient par exercice) sont reprises en brouillon pour l’exercice ' + v.exercise.year + ' : modifiez-les si besoin (l’écart avec elles s’affiche), puis cliquez sur « Valider » pour les adopter.' }));
     panel.appendChild(el('p', { class: 'ed-error', id: 'env-error', role: 'alert', hidden: 'hidden' }));
     if (v.can_edit) bar = saveBar('env', function () {
       var params = { projectId: state.projectId, exerciseId: v.exercise.id }, d = state.envDraft;

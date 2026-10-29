@@ -197,4 +197,20 @@ module.exports = function () {
     eq([bw.allocated, bw.projected, bw.over, bw2.projected], [1800, 1600, false, 2212.5], 'par workpackage : projection, enveloppe, état');
     ok(v4.monthly.budget === 6000 && Array.isArray(v4.monthly.committed), 'le graphique a son budget de référence et l’engagé du projet');
   });
+
+  test('Les valeurs d’avant (enveloppes saisies avant qu’elles soient par exercice) sont proposées, jamais comptées', () => {
+    const w = world();
+    w.c.repoUpdate('Project', w.p1.id, { budget_authorized: 7000 }, null, w.S);
+    w.c.repoUpdate('WorkPackage', w.w1.id, { budget_allocated: 2500 }, null, w.S);
+    let v = w.env();
+    eq([v.legacy.authorized, v.legacy.by_wp[w.w1.id], v.legacy.by_wp[w.w2.id]], [7000, 2500, undefined], 'les anciennes valeurs sont rendues à la page, là où l’exercice n’a pas de valeur à lui');
+    eq([v.totals.authorized, w.row(v, w.w1).allocated], [null, null], 'mais elles ne comptent dans aucun calcul : l’exercice n’a pas de budget tant qu’on ne les adopte pas');
+    w.set(CP, { allocations: [{ wpId: w.w1.id, amount: 3000 }] });
+    v = w.env();
+    eq([v.legacy.by_wp[w.w1.id], v.legacy.authorized], [undefined, 7000], 'dès que l’exercice a sa valeur, l’ancienne n’est plus proposée pour ce workpackage (le budget autorisé reste proposé : il n’a pas été saisi)');
+    const prep = w.call('admin@entreprise.com', 'exercise.create', { year: 2027 });
+    const o = w.call(CP, 'budget.envelope.get', { projectId: w.p1.id, exerciseId: prep.id });
+    eq([o.legacy.authorized, o.legacy.by_wp[w.w1.id], w.row(o, w.w1).allocated], [7000, 2500, null], 'l’autre exercice se voit proposer les mêmes valeurs d’avant, sans rien en commun avec 2026');
+    eq(w.row(w.call(CP, 'budget.envelope.get', { projectId: w.p1.id, exerciseId: w.exec.id }), w.w1).allocated, 3000, 'et 2026 garde la sienne');
+  });
 };

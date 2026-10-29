@@ -482,6 +482,26 @@ function openPage(user, startTab) {
   check(!!unchanged, 'un livrable inchangé : « = »');
   check(!!bl.doc.querySelector('#env-table tr.is-milestone') && bl.doc.querySelector('#env-table tr.is-milestone').cells[6].textContent.trim() === '', 'un jalon n’a pas de coût : cellule vide');
 
+  // ---------------------------------------------------------------- 0.19.3 : les valeurs d'avant sont reprises en brouillon, l'écart s'affiche en direct
+  c.repoUpdate('Project', w.p1.id, { budget_authorized: 7000 }, null, w.S);
+  c.repoUpdate('WorkPackage', w.w1.id, { budget_allocated: 2500 }, null, w.S);
+  const lg = openPage(CP);
+  await lg.until(() => lg.$('env-table'));
+  lg.click(lg.$('tab-op'));
+  await lg.until(() => lg.$('env-authorized') && lg.$('env-' + w.w1.id) && lg.$('env-legacy-note'));
+  check(lg.$('env-authorized').value === '7000' && lg.$('env-' + w.w1.id).value === '2500' && !lg.$('env-validate').disabled && lg.$('env-validate').classList.contains('primary') && /valeurs d’avant/.test(lg.text('env-legacy-note')), 'OP 2027 : les anciennes enveloppes sont reprises en brouillon (rien à ressaisir) ; « Valider » est bleu et la page le dit');
+  check(c.envAmount_(c.repoGet('Project', w.p1.id), c.envKey_(prep)) === null && c.envAmount_(c.repoGet('WorkPackage', w.w1.id), c.envKey_(prep)) === null, 'rien n’est enregistré pour 2027 tant qu’on ne valide pas');
+  check(lg.text('env-' + w.w1.id + '-delta') === '', 'aucun écart tant qu’on n’a pas modifié la valeur reprise');
+  lg.set('env-' + w.w1.id, '3000'); lg.input(lg.$('env-' + w.w1.id));
+  check(/\+500\s?€ vs avant \(2\s?500\s?€\)/.test(lg.text('env-' + w.w1.id + '-delta')) && lg.$('env-' + w.w1.id + '-delta').classList.contains('up'), 'l’écart avec la valeur d’avant s’affiche en direct : ' + lg.text('env-' + w.w1.id + '-delta'));
+  lg.set('env-' + w.w1.id, '2000'); lg.input(lg.$('env-' + w.w1.id));
+  check(/−500\s?€ vs avant/.test(lg.text('env-' + w.w1.id + '-delta')) && lg.$('env-' + w.w1.id + '-delta').classList.contains('down'), 'et il passe en baisse quand on descend : ' + lg.text('env-' + w.w1.id + '-delta'));
+  lg.click(lg.$('env-validate'));
+  await lg.until(() => c.envAmount_(c.repoGet('WorkPackage', w.w1.id), c.envKey_(prep)) === 2000 && c.envAmount_(c.repoGet('Project', w.p1.id), c.envKey_(prep)) === 7000);
+  check(c.envAmount_(c.repoGet('WorkPackage', w.w1.id), c.envKey_(exec)) !== 2000, 'adopté pour 2027 seulement : l’exercice 2026 garde ses propres valeurs');
+  await lg.until(() => lg.$('env-validate') && lg.$('env-validate').disabled && !lg.$('env-legacy-note'));
+  check(lg.text('env-' + w.w1.id + '-delta') === '', 'enregistré : plus de reprise, plus d’écart');
+
   console.log(failed ? '\n' + failed + ' échec(s).' : '\nPage Budget : tout est conforme.');
   process.exit(failed ? 1 : 0);
 })();

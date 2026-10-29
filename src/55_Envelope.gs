@@ -107,6 +107,12 @@ function envelopeView_(ctx, project, ex) {
       over_cost: authorized !== null && total > authorized, over_alloc: authorized !== null && allocated > authorized,
       over_by: authorized === null ? 0 : round2(Math.max(0, total - authorized, allocated - authorized)) };
   }
+  // les « valeurs d'avant » (0.19.3) : les anciennes enveloppes, qui n'étaient pas par exercice. Elles ne comptent dans aucun calcul ; la page les reprend en brouillon (rien à ressaisir) et affiche
+  // l'écart de ce qu'on saisit avec elles. Seulement là où l'exercice n'a pas encore de valeur à lui.
+  var oldNum = function (v) { return isBlank(v) ? null : Number(v); };
+  out.legacy = { authorized: access.all && envAmount_(project, envKey_(ex)) === null ? oldNum(project.budget_authorized) : null, by_wp: {} };
+  rows.forEach(function (r) { var w0 = wpById[r.wp_id]; if (w0 && envAmount_(w0, envKey_(ex)) === null && oldNum(w0.budget_allocated) !== null) out.legacy.by_wp[r.wp_id] = oldNum(w0.budget_allocated); });
+
   // les livrables et jalons, sous leur workpackage : la décomposition du budget. ÉTANCHE (0.19.3) : seuls les livrables DE CET EXERCICE (et les jalons de son année) y figurent ; les livrables d'un autre
   // exercice, ou sans exercice, n'y sont pas et leur coût n'est pas compté. Un livrable porte le coût de ses lignes ; un jalon n'a pas de coût.
   var wpVisible = {}; rows.forEach(function (r) { wpVisible[r.wp_id] = true; });
