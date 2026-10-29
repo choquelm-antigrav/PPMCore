@@ -87,7 +87,7 @@ function baselineScopes_(ctx, project, baselines) {
   };
   var out = [], add = function (scope, depth) {
     var a = activeOf(scope);
-    out.push({ type: scope.type, id: scope.id, label: baselineScopeLabel_(scope, project, wpById), depth: depth, canCreate: canBaselineScope_(ctx, scope), active: a ? { id: a.id, label: a.label || 'B' + a.number, number: Number(a.number), decided_at: a.decided_at || '' } : null });
+    out.push({ type: scope.type, id: scope.id, prefix: baselineAutoLabel_(project, scope, '').replace(/_$/, ''), label: baselineScopeLabel_(scope, project, wpById), depth: depth, canCreate: canBaselineScope_(ctx, scope), active: a ? { id: a.id, label: a.label || 'B' + a.number, number: Number(a.number), decided_at: a.decided_at || '' } : null });
   };
   add({ type: 'project', id: project.id }, 0);
   var kids = {}; wps.forEach(function (w) { if (w.parent_wp_id) (kids[w.parent_wp_id] = kids[w.parent_wp_id] || []).push(w); });

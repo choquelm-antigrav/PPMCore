@@ -252,7 +252,8 @@ function importAnalyze_(parsed, existing) {
       w.action = diff ? 'update' : 'same';
     }
     counts.wps[w.action]++;
-    if (w.envelope !== '' && (!ex || Number(ex.budget_allocated) !== w.envelope || isBlank(ex.budget_allocated))) counts.envelope++;
+    var envEx = importEnvExercise_();
+    if (envEx && w.envelope !== '' && (!ex || envAmount_(ex, envKey_(envEx)) !== w.envelope)) counts.envelope++;
   });
   plan.items.forEach(function (i) {
     var ex = i.existing;
@@ -276,7 +277,8 @@ function importAnalyze_(parsed, existing) {
     }
     counts.lines[l.action]++;
   });
-  if (plan.project && plan.project.authorized !== '' && Number(existing.project.budget_authorized) !== plan.project.authorized) counts.envelope++;
+  var envEx0 = importEnvExercise_();
+  if (envEx0 && plan.project && plan.project.authorized !== '' && envAmount_(existing.project, envKey_(envEx0)) !== plan.project.authorized) counts.envelope++;
   // pas dans le classeur
   var inSheetWps = {}; plan.wps.forEach(function (w) { inSheetWps[w.code] = true; });
   var missing = existing.wps.filter(function (w) { return parsed.Workpackages && parsed.Workpackages.length && !inSheetWps[String(w.wbs_code)]; }).map(function (w) { return String(w.wbs_code); });
@@ -364,6 +366,15 @@ function importCan_(ctx, project) {
  * L'import et l'export de PLUSIEURS projets (page Administration : aucun `projectId`) sont réservés à l'administrateur (0.19.1) : ils créent des programmes, des projets et des personnes.
  * Un chef de projet (ou au-dessus) exporte et importe SON projet depuis la page WBS, avec `projectId`.
  */
+/**
+ * Les enveloppes (colonnes « Budget autorisé » et « Enveloppe ») d'un classeur de projets sont celles de l'exercice EN EXÉCUTION, à défaut de celui en préparation (0.19.3 : elles sont par exercice).
+ * Sans exercice, elles sont ignorées.
+ */
+function importEnvExercise_() {
+  var all = repoList('Exercise', function (x) { return !isTrue(x.deleted); });
+  return all.filter(function (x) { return x.status === 'Exécution'; })[0] || all.filter(function (x) { return x.status === 'Préparation'; })[0] || null;
+}
+
 function importRequireAdminUnlessSingle_(p, ctx) {
   if (isBlank(p.projectId) && !ctx.isAdmin) {
     throw new PpmError('FORBIDDEN', 'L’import et l’export de plusieurs projets (page Administration) sont réservés à l’administrateur. Un chef de projet importe son projet depuis la page WBS.');
@@ -632,9 +643,9 @@ function importWorkbookRows_(ctx, projects) {
     var wpCode = function (id) { return id && byId[id] ? String(byId[id].wbs_code) : ''; };
     var program = project.program_id ? programsById[project.program_id] : null;
     if (program) usedPrograms[program.id] = true;
-    out.Projets.push([project.code, project.name, program ? program.code : '', project.status || '', project.holiday_country || '', use(project.manager_resource_id), isBlank(project.budget_authorized) ? '' : Number(project.budget_authorized)]);
+    out.Projets.push([project.code, project.name, program ? program.code : '', project.status || '', project.holiday_country || '', use(project.manager_resource_id), (function () { var e0 = importEnvExercise_(), v0 = e0 ? envAmount_(project, envKey_(e0)) : null; return v0 === null ? '' : v0; })()]);
     ex.wps.slice().sort(order).forEach(function (w) {
-      out.Workpackages.push([project.code, String(w.wbs_code), wpCode(w.parent_wp_id), w.name, use(w.owner_resource_id), w.charge_code || '', isBlank(w.budget_allocated) ? '' : Number(w.budget_allocated)]);
+      out.Workpackages.push([project.code, String(w.wbs_code), wpCode(w.parent_wp_id), w.name, use(w.owner_resource_id), w.charge_code || '', (function () { var e0 = importEnvExercise_(), v0 = e0 ? envAmount_(w, envKey_(e0)) : null; return v0 === null ? '' : v0; })()]);
     });
     var contrib = {};
     ex.roles.forEach(function (a) { if (a.scope_type === 'planitem' && a.role_code === 'CONTRIB') (contrib[a.scope_id] = contrib[a.scope_id] || []).push(use(a.resource_id)); });
@@ -836,11 +847,13 @@ function importApplyProject_(ctx, project, bp, io) {
       var who = l.team ? l.team.id : pid(l.resource);
       var cur = repoList('BudgetLine', function (b) { return b.deliverable_id === it.id && (l.team ? b.team_id === who : b.resource_id === who); })[0];
       var values = l.team ? { planned_amount: l.amount } : { fixed_amount: l.amount };
+      // (0.19.3) un livrable sans exercice reçoit celui de l'import (en exécution, à défaut en préparation) avec sa première ligne : un livrable hors exercice ne compterait dans aucun budget
+      var envExL = importEnvExercise_(), attach = !isBlank(it.exercise_id) || !envExL ? {} : { exerciseId: envExL.id };
       if (cur) {
         if (Number(cur.planned_amount) === l.amount) return;
-        run('budget.line.save', { id: cur.id, values: values });
+        run('budget.line.save', Object.assign({ id: cur.id, values: values }, attach));
       } else {
-        run('budget.line.save', { values: Object.assign({ deliverable_id: it.id }, l.team ? { team_id: who } : { resource_id: who }, values) });
+        run('budget.line.save', Object.assign({ values: Object.assign({ deliverable_id: it.id }, l.team ? { team_id: who } : { resource_id: who }, values) }, attach));
       }
       applied.lines++;
     });
@@ -848,12 +861,14 @@ function importApplyProject_(ctx, project, bp, io) {
   // 5. enveloppes (état final : tout en une fois)
   step(function () {
     var cur = mustGet('Project', project.id), params = { projectId: project.id }, wanted = 0;
-    if (plan.project && plan.project.authorized !== '' && Number(cur.budget_authorized) !== plan.project.authorized) { params.authorized = plan.project.authorized; wanted++; }
+    var envEx1 = importEnvExercise_();
+    if (envEx1) params.exerciseId = envEx1.id;
+    if (envEx1 && plan.project && plan.project.authorized !== '' && envAmount_(cur, envKey_(envEx1)) !== plan.project.authorized) { params.authorized = plan.project.authorized; wanted++; }
     var allocations = [];
     plan.wps.forEach(function (w) {
       if (w.envelope === '') return;
       var wp = repoList('WorkPackage', function (x) { return x.project_id === project.id && String(x.wbs_code) === w.code; })[0];
-      if (wp && (isBlank(wp.budget_allocated) || Number(wp.budget_allocated) !== w.envelope)) allocations.push({ wpId: wp.id, amount: w.envelope });
+      if (envEx1 && wp && envAmount_(wp, envKey_(envEx1)) !== w.envelope) allocations.push({ wpId: wp.id, amount: w.envelope });
     });
     if (allocations.length) { params.allocations = allocations; wanted += allocations.length; }
     if (wanted) { run('budget.envelope.set', params); applied.envelope += wanted; }

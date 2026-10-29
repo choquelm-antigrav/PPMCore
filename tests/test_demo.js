@@ -87,11 +87,11 @@ module.exports = function () {
     const p1 = c.repoList('Project').find((p) => p.code === 'NAC-1');
     const wpBases = c.repoList('Baseline', (b) => b.project_id === p1.id && b.scope_type === 'workpackage');
     const wp = (code) => c.repoList('WorkPackage').find((w) => w.project_id === p1.id && String(w.wbs_code) === code);
-    eq(wpBases.map((b) => wp(String(c.repoGet('WorkPackage', b.scope_id).wbs_code)).wbs_code + ':' + b.label + ':' + b.status).sort(), ['1:B0:Active', '2:B0:Active'], 'WP 1 et WP 2 ont chacun leur B0 active');
+    eq(wpBases.map((b) => wp(String(c.repoGet('WorkPackage', b.scope_id).wbs_code)).wbs_code + ':' + b.label + ':' + b.status).sort(), ['1:NAC-1_1_0:Active', '2:NAC-1_2_0:Active'], 'WP 1 et WP 2 ont chacun leur baseline 0 active');
     eq([c.repoGet('WorkPackage', wp('1').id).active_baseline_id, c.repoGet('WorkPackage', wp('2').id).active_baseline_id].every(Boolean), true, 'chaque workpackage pointe sur sa baseline');
-    eq(c.repoGet('Project', p1.id).active_baseline_id, c.repoList('Baseline').find((b) => b.project_id === p1.id && b.label === 'B1' && !b.scope_type).id, 'la référence du projet reste B1');
+    eq(c.repoGet('Project', p1.id).active_baseline_id, c.repoList('Baseline').find((b) => b.project_id === p1.id && b.label === 'NAC-1_1' && !b.scope_type).id, 'la référence du projet reste NAC-1_1');
     const feed = call(c, 'changes.feed', { projectId: p1.id, all: true }).items.filter((e) => e.table === 'Baseline');
-    eq(feed.map((e) => e.entity + ' niveau ' + e.level), ['Baseline B0 · 1 Conception niveau 3'], 'seule celle de WP 1 est à valider (figée à un niveau de Workpackage leader) ; celle de WP 2, figée par l’administrateur, n’a personne au-dessus');
+    eq(feed.map((e) => e.entity + ' niveau ' + e.level), ['Baseline NAC-1_1_0 · 1 Conception niveau 3'], 'seule celle de WP 1 est à valider (figée à un niveau de Workpackage leader) ; celle de WP 2, figée par l’administrateur, n’a personne au-dessus');
     const wp2 = call(c, 'baselines.diff', { projectId: p1.id, scopeType: 'workpackage', scopeId: wp('2').id });
     const wp2vsProject = call(c, 'baselines.diff', { projectId: p1.id, scopeType: 'workpackage', scopeId: wp('2').id, against: 'project' });
     ok(wp2.totals.compared >= 3 && wp2.totals.slipped >= 1 && wp2vsProject.totals.slipped >= wp2.totals.slipped, 'les dérives des essais se lisent contre la référence locale (' + wp2.totals.slipped + ') et contre celle du projet (' + wp2vsProject.totals.slipped + ')');
@@ -99,8 +99,8 @@ module.exports = function () {
 
   test('Retards, baselines et dérives : de quoi exercer tout l’écran Suivi', () => {
     const p1 = c.repoList('Project').find((p) => p.code === 'NAC-1');
-    eq(c.repoList('Baseline', (b) => b.project_id === p1.id && !b.scope_type).map((b) => b.label + ':' + b.status).sort(), ['B0:Archivée', 'B1:Active', 'B2:Demandée'], 'NAC-1 : B0 archivée, B1 active, une demande en attente (baselines du projet)');
-    const diff = call(c, 'baselines.diff', { projectId: p1.id, base: c.repoList('Baseline').find((b) => b.project_id === p1.id && b.label === 'B0').id, to: 'current' });
+    eq(c.repoList('Baseline', (b) => b.project_id === p1.id && !b.scope_type).map((b) => b.label + ':' + b.status).sort(), [':Demandée', 'NAC-1_0:Archivée', 'NAC-1_1:Active'], 'NAC-1 : la première archivée, la deuxième active, une demande en attente (baselines du projet)');
+    const diff = call(c, 'baselines.diff', { projectId: p1.id, base: c.repoList('Baseline').find((b) => b.project_id === p1.id && b.label === 'NAC-1_0').id, to: 'current' });
     ok(diff && JSON.stringify(diff).length > 500, 'les écarts B0 → aujourd’hui sont lisibles');
     const feed = call(c, 'changes.feed', { projectId: p1.id, all: true });
     ok(JSON.stringify(feed).length > 1000, 'fil des changements non vide');

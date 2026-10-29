@@ -431,10 +431,13 @@ defineAction('budget.balance', function (p, ctx) {
   var access = budgetAccess_(ctx, project.id);
   if (!access.all) throw new PpmError('FORBIDDEN', 'Le bilan du projet est réservé à ses responsables de budget.');
   var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; });
-  var items = repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable'; });
+  // un exercice demandé : les livrables de son exercice et les commandes de son année seulement (étanchéité, 0.19.3)
+  var exB = isBlank(p.exerciseId) ? null : mustGet('Exercise', p.exerciseId);
+  var items = repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable' && (!exB || i.exercise_id === exB.id); });
   var ids = {}; items.forEach(function (i) { ids[i.id] = true; });
   var lines = repoList('BudgetLine', function (l) { return ids[l.deliverable_id]; });
   var pos = projectOrders_(project.id, wps);
+  if (exB) pos = pos.filter(function (o) { return poYear_(o) === Number(exB.year); });
   var bal = computeBalance_({ project: project, wps: wps, items: items, lines: lines, pos: pos });
   var planned = {};
   repoList('BudgetPhasing', function (x) { return lines.some(function (l) { return l.id === x.budget_line_id; }); }).forEach(function (x) { planned[x.month] = round2((planned[x.month] || 0) + Number(x.amount)); });

@@ -66,7 +66,7 @@ function openPage(user, boot) {
   check(p.text('title') === 'P1 Projet 1', 'titre');
   check(p.text('mode-badge') === 'IA désactivée', 'mode affiché : ' + p.text('mode-badge'));
   const lines = p.text('brief-lines');
-  check(/1 élément en retard, dont « Spécification »/.test(lines) && /signal faible/.test(lines) && /tient la baseline B0/.test(lines), 'synthèse calculée : ' + lines.slice(0, 160));
+  check(/1 élément en retard, dont « Spécification »/.test(lines) && /signal faible/.test(lines) && /tient la baseline P1_0/.test(lines), 'synthèse calculée : ' + lines.slice(0, 160));
   check([...p.doc.querySelectorAll('.card')].some((x) => /^En retard1/.test(x.textContent)), 'carte des retards');
   check(/Signaux faibles/.test(p.text('panel-synthese')) && /en attente fournisseur/.test(p.text('panel-synthese')), 'signaux faibles listés');
   check(!p.doc.getElementById('brief-ai') && /non activée/.test(p.text('panel-synthese')), 'pas de bouton IA, explication');

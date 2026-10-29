@@ -15,7 +15,7 @@ module.exports = function () {
     eq(w.raw(RWP, 'baselines.create', { projectId: w.p1.id, requestId: req.id }).error.code, 'FORBIDDEN');
     const b0 = w.call(CP, 'baselines.create', { projectId: w.p1.id, requestId: req.id });
     eq([b0.id, b0.number, b0.label, b0.status, b0.justification, b0.requested_by, b0.decided_by, b0.items],
-      [req.id, 0, 'B0', 'Active', 'Planning validé en revue de lancement', MEMBER, CP, 4]);
+      [req.id, 0, 'P1_0', 'Active', 'Planning validé en revue de lancement', MEMBER, CP, 4]);
     eq(w.c.repoGet('Project', w.p1.id).active_baseline_id, b0.id);
     const rows = w.c.repoList('BaselineItem', (r) => r.baseline_id === b0.id);
     const byType = {};
@@ -57,7 +57,7 @@ module.exports = function () {
     eq([by('Essais').state, by('Essais').base_owner_name, by('Essais').owner_name, by('Essais').slip], ['changed', 'Carla', 'Rémi', 0]);
     eq([by('Rapport').state, by('Spécification').state, by('Revue').state], ['added', 'removed', 'same']);
     eq(d.items[0].name, 'Calcul', 'les éléments modifiés viennent en tête, du plus gros glissement au plus petit');
-    eq([d.baseline.label, d.compareTo], ['B0', null]);
+    eq([d.baseline.label, d.compareTo], ['P1_0', null]);
   });
 
   test('Écarts de budget visibles seulement par ceux qui gèrent le budget', () => {
@@ -78,11 +78,11 @@ module.exports = function () {
     const b0 = w.call(CP, 'baselines.create', { projectId: w.p1.id, justification: 'Planning initial' });
     w.call(CP, 'planitems.update', { id: w.b.id, patch: { planned_finish: '2026-10-28' } });
     const b1 = w.call(CP, 'baselines.create', { projectId: w.p1.id, justification: 'Replanification après revue', label: 'B1 (revue)' });
-    eq([b1.number, b1.label, w.c.repoGet('Baseline', b0.id).status], [1, 'B1 (revue)', 'Archivée']);
+    eq([b1.number, b1.label, w.c.repoGet('Baseline', b0.id).status], [1, 'P1_1', 'Archivée'], 'le nom se crée seul : projet, puis numéro');
     const between = w.call(CP, 'baselines.diff', { projectId: w.p1.id, baselineId: b0.id, compareTo: b1.id });
-    eq([between.totals.slipped, between.totals.max_slip, between.compareTo.label], [1, 3, 'B1 (revue)']);
+    eq([between.totals.slipped, between.totals.max_slip, between.compareTo.label], [1, 3, 'P1_1']);
     const now = w.call(CP, 'baselines.diff', { projectId: w.p1.id });
-    eq([now.baseline.label, now.totals.slipped, now.items.every((i) => i.state === 'same')], ['B1 (revue)', 0, true]);
+    eq([now.baseline.label, now.totals.slipped, now.items.every((i) => i.state === 'same')], ['P1_1', 0, true]);
     eq(w.raw(CP, 'baselines.activate', { id: b0.id }).error.code, 'VALIDATION', 'motif obligatoire');
     eq(w.raw(CP, 'baselines.activate', { id: b1.id, reason: 'x' }).error.code, 'VALIDATION', 'déjà active');
     eq(w.raw(MEMBER, 'baselines.activate', { id: b0.id, reason: 'x' }).error.code, 'FORBIDDEN');
@@ -149,7 +149,7 @@ module.exports = function () {
     ok(lines(cp).includes('Spécification | modification | avancement | 0 → 50'), 'l’avancement déclaré se valide aussi : ' + lines(cp).join(' ; '));
     ok(lines(cp).includes('Calcul | modification | fin prévue | 2026-10-23 → 2026-10-26') && lines(cp).includes('WP 1 Conception détaillée | modification | nom | Conception → Conception détaillée'), lines(cp).join('\n'));
     ok(!lines(cp).some((l) => /^Rapport \| ajout/.test(l) || /^Essais \|/.test(l)), 'ses propres changements ne sont pas à lui de les valider');
-    eq(cp.mine.map((e) => e.entity).sort(), ['Baseline B0 · Projet P1', 'Essais', 'Rapport'], 'il les voit dans « vos modifications en attente » : la baseline qu’il a figée en fait partie');
+    eq(cp.mine.map((e) => e.entity).sort(), ['Baseline P1_0 · Projet P1', 'Essais', 'Rapport'], 'il les voit dans « vos modifications en attente » : la baseline qu’il a figée en fait partie');
     ok(cp.mine.every((e) => e.validator === 'Domain Program Leader'), 'avec le niveau qui doit les valider : le DPL');
     ok(cp.items.every((e) => e.actor && e.can_validate && typeof e.level === 'number'), 'auteur et niveau de chaque changement');
     // le DPL valide tout, y compris ce que fait le chef de projet
@@ -216,7 +216,7 @@ module.exports = function () {
     eq([row(w.j.id).baseline_finish, row(w.j.id).slip], ['2026-11-09', 0]);
     eq(row(d.id).added, true);
     eq([row('wp:' + w.w1.id).baseline_start, row('wp:' + w.w1.id).baseline_finish], ['2026-10-05', '2026-10-23']);
-    eq([g.baseline.label, g.baseline.slipped, g.baseline.added, g.baseline.removed, g.baseline.end], ['B0', 1, 1, 0, '2026-11-09']);
+    eq([g.baseline.label, g.baseline.slipped, g.baseline.added, g.baseline.removed, g.baseline.end], ['P1_0', 1, 1, 0, '2026-11-09']);
   });
 
   test('Moteur de règles : glissement critique au-delà de 5 jours ouvrés, projet sans baseline', () => {
@@ -235,5 +235,29 @@ module.exports = function () {
     ok(slip, 'jalon critique décalé de 6 jours ouvrés (le 11 novembre est férié) : ' + codes().join(', '));
     ok(/6 jours ouvrés après la baseline/.test(slip.message), slip.message);
     ok(!ins.some((i) => i.rule_code === 'CRITICAL_SLIP' && i.target_id === w.cc.id), '1 jour de glissement : sous le seuil');
+  });
+
+  test('Liste des baselines : ce qui n’est pas encore validé et qui doit le faire, en nom complet', () => {
+    const w = lot2World();
+    w.call(CP, 'baselines.create', { projectId: w.p1.id, justification: 'Planning initial' });
+    const list = () => w.call(CP, 'baselines.list', { projectId: w.p1.id }).baselines.find((b) => b.status === 'Active');
+    let b0 = list();
+    eq([b0.label, b0.validation, b0.validators, b0.pending_changes], ['P1_0', 'pending', ['Dora'], { count: 0, validators: [] }], 'une baseline figée par la cheffe de projet attend le DPL : son nom complet, pas seulement son niveau');
+    // un changement fait depuis, par le Workpackage leader : à valider par la cheffe de projet
+    w.call(RWP, 'planitems.update', { id: w.a.id, patch: { planned_finish: '2026-10-30' } });
+    b0 = list();
+    eq(b0.pending_changes, { count: 1, validators: ['Carla'] }, 'un changement du Workpackage leader depuis la baseline : à valider par Carla');
+    // le DPL valide la baseline : elle n'a plus de validateur ; la cheffe de projet valide le changement : plus rien en attente
+    const feedDpl = w.call(DPL, 'changes.feed', { projectId: w.p1.id }).items.filter((i) => i.table === 'Baseline').map((i) => i.id);
+    ok(w.raw(DPL, 'changes.ack', { ids: feedDpl }).ok, 'le DPL valide la baseline');
+    const dates = w.call(CP, 'changes.feed', { projectId: w.p1.id }).items.filter((i) => i.table === 'PlanItem').map((i) => i.id);
+    ok(w.raw(CP, 'changes.ack', { ids: dates }).ok, 'la cheffe de projet valide le changement');
+    b0 = list();
+    eq([b0.validation, b0.validators, b0.pending_changes.count], ['validated', [], 0], 'tout est validé : plus rien à dire');
+    // sans personne au-dessus de l'auteur, c'est l'administrateur
+    const w2 = lot2World();
+    w2.call(RWP, 'baselines.create', { projectId: w2.p1.id, scopeType: 'workpackage', scopeId: w2.w1.id, justification: 'Référence locale' });
+    const wl = w2.call(RWP, 'baselines.list', { projectId: w2.p1.id }).baselines.find((b) => b.scope_type === 'workpackage');
+    eq([wl.label, wl.validators], ['P1_1_0', ['Carla']], 'la baseline d’un workpackage, figée par son Workpackage leader : à valider par la cheffe de projet (nom complet)');
   });
 };

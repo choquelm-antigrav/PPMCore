@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.19.2">
+<meta name="ppm-version" content="0.19.3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -575,20 +575,38 @@
   .ver-grid .compare-col { min-width: 0; }
   @media (max-width: 900px) { .ver-grid { grid-template-columns: 1fr; } }
   .ver-meta { display: block; color: var(--muted); font-size: 12.5px; }
-  /* graphique du suivi */
-  .chart-box { margin: 10px 0 4px; }
-  .chart-box svg { width: 100%; height: auto; display: block; }
+  /* graphique : histogramme empilé par workpackage, cumul, budget (moderne, thème clair et sombre) */
+  #panel-graph, .chart-box { --c1: #3b82f6; --c2: #14b8a6; --c3: #f59e0b; --c4: #a855f7; --c5: #ef4444; --c6: #22c55e; --c7: #0ea5e9; --c8: #ec4899; }
+  .chart-box { position: relative; margin: 10px 0 4px; }
+  @media (prefers-color-scheme: dark) { #panel-graph, .chart-box { --c1: #60a5fa; --c2: #2dd4bf; --c3: #fbbf24; --c4: #c084fc; --c5: #f87171; --c6: #4ade80; --c7: #38bdf8; --c8: #f472b6; } }
+  .chart-box svg { width: 100%; height: auto; display: block; overflow: visible; }
   .chart-box .ch-axis { stroke: var(--rule); stroke-width: 1; }
-  .chart-box .ch-grid { stroke: var(--rule); stroke-width: 1; stroke-dasharray: 2 4; opacity: .7; }
-  .chart-box text { fill: var(--muted); font-size: 11px; font-family: inherit; }
-  .chart-box .ch-line { fill: none; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
-  .chart-box .ch-planned { stroke: var(--accent, #1f6feb); }
-  .chart-box .ch-granted { stroke: var(--muted); stroke-dasharray: 6 5; }
-  .chart-box .ch-committed { stroke: var(--amber, #c77d00); }
-  .chart-box .ch-earned { fill: var(--ok-ink, #1a7f4b); stroke: var(--surface); stroke-width: 2; }
-  .chart-box .ch-now { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
-  .chart-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 4px 0 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); }
-  .chart-legend i { display: inline-block; width: 18px; height: 3px; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
+  .chart-box .ch-grid { stroke: var(--rule); stroke-width: 1; stroke-dasharray: 2 5; opacity: .75; }
+  .chart-box text { fill: var(--muted); font-size: 11.5px; font-family: inherit; }
+  .chart-box text.ch-cur { fill: var(--ink); font-weight: 600; }
+  .chart-box text.ch-right { fill: var(--muted); opacity: .85; }
+  .chart-box .bar-seg { transition: opacity .15s, filter .15s; stroke: var(--surface); stroke-width: 1; }
+  .chart-box .bar-seg.future { opacity: .5; }
+  .chart-box .ch-band { fill: transparent; }
+  .chart-box .ch-band:hover { fill: color-mix(in srgb, var(--ink) 5%, transparent); }
+  .chart-box .ch-cum { fill: none; stroke: var(--ink); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; opacity: .85; }
+  .chart-box .ch-dot { fill: var(--surface); stroke: var(--ink); stroke-width: 2; }
+  .chart-box .ch-dot.now { fill: var(--ink); }
+  .chart-box .ch-budget { stroke: var(--alert-ink, #c62828); stroke-width: 1.6; stroke-dasharray: 7 6; }
+  .chart-box .ch-budget-label { fill: var(--alert-ink, #c62828); font-weight: 600; }
+  .chart-box .ch-now { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 4; }
+  .ch-tip { position: absolute; z-index: 5; min-width: 200px; max-width: 280px; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); color: var(--ink); box-shadow: 0 6px 22px rgba(0, 0, 0, .18); font-size: 12.5px; pointer-events: none; }
+  .ch-tip strong { display: block; margin-bottom: 6px; font-size: 13px; }
+  .ch-tip .tip-row, .ch-tip .tip-total { display: flex; align-items: center; gap: 8px; margin: 2px 0; }
+  .ch-tip .tip-row span, .ch-tip .tip-total span { flex: 1; color: var(--muted); }
+  .ch-tip .tip-row i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .ch-tip .tip-total { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--rule); }
+  .wp-legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px; }
+  .wp-legend .chip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border: 1px solid var(--rule); border-radius: 999px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
+  .wp-legend .chip i { width: 10px; height: 10px; border-radius: 3px; }
+  .wp-legend .chip:hover { border-color: var(--muted); }
+  .wp-legend .chip.off { opacity: .5; text-decoration: line-through; }
+  .wp-legend .chip:focus-visible { outline: 2px solid var(--accent, #1f6feb); outline-offset: 2px; }
   /* enregistrement explicite : « Valider » en bas de la zone, bleu quand il y a des modifications */
   .save-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 12px 0 0; padding-top: 12px; border-top: 1px solid var(--rule); }
   .save-bar .btn:disabled { opacity: .55; cursor: default; }
@@ -825,33 +843,17 @@
     <div class="zone" id="zone-program" hidden><h2 class="sec">Vue programme : budget et achats de tous les projets</h2></div>
     <section class="panel" id="panel-program" aria-label="Vue programme" hidden></section>
   </div>
-  <div class="cell wide" id="cell-synth">
-    <div class="zone" id="zone-synth" hidden><h2 class="sec">Synthèse et projection de fin d’année</h2></div>
-    <section class="panel" id="panel-synth" aria-label="Synthèse et projection de fin d’année" hidden></section>
+  <div class="cell wide" id="cell-enveloppe">
+    <div class="zone" id="zone-enveloppe" hidden><h2 class="sec">Décomposition du Budget</h2></div>
+    <section class="panel" id="panel-enveloppe" aria-label="Décomposition du Budget" hidden></section>
   </div>
-  <div class="cell wide" id="cell-track">
-    <div class="zone" id="zone-track" hidden><h2 class="sec">Par équipe : accordé, prévu, avancement</h2></div>
-    <section class="panel" id="panel-track" aria-label="Par équipe : accordé, prévu, avancement" hidden></section>
+  <div class="cell wide" id="cell-proj">
+    <div class="zone" id="zone-proj" hidden><h2 class="sec">Projection de fin d’année</h2></div>
+    <section class="panel" id="panel-proj" aria-label="Projection de fin d’année" hidden></section>
   </div>
-  <div class="cell wide" id="cell-deliv">
-    <div class="zone" id="zone-deliv" hidden><h2 class="sec">Livrables en cours</h2></div>
-    <section class="panel" id="panel-deliv" aria-label="Livrables en cours" hidden></section>
-  </div>
-  <div class="cell wide" id="cell-rev">
-    <div class="zone" id="zone-rev" hidden><h2 class="sec">Accordé et révisions (février, avril)</h2></div>
-    <section class="panel" id="panel-rev" aria-label="Accordé et révisions (février, avril)" hidden></section>
-  </div>
-  <div class="cell wide" id="cell-verss">
-    <div class="zone" id="zone-verss" hidden><h2 class="sec">Versions figées et révisions</h2></div>
-    <section class="panel" id="panel-verss" aria-label="Versions figées et révisions" hidden></section>
-  </div>
-  <div class="cell wide" id="cell-exercice">
-    <div class="zone" id="zone-exercice" hidden><h2 class="sec">Budget par équipe</h2></div>
-    <section class="panel" id="panel-exercice" aria-label="Budget par équipe" hidden></section>
-  </div>
-  <div class="cell wide" id="cell-vers">
-    <div class="zone" id="zone-vers" hidden><h2 class="sec">Versions figées</h2></div>
-    <section class="panel" id="panel-vers" aria-label="Versions figées" hidden></section>
+  <div class="cell wide" id="cell-graph">
+    <div class="zone" id="zone-graph" hidden><h2 class="sec">Prévisionnel budgétaire par mois et par workpackage</h2></div>
+    <section class="panel" id="panel-graph" aria-label="Prévisionnel budgétaire par mois et par workpackage" hidden></section>
   </div>
   <div class="cell" id="cell-bilan">
     <div class="zone" id="zone-bilan" hidden><h2 class="sec">Bilan par CPN</h2></div>
@@ -861,9 +863,13 @@
     <div class="zone" id="zone-po" hidden><h2 class="sec">Achats (PO)</h2></div>
     <section class="panel" id="panel-po" aria-label="Achats (PO)" hidden></section>
   </div>
-  <div class="cell wide" id="cell-enveloppe">
-    <div class="zone" id="zone-enveloppe" hidden><h2 class="sec">Décomposition du Budget</h2></div>
-    <section class="panel" id="panel-enveloppe" aria-label="Décomposition du Budget" hidden></section>
+  <div class="cell wide" id="cell-track">
+    <div class="zone" id="zone-track" hidden><h2 class="sec">Par équipe : accordé, prévu, avancement</h2></div>
+    <section class="panel" id="panel-track" aria-label="Par équipe : accordé, prévu, avancement" hidden></section>
+  </div>
+  <div class="cell wide" id="cell-exercice">
+    <div class="zone" id="zone-exercice" hidden><h2 class="sec">Budget par équipe</h2></div>
+    <section class="panel" id="panel-exercice" aria-label="Budget par équipe" hidden></section>
   </div>
 </main>
 
@@ -934,16 +940,13 @@ var BOOT = <?!= boot ?>;
    * Une zone se replie d'un clic sur son titre (même présentation que la page Actualités) ; le choix de la personne est gardé tant que la page reste ouverte.
    */
   var CELLS = [
-    { id: 'synth', tabs: ['suivi'], access: 'exercise', open: true },
-    { id: 'track', tabs: ['suivi'], access: 'exercise', open: true },
-    { id: 'deliv', tabs: ['suivi'], access: 'exercise', open: false },
-    { id: 'rev', tabs: ['suivi'], access: 'exercise', open: false },
-    { id: 'verss', tabs: ['suivi'], access: 'exercise', open: false },
-    { id: 'exercice', tabs: ['op', 'archive'], access: 'exercise', open: true },
-    { id: 'vers', tabs: ['op', 'archive'], access: 'exercise', open: true },
+    { id: 'enveloppe', tabs: ['suivi', 'op', 'archive'], access: 'budget', fixed: true },     // en haut, toujours visible : la décomposition du budget de l'exercice de l'onglet
+    { id: 'proj', tabs: ['suivi'], access: 'budget', fixed: true },
+    { id: 'graph', tabs: ['suivi'], access: 'budget', fixed: true },
     { id: 'bilan', tabs: ['suivi'], access: 'all', open: false },
     { id: 'po', tabs: ['suivi'], access: 'po', open: false },
-    { id: 'enveloppe', tabs: ['suivi', 'op', 'archive'], access: 'budget', open: true }
+    { id: 'track', tabs: ['suivi'], access: 'exercise', open: false },
+    { id: 'exercice', tabs: ['op', 'archive'], access: 'exercise', open: true }
   ];
   var state = { projectId: '', catalog: null, access: null, balance: null, po: null, envelope: null, budget: null, exercises: null, exerciseId: '', exercise: null, tracking: null, envDraft: null, exDraft: {}, costData: null, costItem: null, epoch: 0, tab: 'suivi', execEx: null, prepEx: null, closedEx: [], archiveId: '', sections: {}, outside: null, resources: null, seq: 0 };
   var $ = function (id) { return document.getElementById(id); };
@@ -996,6 +999,7 @@ var BOOT = <?!= boot ?>;
   function setSummary(id, text) { var x = $('sum-' + id); if (x) x.textContent = text || ''; }
   function initSections() {
     CELLS.forEach(function (c) {
+      if (c.fixed) return;   // une zone fixe n'est pas rétractable : son titre reste un simple titre
       var h2 = $('zone-' + c.id).querySelector('h2'), title = h2.textContent;
       clear(h2); h2.classList.add('collapsible');
       var btn = el('button', { type: 'button', class: 'sec-toggle', id: 'toggle-' + c.id, 'aria-expanded': 'true', 'aria-controls': 'panel-' + c.id }, [el('span', { class: 'chev', 'aria-hidden': 'true', text: '▾' }), el('span', { class: 'sec-title', text: title }), el('span', { class: 'sec-sum', id: 'sum-' + c.id })]);
@@ -1015,8 +1019,7 @@ var BOOT = <?!= boot ?>;
     if (state.tab === 'op') return state.prepEx;
     return (state.closedEx || []).filter(function (e) { return e.id === state.archiveId; })[0] || null;
   }
-  function exPanelId() { return state.tab === 'suivi' ? 'panel-rev' : 'panel-exercice'; }
-  function versPanelId() { return state.tab === 'suivi' ? 'panel-verss' : 'panel-vers'; }
+  function exPanelId() { return 'panel-exercice'; }
   function refreshTabs() {
     ['suivi', 'op', 'archive'].forEach(function (t) { var b = $('tab-' + t); b.textContent = tabLabel(t); b.setAttribute('aria-selected', String(state.tab === t)); });
     $('tab-archive').hidden = !state.closedEx.length;
@@ -1027,7 +1030,7 @@ var BOOT = <?!= boot ?>;
     state.tab = t; state.epoch++;   // les réponses attendues de l'onglet précédent sont ignorées à leur arrivée
     state.exercise = null; state.budget = null; state.tracking = null;
     var ex = activeExercise(); state.exerciseId = ex ? ex.id : '';
-    ['synth', 'track', 'deliv', 'rev', 'verss', 'exercice', 'vers'].forEach(function (id) { clear($('panel-' + id)); });
+    ['enveloppe', 'proj', 'graph', 'track', 'exercice'].forEach(function (id) { clear($('panel-' + id)); });
     try { sessionStorage.setItem('ppm-budget-tab', t); } catch (e) { /* stockage indisponible */ }
     refreshTabs();
     if (silent || !state.projectId || !state.access) return Promise.resolve();
@@ -1049,10 +1052,12 @@ var BOOT = <?!= boot ?>;
   }
   function loadAll() {
     var a = state.access || {}, jobs = [], suivi = state.tab === 'suivi';
-    if (a.exercise) { if (suivi) jobs.push(loadTracking()); jobs.push(loadExercise()); }
-    if (a.all && suivi) jobs.push(loadBalance());
-    if (a.po && suivi) jobs.push(loadPo());
-    if (a.budget) jobs.push(loadEnvelope());   // la décomposition du budget : dans tous les onglets (le coût d'un livrable s'y saisit)
+    if (a.budget) jobs.push(loadEnvelope());                    // la décomposition du budget (et, dans le suivi, sa projection et son graphique)
+    if (suivi) {
+      if (a.all) jobs.push(loadBalance());
+      if (a.po) jobs.push(loadPo());
+      if (a.exercise) jobs.push(loadTracking());
+    } else if (a.exercise) jobs.push(loadExercise());
     return Promise.all(jobs);
   }
   function invalidate() { state.balance = null; state.po = null; state.envelope = null; state.budget = null; state.exercise = null; state.tracking = null; state.outside = null; }
@@ -1101,11 +1106,16 @@ var BOOT = <?!= boot ?>;
   }
 
   // ------------------------------------------------------------ Bilan par CPN
+  function noExerciseNote(panel) {
+    clear(panel);
+    panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucun exercice en exécution.' }), el('span', { text: 'Le suivi budgétaire porte sur l’année en cours : l’administrateur passe l’exercice en exécution (page Administration).' })]));
+  }
   function loadBalance() {
     var panel = $('panel-bilan');
+    if (!state.exerciseId) { noExerciseNote(panel); return Promise.resolve(); }
     if (state.balance) { renderBalance(); return Promise.resolve(); }
     loading(panel);
-    return call('budget.balance', { projectId: state.projectId }).then(function (b) { state.balance = b; renderBalance(); }).catch(function (e) { failed(panel, e); });
+    return call('budget.balance', { projectId: state.projectId, exerciseId: state.exerciseId }).then(function (b) { state.balance = b; renderBalance(); }).catch(function (e) { failed(panel, e); });
   }
   function renderBalance() {
     var panel = $('panel-bilan'), b = state.balance, t = b.totals;
@@ -1136,9 +1146,10 @@ var BOOT = <?!= boot ?>;
   // ------------------------------------------------------------ Achats (PO)
   function loadPo() {
     var panel = $('panel-po');
+    if (!state.exerciseId) { noExerciseNote(panel); return Promise.resolve(); }
     if (state.po) { renderPo(); return Promise.resolve(); }
     loading(panel);
-    var reqs = [call('po.list', { projectId: state.projectId }), call('po.list', { scope: 'outside' }).catch(function () { return { orders: [] }; })];
+    var reqs = [call('po.list', { projectId: state.projectId, exerciseId: state.exerciseId }), call('po.list', { scope: 'outside' }).catch(function () { return { orders: [] }; })];
     return Promise.all(reqs).then(function (r) { state.po = r[0]; state.outside = r[1]; renderPo(); }).catch(function (e) { failed(panel, e); });
   }
   function grBadge(o) {
@@ -1292,10 +1303,17 @@ var BOOT = <?!= boot ?>;
    * On peut écrire des montants qui dépassent la somme autorisée : l'état devient « En dépassement » (en rouge), rien n'est refusé.
    */
   function loadEnvelope() {
-    var panel = $('panel-enveloppe'), epoch = state.epoch;
-    if (state.envelope) { renderEnvelope(); return Promise.resolve(); }
+    var panel = $('panel-enveloppe'), epoch = state.epoch, ex = currentExercise();
+    if (!ex) {
+      // ÉTANCHE : sans exercice pour cet onglet, aucune donnée financière (le budget de l'autre année ne s'affiche jamais ici)
+      clear(panel); clear($('panel-proj')); clear($('panel-graph')); $('cell-proj').hidden = true; $('cell-graph').hidden = true;
+      var none = state.tab === 'suivi' ? ['Aucun exercice en exécution.', 'Le suivi budgétaire porte sur l’année en cours : l’administrateur passe l’exercice en exécution (page Administration).'] : state.tab === 'op' ? ['Aucun exercice en préparation.', 'L’administrateur crée l’exercice de l’année suivante (page Administration).'] : ['Aucune archive.', 'Les exercices clos apparaissent ici.'];
+      panel.appendChild(el('div', { class: 'empty', id: 'envelope-empty' }, [el('strong', { text: none[0] }), el('span', { text: none[1] })]));
+      return Promise.resolve();
+    }
+    if (state.envelope && state.envelope.exercise.id === ex.id) { renderEnvelope(); return Promise.resolve(); }
     loading(panel);
-    return call('budget.envelope.get', { projectId: state.projectId }).then(function (v) { if (epoch !== state.epoch) return; state.envelope = v; renderEnvelope(); }).catch(function (e) { if (epoch === state.epoch) failed(panel, e); });
+    return call('budget.envelope.get', { projectId: state.projectId, exerciseId: ex.id }).then(function (v) { if (epoch !== state.epoch) return; state.envelope = v; renderEnvelope(); }).catch(function (e) { if (epoch === state.epoch) failed(panel, e); });
   }
   function sameMoney(a, b) { var x = a === null || a === undefined || a === '' ? '' : Number(String(a).replace(',', '.')), y = b === null || b === undefined || b === '' ? '' : Number(String(b).replace(',', '.')); return x === y; }
   function envDirty() { var d = state.envDraft; return !!d && (d.authorized !== undefined || Object.keys(d.alloc).length > 0); }
@@ -1335,7 +1353,7 @@ var BOOT = <?!= boot ?>;
       cards.appendChild(card('Réparti entre les workpackages', eur(t.allocated), t.reserve === null ? '' : (t.reserve < 0 ? 'dépasse le budget autorisé de ' + eur(-t.reserve) : 'réserve non répartie : ' + eur(t.reserve)), t.reserve !== null && t.reserve < 0 ? 'alert' : ''));
       cards.appendChild(card('Coût prévu des livrables', eur(t.cost), t.remaining === null ? '' : (t.remaining < 0 ? 'dépasse l’enveloppe de ' + eur(-t.remaining) : 'il reste ' + eur(t.remaining) + ' sur l’enveloppe'), t.remaining !== null && t.remaining < 0 ? 'alert' : ''));
       panel.appendChild(cards);
-      if (v.canSetProject) {
+      if (v.canSetProject && v.can_edit) {
         var ai = moneyInput('env-authorized', t.authorized, 'Budget autorisé du projet', { key: 'authorized', get: function () { return draft.authorized; }, set: function (val, server) { if (sameMoney(val, server)) delete draft.authorized; else draft.authorized = val; touch(); } });
         panel.appendChild(el('label', { class: 'field env-project' }, ['Budget autorisé du projet (€) ', ai]));
       }
@@ -1343,7 +1361,7 @@ var BOOT = <?!= boot ?>;
       panel.appendChild(el('p', { class: 'note', text: 'Vous voyez le budget de votre workpackage. Le budget autorisé du projet et la réserve ne sont visibles que du chef de projet et au-dessus.' }));
     }
     // livrables sans exercice : un rattachement groupé à l'exercice de l'onglet
-    var ex = currentExercise(), unassigned = items.filter(function (x) { return x.type === 'Livrable' && x.canEdit && x.exercise_year === null; });
+    var ex = currentExercise(), unassigned = v.unassigned || [];   // les livrables sans exercice : à rattacher, ils ne comptent dans aucun budget
     if (unassigned.length && ex && ex.status !== 'Clos') panel.appendChild(el('div', { class: 'row' }, [el('button', { type: 'button', class: 'btn', id: 'assign-open', text: 'Rattacher les livrables sans exercice à l’exercice ' + ex.year + ' (' + unassigned.length + ')', onclick: function () { openAssign(unassigned); } })]));
     if (!v.rows.length) { panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucun workpackage.' }), el('span', { text: 'Créez les workpackages dans la page WBS.' })])); return; }
     var itemsOf = {}; items.forEach(function (x) { (itemsOf[x.wp_id] = itemsOf[x.wp_id] || []).push(x); });
@@ -1377,7 +1395,7 @@ var BOOT = <?!= boot ?>;
     };
     v.rows.forEach(function (r) {
       var name = el('td', {}, [el('span', { class: 'env-indent', style: 'padding-left:' + (r.depth * 18) + 'px', text: (r.code ? r.code + ' ' : '') + r.name })]);
-      var cell = r.canSet ? moneyInput('env-' + r.wp_id, r.allocated, 'Enveloppe de ' + r.name, { key: r.wp_id, get: function () { return draft.alloc[r.wp_id]; }, set: function (val, server) { if (sameMoney(val, server)) delete draft.alloc[r.wp_id]; else draft.alloc[r.wp_id] = val; touch(); } })
+      var cell = r.canSet && v.can_edit ? moneyInput('env-' + r.wp_id, r.allocated, 'Enveloppe de ' + r.name, { key: r.wp_id, get: function () { return draft.alloc[r.wp_id]; }, set: function (val, server) { if (sameMoney(val, server)) delete draft.alloc[r.wp_id]; else draft.alloc[r.wp_id] = val; touch(); } })
         : el('span', { text: r.allocated === null ? 'Non fixée' : eur(r.allocated) });
       var status = r.allocated === null ? badge('Pas de plafond') : r.over ? badge('En dépassement', 'alert') : badge('Dans l’enveloppe', 'ok');
       var extra = r.over && r.over_by ? el('small', { class: 'late', text: '+' + eur(r.over_by) + (r.over_alloc ? ' (sous-workpackages)' : '') }) : null;
@@ -1394,8 +1412,8 @@ var BOOT = <?!= boot ?>;
     panel.appendChild(table('env-table', ['Élément', 'Enveloppe (€)', 'Coût prévu', 'Reste', 'À répartir', 'État'].concat(baseline ? ['Depuis la baseline ' + baseline.label] : []), trs));
     panel.appendChild(el('p', { class: 'note', text: 'Les sous-workpackages se répartissent l’enveloppe de leur workpackage ; les workpackages, celle du projet. On peut dépasser : l’état devient « En dépassement ». Le coût prévu d’un livrable est celui de ses lignes : le bouton € ouvre son coût (parts d’équipe et forfaits).' }));
     panel.appendChild(el('p', { class: 'ed-error', id: 'env-error', role: 'alert', hidden: 'hidden' }));
-    bar = saveBar('env', function () {
-      var params = { projectId: state.projectId }, d = state.envDraft;
+    if (v.can_edit) bar = saveBar('env', function () {
+      var params = { projectId: state.projectId, exerciseId: v.exercise.id }, d = state.envDraft;
       if (d.authorized !== undefined) params.authorized = d.authorized;
       var allocs = Object.keys(d.alloc).map(function (id) { return { wpId: id, amount: d.alloc[id] }; });
       if (allocs.length) params.allocations = allocs;
@@ -1404,9 +1422,120 @@ var BOOT = <?!= boot ?>;
         state.envelope = res; state.envDraft = null; renderEnvelope(); toast(res.changed ? 'Décomposition du budget enregistrée.' : 'Rien à changer.');
       }).catch(function (e) { $('env-validate').disabled = false; var m = $('env-error'); m.textContent = window.ppmErrorText ? ppmErrorText(e) : (e && e.message) || 'Enregistrement impossible.'; m.hidden = false; });
     }, function () { state.envDraft = null; renderEnvelope(); });
-    panel.appendChild(bar);
-    bar.sync(envDirty());
+    if (bar) { panel.appendChild(bar); bar.sync(envDirty()); }
+    else panel.appendChild(el('p', { class: 'note', id: 'env-readonly', text: 'Exercice clos : la décomposition du budget est en lecture seule.' }));
+    if (state.tab === 'suivi') { $('cell-proj').hidden = false; $('cell-graph').hidden = false; renderProjection(v); renderGraph(v); }
   }
+
+  // ------------------------------------------------------------ projection de fin d'année et prévisionnel par mois (suivi budgétaire)
+  /**
+   * Entre le tableau de décomposition et le graphique : la projection de fin d'année. Elle part de l'AVANCEMENT (le réalisé comptable n'est pas importé) : valeur acquise à ce jour + reste à faire de chaque
+   * livrable, étalé jusqu'à sa date de fin, au plus jusqu'à la fin de l'année. Les écarts s'affichent, rien ne bloque.
+   */
+  function renderProjection(v) {
+    var box = $('panel-proj'), pj = v.projection;
+    clear(box);
+    if (!pj) return;
+    var cards = el('div', { class: 'cards', id: 'proj-cards' });
+    cards.appendChild(card('Budget de l’exercice ' + pj.year, pj.budget === null ? 'Non fixé' : eur(pj.budget), pj.budget === null ? 'à fixer dans la décomposition' : 'budget autorisé du projet'));
+    cards.appendChild(card('Prévu de l’année', eur(pj.plan_year), (pj.current_month ? 'à fin ' + MONTHS[pj.current_month - 1] + ' : ' : 'à ce jour : ') + eur(pj.pv)));
+    cards.appendChild(card('Valeur acquise', eur(pj.ev), pj.ev - pj.pv < -0.5 ? 'en retard de ' + eur(pj.pv - pj.ev) + ' sur le prévu à ce jour' : 'parts × avancement des livrables', pj.ev - pj.pv < -0.5 ? 'alert' : ''));
+    cards.appendChild(card('Projection de fin d’année', eur(pj.projected), pj.gap === null ? 'sans budget de référence' : (pj.over ? 'dépasse le budget de ' + eur(-pj.gap) : 'sous le budget de ' + eur(pj.gap)), pj.over ? 'alert' : ''));
+    if (pj.committed_to_date !== null) cards.appendChild(card('Engagé (commandes d’achat)', eur(pj.committed_to_date), 'à ce jour, projet entier'));
+    box.appendChild(cards);
+    if (pj.by_wp.length) {
+      box.appendChild(table('proj-table', ['Workpackage', { t: 'Enveloppe' }, { t: 'Prévu de l’année' }, { t: 'Valeur acquise' }, { t: 'Projection' }, { t: 'Écart à l’enveloppe' }, 'État'], pj.by_wp.map(function (w) {
+        var state2 = w.allocated === null ? badge('Pas de plafond') : w.over ? badge('En dépassement', 'alert') : badge('Dans l’enveloppe', 'ok');
+        return el('tr', { 'data-wp': w.wp_id }, [cell((w.code ? w.code + ' ' : '') + w.name), cell(w.allocated === null ? '—' : eur(w.allocated), 'num'), cell(eur(w.plan), 'num'), cell(eur(w.ev), 'num'), cell(eur(w.projected), 'num'),
+          cell(w.gap === null ? '—' : signed(w.gap), 'num' + (w.over ? ' late' : '')), cell(state2)]);
+      })));
+    }
+    box.appendChild(el('p', { class: 'note', id: 'proj-method', text: 'Méthode : ' + pj.method }));
+  }
+
+  function fmtK(v) { return v >= 1e6 ? (v / 1e6).toFixed(1).replace('.', ',') + ' M€' : v >= 1e3 ? Math.round(v / 1e3) + ' k€' : Math.round(v) + ' €'; }
+  var MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+  /**
+   * Le prévisionnel budgétaire par mois et par workpackage : histogramme empilé (une couleur par workpackage de premier niveau), cumul en courbe sur l'axe de droite, budget de référence en pointillé,
+   * repère « aujourd'hui », infobulle au survol. Les pastilles de la légende masquent ou montrent un workpackage (le cumul suit).
+   */
+  var hiddenWp = {};
+  function renderGraph(v) {
+    var box = $('panel-graph'), m = v.monthly;
+    clear(box);
+    if (!m || !m.series.length) { box.appendChild(el('div', { class: 'empty', id: 'graph-empty' }, [el('strong', { text: 'Rien à afficher.' }), el('span', { text: 'Chiffrez les livrables de l’exercice (bouton € de la décomposition) : leur prévu s’étale par mois d’après leurs dates.' })])); return; }
+    var NS = 'http://www.w3.org/2000/svg', W = 1000, H = 380, L = 62, R = 74, T = 26, B = 44, cur = m.current_month;
+    var colorOf = function (i) { return 'var(--c' + ((i % 8) + 1) + ')'; };
+    var shown = m.series.filter(function (sr) { return !hiddenWp[sr.wp_id || 'none']; });
+    var legend = el('div', { class: 'wp-legend', id: 'graph-legend', role: 'group', 'aria-label': 'Workpackages affichés' }, m.series.map(function (sr, i) {
+      var key = sr.wp_id || 'none', on = !hiddenWp[key];
+      return el('button', { type: 'button', class: 'chip' + (on ? '' : ' off'), 'data-wp': key, 'aria-pressed': String(on), onclick: function () { hiddenWp[key] = on; renderGraph(v); } },
+        [el('i', { style: 'background:' + colorOf(i) }), (sr.code ? sr.code + ' ' : '') + sr.name + ' · ' + eur(sr.total)]);
+    }));
+    box.appendChild(legend);
+    var perMonth = m.months.map(function (_, i) { return shown.reduce(function (t, sr) { return t + sr.values[i]; }, 0); });
+    var run = 0, cum = perMonth.map(function (x) { run += x; return Math.round(run * 100) / 100; });
+    var maxBar = Math.max.apply(null, perMonth.concat([1])), maxCum = Math.max.apply(null, cum.concat(m.budget === null ? [] : [m.budget]).concat([1]));
+    var niceTop = function (max, n) { var step = Math.pow(10, Math.floor(Math.log(max / n) / Math.LN10)), k = max / n / step; step *= k <= 1 ? 1 : k <= 2 ? 2 : k <= 5 ? 5 : 10; return { step: step, top: Math.ceil(max / step) * step }; };
+    var A = niceTop(maxBar * 1.08, 4), C = niceTop(maxCum * 1.06, 4);
+    var band = (W - L - R) / 12, bw = band * 0.62, x0 = function (i) { return L + i * band + (band - bw) / 2; }, xc = function (i) { return L + i * band + band / 2; };
+    var yA = function (val) { return T + (H - T - B) * (1 - val / A.top); }, yC = function (val) { return T + (H - T - B) * (1 - val / C.top); };
+    var mk = function (name, attrs, text) { var n = document.createElementNS(NS, name); Object.keys(attrs || {}).forEach(function (k) { n.setAttribute(k, attrs[k]); }); if (text !== undefined) n.textContent = text; return n; };
+    var svg = mk('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': 'Prévisionnel budgétaire de l’exercice ' + m.year + ' par mois et par workpackage' });
+    for (var g = 0; g <= A.top + 1e-6; g += A.step) {
+      svg.appendChild(mk('line', { x1: L, x2: W - R, y1: yA(g), y2: yA(g), class: g === 0 ? 'ch-axis' : 'ch-grid' }));
+      svg.appendChild(mk('text', { x: L - 10, y: yA(g) + 4, 'text-anchor': 'end' }, fmtK(g)));
+    }
+    for (var g2 = 0; g2 <= C.top + 1e-6; g2 += C.step) svg.appendChild(mk('text', { x: W - R + 10, y: yC(g2) + 4, 'text-anchor': 'start', class: 'ch-right' }, fmtK(g2)));
+    m.months.forEach(function (mm, i) { svg.appendChild(mk('text', { x: xc(i), y: H - 16, 'text-anchor': 'middle', class: i + 1 === cur ? 'ch-cur' : '' }, MONTHS[i])); });
+    var tip = el('div', { class: 'ch-tip', id: 'graph-tip', role: 'status', hidden: 'hidden' });
+    // les barres empilées
+    m.months.forEach(function (mm, i) {
+      var acc = 0, top = -1;
+      shown.forEach(function (sr, k) { if (sr.values[i] > 0) top = k; });
+      shown.forEach(function (sr, k) {
+        var val = sr.values[i]; if (!(val > 0)) return;
+        var y1 = yA(acc + val), y2 = yA(acc), h = Math.max(1, y2 - y1), idx = m.series.indexOf(sr), r = Math.min(7, bw / 2, h);
+        var rect;
+        if (k === top) rect = mk('path', { d: 'M' + x0(i) + ',' + (y1 + h) + ' L' + x0(i) + ',' + (y1 + r) + ' Q' + x0(i) + ',' + y1 + ' ' + (x0(i) + r) + ',' + y1 + ' L' + (x0(i) + bw - r) + ',' + y1 + ' Q' + (x0(i) + bw) + ',' + y1 + ' ' + (x0(i) + bw) + ',' + (y1 + r) + ' L' + (x0(i) + bw) + ',' + (y1 + h) + ' Z' });
+        else rect = mk('rect', { x: x0(i), y: y1, width: bw, height: h });
+        rect.setAttribute('class', 'bar-seg' + (i + 1 > cur ? ' future' : '')); rect.setAttribute('fill', colorOf(idx)); rect.setAttribute('data-wp', sr.wp_id || 'none'); rect.setAttribute('data-month', mm);
+        svg.appendChild(rect);
+        acc += val;
+      });
+    });
+    // le budget de référence (axe de droite) et le cumul
+    if (m.budget !== null && m.budget !== undefined) {
+      svg.appendChild(mk('line', { x1: L, x2: W - R, y1: yC(m.budget), y2: yC(m.budget), class: 'ch-budget' }));
+      svg.appendChild(mk('text', { x: W - R - 6, y: yC(m.budget) - 7, 'text-anchor': 'end', class: 'ch-budget-label' }, 'Budget ' + fmtK(m.budget)));
+    }
+    svg.appendChild(mk('polyline', { points: cum.map(function (c, i) { return xc(i) + ',' + yC(c); }).join(' '), class: 'ch-cum' }));
+    cum.forEach(function (c, i) { svg.appendChild(mk('circle', { cx: xc(i), cy: yC(c), r: i + 1 === cur ? 5.5 : 3.5, class: 'ch-dot' + (i + 1 === cur ? ' now' : '') })); });
+    if (cur >= 1 && cur <= 12) { svg.appendChild(mk('line', { x1: xc(cur - 1), x2: xc(cur - 1), y1: T - 6, y2: H - B, class: 'ch-now' })); svg.appendChild(mk('text', { x: xc(cur - 1), y: T - 10, 'text-anchor': 'middle', class: 'ch-cur' }, 'aujourd’hui')); }
+    // survol : une bande par mois, une infobulle
+    m.months.forEach(function (mm, i) {
+      var bandEl = mk('rect', { x: L + i * band, y: T, width: band, height: H - T - B, class: 'ch-band', 'data-month': mm });
+      var show = function (e) {
+        var lines = shown.filter(function (sr) { return sr.values[i] > 0; }).map(function (sr) { return el('div', { class: 'tip-row' }, [el('i', { style: 'background:' + colorOf(m.series.indexOf(sr)) }), el('span', { text: (sr.code ? sr.code + ' ' : '') + sr.name }), el('b', { text: eur(sr.values[i]) })]); });
+        clear(tip);
+        tip.appendChild(el('strong', { text: MONTHS[i] + ' ' + m.year + (i + 1 > cur ? ' · à venir' : '') }));
+        lines.forEach(function (l) { tip.appendChild(l); });
+        tip.appendChild(el('div', { class: 'tip-total' }, [el('span', { text: 'Prévu du mois' }), el('b', { text: eur(perMonth[i]) })]));
+        tip.appendChild(el('div', { class: 'tip-total' }, [el('span', { text: 'Cumul' }), el('b', { text: eur(cum[i]) })]));
+        if (m.committed) tip.appendChild(el('div', { class: 'tip-total' }, [el('span', { text: 'Engagé (projet entier)' }), el('b', { text: eur(m.committed[i]) })]));
+        tip.hidden = false;
+        var r0 = box.getBoundingClientRect ? box.getBoundingClientRect() : { left: 0, top: 0 };
+        tip.style.left = Math.min(Math.max(8, (e && e.clientX ? e.clientX - r0.left : xc(i)) + 14), Math.max(8, (r0.width || 600) - 230)) + 'px'; tip.style.top = Math.max(40, (e && e.clientY ? e.clientY - r0.top : T) - 12) + 'px';
+      };
+      bandEl.addEventListener('mousemove', show); bandEl.addEventListener('mouseenter', show); bandEl.addEventListener('mouseleave', function () { tip.hidden = true; });
+      svg.appendChild(bandEl);
+    });
+    var wrap = el('div', { class: 'chart-box', id: 'monthly-chart' });
+    wrap.appendChild(svg); wrap.appendChild(tip);
+    box.appendChild(wrap);
+    box.appendChild(el('p', { class: 'note', id: 'graph-note', text: 'Barres : prévu de chaque mois par workpackage (échéancier des lignes de coût des livrables de l’exercice), axe de gauche. Courbe : cumul, axe de droite' + (m.budget === null ? '.' : ' ; pointillé : budget de l’exercice.') + ' Les mois à venir sont plus clairs.' }));
+  }
+
   function ensureResources() {
     if (state.resources) return Promise.resolve(state.resources);
     return call('resources.list', { limit: 500 }).then(function (r) { state.resources = r; return r; }).catch(function () { return []; });
@@ -1550,7 +1679,7 @@ var BOOT = <?!= boot ?>;
   function loadExercise() {
     var panel = $(exPanelId()), ex = currentExercise();
     if (!ex) {
-      clear(panel); clear($(versPanelId()));
+      clear(panel);
       var none = state.tab === 'suivi' ? ['Aucun exercice en exécution.', 'Le suivi budgétaire porte sur l’année en cours : l’administrateur passe l’exercice en exécution (page Administration).'] : state.tab === 'op' ? ['Aucun exercice en préparation.', 'L’administrateur crée l’exercice de l’année suivante (page Administration).'] : ['Aucune archive.', 'Les exercices clos apparaissent ici.'];
       panel.appendChild(el('div', { class: 'empty', id: 'exercise-empty' }, [el('strong', { text: none[0] }), el('span', { text: none[1] })]));
       return Promise.resolve();
@@ -1657,8 +1786,6 @@ var BOOT = <?!= boot ?>;
     // équipes qui ne s'additionnent nulle part
     if (v.orphans.length) panel.appendChild(el('p', { class: 'note late', id: 'exercise-orphans', text: 'Équipes à 4 caractères sans équipe parente à 3 caractères (non additionnées) : ' + v.orphans.map(function (o) { return o.name + ' (attendu ' + (o.expected === null ? '—' : eur(o.expected)) + ', parts ' + eur(o.parts) + ')'; }).join(' ; ') + '.' }));
     if (v.unruled.length) panel.appendChild(el('p', { class: 'note late', id: 'exercise-unruled', text: 'Parts sur des équipes dont le nom n’a pas 3 ou 4 caractères (hors règle, non comptées dans les équipes ci-dessus) : ' + v.unruled.map(function (o) { return o.name + ' ' + eur(o.parts); }).join(' ; ') + '.' }));
-    // versions figées de l'exercice (instantanés à comparer et à valider) : leur propre zone
-    renderVersions($(versPanelId()), ex);
     // exporter / importer l'exercice dans un classeur Google Sheet (la préparation se fait dans un tableur)
     if (v.can_edit) panel.appendChild(el('div', { class: 'row' }, [el('button', { type: 'button', class: 'btn', id: 'exercise-import', text: 'Exporter ou importer l’exercice (Google Sheet)', onclick: openExerciseImport })]));
     // ajouter une équipe au tableau
@@ -1677,95 +1804,16 @@ var BOOT = <?!= boot ?>;
     }
   }
 
-  // ------------------------------------------------------------ suivi budgétaire : synthèse, graphique, par équipe, livrables
-  /**
-   * Le suivi de l'année en cours (exercice en exécution) : accordé, prévu (parts étalées par mois), valeur acquise (parts × avancement), engagé (commandes d'achat). Les écarts s'affichent, rien ne
-   * bloque. La projection de fin d'année vient avec le réalisé importé (`projection.available`).
-   */
-  var MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+  // ------------------------------------------------------------ suivi budgétaire : par équipe
+  /** « Par équipe » : accordé, prévu, avancement (exercice en exécution). Les écarts s'affichent, rien ne bloque. */
+  function signed(n) { return n === null || n === undefined ? '—' : (n > 0.004 ? '+' : n < -0.004 ? '−' : '') + eur(Math.abs(n)); }
   function loadTracking() {
-    var ex = state.execEx, box = $('panel-synth');
-    if (!ex) {
-      ['synth', 'track', 'deliv'].forEach(function (id) { clear($('panel-' + id)); setSummary(id, ''); });
-      box.appendChild(el('div', { class: 'empty', id: 'tracking-empty' }, [el('strong', { text: 'Aucun exercice en exécution.' }), el('span', { text: 'Le suivi budgétaire porte sur l’année en cours : l’administrateur passe l’exercice en exécution (page Administration).' })]));
-      return Promise.resolve();
-    }
-    if (state.tracking) { renderTracking(); return Promise.resolve(); }
+    var ex = state.execEx, box = $('panel-track');
+    if (!ex) { clear(box); box.appendChild(el('div', { class: 'empty', id: 'tracking-empty' }, [el('strong', { text: 'Aucun exercice en exécution.' }), el('span', { text: 'Le suivi budgétaire porte sur l’année en cours : l’administrateur passe l’exercice en exécution (page Administration).' })])); setSummary('track', ''); return Promise.resolve(); }
+    if (state.tracking) { renderTrackTable(state.tracking); return Promise.resolve(); }
     loading(box);
     var epoch = state.epoch;
-    return call('exercise.tracking', { projectId: state.projectId, exerciseId: ex.id }).then(function (d) { if (epoch !== state.epoch) return; state.tracking = d; renderTracking(); }).catch(function (e) { if (epoch === state.epoch) failed(box, e); });
-  }
-  function renderTracking() { var d = state.tracking; renderSynth(d); renderTrackTable(d); renderDeliv(d); }
-  function signed(n) { return n === null || n === undefined ? '—' : (n > 0.004 ? '+' : n < -0.004 ? '−' : '') + eur(Math.abs(n)); }
-  function renderSynth(d) {
-    var box = $('panel-synth'), t = d.totals, cur = d.current_month;
-    clear(box);
-    var basis = d.series.granted_basis || 'accordé', budget = t.granted !== null ? t.granted : t.expected;
-    var cards = el('div', { class: 'cards' });
-    cards.appendChild(card('Budget ' + basis, budget === null ? '—' : eur(budget), 'exercice ' + d.exercise.year));
-    cards.appendChild(card('Prévu de l’année', eur(t.planned_year), t.remaining === null ? '' : (t.remaining >= 0 ? 'il reste ' + eur(t.remaining) + ' sur le budget' : 'dépasse le budget de ' + eur(-t.remaining)), t.clash ? 'alert' : ''));
-    cards.appendChild(card('Prévu à ce jour', eur(t.pv), cur ? 'à fin ' + MONTHS[cur - 1] : 'l’année n’a pas commencé'));
-    cards.appendChild(card('Valeur acquise', eur(t.ev), t.ev_gap >= -0.004 ? 'en avance de ' + eur(t.ev_gap) + ' sur le prévu' : 'en retard de ' + eur(-t.ev_gap) + ' sur le prévu', t.ev_gap < -0.5 ? 'alert' : ''));
-    cards.appendChild(card('Engagé (commandes d’achat)', eur(t.committed_to_date), 'projet entier, à ce jour'));
-    box.appendChild(cards);
-    if (t.planned_outside) box.appendChild(el('p', { class: 'note', id: 'tracking-outside', text: 'Dont ' + eur(t.planned_outside) + ' de prévu hors de l’année (livrables à cheval sur deux exercices) : il n’est pas dans le « prévu de l’année ».' }));
-    var sel = el('select', { id: 'chart-team', class: 'inline', 'aria-label': 'Équipe du graphique' }, [el('option', { value: '', text: 'Toutes les équipes' })].concat(d.teams.map(function (x) { return el('option', { value: x.team_id, text: x.name }); })));
-    var chart = el('div', { class: 'chart-box', id: 'tracking-chart' });
-    sel.addEventListener('change', function () { renderChart(chart, d, sel.value); });
-    box.appendChild(el('div', { class: 'row' }, [el('label', { for: 'chart-team', text: 'Courbes cumulées de l’année : ' }), sel]));
-    box.appendChild(chart);
-    renderChart(chart, d, '');
-    box.appendChild(el('p', { class: 'note', id: 'projection-note', text: 'Projection de fin d’année : ' + d.projection.reason }));
-    setSummary('synth', (budget === null ? 'pas de budget' : eur(budget)) + ' · prévu ' + eur(t.planned_year) + (t.clash ? ' · dépasse' : ''));
-  }
-  function fmtK(v) { return v >= 1e6 ? (v / 1e6).toFixed(1).replace('.', ',') + ' M€' : v >= 1e3 ? Math.round(v / 1e3) + ' k€' : Math.round(v) + ' €'; }
-  /** Les courbes cumulées de l'année, en SVG : prévu, accordé (plafond), engagé (projet entier), valeur acquise à ce jour. */
-  function renderChart(box, d, teamId) {
-    clear(box);
-    var NS = 'http://www.w3.org/2000/svg', W = 1000, H = 320, L = 62, R = 16, T = 16, B = 34, cur = d.current_month;
-    var team = teamId ? d.teams.filter(function (x) { return x.team_id === teamId; })[0] : null;
-    var planned, budget, committed = null, earned;
-    if (team) {
-      var run = 0; planned = team.monthly.map(function (v) { run += v; return Math.round(run * 100) / 100; }); budget = team.granted !== null ? team.granted : team.expected; earned = team.ev;
-    } else { planned = d.series.planned_cum; budget = d.series.granted; committed = d.series.committed_cum; earned = d.totals.ev; }
-    var all = planned.concat(committed || []).concat([budget, earned]).filter(function (v) { return v !== null && v !== undefined; });
-    var max = Math.max.apply(null, all.concat([1])) * 1.08, step = Math.pow(10, Math.floor(Math.log(max / 4) / Math.LN10)), k = max / 4 / step;
-    step *= k <= 1 ? 1 : k <= 2 ? 2 : k <= 5 ? 5 : 10;
-    var top = Math.ceil(max / step) * step;
-    var x = function (i) { return L + i * (W - L - R) / 11; }, y = function (v) { return T + (H - T - B) * (1 - v / top); };
-    var mk = function (name, attrs, text) { var n = document.createElementNS(NS, name); Object.keys(attrs || {}).forEach(function (a) { n.setAttribute(a, attrs[a]); }); if (text !== undefined) n.textContent = text; return n; };
-    var svg = mk('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': 'Courbes cumulées de l’année ' + d.exercise.year + (team ? ' pour l’équipe ' + team.name : '') });
-    svg.appendChild(mk('title', {}, 'Courbes cumulées du budget de l’exercice ' + d.exercise.year));
-    for (var v = 0; v <= top + 1e-6; v += step) {
-      svg.appendChild(mk('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), class: v === 0 ? 'ch-axis' : 'ch-grid' }));
-      svg.appendChild(mk('text', { x: L - 8, y: y(v) + 4, 'text-anchor': 'end' }, fmtK(v)));
-    }
-    MONTHS.forEach(function (m, i) { svg.appendChild(mk('text', { x: x(i), y: H - 12, 'text-anchor': 'middle' }, m)); });
-    if (cur >= 1 && cur <= 12) {
-      svg.appendChild(mk('line', { x1: x(cur - 1), x2: x(cur - 1), y1: T, y2: H - B, class: 'ch-now' }));
-      svg.appendChild(mk('text', { x: x(cur - 1), y: T - 4, 'text-anchor': 'middle' }, 'aujourd’hui'));
-    }
-    if (budget !== null && budget !== undefined) {
-      svg.appendChild(mk('line', { x1: x(0), x2: x(11), y1: y(budget), y2: y(budget), class: 'ch-line ch-granted' }));
-      svg.lastChild.appendChild(mk('title', {}, 'Budget ' + (team ? (team.granted !== null ? 'accordé' : 'attendu') : d.series.granted_basis) + ' : ' + eur(budget)));
-    }
-    var line = function (series, cls, label) {
-      var pts = [];
-      series.forEach(function (val, i) { if (val !== null && val !== undefined) pts.push(x(i) + ',' + y(val)); });
-      if (!pts.length) return;
-      svg.appendChild(mk('polyline', { points: pts.join(' '), class: 'ch-line ' + cls }));
-      series.forEach(function (val, i) { if (val === null || val === undefined) return; var c = mk('circle', { cx: x(i), cy: y(val), r: 4, fill: 'transparent' }); c.appendChild(mk('title', {}, MONTHS[i] + ' : ' + label + ' ' + eur(val))); svg.appendChild(c); });
-    };
-    line(planned, 'ch-planned', 'prévu cumulé');
-    if (committed) line(committed, 'ch-committed', 'engagé cumulé');
-    if (cur >= 1 && cur <= 12 && earned !== null && earned !== undefined) { var dot = mk('circle', { cx: x(cur - 1), cy: y(earned), r: 6, class: 'ch-earned' }); dot.appendChild(mk('title', {}, 'Valeur acquise à ce jour : ' + eur(earned))); svg.appendChild(dot); }
-    box.appendChild(svg);
-    var legend = el('ul', { class: 'chart-legend', id: 'chart-legend' }, [
-      el('li', {}, [el('i', { style: 'background:var(--accent,#1f6feb)' }), 'Prévu cumulé']),
-      el('li', {}, [el('i', { style: 'background:var(--muted)' }), 'Budget ' + (team ? (team.granted !== null ? 'accordé' : team.expected !== null ? 'attendu' : '') : d.series.granted_basis)]),
-      committed ? el('li', {}, [el('i', { style: 'background:var(--amber,#c77d00)' }), 'Engagé cumulé (projet entier)']) : null,
-      el('li', {}, [el('i', { style: 'background:var(--ok-ink,#1a7f4b);height:9px;width:9px;border-radius:50%' }), 'Valeur acquise à ce jour'])]);
-    box.appendChild(legend);
+    return call('exercise.tracking', { projectId: state.projectId, exerciseId: ex.id }).then(function (d) { if (epoch !== state.epoch) return; state.tracking = d; renderTrackTable(d); }).catch(function (e) { if (epoch === state.epoch) failed(box, e); });
   }
   function renderTrackTable(d) {
     var box = $('panel-track'); clear(box);
@@ -1783,92 +1831,6 @@ var BOOT = <?!= boot ?>;
     box.appendChild(table('track-table', ['Équipe', { t: 'Budget' }, { t: 'Prévu de l’année' }, { t: 'Reste' }, { t: 'Prévu à ce jour' }, { t: 'Valeur acquise' }, { t: 'Écart à ce jour' }], rows));
     var clashes = d.teams.filter(function (t) { return t.clash; }).length;
     setSummary('track', plural(d.teams.length, 'équipe', 'équipes') + (clashes ? ' · ' + plural(clashes, 'clash', 'clashs') : ''));
-  }
-  function renderDeliv(d) {
-    var box = $('panel-deliv'); clear(box);
-    if (!d.deliverables.length) { box.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucun livrable dans l’exercice ' + d.exercise.year + '.' })])); setSummary('deliv', ''); return; }
-    box.appendChild(table('deliv-table', ['Livrable', 'Équipes', { t: 'Avancement' }, { t: 'Part' }, { t: 'Prévu à ce jour' }, { t: 'Valeur acquise' }, { t: 'Écart' }, 'Fin prévue'], d.deliverables.map(function (x) {
-      return el('tr', { 'data-id': x.id }, [cell([x.name, x.wp ? el('small', { text: x.wp }) : null]), cell(x.teams), cell(x.progress + ' %', 'num'), cell(eur(x.parts), 'num'), cell(eur(x.pv), 'num'), cell(eur(x.ev), 'num'),
-        cell(signed(x.ev_gap), 'num' + (x.ev_gap < -0.5 ? ' late' : '')), cell(x.finish ? frDate(x.finish) : '—')]);
-    })));
-    var late = d.deliverables.filter(function (x) { return x.ev_gap < -0.5; }).length;
-    setSummary('deliv', plural(d.deliverables.length, 'livrable', 'livrables') + (late ? ' · ' + late + ' en retard sur le prévu' : ''));
-  }
-
-  // ------------------------------------------------------------ exercice : versions figées
-  /**
-   * Une version figée est un instantané de l'exercice du projet (budget attendu, accordé, parts des livrables par équipe) qui ne change plus ; on la compare à une autre ou à l'état actuel ;
-   * elle est à valider par le niveau du dessus de son auteur (le DPL pour un chef de projet). Les écarts s'affichent, rien ne bloque.
-   */
-  function frDay(iso) { return iso ? String(iso).slice(8, 10) + '/' + String(iso).slice(5, 7) + '/' + String(iso).slice(0, 4) : ''; }
-  function deltaText(x) { return x.delta === null || x.delta === undefined ? '—' : (x.delta > 0 ? '+' : x.delta < 0 ? '−' : '') + eur(Math.abs(x.delta)); }
-  function renderVersions(box, ex) {
-    var sumId = state.tab === 'suivi' ? 'verss' : 'vers', epoch = state.epoch;
-    call('exercise.version.list', { projectId: state.projectId, exerciseId: ex.id }).then(function (r) {
-      if (epoch !== state.epoch) return;
-      clear(box);
-      var pending = r.versions.filter(function (v) { return v.status === 'À valider'; }).length;
-      setSummary(sumId, r.versions.length ? plural(r.versions.length, 'version', 'versions') + (pending ? ' · ' + pending + ' à valider' : '') : 'aucune');
-      var reload = function () { renderVersions(box, ex); };
-      var left = el('div', { class: 'list-col', id: 'exercise-versions' }), right = el('div', { class: 'compare-col' });
-      var head = el('div', { class: 'row' });
-      if (r.can_create) head.appendChild(el('button', { type: 'button', class: 'btn primary', id: 'version-create', text: 'Figer une version', onclick: function () { openFreeze(box, ex); } }));
-      left.appendChild(head);
-      if (!r.versions.length) {
-        left.appendChild(el('p', { class: 'note', id: 'versions-empty', text: 'Aucune version figée. Figez l’exercice à chaque étape (attendu avant l’été, livrables, accordé, révisions) pour pouvoir comparer.' }));
-        box.appendChild(el('div', { class: 'ver-grid' }, [left, right]));
-        return;
-      }
-      var decide = function (v, decision) {
-        openForm({
-          title: (decision === 'validate' ? 'Valider' : 'Refuser') + ' la version ' + v.number + ' (' + v.label + ')', ok: decision === 'validate' ? 'Valider' : 'Refuser',
-          note: 'Figée par ' + v.author + ' : ' + v.justification,
-          fields: [{ key: 'note', label: decision === 'validate' ? 'Note (facultative)' : 'Motif du refus (obligatoire)', type: 'textarea', value: '' }],
-          onSubmit: function (f) { return call('exercise.version.decide', { id: v.id, version: v.version, decision: decision, note: f.note }, true).then(function () { toast(decision === 'validate' ? 'Version validée.' : 'Version refusée.'); reload(); }); }
-        });
-      };
-      left.appendChild(table('versions-table', ['N°', 'Version', 'Statut', ''], r.versions.map(function (v) {
-        var btns = [];
-        if (v.can_decide) { btns.push(el('button', { type: 'button', class: 'btn ver-validate', 'data-id': v.id, text: 'Valider', onclick: function () { decide(v, 'validate'); } })); btns.push(el('button', { type: 'button', class: 'btn ver-refuse', 'data-id': v.id, text: 'Refuser', onclick: function () { decide(v, 'refuse'); } })); }
-        return el('tr', { 'data-version': v.id }, [
-          el('td', { text: String(v.number) }),
-          el('td', {}, [v.label, el('span', { class: 'ver-meta', text: v.justification }), el('span', { class: 'ver-meta', text: 'figée le ' + frDay(v.created_at || v.decided_at) + ' par ' + v.author }),
-            el('span', { class: 'ver-meta', text: 'Attendu ' + (v.totals.expected === null ? '—' : eur(v.totals.expected)) + ' · Accordé ' + (v.totals.granted === null ? '—' : eur(v.totals.granted)) + ' · Parts ' + eur(v.totals.parts) })]),
-          el('td', {}, [el('span', { class: 'badge ' + (v.status === 'Validée' ? 'ok' : v.status === 'Refusée' ? 'alert' : 'warn'), text: v.status }), v.decided_by ? el('span', { class: 'ver-meta', text: 'par ' + v.decided_by + (v.decision_note ? ' : ' + v.decision_note : '') }) : null]),
-          el('td', {}, [el('div', { class: 'actions-cell' }, btns)])]);
-      })));
-      // comparer deux versions, ou une version et l'état actuel
-      var opts = function (withCurrent) { return r.versions.map(function (v) { return el('option', { value: v.id, text: 'V' + v.number + ' · ' + v.label }); }).concat(withCurrent ? [el('option', { value: 'current', text: 'État actuel' })] : []); };
-      var selA = el('select', { id: 'compare-a', class: 'inline', 'aria-label': 'Comparer la version' }, opts(false)), selB = el('select', { id: 'compare-b', class: 'inline', 'aria-label': 'avec' }, opts(true));
-      selA.value = r.versions[0].id; selB.value = r.versions.length > 1 ? r.versions[0].id : 'current'; if (r.versions.length > 1) { selA.value = r.versions[1].id; }
-      var out = el('div', { id: 'version-diff' });
-      right.appendChild(el('h3', { class: 'imp-sub', text: 'Comparer' }));
-      right.appendChild(el('div', { class: 'row' }, [selA, el('span', { text: 'avec' }), selB, el('button', { type: 'button', class: 'btn', id: 'compare-run', text: 'Comparer', onclick: function () {
-        call('exercise.version.compare', { projectId: state.projectId, exerciseId: ex.id, a: selA.value, b: selB.value }).then(function (d) { renderDiff(out, d); }).catch(function (e) { toast(ppmErrorText(e), true); });
-      } })]));
-      right.appendChild(out);
-      box.appendChild(el('div', { class: 'ver-grid' }, [left, right]));
-    }).catch(function (e) { clear(box); box.appendChild(el('p', { class: 'note', text: 'Versions indisponibles : ' + ppmErrorText(e) })); });
-  }
-  function renderDiff(out, d) {
-    clear(out);
-    out.appendChild(el('h3', { class: 'imp-sub', id: 'diff-title', text: d.a.label + ' → ' + d.b.label }));
-    if (d.identical) { out.appendChild(el('p', { class: 'note', id: 'diff-same', text: 'Aucun écart entre ces deux états.' })); return; }
-    out.appendChild(el('p', { class: 'note', id: 'diff-totals', text: 'Attendu ' + deltaText(d.totals.expected) + ' · Accordé ' + deltaText(d.totals.granted) + ' · Parts des livrables ' + deltaText(d.totals.parts) }));
-    if (d.teams.length) out.appendChild(table('diff-teams', ['Équipe', { t: 'Attendu' }, { t: 'Accordé' }, { t: 'Parts' }], d.teams.map(function (t) {
-      return el('tr', {}, [el('td', { text: t.name }), el('td', { class: 'num', text: t.expected.delta ? deltaText(t.expected) : '—' }), el('td', { class: 'num', text: t.granted.delta ? deltaText(t.granted) : '—' }), el('td', { class: 'num', text: t.parts.delta ? deltaText(t.parts) : '—' })]);
-    })));
-    if (d.parts.length) out.appendChild(table('diff-parts', ['Livrable', 'Équipe', { t: 'Avant' }, { t: 'Après' }, 'Écart'], d.parts.map(function (x) {
-      return el('tr', { class: 'diff-' + x.status }, [el('td', { text: x.deliverable }), el('td', { text: x.team }), el('td', { class: 'num', text: x.a === null ? '—' : eur(x.a) }), el('td', { class: 'num', text: x.b === null ? '—' : eur(x.b) }), el('td', {}, [el('span', { class: 'badge ' + (x.status === 'retirée' ? 'alert' : x.status === 'ajoutée' ? 'ok' : 'warn'), text: x.status })])]);
-    })));
-  }
-  function openFreeze(box, ex) {
-    openForm({
-      title: 'Figer une version de l’exercice ' + ex.year, ok: 'Figer',
-      note: 'Un instantané du budget attendu, de l’accordé et des parts des livrables de ce projet, qui ne changera plus. Il est à valider par le niveau du dessus de son auteur.',
-      fields: [{ key: 'label', label: 'Libellé (ex. Attendu, Accordé, Révision de février)', type: 'text', value: '', maxlength: 60 }, { key: 'justification', label: 'Motif (obligatoire)', type: 'textarea', value: '' }],
-      onSubmit: function (f) { return call('exercise.version.create', { projectId: state.projectId, exerciseId: ex.id, label: f.label, justification: f.justification }, true).then(function () { toast('Version figée.'); renderVersions(box, ex); }); }
-    });
   }
 
   // ------------------------------------------------------------ exercice : export et import par classeur Google Sheet
@@ -1962,7 +1924,7 @@ var BOOT = <?!= boot ?>;
   // ------------------------------------------------------------ événements et démarrage
   // vue programme (PL et DPL) : une ligne par projet, reprise de leur bilan ; un clic sur un projet ouvre son budget
   var pv = ppm.programView({
-    hide: ['tabs', 'cell-synth', 'cell-track', 'cell-deliv', 'cell-rev', 'cell-verss', 'cell-exercice', 'cell-vers', 'cell-bilan', 'cell-po', 'cell-enveloppe'], zone: 'zone-program', panel: 'panel-program', action: 'budget.program',
+    hide: ['tabs', 'cell-enveloppe', 'cell-proj', 'cell-graph', 'cell-track', 'cell-exercice', 'cell-bilan', 'cell-po'], zone: 'zone-program', panel: 'panel-program', action: 'budget.program',
     render: function (d, host) {
       host.appendChild(el('p', { class: 'program-note', text: 'Programme ' + d.program.code + ' — ' + d.program.name + '. Montants repris du bilan de chaque projet ; cliquez sur un projet pour le détail.' }));
       var open = function (row) { pv.leave(); loadProject(row.id); };

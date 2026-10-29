@@ -15,6 +15,9 @@ const c = w.c;
 c.WORKSPACE = fakeWorkspace();
 const CP = 'carla@entreprise.com', MEMBER = 'mia@entreprise.com', RWP = 'remi@entreprise.com';
 const budgetLine = c.repoInsert('BudgetLine', { deliverable_id: w.cc.id, resource_id: w.carla.id, cost_type: 'Forfait', fixed_amount: 1000 }, w.S);
+const ex0 = w.call('admin@entreprise.com', 'exercise.create', { year: 2026 });
+w.call('admin@entreprise.com', 'exercise.setStatus', { id: ex0.id, status: 'Exécution' });
+c.repoUpdate('PlanItem', w.cc.id, { exercise_id: ex0.id }, null, w.S);   // la décomposition du budget est par exercice (0.19.3)
 const style = fs.readFileSync(path.join(__dirname, '..', 'src', 'Style.html'), 'utf8');
 
 let failed = 0;
@@ -68,19 +71,20 @@ function openPage(file, user, boot, extraScript) {
   check(p.text('title') === 'P1 Projet 1', 'titre : ' + p.text('title'));
   check(p.text('context') === 'Pas de baseline', 'contexte : ' + p.text('context'));
   check(p.doc.getElementById('nav-plan').getAttribute('href') === 'https://app.test/exec?view=gantt&project=' + w.p1.id, 'lien vers le planning');
-  const b0btn = p.button('Figer la baseline B0', p.doc.getElementById('panel-ecarts'));
-  check(!!b0btn, 'bouton « Figer la baseline B0 » proposé au chef de projet');
+  const b0btn = p.button('Figer la baseline P1_0', p.doc.getElementById('panel-ecarts'));
+  check(!!b0btn, 'bouton « Figer la baseline P1_0 » proposé au chef de projet : le nom se crée seul');
   p.click(b0btn);
-  check(p.doc.getElementById('form').open && p.doc.getElementById('form-label').value === 'B0', 'boîte de gel ouverte, libellé B0 proposé');
+  check(p.doc.getElementById('form').open && !p.doc.getElementById('form-label') && /Figer la baseline P1_0/.test(p.text('form-title')), 'boîte de gel ouverte : plus de champ de nom, la baseline s’appellera P1_0');
   p.click(p.doc.getElementById('form-ok'));
   check(/obligatoire/.test(p.text('toast')), 'justification obligatoire : ' + p.text('toast'));
   p.fill('form-reason', 'Planning validé en revue de lancement');
   p.click(p.doc.getElementById('form-ok'));
-  await p.until(() => /Baseline B0 figée/.test(p.text('toast')));
+  await p.until(() => /Baseline P1_0 figée/.test(p.text('toast')));
   check(/4 éléments/.test(p.text('toast')), 'confirmation : ' + p.text('toast'));
   await p.until(() => p.doc.querySelector('#panel-ecarts .cards'));
-  check(/B0 active/.test(p.text('context')), 'contexte : ' + p.text('context'));
+  check(/P1_0 active/.test(p.text('context')), 'contexte : ' + p.text('context'));
   check(p.text('panel-ecarts').includes('Aucun écart'), 'aucun écart juste après le gel');
+  check(/À valider par : Dora/.test(p.text('panel-baselines')) && !!p.doc.querySelector('#panel-baselines .who-pending[data-pending="baseline"]'), 'l’état de la baseline dit ce qui n’est pas validé et qui doit le faire, en nom complet : « À valider par : Dora » (le DPL)');
 
   // ---------------------------------------------------------------- écarts après modifications
   w.call(RWP, 'planitems.update', { id: w.b.id, patch: { planned_finish: '2026-10-28' } });
@@ -181,28 +185,29 @@ function openPage(file, user, boot, extraScript) {
   p.click(p.doc.getElementById('form-ok'));
   await p.until(() => p.text('toast') === 'Demande refusée.');
   await p.until(() => p.text('panel-baselines').includes('Refusée'));
-  p.click(p.button('Figer une nouvelle baseline'));
-  check(p.doc.getElementById('form-label').value === 'B1', 'libellé suivant proposé : B1');
+  p.click(p.button('Figer la baseline P1_1'));
+  check(/Figer la baseline P1_1/.test(p.text('form-title')), 'nom suivant : P1_1');
   p.fill('form-reason', 'Replanification après revue');
   p.click(p.doc.getElementById('form-ok'));
-  await p.until(() => /Baseline B1 figée/.test(p.text('toast')));
+  await p.until(() => /Baseline P1_1 figée/.test(p.text('toast')));
   await p.until(() => p.button('Réactiver'));
   check(p.doc.querySelectorAll('#panel-baselines .badge.active').length === 1, 'une seule baseline active');
   p.click(p.button('Réactiver'));
   p.fill('form-reason', 'Le client refuse le nouveau planning');
   p.click(p.doc.getElementById('form-ok'));
-  await p.until(() => p.text('toast') === 'B0 réactivée.');
-  await p.until(() => /B0 active/.test(p.text('context')));
-  check(true, 'B0 réactivée, contexte à jour');
-  // comparer B0 et B1
-  await p.until(() => p.doc.getElementById('cmp-to'));
+  await p.until(() => p.text('toast') === 'P1_0 réactivée.');
+  await p.until(() => /P1_0 active/.test(p.text('context')));
+  check(true, 'P1_0 réactivée, contexte à jour');
+  // comparer P1_0 et P1_1, avec la carte des baselines
+  await p.until(() => p.doc.getElementById('baseline-map'));
   const onlyAgain = p.doc.getElementById('only-changes');
   onlyAgain.checked = true; onlyAgain.dispatchEvent(new p.win.Event('change'));
-  const to = p.doc.getElementById('cmp-to');
-  to.value = [...to.options].find((o) => /B1/.test(o.textContent)).value;
-  to.dispatchEvent(new p.win.Event('change'));
+  const idOf = (label) => c.repoList('Baseline').find((b) => b.label === label).id;
+  const chipOf = (pg, id) => pg.doc.querySelector('#baseline-map .bm-chip[data-baseline="' + id + '"]');
+  check(chipOf(p, idOf('P1_0')).classList.contains('is-a') && /Référence/.test(chipOf(p, idOf('P1_0')).textContent) && /Je compare la baseline P1_0/.test(p.text('bm-sentence')) && /état d’aujourd’hui/.test(p.text('bm-sentence')), 'la carte : P1_0 est la référence, comparée à l’état d’aujourd’hui ; la phrase le dit : ' + p.text('bm-sentence'));
+  p.click(chipOf(p, idOf('P1_1')));
   await p.until(() => p.doc.querySelectorAll('#panel-ecarts tbody tr[data-item]').length === 3);
-  check(p.doc.querySelectorAll('#panel-ecarts tbody tr[data-item]').length === 3, 'B0 comparée à B1 : les 3 écarts figés dans B1');
+  check(p.doc.querySelectorAll('#panel-ecarts tbody tr[data-item]').length === 3 && /à la baseline P1_1/.test(p.text('bm-sentence')) && chipOf(p, idOf('P1_1')).classList.contains('is-b'), 'P1_0 comparée à P1_1 (un clic sur la baseline du même périmètre) : les 3 écarts figés dans P1_1 ; la phrase le redit');
 
   // ---------------------------------------------------------------- agenda et Drive
   await p.until(() => p.doc.getElementById('ws-enable'));
@@ -233,7 +238,7 @@ function openPage(file, user, boot, extraScript) {
   const gEnd = Number(ghost(w.b.id).getAttribute('x')) + Number(ghost(w.b.id).getAttribute('width'));
   check(bEnd - gEnd > 1, 'Calcul glissé : la barre dépasse son trait de baseline');
   check(Number(ghost(w.b.id).getAttribute('y')) > Number(bar(w.b.id).getAttribute('y')), 'le trait est sous la barre');
-  check(/Baseline B0 du \d\d\/\d\d\/\d{4} : 1 élément glissé, 1 ajouté/.test(g.text('summary')), 'résumé : ' + g.text('summary'));
+  check(/Baseline P1_0 du \d\d\/\d\d\/\d{4} : 1 élément glissé, 1 ajouté/.test(g.text('summary')), 'résumé : ' + g.text('summary'));
   check(!g.doc.getElementById('baseline-toggle').hidden && !g.doc.getElementById('legend-baseline').hidden, 'case et légende « Baseline » affichées');
   const cb = g.doc.getElementById('baseline');
   cb.checked = false; cb.dispatchEvent(new g.win.Event('change'));
@@ -242,7 +247,7 @@ function openPage(file, user, boot, extraScript) {
   g.click(g.doc.querySelector('.bar-wrapper[data-id="' + w.b.id + '"]'));
   await g.until(() => !g.doc.getElementById('details').hidden);
   const det = g.text('details');
-  check(/Finit 3 jours ouvrés après la baseline B0/.test(det) && /Baseline12\/10\/2026 → 23\/10\/2026/.test(det), 'détail : glissement et dates figées');
+  check(/Finit 3 jours ouvrés après la baseline P1_0/.test(det) && /Baseline12\/10\/2026 → 23\/10\/2026/.test(det), 'détail : glissement et dates figées');
   g.click(g.doc.querySelector('[data-mode="Month"]'));
   await wait(50);
   check(g.doc.querySelectorAll('.baseline-ghost').length === ghosts.length, 'les traits sont redessinés au changement d’échelle');
@@ -276,7 +281,7 @@ function openPage(file, user, boot, extraScript) {
   chooseProgram(dsx);
   await ds.until(() => ds.doc.querySelector('#panel-program table.consol'));
   const rowsS = [...ds.doc.querySelectorAll('#panel-program tbody tr')];
-  check(rowsS.length === 2 && /Baseline active/.test(norm(ds.doc.querySelector('#panel-program thead').textContent)) && rowsS.every((r) => /Aucune|B\d/.test(r.textContent)) && /Aucune/.test(rowsS[1].textContent), 'suivi du programme : une ligne par projet, la baseline active ou « Aucune » : ' + rowsS.map((r) => norm(r.textContent).slice(0, 30)).join(' | '));
+  check(rowsS.length === 2 && /Baseline active/.test(norm(ds.doc.querySelector('#panel-program thead').textContent)) && rowsS.every((r) => /Aucune|P1_\d/.test(r.textContent)) && /Aucune/.test(rowsS[1].textContent), 'suivi du programme : une ligne par projet, la baseline active ou « Aucune » : ' + rowsS.map((r) => norm(r.textContent).slice(0, 30)).join(' | '));
   check(ds.doc.body.classList.contains('in-program') && ['ecarts', 'changes', 'baselines', 'workspace'].every((z) => [...ds.doc.querySelectorAll('style')].some((s) => s.textContent.includes('body.in-program #panel-' + z))) && /Suivi — Programme/.test(ds.doc.getElementById('title').textContent), 'les zones du projet sont masquées en vue programme par une règle de la page');
   ds.click(ds.doc.querySelector('#panel-program tbody tr button.proj-open'));
   await ds.until(() => ds.doc.getElementById('panel-program').hidden && !ds.doc.body.classList.contains('in-program'));
@@ -294,33 +299,41 @@ function openPage(file, user, boot, extraScript) {
   check(cpScopes.doc.getElementById('create-scope').value === 'project:' + w.p1.id, 'par défaut : le périmètre affiché, ici le projet');
   const wlSel = wl.doc.getElementById('create-scope');
   wlSel.value = 'workpackage:' + w.w1.id; wlSel.dispatchEvent(new wl.win.Event('change'));
-  check(wl.doc.getElementById('create-btn').textContent === 'Figer la baseline B0', 'WP 1 n’a pas encore de baseline : « Figer la baseline B0 »');
+  check(wl.doc.getElementById('create-btn').textContent === 'Figer la baseline P1_1_0', 'WP 1 n’a pas encore de baseline : « Figer la baseline P1_1_0 » (projet, workpackage, numéro)');
   const projectBase = c.repoGet('Project', w.p1.id).active_baseline_id;
   wl.click(wl.doc.getElementById('create-btn'));
   check(wl.doc.getElementById('form').open && /1 Conception/.test(wl.text('form-title')) && /référence locale/.test(wl.text('form-text')) && /baseline du projet n’est pas modifiée/.test(wl.text('form-text')), 'la boîte dit le périmètre et que la baseline du projet n’est pas modifiée : ' + wl.text('form-title'));
   wl.fill('form-reason', 'Conception figée après la revue');
   wl.click(wl.doc.getElementById('form-ok'));
-  await wl.until(() => /Baseline B0 figée/.test(wl.text('toast')));
+  await wl.until(() => /Baseline P1_1_0 figée/.test(wl.text('toast')));
   const wpBase = c.repoList('Baseline').find((b) => b.scope_type === 'workpackage' && b.scope_id === w.w1.id);
   check(!!wpBase && wpBase.status === 'Active' && c.repoGet('WorkPackage', w.w1.id).active_baseline_id === wpBase.id && c.repoGet('Project', w.p1.id).active_baseline_id === projectBase, 'la baseline de WP 1 est active ; la référence du projet n’a pas bougé');
   check(/à valider par le niveau du dessus/.test(wl.text('toast')), 'la page dit qu’elle est à valider par le niveau du dessus');
-  await wl.until(() => wl.doc.getElementById('view-scope') && wl.doc.getElementById('view-scope').value === 'workpackage:' + w.w1.id);
+  await wl.until(() => wl.doc.querySelector('#baseline-map .bm-lane.lane-a[data-scope="workpackage:' + w.w1.id + '"]'));
   await wl.until(() => wl.doc.querySelectorAll('#panel-ecarts tbody tr[data-item]').length >= 1 || /Aucun écart/.test(wl.text('panel-ecarts')));
-  check(wl.doc.getElementById('view-scope').value === 'workpackage:' + w.w1.id, 'les écarts s’affichent pour le périmètre qu’on vient de figer');
+  check(!!wl.doc.querySelector('#baseline-map .bm-lane.lane-a[data-scope="workpackage:' + w.w1.id + '"] .bm-chip.is-a'), 'les écarts s’affichent pour le périmètre qu’on vient de figer : sa baseline est la référence sur la carte');
   check(/Spécification|Aucun écart/.test(wl.text('panel-ecarts')) && !/Essais|Revue/.test([...wl.doc.querySelectorAll('#panel-ecarts tbody td:first-child')].map((t) => t.textContent).join(' ')), 'seuls les éléments du périmètre sont comparés (pas Essais, pas Revue)');
   check(/Conception/.test([...wl.doc.querySelectorAll('#baselines-scope-tag, #panel-baselines .scope-tag')].map((t) => t.textContent).join(' ')) && /À valider/.test(wl.text('panel-baselines')), 'l’historique dit le périmètre et « À valider »');
-  // les écarts d'un workpackage se lisent aussi contre la baseline du projet
-  await wl.until(() => wl.doc.getElementById('view-ref'));
-  const refSel = wl.doc.getElementById('view-ref');
-  refSel.value = 'project'; refSel.dispatchEvent(new wl.win.Event('change'));
+  // les écarts d'un workpackage se lisent aussi contre la baseline ACTIVE du projet : on clique cette baseline (référence), puis « Aujourd'hui » du workpackage
+  await wl.until(() => chipOf(wl, projectBase));
+  const nowOf = (pg, scope) => pg.doc.querySelector('#baseline-map .bm-chip.now[data-now="' + scope + '"]');
+  wl.click(chipOf(wl, projectBase));
+  await wl.until(() => /Je compare la baseline P1_0 \(Projet P1/.test(wl.text('bm-sentence')) && wl.text('bm-help').indexOf('2.') === 0);
+  check(nowOf(wl, 'workpackage:' + w.w1.id).getAttribute('aria-disabled') === 'false' && nowOf(wl, 'workpackage:' + w.w2.id).getAttribute('aria-disabled') === 'false' && nowOf(wl, 'project:' + w.p1.id).getAttribute('aria-disabled') === 'false', 'référence = baseline du projet : « Aujourd’hui » du projet et de ses workpackages sont comparables');
+  wl.click(nowOf(wl, 'workpackage:' + w.w1.id));
   await wl.until(() => wl.doc.getElementById('ref-project-note'));
-  check(/baseline B\d+ du projet, restreinte à ce périmètre/.test(wl.text('ref-project-note')) && /1 Conception/.test(wl.text('ref-project-note')) && wl.doc.getElementById('ref-project-note').getAttribute('data-against') === 'project' && wl.doc.getElementById('ref-project-note').getAttribute('data-baseline-scope') === 'project', 'contre la baseline du projet : la page le dit : ' + wl.text('ref-project-note'));
+  check(/baseline P1_0 du projet, restreinte à ce périmètre/.test(wl.text('ref-project-note')) && /1 Conception/.test(wl.text('ref-project-note')) && wl.doc.getElementById('ref-project-note').getAttribute('data-against') === 'project' && /état d’aujourd’hui de « 1 Conception »/.test(wl.text('bm-sentence')), 'les écarts de WP 1 contre la baseline du projet : la note et la phrase le disent');
+  // ce qui n'est pas comparable est grisé
+  wl.click(chipOf(wl, wpBase.id));
+  await wl.until(() => /Je compare la baseline P1_1_0/.test(wl.text('bm-sentence')));
+  check(nowOf(wl, 'workpackage:' + w.w1.id).getAttribute('aria-disabled') === 'false' && nowOf(wl, 'workpackage:' + w.w2.id).getAttribute('aria-disabled') === 'true' && nowOf(wl, 'project:' + w.p1.id).getAttribute('aria-disabled') === 'true' && /Pas comparable/.test(nowOf(wl, 'project:' + w.p1.id).getAttribute('title')), 'référence = baseline de WP 1 : seul « Aujourd’hui » de WP 1 est comparable ; ceux du projet et de WP 2 sont grisés, avec la raison');
   // le niveau du dessus est informé : le chef de projet voit la baseline et peut la refuser
   const cpFeed = openPage('Suivi.html', CP);
   await cpFeed.until(() => cpFeed.doc.querySelector('#panel-changes [data-reject]'));
   const rejectBtn = cpFeed.doc.querySelector('#panel-changes [data-reject]');
   const baselineRow = rejectBtn.closest('tr');
-  check(/Baseline B0 · 1 Conception/.test(baselineRow.textContent) && /Workpackage leader/.test(baselineRow.textContent) && /première baseline de ce périmètre/.test(baselineRow.textContent), 'le chef de projet voit la baseline du Workpackage leader, avec son niveau et son résumé : ' + baselineRow.textContent.replace(/\s+/g, ' ').slice(0, 160));
+  check(/Baseline P1_1_0 · 1 Conception/.test(baselineRow.textContent) && /Workpackage leader/.test(baselineRow.textContent) && /première baseline de ce périmètre/.test(baselineRow.textContent), 'le chef de projet voit la baseline du Workpackage leader, avec son niveau et son résumé : ' + baselineRow.textContent.replace(/\s+/g, ' ').slice(0, 160));
+  check(/À valider par : Carla/.test(cpFeed.text('panel-baselines')), 'la liste des baselines : la baseline de WP 1, figée par le Workpackage leader, attend Carla (nom complet) : ' + cpFeed.text('panel-baselines').replace(/\s+/g, ' ').slice(0, 260));
   cpFeed.click(rejectBtn);
   check(cpFeed.doc.getElementById('form').open && /Refuser la baseline/.test(cpFeed.text('form-title')), 'Refuser ouvre la boîte du motif');
   cpFeed.fill('form-reason', 'Pas avant la revue de planning');

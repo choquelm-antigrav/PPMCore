@@ -4,7 +4,7 @@ const { makeFakeSheets } = require('./fake_sheets');
 module.exports = function () {
   console.log('\nProtection des feuilles du classeur, déduite des rôles (0.15.0)');
   const ADMIN = 'admin@entreprise.com', OWNER = 'proprio@entreprise.com', S = { actor: 'setup', source: 'setup' };
-  const ROLES_TABLES = ['RoleAssignment', 'Role', 'Resource'], BUDGET_TABLES = ['BudgetLine', 'BudgetPhasing', 'PurchaseOrder', 'PurchaseOrderLink', 'EtpCost', 'Exercise', 'TeamBudget', 'ExerciseVersion', 'ActualImport'];
+  const ROLES_TABLES = ['RoleAssignment', 'Role', 'Resource'], BUDGET_TABLES = ['BudgetLine', 'BudgetPhasing', 'PurchaseOrder', 'PurchaseOrderLink', 'EtpCost', 'Exercise', 'TeamBudget', 'ActualImport'];
 
   /** Un Core sur de (fausses) feuilles qui connaissent les protections, un faux Drive relié à la liste des éditeurs du classeur, et des personnes avec des rôles. */
   function world() {
@@ -46,10 +46,10 @@ module.exports = function () {
     ok(!c.sheetProtectEditors_(byKey('roles')).includes('maj@entreprise.com'), 'fiche supprimée : plus éditeur');
   });
 
-  test('Application : les douze feuilles sensibles sont verrouillées pour les seuls éditeurs, les autres restent en édition libre', () => {
+  test('Application : les onze feuilles sensibles sont verrouillées pour les seuls éditeurs, les autres restent en édition libre', () => {
     const x = world(), c = x.c;
     const rep = c.sheetProtectApply_(); // l'application donne d'abord accès au classeur à ceux qui doivent être éditeurs
-    eq([rep.enabled, rep.failed, rep.created], [true, [], 12], 'douze protections posées, aucune erreur');
+    eq([rep.enabled, rep.failed, rep.created], [true, [], 11], 'onze protections posées, aucune erreur');
     c.sheetSync_(); // puis chaque personne invitée a accès au classeur (RWP et membre y compris)
     eq(protectedTables(x), ROLES_TABLES.concat(BUDGET_TABLES).sort(), 'exactement les feuilles des deux groupes');
     ROLES_TABLES.forEach((t) => eq(['pl', 'dpl', 'admin', 'cp', 'rwp', 'mia'].map((u) => x.can(t, u)), [true, true, true, false, false, false], t + ' : PL, DPL, administrateur ; pas CP, RWP ni membre'));
@@ -67,7 +67,7 @@ module.exports = function () {
     const rep = c.sheetProtectApply_();
     eq([rep.created, rep.failed.length], [0, 0], 'rien de nouveau');
     eq(JSON.stringify(x.book.sheets.map((s) => s.protections.map((p) => [p.getDescription(), p.getEditors().map((u) => u.getEmail()).sort()]))), before, 'mêmes protections, mêmes éditeurs');
-    eq(x.book.sheets.reduce((n, s) => n + s.protections.length, 0), 12, 'toujours douze protections, pas de doublon');
+    eq(x.book.sheets.reduce((n, s) => n + s.protections.length, 0), 11, 'toujours onze protections, pas de doublon');
   });
 
   test('La protection suit les rôles toute seule : attribuer ou retirer un rôle par l’application met les feuilles à jour', () => {
@@ -82,7 +82,7 @@ module.exports = function () {
     const a = c.repoList('RoleAssignment').find((z) => z.resource_id === x.people.mia.id && z.role_code === 'DPL');
     ok(x.call(ADMIN, 'roles.end', { id: a.id, end_date: '2020-01-01' }).ok || true, 'rôle terminé par l’application');
     eq([x.can('RoleAssignment', 'mia'), x.can('PurchaseOrder', 'mia')], [false, false], 'rôle retiré : verrouillée de nouveau');
-    ok(x.book.sheets.reduce((n, s) => n + s.protections.length, 0) === 12, 'jamais de protection en double');
+    ok(x.book.sheets.reduce((n, s) => n + s.protections.length, 0) === 11, 'jamais de protection en double');
   });
 
   test('Une fiche dont l’adresse change met aussi la protection à jour (sinon un rôle passerait à une autre adresse)', () => {
@@ -103,12 +103,12 @@ module.exports = function () {
     c.sheetProtectApply_();
     eq([x.book.getSheetByName('EtpCost').protections.length, x.book.getSheetByName('EtpCost').protections.filter((q) => q.getDescription() === 'Protection du propriétaire').length, x.book.getSheetByName('PlanItem').protections.length], [2, 1, 1], 'sur EtpCost la protection de l’outil s’ajoute à celle du propriétaire, qui reste intacte ; PlanItem n’est pas touchée');
     const off = x.call(ADMIN, 'admin.set', { values: { sheet_protect: false } });
-    ok(off.ok && off.data.sheet_protect === false && off.data.sheet_protect_report.removedProtections === 12, JSON.stringify(off.data && off.data.sheet_protect_report && off.data.sheet_protect_report.removedProtections));
+    ok(off.ok && off.data.sheet_protect === false && off.data.sheet_protect_report.removedProtections === 11, JSON.stringify(off.data && off.data.sheet_protect_report && off.data.sheet_protect_report.removedProtections));
     eq([protectedTables(x), x.book.getSheetByName('PlanItem').protections.length, x.book.getSheetByName('EtpCost').protections.map((q) => q.getDescription())], [[], 1, ['Protection du propriétaire']], 'plus aucune protection de l’outil ; celles du propriétaire restent, même sur une feuille de l’outil');
     eq([x.can('RoleAssignment', 'mia'), x.can('BudgetLine', 'rwp')], [true, true], 'tout redevient modifiable');
     ok(c.repoList('ChangeEvent').some((e) => e.table_name === 'Réglages' && e.field === 'sheet_protect' && e.old_value === 'oui' && e.new_value === 'non' && e.actor === ADMIN), 'tracé dans le journal des réglages');
     const on = x.call(ADMIN, 'admin.set', { values: { sheet_protect: true } });
-    eq([on.data.sheet_protect, on.data.sheet_protect_report.created, x.can('RoleAssignment', 'mia')], [true, 12, false], 'recochée : les douze feuilles sont reverrouillées tout de suite');
+    eq([on.data.sheet_protect, on.data.sheet_protect_report.created, x.can('RoleAssignment', 'mia')], [true, 11, false], 'recochée : les onze feuilles sont reverrouillées tout de suite');
     eq(x.call('mia@entreprise.com', 'admin.set', { values: { sheet_protect: false } }).error.code, 'FORBIDDEN', 'seul un administrateur coupe la protection');
   });
 
@@ -136,7 +136,7 @@ module.exports = function () {
     const x = world(), c = x.c;
     eq(x.call('cp@entreprise.com', 'admin.sheet.protect', {}).error.code, 'FORBIDDEN', 'refusé à un chef de projet');
     const ok1 = x.call(ADMIN, 'admin.sheet.protect', {});
-    ok(ok1.ok && ok1.data.groups.length === 2 && ok1.data.groups[0].protectedSheets.length === 3 && ok1.data.groups[1].protectedSheets.length === 9, 'compte rendu : deux groupes, 3 et 9 feuilles');
+    ok(ok1.ok && ok1.data.groups.length === 2 && ok1.data.groups[0].protectedSheets.length === 3 && ok1.data.groups[1].protectedSheets.length === 8, 'compte rendu : deux groupes, 3 et 8 feuilles');
     x.book.getSheetByName('Role').protections.forEach((p) => p.remove()); // quelqu'un a supprimé une protection
     c.nightlyRun();
     eq(x.book.getSheetByName('Role').protections.length, 1, 'la nuit répare une protection disparue');
@@ -159,9 +159,9 @@ module.exports = function () {
   test('A7 contrôle la protection : feuilles protégées, éditeurs, protection coupée ou feuille non protégée', () => {
     const x = world(), c = x.c; c.sheetSync_(); c.sheetProtectApply_();
     const row = () => c.liveSmokeTest_().rows.find((r) => r.name.indexOf('Classeur Données : feuilles protégées') === 0);
-    ok(row().status === 'OK' && /12 feuilles protégées \(Rôles et personnes : 3 éditeur\(s\) ; Budget et achats : 4 éditeur\(s\)\)/.test(row().detail), row().detail);
+    ok(row().status === 'OK' && /11 feuilles protégées \(Rôles et personnes : 3 éditeur\(s\) ; Budget et achats : 4 éditeur\(s\)\)/.test(row().detail), row().detail);
     x.book.getSheetByName('EtpCost').protections.forEach((p) => p.remove());
-    ok(row().status === 'ATTENTION' && /1 feuille\(s\) sur 12 non protégée\(s\) : EtpCost/.test(row().detail) && /Appliquer les protections maintenant/.test(row().detail), row().detail);
+    ok(row().status === 'ATTENTION' && /1 feuille\(s\) sur 11 non protégée\(s\) : EtpCost/.test(row().detail) && /Appliquer les protections maintenant/.test(row().detail), row().detail);
     c.setProp(c.PROP.SHEET_PROTECT, 'non');
     ok(row().status === 'ATTENTION' && /la protection est coupée/.test(row().detail), row().detail);
   });

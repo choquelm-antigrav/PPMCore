@@ -64,18 +64,18 @@ module.exports = function () {
     eq(ids('Project'), [], 'pas la ligne du projet');
     eq(ids('Dependency'), deps.filter((d) => d.successor_id === w.b.id).map((d) => d.id).sort(), 'la dépendance dont le successeur est dans le périmètre (Spécification → Calcul), pas Calcul → Essais ni Essais → Revue');
     eq(ids('BudgetLine').length, 1, 'la ligne de budget de B, pas celle de C');
-    eq([b.scope_type, b.scope_id, b.label, b.items], ['workpackage', w.w1.id, 'B0', 2]);
+    eq([b.scope_type, b.scope_id, b.label, b.items], ['workpackage', w.w1.id, 'P1_1_0', 2]);
   });
 
   test('Références parallèles : une baseline par périmètre ; la baseline du projet n’est jamais remplacée par celle d’un workpackage', () => {
     const w = world();
     const proj = w.create(CP, null).data;
     const w1a = w.create(WPL, w.w1).data, w11 = w.create(SWPL, w.w11).data;
-    eq([proj.label, w1a.label, w11.label], ['B0', 'B0', 'B0'], 'chaque périmètre a sa propre numérotation');
+    eq([proj.label, w1a.label, w11.label], ['P1_0', 'P1_1_0', 'P1_1_1.1_0'], 'chaque périmètre a sa propre numérotation, et son nom dit le périmètre : projet, workpackage, sous-workpackage');
     eq(w.c.repoGet('Project', w.p1.id).active_baseline_id, proj.id, 'la référence du projet est celle du projet');
     eq([w.wpRow(w.w1).active_baseline_id, w.wpRow(w.w11).active_baseline_id, w.wpRow(w.w2).active_baseline_id || ''], [w1a.id, w11.id, ''], 'chaque workpackage pointe sur la sienne ; WP 2 n’en a pas');
     const w1b = w.create(WPL, w.w1, { justification: 'Replanification de la conception' }).data;
-    eq(w1b.label, 'B1', 'la deuxième baseline de WP 1 est B1');
+    eq(w1b.label, 'P1_1_1', 'la deuxième baseline de WP 1 est P1_1_1');
     const byId = {}; w.list(CP).baselines.forEach((x) => { byId[x.id] = x; });
     eq([byId[w1a.id].status, byId[w1b.id].status, byId[proj.id].status, byId[w11.id].status], ['Archivée', 'Active', 'Active', 'Active'], 'seule la précédente DU MÊME périmètre est archivée');
     eq(w.c.repoGet('Project', w.p1.id).active_baseline_id, proj.id, 'la référence du projet n’a pas bougé');
@@ -115,8 +115,8 @@ module.exports = function () {
     w.create(WPL, w.w1);                                                                         // niveau 3 → par le chef de projet
     const baseEv = (f) => f.items.filter((e) => e.table === 'Baseline');
     const cpFeed = w.feed(CP), dplFeed = w.feed(DPL);
-    eq(baseEv(cpFeed).map((e) => e.entity), ['Baseline B0 · 1 Conception'], 'le chef de projet voit la baseline du Workpackage leader (pas la sienne)');
-    eq(baseEv(dplFeed).map((e) => e.entity).sort(), ['Baseline B0 · 1 Conception', 'Baseline B0 · Projet P1'], 'le DPL voit les deux');
+    eq(baseEv(cpFeed).map((e) => e.entity), ['Baseline P1_1_0 · 1 Conception'], 'le chef de projet voit la baseline du Workpackage leader (pas la sienne)');
+    eq(baseEv(dplFeed).map((e) => e.entity).sort(), ['Baseline P1_0 · Projet P1', 'Baseline P1_1_0 · 1 Conception'], 'le DPL voit les deux');
     const ev = baseEv(cpFeed)[0];
     ok(ev.what === 'baseline' && ev.level === 3 && ev.can_validate && /première baseline de ce périmètre/.test(ev.new_value) && /Planning du périmètre validé/.test(ev.new_value), 'résumé : ' + ev.new_value);
     eq(w.feed(WPL).mine.filter((e) => e.table === 'Baseline').map((e) => e.validator), ['Chef de projet'], 'l’auteur voit qui doit la valider : le niveau juste au-dessus');
@@ -132,7 +132,7 @@ module.exports = function () {
     eq(w.feed(DPL).pending, before, 'une baseline figée par l’administrateur n’est à valider par personne');
     // le Sub-workpackage leader : validé d'abord par son Workpackage leader
     w.create(SWPL, w.w11);
-    eq(w.feed(WPL).items.filter((e) => e.table === 'Baseline').map((e) => e.entity), ['Baseline B0 · 1.1 Calcul'], 'le Workpackage leader voit la baseline de son Sub-workpackage leader');
+    eq(w.feed(WPL).items.filter((e) => e.table === 'Baseline').map((e) => e.entity), ['Baseline P1_1_1.1_0 · 1.1 Calcul'], 'le Workpackage leader voit la baseline de son Sub-workpackage leader');
     eq(w.feed(SWPL).mine.filter((e) => e.table === 'Baseline').map((e) => e.validator), ['Workpackage leader'], 'qui est son validateur nominal');
   });
 

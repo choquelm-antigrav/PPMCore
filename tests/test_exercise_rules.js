@@ -85,15 +85,6 @@ module.exports = function () {
     ok(f.some((x) => /Direction/.test(x.message) && /n’a pas 3 ou 4 caractères/.test(x.message)) && f.some((x) => /zzzz/.test(x.message) && /pas d’équipe parente à 3 caractères/.test(x.message)), 'chacune avec sa raison : ' + f.map((x) => x.message).join(' | '));
   });
 
-  test('Version figée qui attend sa validation : signalée au bout de 7 jours, pas avant ; plus après la décision', () => {
-    const w = world(), today = w.c.todayStr();
-    const v = w.call(CP, 'exercise.version.create', { projectId: w.p1.id, exerciseId: w.prep.id, justification: 'Attendu', label: 'Attendu' });
-    eq(rules(w.found(w.c.addCalendarDays(today, 6))), [], 'six jours : pas encore');
-    const f = w.found(w.c.addCalendarDays(today, 8));
-    eq([rules(f), f[0].targetType, f[0].targetId, /attend sa validation depuis 8 jours/.test(f[0].message)], [['EXERCISE_VERSION_PENDING'], 'ExerciseVersion', v.id, true], 'huit jours : signalée, avec l’ancienneté');
-    w.call('dora@entreprise.com', 'exercise.version.decide', { id: v.id, decision: 'validate' });
-    eq(rules(w.found(w.c.addCalendarDays(today, 8))), [], 'validée : plus rien');
-  });
 
   test('Enveloppes : le coût des livrables dépasse celle d’un workpackage ou le budget autorisé du projet', () => {
     const w = world();

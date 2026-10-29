@@ -100,3 +100,10 @@ Pour un usage avec une vraie équipe, **déployez depuis le compte Workspace de 
 3. Page **Administration**, zone « Budget : exercices et coût d'un ETP » : créer l'exercice en préparation (et celui en exécution), et saisir le coût annuel d'un ETP des pays utilisés.
 4. Page **Ressources** : donner un **pays** aux équipes (France par défaut) ; nommer les équipes avec leur code (3 caractères : porte le budget, 4 : détail rattaché).
 5. Classeurs d'import d'avant la 0.17.1 : l'onglet **Budget** a changé (Équipe ou Forfait, un montant) et l'onglet **Personnes** n'a plus de taux (une colonne Équipe) ; regénérer le modèle depuis la page.
+
+## Passer à la 0.19.3 (enveloppes par exercice, baselines à nom automatique)
+
+1. Remplacer les fichiers, relancer **`A1_INSTALLER_PPM`** : il ajoute la colonne `envelopes_json` aux projets et aux workpackages.
+2. **Ressaisir les enveloppes** : le budget autorisé et les enveloppes de workpackages sont maintenant **par exercice** (les anciennes valeurs ne sont plus lues). Les saisir dans la **Décomposition du Budget**, onglet de l'exercice voulu. **Rattacher les livrables à leur exercice** (bouton de la décomposition) : un livrable sans exercice ne compte plus dans aucun budget.
+3. Les feuilles `ExerciseVersion` et `ExerciseVersionLine` (versions figées de l'exercice, retirées) ne servent plus : on peut les supprimer à la main.
+4. Les baselines déjà figées gardent leur nom ; les nouvelles s'appellent `P1_n`, `P1_wp_n`, `P1_wp_sous-wp_n`. Les baselines figées avant cette version n'ont pas d'enveloppes par exercice : l'écart le dit (« non figé à l'époque »).

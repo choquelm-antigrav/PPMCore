@@ -27,13 +27,13 @@ var SCHEMA = {
     book: 'data',
     cols: ['id', 'code', 'name', 'program_id', 'manager_resource_id', 'status', 'holiday_country',
       'start_date', 'end_date', 'active_baseline_id', 'drive_folder_id', 'calendar_id', 'cpn', 'cpn_label',
-      'news_on', 'news_keywords', 'news_journal_id', 'budget_authorized'],   // budget_authorized : enveloppe autorisée (55_Envelope.gs)
+      'news_on', 'news_keywords', 'news_journal_id', 'budget_authorized', 'envelopes_json'],   // enveloppe autorisée PAR EXERCICE : envelopes_json { exercice: montant } (55_Envelope.gs, 0.19.3) ; budget_authorized n'est plus utilisé
     required: ['code', 'name'],
     enums: { status: ['Préparation', 'Actif', 'En pause', 'Clos'], holiday_country: COUNTRIES }
   },
   WorkPackage: {
     book: 'data',
-    cols: ['id', 'project_id', 'parent_wp_id', 'wbs_code', 'name', 'owner_resource_id', 'charge_code', 'cpn', 'cpn_label', 'budget_allocated', 'active_baseline_id'],   // budget_allocated : part de l'enveloppe (55_Envelope.gs)
+    cols: ['id', 'project_id', 'parent_wp_id', 'wbs_code', 'name', 'owner_resource_id', 'charge_code', 'cpn', 'cpn_label', 'budget_allocated', 'active_baseline_id', 'envelopes_json'],   // part de l'enveloppe PAR EXERCICE : envelopes_json { exercice: montant } (0.19.3) ; budget_allocated n'est plus utilisé
     required: ['project_id', 'name']
   },
   PlanItem: {
@@ -230,22 +230,6 @@ var SCHEMA = {
     book: 'history', tech: false,
     cols: ['id', 'at', 'table_name', 'entity_id', 'project_id', 'field', 'old_value', 'new_value',
       'actor', 'source', 'acknowledged', 'acknowledged_by', 'acknowledged_at', 'actor_level']   // actor_level : niveau de l'auteur sur l'objet (54_Validation.gs)
-  },
-  /**
-   * Une VERSION FIGÉE de l'exercice d'un projet (0.18.0) : un instantané du budget attendu, de l'accordé et des parts des livrables par équipe, à comparer à la précédente. Elle est à valider
-   * par le niveau du dessus de son auteur (`author_level` : son meilleur rang sur le projet quand il l'a figée ; 0 = personne au-dessus, validée d'emblée). Jamais modifiée ni supprimée.
-   */
-  ExerciseVersion: {
-    book: 'data',
-    cols: ['id', 'exercise_id', 'project_id', 'number', 'label', 'justification', 'author', 'author_level', 'status', 'decided_by', 'decided_at', 'decision_note',
-      'total_expected', 'total_granted', 'total_parts'],
-    required: ['exercise_id', 'project_id', 'justification'],
-    enums: { status: ['À valider', 'Validée', 'Refusée'] }
-  },
-  /** Les lignes d'une version figée : kind « team » (une équipe : attendu, accordé, total de ses parts) ou « part » (une équipe sur un livrable : montant). */
-  ExerciseVersionLine: {
-    book: 'history', tech: false,
-    cols: ['id', 'version_id', 'kind', 'team_id', 'deliverable_id', 'label', 'expected', 'granted', 'amount']
   },
   BaselineItem: {
     book: 'history', tech: false,

@@ -133,6 +133,15 @@ function projectOrders_(projectId, wps) {
   return attachLinks_(repoList('PurchaseOrder', function (o) { return set[normCpn_(o.cpn)]; }));
 }
 
+/**
+ * À quelle année appartient une commande d'achat (0.19.3 : les données financières du suivi d'une année ne se mêlent pas à celles d'une autre) : l'année de son lancement, à défaut de son début, de son
+ * échéance de réception ou de sa fin ; sans aucune date, l'année en cours.
+ */
+function poYear_(o) {
+  var d = o.launched_on || o.start_date || o.gr_due_date || o.end_date || '';
+  return isBlank(d) ? Number(todayStr().slice(0, 4)) : Number(String(d).slice(0, 4));
+}
+
 function grFlag_(o, today) {
   if (o.status !== 'Lancée' || isBlank(o.gr_due_date)) return '';
   if (String(o.gr_due_date) < today) return 'late';
@@ -222,7 +231,11 @@ defineAction('po.list', function (p, ctx) {
   if (!canPoView_(ctx, project.id)) throw new PpmError('FORBIDDEN', 'Les commandes d’achat sont réservées aux personnes internes nommées dans l’équipe du projet.');
   var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; });
   var pos = projectOrders_(project.id, wps);
+  // un exercice demandé : les commandes de son année et les livrables de son exercice seulement (étanchéité, 0.19.3)
+  var exFilter = isBlank(p.exerciseId) ? null : mustGet('Exercise', p.exerciseId);
+  if (exFilter) pos = pos.filter(function (o) { return poYear_(o) === Number(exFilter.year); });
   var env = projectEnv_(project, wps, pos);
+  if (exFilter) env.items = env.items.filter(function (i) { return i.exercise_id === exFilter.id; });
   var orders = pos.map(function (o) { return orderView_(o, env, today); }).sort(function (a, b) {
     return (PO_ORDER[a.status] - PO_ORDER[b.status]) || String(a.gr_due_date || '9999').localeCompare(String(b.gr_due_date || '9999')) || String(a.po_number).localeCompare(String(b.po_number));
   });

@@ -1,5 +1,14 @@
 # Journal des versions
 
+## 0.19.3 — étanchéité par exercice, projection, graphique, baselines et leur carte
+
+- **Étanchéité** : enveloppes (projet et workpackages) **par exercice** ; décomposition, bilan par CPN et achats limités aux livrables et aux commandes de l'exercice demandé ; livrables sans exercice hors budget (bouton de rattachement) ; exercice clos en lecture seule ; import et export sur l'exercice en exécution.
+- **Suivi budgétaire** : décomposition du budget en haut, non rétractable ; **projection de fin d'année** (à l'avancement) puis **graphique moderne** (histogramme empilé par workpackage, cumul, budget, infobulle, légende interactive) ; bilan par CPN et achats rétractables dessous ; **supprimés** : synthèse, livrables en cours, accordé et révisions, versions figées.
+- **Versions figées de l'exercice retirées** : ce sont les **baselines** qui portent les versions du budget (elles figent déjà la décomposition).
+- **Baselines** : **nom automatique** `P1_0`, `P1_1_0`, `P1_1_1.2_0` ; liste des baselines : **qui doit valider, en nom complet**, et les changements en attente ; **carte des baselines** (arbre des périmètres, chaîne de baselines, « Aujourd'hui », comparaisons limitées à ce qui est comparable, phrase de synthèse) à la place du double menu.
+- Serveur : `envelopeExercise_`, `envKey_`, `exerciseId` dans `budget.balance` et `po.list`, `monthly` et `projection` dans `budget.envelope.get`, `validatorNamesFor_`, `baselineAutoLabel_`, `prefix` des périmètres.
+- Tests : `test_envelope.js` (10), `test_baselines.js` (12), `ui_budget.js` (124), `ui_suivi.js` (88) ; treize sabotages vérifiés.
+
 ## 0.19.2 — décomposition du budget, enregistrement explicite, baselines
 
 - **Décomposition du Budget** (ex « Enveloppe par workpackage », dans les trois onglets) : workpackages, sous-workpackages, livrables et jalons dans un seul tableau ; un livrable n'a pas d'enveloppe ; bouton € de « Coût prévu » : fenêtre **« Coût du livrable »** (lignes, échéancier, ajout d'une part ou d'un forfait). **« Parts des livrables » supprimée.**

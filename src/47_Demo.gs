@@ -196,7 +196,7 @@ function demoDeps_(d) {
  */
 function demoBaselines_(d) {
   var p1 = d.project('NAC-1').id;
-  d.call('baselines.create', { projectId: p1, label: 'B0', justification: 'Planning validé en revue de lancement' });
+  d.call('baselines.create', { projectId: p1, justification: 'Planning validé en revue de lancement' });
   // évolutions après B0 : faites à un niveau de Deliverable owner (niveau 5), donc « à valider » par les niveaux du dessus ; l'administrateur qui lance la démo n'a personne au-dessus
   var adminActx = d.a;
   d.a = Object.assign({}, adminActx, { actor_level: 5 });
@@ -214,8 +214,8 @@ function demoBaselines_(d) {
     });
   d.call('wbs.delete', { kind: 'item', id: d.item('NAC-1', 'Moyens de contrôle non destructif').id });
   d.a = adminActx;
-  d.call('baselines.create', { projectId: p1, label: 'B1', justification: 'Replanification après le retard des éprouvettes matériaux' });
-  d.call('baselines.create', { projectId: p1, scopeType: 'workpackage', scopeId: d.wp('NAC-1', '2').id, label: 'B0', justification: 'Référence locale des essais, figée avec le plan de campagne soufflerie' });
+  d.call('baselines.create', { projectId: p1, justification: 'Replanification après le retard des éprouvettes matériaux' });
+  d.call('baselines.create', { projectId: p1, scopeType: 'workpackage', scopeId: d.wp('NAC-1', '2').id, justification: 'Référence locale des essais, figée avec le plan de campagne soufflerie' });
   // dérives après B1 (au même niveau)
   d.a = Object.assign({}, adminActx, { actor_level: 5 });
   demoShift_(d, 'NAC-1', 'Campagne d’essais statiques', 0, 6);
@@ -224,8 +224,8 @@ function demoBaselines_(d) {
   demoShift_(d, 'NAC-1', 'Optimisation de la lèvre d’entrée d’air', 0, 5);
   demoShift_(d, 'NAC-1', 'Dossier de certification complet', 0, 7);
   d.a = adminActx;
-  d.callAs('baselines.create', { projectId: p1, scopeType: 'workpackage', scopeId: d.wp('NAC-1', '1').id, label: 'B0', justification: 'Conception : plan de la revue critique figé par le responsable du workpackage' }, 3);
-  d.call('baselines.request', { projectId: p1, label: 'B2', justification: 'Replanifier la revue critique de conception et la campagne soufflerie après le retard de la maquette' });
+  d.callAs('baselines.create', { projectId: p1, scopeType: 'workpackage', scopeId: d.wp('NAC-1', '1').id, justification: 'Conception : plan de la revue critique figé par le responsable du workpackage' }, 3);
+  d.call('baselines.request', { projectId: p1, justification: 'Replanifier la revue critique de conception et la campagne soufflerie après le retard de la maquette' });
 }
 
 /** Historique de déclarations d'avancement (trois dates au plus par livrable), avec quelques commentaires et des déclarations anciennes. */

@@ -16,7 +16,7 @@
  * et l'avancement déclaré d'un livrable (`PlanItem.progress_pct`).
  */
 
-var VALIDATION_EXTRA_FIELDS = { PlanItem: ['progress_pct'], Project: ['budget_authorized'], WorkPackage: ['budget_allocated'], Baseline: ['baseline_frozen'] };
+var VALIDATION_EXTRA_FIELDS = { PlanItem: ['progress_pct'], Project: ['envelopes_json', 'budget_authorized'], WorkPackage: ['envelopes_json', 'budget_allocated'], Baseline: ['baseline_frozen'] };
 var VALIDATION_WINDOW_DAYS = 60;   // sans baseline active, le fil remonte aux 60 derniers jours
 
 /** L'événement porte-t-il sur une donnée à valider ? */
@@ -107,6 +107,24 @@ function nominalValidator_(e, scope, assignments, lookup) {
   });
   if (best < 0) return '';
   return ROLES.filter(function (c) { return ROLE_RANK[c] === best; }).map(function (c) { return ROLE_LABELS[c]; })[0] || '';
+}
+
+/**
+ * Les NOMS COMPLETS de ceux qui doivent valider (0.19.3) : les personnes qui tiennent le niveau présent juste au-dessus de l'auteur (de rang `rank`) dans la chaîne de l'objet. Sans personne à ce
+ * niveau, l'administrateur. Fonction pure : `assignments` (affectations actives), `names` { identifiant de ressource : nom }.
+ */
+function validatorNamesFor_(rank, scope, assignments, lookup, names) {
+  if (!scope || rank <= 0) return [];
+  var chain = scopeAncestors(scope, lookup), best = -1, who = {};
+  assignments.forEach(function (a) {
+    if (!chain.some(function (s) { return sameScope_(s, a.scope_type, a.scope_id); })) return;
+    var r = ROLE_RANK[effectiveRoleCode_(a, lookup)];
+    if (r === undefined || r >= rank) return;
+    if (r > best) { best = r; who = {}; }
+    if (r === best) who[a.resource_id] = true;
+  });
+  var list = Object.keys(who).map(function (id) { return names[id] || '(personne retirée)'; }).sort(function (a, b) { return String(a).localeCompare(String(b), 'fr'); });
+  return list.length ? list : ['Administrateur'];
 }
 
 /** Date de départ du fil d'un projet : la baseline active, ou les soixante derniers jours. */

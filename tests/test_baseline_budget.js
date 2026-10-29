@@ -8,17 +8,19 @@ module.exports = function () {
   /** Budget autorisé 10 000 ; enveloppes WP 1 : 2 000, WP 2 : 1 000 ; lignes : Spécification 800 et Calcul 500 (forfaits) ; une baseline B0 figée là-dessus. */
   function world() {
     const w = lot2World();
-    const line = (item, amount) => w.call(CP, 'budget.line.save', { values: { deliverable_id: item.id, resource_id: w.xavier.id, cost_type: 'Forfait', fixed_amount: amount } });
+    const e0 = w.call('admin@entreprise.com', 'exercise.create', { year: 2026 });
+    w.exec = w.call('admin@entreprise.com', 'exercise.setStatus', { id: e0.id, status: 'Exécution' });
+    const line = (item, amount) => w.call(CP, 'budget.line.save', { values: { deliverable_id: item.id, resource_id: w.xavier.id, cost_type: 'Forfait', fixed_amount: amount }, exerciseId: w.exec.id });
     w.l1 = line(w.a, 800); w.l2 = line(w.b, 500);
     w.call(CP, 'budget.envelope.set', { projectId: w.p1.id, authorized: 10000, allocations: [{ wpId: w.w1.id, amount: 2000 }, { wpId: w.w2.id, amount: 1000 }] });
-    w.b0 = w.call(CP, 'baselines.create', { projectId: w.p1.id, justification: 'Planning et budget initiaux', label: 'B0' });
+    w.b0 = w.call(CP, 'baselines.create', { projectId: w.p1.id, justification: 'Planning et budget initiaux', label: 'P1_0' });
     w.dec = (who, p) => w.raw(who || CP, 'baselines.decomposition', Object.assign({ projectId: w.p1.id }, p || {}));
     // des changements après la baseline : deux enveloppes (projet, WP 1), une ligne modifiée (+200), une retirée (−500), une ajoutée (+1 500 sur WP 2)
     w.change = () => {
       w.call(CP, 'budget.envelope.set', { projectId: w.p1.id, authorized: 12000, allocations: [{ wpId: w.w1.id, amount: 2500 }] });
       w.call(CP, 'budget.line.save', { id: w.l1.id, version: w.l1.version, values: { fixed_amount: 1000 } });
       w.call(CP, 'budget.line.delete', { id: w.l2.id, version: w.c.repoGet('BudgetLine', w.l2.id).version });
-      w.call(CP, 'budget.line.save', { values: { deliverable_id: w.cc.id, resource_id: w.xavier.id, cost_type: 'Forfait', fixed_amount: 1500 } });
+      w.call(CP, 'budget.line.save', { values: { deliverable_id: w.cc.id, resource_id: w.xavier.id, cost_type: 'Forfait', fixed_amount: 1500 }, exerciseId: w.exec.id });
     };
     return w;
   }
@@ -26,7 +28,8 @@ module.exports = function () {
   test('La baseline fige le budget autorisé, l’enveloppe de chaque workpackage, l’exercice des livrables et les lignes de coût', () => {
     const w = world(), snap = w.c.loadBaselineSnapshot_(w.b0.id);
     const proj = Object.keys(snap.Project).map((k) => snap.Project[k])[0];
-    eq([Number(proj.budget_authorized), Number(snap.WorkPackage[w.w1.id].budget_allocated), 'exercise_id' in snap.PlanItem[w.a.id]], [10000, 2000, true], 'budget autorisé, enveloppe d’un workpackage et exercice du livrable sont dans l’instantané');
+    const envOf = (rec) => w.c.envAmount_(rec, w.c.envKey_(w.exec));
+    eq([envOf(proj), envOf(snap.WorkPackage[w.w1.id]), 'exercise_id' in snap.PlanItem[w.a.id]], [10000, 2000, true], 'budget autorisé, enveloppe d’un workpackage et exercice du livrable sont dans l’instantané');
     eq(Object.keys(snap.BudgetLine).length, 2, 'les deux lignes de coût aussi');
   });
 
@@ -58,8 +61,8 @@ module.exports = function () {
     const real = w.c.loadBaselineSnapshot_;
     w.c.loadBaselineSnapshot_ = (id) => {
       const snap = real(id);
-      Object.keys(snap.Project).forEach((k) => { delete snap.Project[k].budget_authorized; });
-      Object.keys(snap.WorkPackage).forEach((k) => { delete snap.WorkPackage[k].budget_allocated; });
+      Object.keys(snap.Project).forEach((k) => { delete snap.Project[k].envelopes_json; });
+      Object.keys(snap.WorkPackage).forEach((k) => { delete snap.WorkPackage[k].envelopes_json; });
       Object.keys(snap.PlanItem).forEach((k) => { delete snap.PlanItem[k].exercise_id; });
       return snap;
     };
@@ -72,35 +75,38 @@ module.exports = function () {
   test('Suivre l’évolution d’une baseline à l’autre : deux baselines comparées entre elles', () => {
     const w = world();
     w.change();
-    const b1 = w.call(CP, 'baselines.create', { projectId: w.p1.id, justification: 'Budget revu', label: 'B1' });
+    const b1 = w.call(CP, 'baselines.create', { projectId: w.p1.id, justification: 'Budget revu', label: 'P1_1' });
     const d = w.dec(CP, { baselineId: w.b0.id, compareTo: b1.id }).data;
-    eq([d.baseline.label, d.compareTo.label, d.decomposition.totals.cost_delta, d.decomposition.totals.line_changes, d.decomposition.project.authorized], ['B0', 'B1', 1200, 3, 12000], 'B0 → B1 : ce qui a changé entre les deux baselines');
+    eq([d.baseline.label, d.compareTo.label, d.decomposition.totals.cost_delta, d.decomposition.totals.line_changes, d.decomposition.project.authorized], ['P1_0', 'P1_1', 1200, 3, 12000], 'B0 → B1 : ce qui a changé entre les deux baselines');
     eq(w.dec(CP, { baselineId: b1.id }).data.decomposition.totals.cost_delta, 0, 'B1 contre l’état actuel : plus d’écart');
   });
 
   test('Traçabilité : les changements de la décomposition entrent dans le fil de validation, comme ceux du planning', () => {
     const w = world();
     w.change();
-    w.call(CP, 'budget.deliverable.exercise', { deliverableId: w.cc.id, exerciseId: w.call('admin@entreprise.com', 'exercise.create', { year: 2027 }).id });
+    const fresh = w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name: 'Livrable neuf', item_type: 'Livrable', planned_start: '2027-02-01', planned_finish: '2027-02-12', wp_id: w.w1.id, owner_resource_id: w.mia.id } });
+    w.call(CP, 'budget.deliverable.exercise', { deliverableId: fresh.id, exerciseId: w.call('admin@entreprise.com', 'exercise.create', { year: 2027 }).id });
     const feed = w.call(DPL, 'changes.feed', { projectId: w.p1.id });
     const fields = feed.items.map((i) => i.field + ':' + i.table);
-    ok(fields.includes('budget_authorized:Project') && fields.includes('budget_allocated:WorkPackage'), 'budget autorisé et enveloppe d’un workpackage : à valider par le niveau du dessus : ' + fields.join(' | '));
+    ok(fields.includes('envelopes_json:Project') && fields.includes('envelopes_json:WorkPackage'), 'budget autorisé et enveloppe d’un workpackage : à valider par le niveau du dessus : ' + fields.join(' | '));
     ok(fields.some((f) => /:BudgetLine$/.test(f)), 'les lignes de coût aussi');
     ok(feed.items.some((i) => i.field === 'exercise_id' && i.field_label === 'exercice'), 'et le rattachement d’un livrable à un exercice');
-    const env = feed.items.find((i) => i.field === 'budget_allocated');
-    eq([env.field_label, env.what], ['enveloppe budgétaire', 'modification'], 'libellé lisible');
+    const env = feed.items.find((i) => i.field === 'envelopes_json' && i.table === 'WorkPackage');
+    eq([env.field_label, env.what, /exercice 2026 : 2500 €/.test(env.new_value)], ['enveloppes budgétaires', 'modification', true], 'libellé lisible : l’exercice et le montant');
   });
 
   test('La décomposition affiche, pour chaque workpackage et livrable, ce qu’elle valait à la baseline', () => {
     const w = world();
     w.change();
     const v = w.call(CP, 'budget.envelope.get', { projectId: w.p1.id }), row = (x) => v.rows.find((r) => r.wp_id === x.id), it = (n) => v.items.find((i) => i.name === n);
-    eq([v.baseline.label, v.baseline.number], ['B0', 0], 'la baseline de référence');
+    eq([v.baseline.label, v.baseline.number], ['P1_0', 0], 'la baseline de référence');
     eq([row(w.w1).base.allocated, row(w.w1).base.cost, row(w.w2).base.cost, v.totals.base.authorized, v.totals.base.cost], [2000, 1300, 0, 10000, 1300], 'enveloppe et coût figés de chaque workpackage ; budget autorisé et coût total figés du projet');
-    w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name: 'Livrable apparu', item_type: 'Livrable', planned_start: '2026-11-02', planned_finish: '2026-11-13', wp_id: w.w2.id, owner_resource_id: w.mia.id } });
+    const apparu = w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name: 'Livrable apparu', item_type: 'Livrable', planned_start: '2026-11-02', planned_finish: '2026-11-13', wp_id: w.w2.id, owner_resource_id: w.mia.id } });
+    w.call(CP, 'budget.deliverable.exercise', { deliverableId: apparu.id, exerciseId: w.exec.id });
     const v2 = w.call(CP, 'budget.envelope.get', { projectId: w.p1.id }), it2 = (n) => v2.items.find((i) => i.name === n);
     eq([it2('Spécification').base.cost, it2('Essais').base.cost, it2('Livrable apparu').base.new], [800, 0, true], 'un livrable : son coût figé (0 s’il n’en avait pas) ; un livrable apparu depuis la baseline : « nouveau »');
     const none = lot2World();
+    none.call('admin@entreprise.com', 'exercise.create', { year: 2026 });
     eq(none.call(CP, 'budget.envelope.get', { projectId: none.p1.id }).baseline, undefined, 'sans baseline : pas de colonne d’évolution');
   });
 };

@@ -130,11 +130,6 @@ function buildDigests(data, today, opts) {
       var n = pendingChangesFor_(ctx, data, p);
       if (n) validateLines.push({ text: p.code + ' · ' + n + (n > 1 ? ' changements' : ' changement') + ' sur des données figées', note: 'à valider', url: link('suivi', p.id, '&tab=changes') });
     });
-    // 2 ter. Versions de l'exercice à valider (0.18.0) : celles que cette personne peut valider (un niveau strictement supérieur à l'auteur)
-    data.projects.filter(function (p) { return activeProject(p.id); }).forEach(function (p) {
-      var nv = (data.exerciseVersions || []).filter(function (v) { return live(v) && v.project_id === p.id && canValidateVersion_(ctx, v); }).length;
-      if (nv) validateLines.push({ text: p.code + ' · ' + nv + (nv > 1 ? ' versions' : ' version') + ' de l’exercice figée' + (nv > 1 ? 's' : ''), note: 'à valider', url: link('budget', p.id) });
-    });
     if (validateLines.length) sections.push({ title: 'Changements à valider', lines: validateLines });
 
     // 3. Mes demandes de baseline tranchées
@@ -205,7 +200,7 @@ function loadDigestData_() {
   return {
     projects: projects, planitems: repoList('PlanItem'), resources: repoList('Resource'),
     assignments: repoList('RoleAssignment'), settings: repoList('UserSetting'), insights: repoList('Insight'),
-    baselines: repoList('Baseline'), exerciseVersions: repoList('ExerciseVersion', function (v) { return v.status === 'À valider'; }), workpackages: repoList('WorkPackage'), budgetLines: repoList('BudgetLine'),
+    baselines: repoList('Baseline'), workpackages: repoList('WorkPackage'), budgetLines: repoList('BudgetLine'),
     news: { meetings: repoList('Meeting'), actions: repoList('NewsAction'), digests: repoList('NewsDigest') },
     pendingChanges: pendingChangeCounts_(projects, repoList('ChangeEvent')), changeEvents: repoList('ChangeEvent'),
     purchaseOrders: repoList('PurchaseOrder', function (o) { return o.status === 'Lancée'; }),

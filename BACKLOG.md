@@ -4,6 +4,7 @@
 
 ## Fait récemment
 
+- **0.19.3 : étanchéité par exercice, projection, graphique, baselines** : enveloppes et coûts propres à chaque exercice, projection de fin d'année à l'avancement, graphique par workpackage, versions du budget portées par les baselines (nom automatique, carte, validateurs en nom complet). Les « versions figées de l'exercice » sont retirées.
 - **0.19.0 : page Budget en onglets et suivi budgétaire** : « Suivi budgétaire N » (première page), « OP N+1 », archives ; sections rétractables ; synthèse, graphique, tableaux par équipe et par livrable, prévu, valeur acquise, engagé ; versions en deux colonnes.
 - **0.18.1 : constats du moteur de règles sur l'exercice** : clash, dépassement de l'attendu, équipe sans budget, équipe sans livrable, équipe hors règle, version à valider depuis plus de 7 jours, dépassement d'enveloppe de workpackage et de projet ; sans montant, lisibles selon les droits.
 - **0.18.0 : versions figées de l'exercice** : instantané (attendu, accordé, parts des livrables), comparaison entre deux versions ou avec l'état actuel, validation par le niveau du dessus.

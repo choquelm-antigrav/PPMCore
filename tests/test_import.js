@@ -13,6 +13,8 @@ module.exports = function () {
     w.shared = [];
     w.c.IMPORT_DRIVE = { share: (id, email) => w.shared.push([id, email]), moveToProjectFolder() {} };
     w.team = w.call(CP, 'teams.create', { values: { name: 'T1A', country: 'FR' } });   // l'équipe des parts de budget (0.17.1 : plus de taux journalier)
+    const e0 = w.call(ADMIN, 'exercise.create', { year: 2026 });   // les enveloppes et les livrables chiffrés de l'import appartiennent à l'exercice en exécution (0.19.3)
+    w.exec = w.call(ADMIN, 'exercise.setStatus', { id: e0.id, status: 'Exécution' });
     w.template = (who, extra) => w.call(who || CP, 'import.template', Object.assign({ projectId: w.p1.id }, extra || {}));
     w.book = (t) => w.c.SpreadsheetApp.openById(t.id || t);
     w.analyze = (t, who, extra) => w.raw(who || CP, 'import.analyze', Object.assign({ projectId: w.p1.id, book: t.id || t }, extra || {}));
@@ -238,7 +240,8 @@ module.exports = function () {
     eq([!!dep, dep && dep.dep_type, dep && Number(dep.lag_days)], [true, 'FS', 2], 'dépendance créée, avec son décalage');
     eq(w.c.repoList('BudgetLine').filter((l) => l.deliverable_id === gammes.id).map((l) => l.cost_type + ':' + l.planned_amount).sort(), ['Forfait:1500', 'Équipe:3000'], 'budget de Gammes : la part de l’équipe et un forfait externe');
     eq(w.c.repoList('BudgetLine').filter((l) => l.deliverable_id === item('Gabarits').id).map((l) => l.planned_amount), [1600], 'et la part de l’équipe sur Gabarits');
-    eq([Number(w.c.repoGet('Project', w.p1.id).budget_authorized), Number(w.c.repoGet('WorkPackage', wp3.id).budget_allocated), Number(w.c.repoGet('WorkPackage', wp31.id).budget_allocated)], [20000, 9000, 4000], 'enveloppes posées');
+    const envOf = (rec) => w.c.envAmount_(rec, w.c.envKey_(w.exec));
+    eq([envOf(w.c.repoGet('Project', w.p1.id)), envOf(w.c.repoGet('WorkPackage', wp3.id)), envOf(w.c.repoGet('WorkPackage', wp31.id))], [20000, 9000, 4000], 'enveloppes posées (celles de l’exercice en exécution)');
     // idempotence
     const events = w.c.repoList('ChangeEvent').length, rows = ['WorkPackage', 'PlanItem', 'BudgetLine', 'RoleAssignment', 'Dependency', 'Resource'].map((x) => w.c.repoList(x).length);
     const again = w.run(t, CP, { resume: true });
@@ -320,7 +323,7 @@ module.exports = function () {
     const prog = w.c.repoList('Program').find((g) => g.code === 'NEW');
     const n1 = w.c.repoList('Project').find((x) => x.code === 'N1'), n2 = w.c.repoList('Project').find((x) => x.code === 'N2');
     ok(prog && prog.name === 'Nouveau programme', 'le programme est créé');
-    eq([n1.program_id, n2.program_id, n1.manager_resource_id, n1.status, n2.status, n2.holiday_country, Number(n1.budget_authorized)], [prog.id, prog.id, w.carla.id, 'Actif', 'Préparation', 'DE', 5000], 'deux projets dans le nouveau programme, avec leur chef de projet, statut, pays et budget autorisé');
+    eq([n1.program_id, n2.program_id, n1.manager_resource_id, n1.status, n2.status, n2.holiday_country, w.c.envAmount_(n1, w.c.envKey_(w.exec))], [prog.id, prog.id, w.carla.id, 'Actif', 'Préparation', 'DE', 5000], 'deux projets dans le nouveau programme, avec leur chef de projet, statut, pays et budget autorisé');
     eq(w.c.repoList('WorkPackage').filter((x) => x.project_id === n1.id).map((x) => x.name + ':' + x.owner_resource_id), ['Étude:' + w.remi.id], 'le découpage du premier projet');
     eq(w.c.repoList('Dependency').filter((d) => w.c.repoGet('PlanItem', d.successor_id).project_id === n1.id).length, 1, 'et sa dépendance');
     eq(w.c.repoList('Program').map((g) => g.code).sort(), ['NEW', 'PG'], 'deux programmes dans l’outil');
@@ -349,6 +352,7 @@ module.exports = function () {
     d.Session = { getActiveUser: () => ({ getEmail: () => ADMIN }), getEffectiveUser: () => ({ getEmail: () => ADMIN }), getScriptTimeZone: () => 'Europe/Paris' };
     d.SpreadsheetApp = w.c.SpreadsheetApp; d.IMPORT_DRIVE = { share() {}, moveToProjectFolder() {} };
     const call = (a, p) => { const r = d.handleRequest({ action: a, params: p, apiVersion: d.PPM_API_VERSION }, ADMIN); if (!r.ok) throw new Error(a + ' : ' + JSON.stringify(r.error)); return r.data; };
+    const dEx = call('exercise.create', { year: 2026 }); call('exercise.setStatus', { id: dEx.id, status: 'Exécution' });   // les enveloppes de l'import sont celles de l'exercice en exécution (0.19.3)
     // la structure des équipes d'abord (les parts de budget désignent des équipes qui doivent exister) : classeur dédié exporté de l'ancienne installation
     const tbook = w.call(ADMIN, 'teams.import.template', {});
     let tr = call('teams.import.run', { book: tbook.id }), tn = 1;
@@ -367,8 +371,8 @@ module.exports = function () {
       const lines = [], used = {};
       const who = (id) => { if (id) used[id] = true; return email(id); };
       c.repoList('Program').forEach((g) => lines.push('G|' + g.code + '|' + g.name + '|' + (g.status || 'Actif')));
-      c.repoList('Project').forEach((p) => lines.push('P|' + p.code + '|' + p.name + '|' + (p.program_id ? c.repoGet('Program', p.program_id).code : '') + '|' + p.status + '|' + p.holiday_country + '|' + who(p.manager_resource_id) + '|' + Number(p.budget_authorized || 0)));
-      c.repoList('WorkPackage').forEach((x) => lines.push('W|' + c.repoGet('Project', x.project_id).code + '|' + x.wbs_code + '|' + wpName(x.parent_wp_id) + '|' + x.name + '|' + who(x.owner_resource_id) + '|' + (x.charge_code || '') + '|' + Number(x.budget_allocated || 0)));
+      c.repoList('Project').forEach((p) => lines.push('P|' + p.code + '|' + p.name + '|' + (p.program_id ? c.repoGet('Program', p.program_id).code : '') + '|' + p.status + '|' + p.holiday_country + '|' + who(p.manager_resource_id) + '|' + Number(c.envAmount_(p, c.envKey_(c.repoList('Exercise').find((e) => e.status === 'Exécution'))) || 0)));
+      c.repoList('WorkPackage').forEach((x) => lines.push('W|' + c.repoGet('Project', x.project_id).code + '|' + x.wbs_code + '|' + wpName(x.parent_wp_id) + '|' + x.name + '|' + who(x.owner_resource_id) + '|' + (x.charge_code || '') + '|' + Number(c.envAmount_(x, c.envKey_(c.repoList('Exercise').find((e) => e.status === 'Exécution'))) || 0)));
       c.repoList('PlanItem').forEach((i) => lines.push('I|' + c.repoGet('Project', i.project_id).code + '|' + wpName(i.wp_id) + '|' + i.name + '|' + i.item_type + '|' + i.planned_start + '|' + i.planned_finish + '|' + who(i.owner_resource_id) + '|' + (i.milestone_category || '')));
       c.repoList('Dependency').forEach((x) => lines.push('D|' + c.repoGet('PlanItem', x.predecessor_id).name + '|' + c.repoGet('PlanItem', x.successor_id).name + '|' + x.dep_type + '|' + Number(x.lag_days || 0)));
       c.repoList('BudgetLine').forEach((l) => lines.push('B|' + c.repoGet('PlanItem', l.deliverable_id).name + '|' + (l.cost_type === 'Équipe' ? 'T:' + c.repoGet('HierarchicalTeam', l.team_id).name : who(l.resource_id)) + '|' + l.cost_type + '|' + Number(l.fixed_amount || 0) + '|' + Number(l.planned_amount || 0)));
@@ -419,7 +423,7 @@ module.exports = function () {
     ok(r.ok && r.data.stopped && !r.data.done && r.data.remaining > 0 && r.data.operations === 3, 'premier lancement : trois opérations, il dit qu’il reste à faire (' + (r.data && r.data.remaining) + ')');
     while (!r.data.done && runs < 40) { r = w.run(t, CP, { maxOps: 3, resume: true }); runs++; }
     ok(r.data.done && runs > 3, 'terminé en ' + runs + ' lancements');
-    const sig = (x) => ['WorkPackage', 'PlanItem', 'BudgetLine', 'Dependency'].map((tb) => x.c.repoList(tb).map((o) => [o.wbs_code, o.name, o.planned_start, o.planned_finish, o.planned_amount, o.budget_allocated, o.dep_type, o.lag_days].join('|')).sort().join(';')).join('#');
+    const sig = (x) => ['WorkPackage', 'PlanItem', 'BudgetLine', 'Dependency'].map((tb) => x.c.repoList(tb).map((o) => [o.wbs_code, o.name, o.planned_start, o.planned_finish, o.planned_amount, tb === 'WorkPackage' ? x.c.envAmount_(o, x.c.envKey_(x.exec)) : '', o.dep_type, o.lag_days].join('|')).sort().join(';')).join('#');
     eq(sig(w), sig(ref), 'mêmes données qu’un import en un seul lancement');
     const roles = (x) => x.c.repoList('RoleAssignment').filter((a) => !a.end_date).map((a) => a.role_code).sort().join();
     eq(roles(w), roles(ref), 'mêmes rôles');

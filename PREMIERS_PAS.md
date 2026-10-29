@@ -1,4 +1,4 @@
-# Premiers pas : installer et essayer PPM (version 0.19.2)
+# Premiers pas : installer et essayer PPM (version 0.19.3)
 
 Environ 15 minutes. Pas besoin d'AppSheet pour ces essais. Tout ce qu'il faut est dans le dossier `dist` de l'archive : **12 fichiers**.
 

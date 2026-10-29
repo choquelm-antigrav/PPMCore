@@ -21,7 +21,6 @@ require('./test_import')();
 require('./test_team_import')();
 require('./test_exercise')();
 require('./test_exercise_import')();
-require('./test_exercise_version')();
 require('./test_exercise_rules')();
 require('./test_exercise_tracking')();
 require('./test_milestone')();

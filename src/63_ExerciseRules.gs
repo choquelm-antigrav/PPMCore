@@ -10,7 +10,6 @@
  *   EXERCISE_UNFUNDED        Vigilance  une équipe a des parts mais ni attendu ni accordé ;
  *   EXERCISE_NO_PARTS        Info       en préparation, une fois les livrables commencés : une équipe a un attendu mais aucune part ;
  *   EXERCISE_TEAM_RULE       Vigilance  des parts ou un budget sur une équipe dont le nom n'a pas 3 ou 4 caractères, ou à 4 caractères sans parente à 3 : ils ne comptent nulle part ;
- *   EXERCISE_VERSION_PENDING Vigilance  une version figée attend sa validation depuis plus de THRESHOLDS.exerciseVersionPendingDays jours ;
  *   ENVELOPE_WP_EXCEEDED     Vigilance  les lignes de budget des livrables d'un workpackage dépassent son enveloppe ;
  *   ENVELOPE_PROJECT_EXCEEDED Vigilance le coût prévu du projet dépasse son budget autorisé.
  *
@@ -47,33 +46,25 @@ function exerciseFindings_(today) {
       });
     });
   });
-  // versions figées qui attendent leur validation
-  var exById = indexBy_(repoList('Exercise')), prById = indexBy_(projects);
-  repoList('ExerciseVersion', function (v) { return live(v) && v.status === 'À valider'; }).forEach(function (v) {
-    var pr = prById[v.project_id], ex = exById[v.exercise_id];
-    if (!pr || !ex) return;
-    var since = String(v.created_at || '').slice(0, 10);
-    if (!since) return;
-    var days = Math.round((parseYmd(today) - parseYmd(since)) / DAY_MS);
-    if (days < THRESHOLDS.exerciseVersionPendingDays) return;
-    out.push({ projectId: pr.id, rule: 'EXERCISE_VERSION_PENDING', severity: 'Vigilance', targetType: 'ExerciseVersion', targetId: v.id,
-      message: 'La version ' + v.number + ' (« ' + v.label + ' ») de l’exercice ' + ex.year + ' du projet ' + pr.code + ' attend sa validation depuis ' + days + ' jours.',
-      suggestion: 'Le niveau au-dessus de ' + v.author + ' la valide ou la refuse (page Budget, zone « Versions figées »).' });
-  });
-  // enveloppes : workpackages et projet
-  projects.forEach(function (pr) {
-    var wps = repoList('WorkPackage', function (w) { return live(w) && w.project_id === pr.id; }), wpById = indexBy_(wps), costs = envelopeCosts_(pr.id, wpById);
-    wps.forEach(function (w) {
-      if (isBlank(w.budget_allocated) || !((costs.byWp[w.id] || 0) > Number(w.budget_allocated))) return;
-      out.push({ projectId: pr.id, rule: 'ENVELOPE_WP_EXCEEDED', severity: 'Vigilance', targetType: 'WorkPackage', targetId: w.id,
-        message: 'Les lignes de budget des livrables du workpackage « ' + w.name + ' » (' + pr.code + ') dépassent son enveloppe.',
-        suggestion: 'Rechiffrer ou retirer des livrables, ou revoir l’enveloppe du workpackage (page Budget, zone « Enveloppe budgétaire »).' });
+  // enveloppes : workpackages et projet, exercice par exercice (0.19.3)
+  exercises.forEach(function (ex) {
+    projects.forEach(function (pr) {
+      var wps = repoList('WorkPackage', function (w) { return live(w) && w.project_id === pr.id; }), wpById = indexBy_(wps), costs = envelopeCosts_(pr.id, wpById, ex.id);
+      var where = ' (exercice ' + ex.year + ')';
+      wps.forEach(function (w) {
+        var al = envAmount_(w, envKey_(ex));
+        if (al === null || !((costs.byWp[w.id] || 0) > al)) return;
+        out.push({ projectId: pr.id, rule: 'ENVELOPE_WP_EXCEEDED', severity: 'Vigilance', targetType: 'WorkPackage', targetId: ex.id + ':' + w.id,
+          message: 'Les lignes de budget des livrables du workpackage « ' + w.name + ' » (' + pr.code + ') dépassent son enveloppe' + where + '.',
+          suggestion: 'Rechiffrer ou retirer des livrables, ou revoir l’enveloppe du workpackage (page Budget, zone « Décomposition du Budget »).' });
+      });
+      var au = envAmount_(pr, envKey_(ex));
+      if (au !== null) {
+        var total = costs.none; Object.keys(costs.byWp).forEach(function (k) { if (wpById[k] && !wpById[k].parent_wp_id) total = round2(total + costs.byWp[k]); });
+        if (total > au) out.push({ projectId: pr.id, rule: 'ENVELOPE_PROJECT_EXCEEDED', severity: 'Vigilance', targetType: 'Project', targetId: ex.id + ':' + pr.id,
+          message: 'Le coût prévu du projet ' + pr.code + ' dépasse son budget autorisé' + where + '.', suggestion: 'Rechiffrer ou retirer des livrables, ou revoir le budget autorisé du projet (page Budget, zone « Décomposition du Budget »).' });
+      }
     });
-    if (!isBlank(pr.budget_authorized)) {
-      var total = costs.none; Object.keys(costs.byWp).forEach(function (k) { if (wpById[k] && !wpById[k].parent_wp_id) total = round2(total + costs.byWp[k]); });
-      if (total > Number(pr.budget_authorized)) out.push({ projectId: pr.id, rule: 'ENVELOPE_PROJECT_EXCEEDED', severity: 'Vigilance', targetType: 'Project', targetId: pr.id,
-        message: 'Le coût prévu du projet ' + pr.code + ' dépasse son budget autorisé.', suggestion: 'Rechiffrer ou retirer des livrables, ou revoir le budget autorisé du projet (page Budget, zone « Enveloppe budgétaire »).' });
-    }
   });
   return out;
 }
