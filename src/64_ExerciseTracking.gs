@@ -27,8 +27,17 @@ defineAction('exercise.tracking', function (p, ctx) {
   var today = todayStr(), year = Number(ex.year), curIdx = Number(today.slice(0, 4)) < year ? 0 : (Number(today.slice(0, 4)) > year ? 12 : Number(today.slice(5, 7)));
   var months = []; for (var m = 1; m <= 12; m++) months.push(year + '-' + (m < 10 ? '0' : '') + m);
   var idxOf = {}; months.forEach(function (mm, i) { idxOf[mm] = i + 1; });
-  var data = exerciseData_(ex, [project.id]), table = exerciseTable_(ex, data, project.id);
-  var lineById = indexBy_(data.lines), phasing = repoList('BudgetPhasing', function (x) { return !!lineById[x.budget_line_id]; });
+  var data = exerciseData_(ex, [project.id]), table, phasing, lineById;
+  // une version de la décomposition (0.20.0) : le suivi lit la version de référence (les parts d'équipe et leur échéancier figés), pas le brouillon
+  var rvT = isBlank(p.version) ? null : resolveDecompVersion_(project, p.version);
+  if (rvT && rvT.version) {
+    var Dt = decompDataset_(project, ex, rvT.version);
+    var its = Dt.items.filter(function (i) { return i.item_type === 'Livrable' && i.exercise_id === ex.id; }), itIds = indexBy_(its);
+    data.items = its; data.itemById = itIds;
+    data.lines = Dt.lines.filter(function (l) { return itIds[l.deliverable_id] && l.cost_type !== 'Forfait' && !isBlank(l.team_id); });
+    lineById = indexBy_(data.lines); phasing = Dt.phasing.filter(function (x) { return !!lineById[x.budget_line_id]; });
+  } else { lineById = indexBy_(data.lines); phasing = repoList('BudgetPhasing', function (x) { return !!lineById[x.budget_line_id]; }); }
+  table = exerciseTable_(ex, data, project.id);
   var teamRows = {};
   var row = function (team) {
     var id = team.id;

@@ -1,5 +1,12 @@
 # Journal des versions
 
+## 0.20.0 — versions de la décomposition du budget
+
+- **Versions** : la décomposition en cours (brouillon) est figée par chaque baseline du projet ; ses versions V0, V1… s'affichent en **onglets** (lecture seule) à côté de la version en cours.
+- **Version de référence du suivi** = la dernière baseline **validée** : projection, graphique, bilan par CPN et « Par équipe » la lisent ; une nouvelle version **n'est pas prise en compte dans le suivi tant que sa baseline n'est pas validée**, et la page le dit (statut, validateur en nom complet). **« Figer une nouvelle version »** : bouton sur la décomposition.
+- Serveur : `decompVersions_`, `resolveDecompVersion_`, `decompDataset_` (jeu de données par version : dépôt ou instantané), `envelopeCostsD_` ; paramètre `version` de `budget.envelope.get`, `budget.balance`, `exercise.tracking`.
+- Tests : `test_decomp_versions.js` (5), `ui_budget.js` (142) ; huit sabotages vérifiés (dont un renforcé en route).
+
 ## 0.19.4 — les valeurs d'avant des enveloppes sont reprises, l'écart s'affiche en direct
 
 - **Plus rien à ressaisir** : les anciennes enveloppes (budget autorisé du projet, enveloppes de workpackages), saisies avant qu'elles soient par exercice, sont **reprises en brouillon** dans la décomposition de chaque exercice qui n'a pas encore de valeur à lui ; « Valider » les adopte pour cet exercice seulement. Elles ne comptent dans aucun calcul tant qu'elles ne sont pas adoptées (`legacy` de `budget.envelope.get`).

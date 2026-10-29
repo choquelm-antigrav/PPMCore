@@ -1,4 +1,4 @@
-# PPM Core — lots 0, 1, 2 et 4 (version 0.19.4)
+# PPM Core — lots 0, 1, 2 et 4 (version 0.20.0)
 
 Socle de l'outil de gestion de projets et programmes, et planning graphique. Le Core est une bibliothèque Apps Script qui travaille sur deux classeurs Google Sheets. Il fournit une API JSON, le journal des changements, les droits par périmètre, les calendriers FR/DE/UK/IN, le moteur de règles, le calcul des marges, le Gantt, la page Structure (organigramme OBS et découpage WBS, avec choix des attributs affichés) et, depuis le lot 2, les baselines et leurs écarts, le fil des changements du chef de projet, un agenda et un dossier Drive par projet, un mail récapitulatif par personne et, depuis le lot 4, le copilote : synthèse chiffrée, simulation « et si… », signaux faibles, suggestions à décider et, si la DSI l'autorise, Gemini. L'interface de saisie est une application AppSheet (guide dans `appsheet/`).
 
@@ -276,6 +276,14 @@ Additive et relançable, elle **termine** les anciennes lignes sans les supprime
 **Protection.** Les enveloppes ne s'écrivent que par `budget.envelope.set` : les mises à jour ordinaires d'un projet ou d'un workpackage (`projects.update`, `workpackages.*`, `wbs.*`) les ignorent. Actions : `budget.envelope.get` (lecture) et `budget.envelope.set` (`authorized`, `allocations: [{ wpId, amount }]`).
 
 **Limites.** Pas de règle du moteur de constats pour un dépassement d'enveloppe (seulement l'affichage) ; pas de graphique de consommation dans le temps ; l'enveloppe n'est pas figée par les baselines (elle est suivie par la validation). Vérifié sur les faux services et dans un aperçu, pas dans votre Apps Script. La démo reçoit une enveloppe (un workpackage dépassé pour l'illustrer) à l'étape « Enveloppe budgétaire de NAC-1 ».
+
+## Versions de la décomposition du budget : V0, V1… et version de référence du suivi (0.20.0)
+
+- **La version en cours** est la décomposition qu'on édite (brouillon, bouton « Valider »). **Chaque baseline du projet la fige** : elle devient une **version** (V0, V1…, nommée comme la baseline : `P1_0`, `P1_1`).
+- **Onglets de version** en tête de la Décomposition du Budget (suivi budgétaire) : **« Suivi · P1_0 »** ✓ (la version lue par le suivi), **« Version en cours »** (modifiable) et un onglet par version figée (**⏳ à valider**, validée, archivée). Les versions figées sont en **lecture seule** et montrent ce qui a été figé (enveloppes par exercice, coûts, échéanciers), pas la saisie du jour.
+- **Le suivi ne lit pas le brouillon** : il lit la **version de référence = la dernière baseline VALIDÉE** (ou qui n'avait pas à l'être : figée au niveau le plus haut). **Projection de fin d'année, graphique, bilan par CPN et « Par équipe » (parts d'équipe)** sont calculés sur cette version (`version: 'ref'`) ; l'avancement des livrables et les commandes d'achat restent ceux d'aujourd'hui. L'accordé et l'attendu par équipe ne sont pas versionnés.
+- **« Figer une nouvelle version »** (bouton, chef de projet et au-dessus ; motif obligatoire) crée la baseline. Tant qu'elle n'est **pas validée** par le niveau du dessus, la page affiche : « La version P1_1 est **en attente de validation** par <nom complet> : tant qu'elle n'est pas validée, elle n'est **pas prise en compte dans le suivi**, qui continue de lire P1_0 ». Une fois validée, elle devient la référence.
+- **Sans aucune baseline validée**, le suivi lit la version en cours, et la page le dit (« Aucune version validée… »). Actions : `budget.envelope.get`, `budget.balance`, `exercise.tracking` avec `version` (`live`, `ref` ou l'identifiant d'une baseline) ; réponse : `versions`, `reference_id`, `pending_version`, `fallback_live`, `can_version`.
 
 ## Budget : étanchéité par exercice, projection, graphique, baselines (0.19.3)
 

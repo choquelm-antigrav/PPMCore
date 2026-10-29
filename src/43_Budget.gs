@@ -436,6 +436,14 @@ defineAction('budget.balance', function (p, ctx) {
   var items = repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable' && (!exB || i.exercise_id === exB.id); });
   var ids = {}; items.forEach(function (i) { ids[i.id] = true; });
   var lines = repoList('BudgetLine', function (l) { return ids[l.deliverable_id]; });
+  // une version de la décomposition (0.20.0) : le suivi lit la version de référence, pas le brouillon
+  var rvB = exB && !isBlank(p.version) ? resolveDecompVersion_(project, p.version) : null;
+  if (rvB && rvB.version) {
+    var Dv = decompDataset_(project, exB, rvB.version);
+    items = Dv.items.filter(function (i) { return i.item_type === 'Livrable' && i.exercise_id === exB.id; });
+    ids = {}; items.forEach(function (i) { ids[i.id] = true; });
+    lines = Dv.lines.filter(function (l) { return ids[l.deliverable_id]; });
+  }
   var pos = projectOrders_(project.id, wps);
   if (exB) pos = pos.filter(function (o) { return poYear_(o) === Number(exB.year); });
   var bal = computeBalance_({ project: project, wps: wps, items: items, lines: lines, pos: pos });

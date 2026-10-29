@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.19.4">
+<meta name="ppm-version" content="0.20.0">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <?!= include('CommonForms') ?>
@@ -71,6 +71,20 @@
   .save-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 12px 0 0; padding-top: 12px; border-top: 1px solid var(--rule); }
   .save-bar .btn:disabled { opacity: .55; cursor: default; }
   .save-hint { margin: 0; color: var(--accent, #1f6feb); font-weight: 600; }
+  .vbar { margin: 0 0 14px; }
+  .vtabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; border-bottom: 1px solid var(--rule); margin-bottom: 8px; }
+  .vtab { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 8px 14px; margin-bottom: -1px; border: 1px solid transparent; border-bottom: 0; border-radius: 10px 10px 0 0; background: none; color: var(--muted); font: inherit; cursor: pointer; text-align: left; }
+  .vtab small { font-size: 11.5px; color: var(--muted); }
+  .vtab .vt-name { font-weight: 600; font-size: 14px; }
+  .vtab:hover { color: var(--ink); }
+  .vtab[aria-selected="true"] { color: var(--ink); background: var(--surface); border-color: var(--rule); box-shadow: inset 0 3px 0 var(--accent, #1f6feb); }
+  .vtab.pending .vt-name::after { content: ' ⏳'; }
+  .vtab.ref .vt-name::after { content: ' ✓'; color: var(--ok-ink, #1a7f4b); }
+  .vtab:focus-visible { outline: 2px solid var(--accent, #1f6feb); outline-offset: -2px; }
+  .vactions { display: flex; gap: 8px; margin: 0 0 6px; }
+  .ver-status { margin: 6px 0; padding: 8px 12px; border-radius: 8px; font-size: 14px; background: color-mix(in srgb, var(--muted) 10%, var(--surface)); }
+  .ver-status.pending { background: var(--warn-bg, #fff4d6); color: var(--warn-ink, #8a5a00); }
+  .ver-status.frozen { background: color-mix(in srgb, var(--accent, #1f6feb) 8%, var(--surface)); }
   .env-field { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 2px; }
   .env-delta { font-size: 12px; color: var(--muted); min-height: 14px; }
   .env-delta.up { color: var(--alert-ink, #c62828); }
@@ -245,7 +259,7 @@ var BOOT = <?!= boot ?>;
     { id: 'track', tabs: ['suivi'], access: 'exercise', open: false },
     { id: 'exercice', tabs: ['op', 'archive'], access: 'exercise', open: true }
   ];
-  var state = { projectId: '', catalog: null, access: null, balance: null, po: null, envelope: null, budget: null, exercises: null, exerciseId: '', exercise: null, tracking: null, envDraft: null, exDraft: {}, costData: null, costItem: null, epoch: 0, tab: 'suivi', execEx: null, prepEx: null, closedEx: [], archiveId: '', sections: {}, outside: null, resources: null, seq: 0 };
+  var state = { projectId: '', catalog: null, access: null, balance: null, po: null, envelope: null, budget: null, exercises: null, exerciseId: '', exercise: null, tracking: null, verTab: 'ref', envRef: null, envDraft: null, exDraft: {}, costData: null, costItem: null, epoch: 0, tab: 'suivi', execEx: null, prepEx: null, closedEx: [], archiveId: '', sections: {}, outside: null, resources: null, seq: 0 };
   var $ = function (id) { return document.getElementById(id); };
   var STATUS_TONE = { 'À faire': '', 'Lancée': 'warn', 'GR': 'ok', 'Terminée': 'ok' };
   var STATUSES = ['À faire', 'Lancée', 'GR', 'Terminée'];
@@ -325,7 +339,7 @@ var BOOT = <?!= boot ?>;
   /** Changer d'onglet : l'exercice affiché est celui de l'onglet ; les zones de l'autre onglet sont vidées (aucun identifiant en double). */
   function setTab(t, silent) {
     state.tab = t; state.epoch++;   // les réponses attendues de l'onglet précédent sont ignorées à leur arrivée
-    state.exercise = null; state.budget = null; state.tracking = null; state.envDraft = null; state.exDraft = {};   // un brouillon ne passe jamais d'un exercice à l'autre
+    state.exercise = null; state.budget = null; state.tracking = null; state.envDraft = null; state.exDraft = {}; state.verTab = 'ref'; state.envRef = null;   // un brouillon ne passe jamais d'un exercice à l'autre
     var ex = activeExercise(); state.exerciseId = ex ? ex.id : '';
     ['enveloppe', 'proj', 'graph', 'track', 'exercice'].forEach(function (id) { clear($('panel-' + id)); });
     try { sessionStorage.setItem('ppm-budget-tab', t); } catch (e) { /* stockage indisponible */ }
@@ -413,7 +427,7 @@ var BOOT = <?!= boot ?>;
     if (!state.exerciseId) { noExerciseNote(panel); return Promise.resolve(); }
     if (state.balance) { renderBalance(); return Promise.resolve(); }
     loading(panel);
-    return call('budget.balance', { projectId: state.projectId, exerciseId: state.exerciseId }).then(function (b) { state.balance = b; renderBalance(); }).catch(function (e) { failed(panel, e); });
+    return call('budget.balance', { projectId: state.projectId, exerciseId: state.exerciseId, version: 'ref' }).then(function (b) { state.balance = b; renderBalance(); }).catch(function (e) { failed(panel, e); });
   }
   function renderBalance() {
     var panel = $('panel-bilan'), b = state.balance, t = b.totals;
@@ -609,9 +623,16 @@ var BOOT = <?!= boot ?>;
       panel.appendChild(el('div', { class: 'empty', id: 'envelope-empty' }, [el('strong', { text: none[0] }), el('span', { text: none[1] })]));
       return Promise.resolve();
     }
-    if (state.envelope && state.envelope.exercise.id === ex.id) { renderEnvelope(); return Promise.resolve(); }
+    var suivi = state.tab === 'suivi', want = suivi ? state.verTab : 'live';
+    if (state.envelope && state.envelope.exercise.id === ex.id && state.envelope.asked === want && (!suivi || state.envRef)) { renderEnvelope(); return Promise.resolve(); }
     loading(panel);
-    return call('budget.envelope.get', { projectId: state.projectId, exerciseId: ex.id }).then(function (v) { if (epoch !== state.epoch) return; state.envelope = v; renderEnvelope(); }).catch(function (e) { if (epoch === state.epoch) failed(panel, e); });
+    // le suivi lit la version de RÉFÉRENCE (la dernière validée) : proj, graphique, bilan et « Par équipe » en dépendent ; le tableau montre l'onglet de version choisi
+    var main = call('budget.envelope.get', { projectId: state.projectId, exerciseId: ex.id, version: want });
+    var ref = suivi && want !== 'ref' ? call('budget.envelope.get', { projectId: state.projectId, exerciseId: ex.id, version: 'ref' }) : null;
+    return Promise.all([main, ref]).then(function (r) {
+      if (epoch !== state.epoch) return;
+      r[0].asked = want; state.envelope = r[0]; state.envRef = suivi ? (r[1] || r[0]) : null; renderEnvelope();
+    }).catch(function (e) { if (epoch === state.epoch) failed(panel, e); });
   }
   function sameMoney(a, b) { var x = a === null || a === undefined || a === '' ? '' : Number(String(a).replace(',', '.')), y = b === null || b === undefined || b === '' ? '' : Number(String(b).replace(',', '.')); return x === y; }
   function envDirty() { var d = state.envDraft; return !!d && (d.authorized !== undefined || Object.keys(d.alloc).length > 0); }
@@ -665,6 +686,7 @@ var BOOT = <?!= boot ?>;
     }
     var hasSeed = seededNow || (draft.authorized !== undefined && lg.authorized !== null && String(lg.authorized) === draft.authorized) || Object.keys(draft.alloc).some(function (k) { return lg.by_wp[k] !== undefined && String(lg.by_wp[k]) === draft.alloc[k]; });
     var bar = null;
+    if (state.tab === 'suivi') panel.appendChild(versionBar(v));
     var touch = function () { if (bar) bar.sync(envDirty()); };
     var overText = function (by) { return by ? ' · ' + eur(by) + ' au-delà' : ''; };
     setSummary('enveloppe', plural(v.rows.length, 'workpackage', 'workpackages') + ' · ' + plural(items.filter(function (x) { return x.type === 'Livrable'; }).length, 'livrable', 'livrables') + (t && t.over ? ' · en dépassement' : ''));
@@ -746,7 +768,7 @@ var BOOT = <?!= boot ?>;
     }, function () { state.envDraft = null; renderEnvelope(); });
     if (bar) { panel.appendChild(bar); bar.sync(envDirty()); }
     else panel.appendChild(el('p', { class: 'note', id: 'env-readonly', text: 'Exercice clos : la décomposition du budget est en lecture seule.' }));
-    if (state.tab === 'suivi') { $('cell-proj').hidden = false; $('cell-graph').hidden = false; renderProjection(v); renderGraph(v); }
+    if (state.tab === 'suivi') { $('cell-proj').hidden = false; $('cell-graph').hidden = false; renderProjection(state.envRef || v); renderGraph(state.envRef || v); }
   }
 
   // ------------------------------------------------------------ projection de fin d'année et prévisionnel par mois (suivi budgétaire)
@@ -856,6 +878,54 @@ var BOOT = <?!= boot ?>;
     wrap.appendChild(svg); wrap.appendChild(tip);
     box.appendChild(wrap);
     box.appendChild(el('p', { class: 'note', id: 'graph-note', text: 'Barres : prévu de chaque mois par workpackage (échéancier des lignes de coût des livrables de l’exercice), axe de gauche. Courbe : cumul, axe de droite' + (m.budget === null ? '.' : ' ; pointillé : budget de l’exercice.') + ' Les mois à venir sont plus clairs.' }));
+  }
+
+
+  // ------------------------------------------------------------ versions de la décomposition (suivi)
+  /**
+   * Les onglets de VERSION de la décomposition : la « version en cours » (celle qu'on édite) et une version par baseline figée (V0, V1… nommées comme leur baseline). Le suivi lit la version de RÉFÉRENCE,
+   * la dernière baseline VALIDÉE ; une nouvelle version n'y est pas prise en compte tant que sa baseline n'est pas validée, et la page le dit.
+   */
+  function selectVersion(id) { guardDirty(function () { state.verTab = id; state.envelope = null; state.envRef = null; state.envDraft = null; loadEnvelope(); }); }
+  function openNewVersion(v) {
+    openForm({
+      title: 'Figer une nouvelle version de la décomposition', ok: 'Figer la version',
+      note: 'La décomposition en cours (enveloppes et coûts) est figée dans une nouvelle baseline du projet : elle devient la version suivante. Tant que cette baseline n’est pas validée par le niveau du dessus, le suivi continue de lire la version précédente.',
+      fields: [{ key: 'reason', label: 'Motif de la nouvelle version (obligatoire)', type: 'textarea', value: '' }],
+      onSubmit: function (f) {
+        return call('baselines.create', { projectId: state.projectId, justification: f.reason }, true).then(function (b) {
+          toast('Version ' + b.label + ' figée' + (b.number >= 0 ? '.' : ''));
+          state.verTab = 'live'; return reload();
+        });
+      }
+    });
+  }
+  function versionBar(v) {
+    var versions = v.versions || [], box = el('div', { class: 'vbar', id: 'version-bar' });
+    var tabs = el('div', { class: 'vtabs', role: 'tablist', 'aria-label': 'Versions de la décomposition du budget' });
+    var tab = function (id, label, sub, cls, selected) {
+      return el('button', { type: 'button', role: 'tab', class: 'vtab ' + (cls || ''), id: 'vt-' + id, 'data-version': id, 'aria-selected': String(selected), onclick: function () { if (!selected) selectVersion(id); } }, [el('span', { class: 'vt-name', text: label }), sub ? el('small', { text: sub }) : null]);
+    };
+    var refId = v.reference_id || '', cur = state.verTab, byId = {}; versions.forEach(function (x) { byId[x.id] = x; });
+    var shownId = v.version ? v.version.id : null;
+    if (refId) tabs.appendChild(tab('ref', 'Suivi · ' + byId[refId].label, 'version lue par le suivi', 'ref', cur === 'ref'));
+    tabs.appendChild(tab('live', 'Version en cours', 'brouillon modifiable' + (v.pending_version ? ' · dernière figée : en attente' : ''), 'live', cur === 'live' || (!refId && cur === 'ref')));
+    versions.slice().reverse().forEach(function (x) {
+      var st = x.validation === 'pending' ? 'à valider' : x.validation === 'validated' ? 'validée' : x.status === 'Archivée' ? 'archivée' : 'figée';
+      tabs.appendChild(tab(x.id, 'V' + x.number + ' · ' + x.label, st + (x.is_reference ? ' · lue par le suivi' : ''), x.validation === 'pending' ? 'pending' : 'frozen', cur === x.id));
+    });
+    box.appendChild(tabs);
+    var actions = el('div', { class: 'vactions' });
+    if (v.can_version) actions.appendChild(el('button', { type: 'button', class: 'btn', id: 'version-new', text: 'Figer une nouvelle version', onclick: function () { openNewVersion(v); } }));
+    box.appendChild(actions);
+    // le statut : ce que le suivi lit, et ce qui attend
+    var lines = [];
+    if (v.pending_version) lines.push(el('p', { class: 'ver-status pending', id: 'ver-pending', role: 'status' }, ['La version ', el('strong', { text: v.pending_version.label }), ' est ', el('strong', { text: 'en attente de validation' }), ' par ' + v.pending_version.validators.join(', ') + ' : tant qu’elle n’est pas validée, elle n’est ', el('strong', { text: 'pas prise en compte dans le suivi' }), refId ? ', qui continue de lire ' + byId[refId].label + '.' : ', qui lit la version en cours.']));
+    if (!refId) lines.push(el('p', { class: 'ver-status', id: 'ver-fallback', text: v.pending_version ? '' : 'Aucune version validée : le suivi s’appuie sur la version en cours. Figez une version (baseline) et faites-la valider pour qu’elle devienne la référence du suivi.' }));
+    if (v.version) lines.push(el('p', { class: 'ver-status frozen', id: 'ver-frozen', text: 'Version ' + v.version.label + ' figée le ' + (v.version.decided_at ? frDate(v.version.decided_at) : '—') + ' par ' + (v.version.decided_by || '—') + ' · lecture seule' + (v.version.id === refId ? ' · c’est la version lue par le suivi.' : '.') }));
+    else if (state.verTab === 'live' && refId) lines.push(el('p', { class: 'ver-status', id: 'ver-live', text: 'Version en cours : vos modifications ne sont pas prises en compte dans le suivi tant qu’une version figée qui les contient n’est pas validée.' }));
+    lines.forEach(function (l) { if (l.textContent) box.appendChild(l); });
+    return box;
   }
 
   function ensureResources() {
@@ -1135,7 +1205,7 @@ var BOOT = <?!= boot ?>;
     if (state.tracking) { renderTrackTable(state.tracking); return Promise.resolve(); }
     loading(box);
     var epoch = state.epoch;
-    return call('exercise.tracking', { projectId: state.projectId, exerciseId: ex.id }).then(function (d) { if (epoch !== state.epoch) return; state.tracking = d; renderTrackTable(d); }).catch(function (e) { if (epoch === state.epoch) failed(box, e); });
+    return call('exercise.tracking', { projectId: state.projectId, exerciseId: ex.id, version: 'ref' }).then(function (d) { if (epoch !== state.epoch) return; state.tracking = d; renderTrackTable(d); }).catch(function (e) { if (epoch === state.epoch) failed(box, e); });
   }
   function renderTrackTable(d) {
     var box = $('panel-track'); clear(box);

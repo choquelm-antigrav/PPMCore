@@ -502,6 +502,46 @@ function openPage(user, startTab) {
   await lg.until(() => lg.$('env-validate') && lg.$('env-validate').disabled && !lg.$('env-legacy-note'));
   check(lg.text('env-' + w.w1.id + '-delta') === '', 'enregistré : plus de reprise, plus d’écart');
 
+  // ---------------------------------------------------------------- 0.20.0 : les versions de la décomposition (suivi)
+  const DPL = 'dora@entreprise.com';
+  const vp = openPage(CP);
+  await vp.until(() => vp.$('version-bar') && vp.$('env-table'));
+  check(/P1_0/.test(vp.text('ver-pending')) && /en attente de validation/.test(vp.text('ver-pending')) && /Dora/.test(vp.text('ver-pending')) && /pas prise en compte dans le suivi/.test(vp.text('ver-pending')), 'la baseline P1_0 est en attente : la page le dit, nomme Dora, et précise que cette version n’est pas prise en compte dans le suivi : ' + vp.text('ver-pending'));
+  const p0 = c.repoList('Baseline').find((b) => b.label === 'P1_0');
+  check(!vp.$('vt-ref') && vp.$('vt-live').getAttribute('aria-selected') === 'true' && /à valider/.test(vp.text('vt-' + p0.id)) && vp.$('vt-' + p0.id).classList.contains('pending') && !!vp.$('version-new'), 'onglets : « Version en cours » (aucune version validée : le suivi la lit) et la version P1_0 « à valider » ⏳ ; le bouton « Figer une nouvelle version » est proposé');
+  check(/Aucune version validée|en attente de validation/.test(vp.text('version-bar')) && !!vp.doc.querySelector('#env-table input.env-input'), 'tant que rien n’est validé, la décomposition du suivi reste modifiable (c’est la version en cours)');
+  // le DPL valide P1_0 ; la saisie change ensuite ; le suivi lit toujours P1_0
+  const ackIds = w.call(DPL, 'changes.feed', { projectId: w.p1.id }).items.filter((x) => x.table === 'Baseline' && x.entity_id === p0.id).map((x) => x.id);
+  w.call(DPL, 'changes.ack', { ids: ackIds });
+  const frozenCost = c.repoList('BudgetLine').filter((l) => c.repoGet('PlanItem', l.deliverable_id).exercise_id === exec.id).reduce((t, l) => t + Number(l.planned_amount), 0);
+  w.call(CP, 'budget.envelope.set', { projectId: w.p1.id, exerciseId: exec.id, authorized: 55555, allocations: [{ wpId: w.w1.id, amount: 777 }] });
+  const vq = openPage(CP);
+  await vq.until(() => vq.$('vt-ref') && vq.$('env-table'));
+  check(/Suivi · P1_0/.test(vq.text('vt-ref')) && vq.$('vt-ref').getAttribute('aria-selected') === 'true' && vq.$('vt-ref').classList.contains('ref') && /lue par le suivi/.test(vq.text('vt-ref')), 'P1_0 validée : l’onglet « Suivi · P1_0 » ✓ est sélectionné, c’est la version lue par le suivi');
+  check(!vq.doc.querySelector('#env-table input.env-input') && /lecture seule/.test(vq.text('ver-frozen')) && /version lue par le suivi/.test(vq.text('ver-frozen')) && !vq.$('env-validate'), 'la version figée est en lecture seule : aucun champ, pas de « Valider » : ' + vq.text('ver-frozen'));
+  const wpRow = (pg) => pg.doc.querySelector('#env-table tr[data-wp="' + w.w1.id + '"]');
+  check(!/777/.test(wpRow(vq).textContent), 'elle montre ce qui a été figé, pas la saisie d’aujourd’hui (777 €) ');
+  vq.click(vq.$('vt-live'));
+  await vq.until(() => vq.doc.querySelector('#env-table input.env-input') && vq.$('ver-live'));
+  check(vq.$('env-' + w.w1.id).value === '777' && /pas prises en compte dans le suivi/.test(vq.text('ver-live')) && !!vq.$('env-validate'), 'la version en cours montre la saisie (777 €), modifiable ; elle précise que ces modifications ne sont pas prises en compte dans le suivi tant qu’une version figée qui les contient n’est pas validée');
+  // le suivi (projection, graphique) lit toujours la version de référence, même sur l’onglet de la version en cours
+  check(vq.$('env-authorized').value === '55555' && /20\s?000/.test(vq.text('proj-cards')) && !/55\s?555/.test(vq.text('proj-cards')), 'la version en cours montre 55 555 € de budget autorisé ; la projection et le graphique, eux, restent sur la version de référence (20 000 €) pendant qu’on l’édite');
+  // figer une nouvelle version
+  vq.click(vq.$('version-new'));
+  await vq.until(() => vq.$('genform').open && vq.$('gf-reason'));
+  vq.submitGf();
+  await vq.until(() => !vq.$('gf-error').hidden);
+  check(/justification est obligatoire|motif/i.test(vq.text('gf-error')), 'sans motif : refusé : ' + vq.text('gf-error'));
+  vq.set('gf-reason', 'Budget revu après la revue de décembre'); vq.submitGf();
+  await vq.until(() => c.repoList('Baseline').some((b) => b.label === 'P1_1'));
+  await vq.until(() => vq.$('ver-pending') && /P1_1/.test(vq.text('ver-pending')));
+  const p1 = c.repoList('Baseline').find((b) => b.label === 'P1_1');
+  check(/P1_1/.test(vq.text('ver-pending')) && /Suivi · P1_0/.test(vq.text('vt-ref')) && /à valider/.test(vq.text('vt-' + p1.id)), 'la nouvelle version P1_1 apparaît en attente ; le suivi continue de lire P1_0 : ' + vq.text('ver-pending'));
+  // une version se consulte par son onglet
+  vq.click(vq.$('vt-' + p1.id));
+  await vq.until(() => vq.$('ver-frozen') && /P1_1/.test(vq.text('ver-frozen')));
+  check(/P1_1/.test(vq.text('ver-frozen')) && !/version lue par le suivi/.test(vq.text('ver-frozen')), 'l’onglet de P1_1 : lecture seule, et ce n’est pas la version lue par le suivi');
+
   console.log(failed ? '\n' + failed + ' échec(s).' : '\nPage Budget : tout est conforme.');
   process.exit(failed ? 1 : 0);
 })();
