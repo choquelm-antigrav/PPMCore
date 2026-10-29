@@ -228,7 +228,33 @@ function runSimulation_(data, projectId, changes) {
 }
 
 /** Fonctions en lecture seule proposées au modèle pour répondre aux questions. */
-function copilotTools_(data, projectId, brief) {
+/**
+ * L'OUTIL BUDGÉTAIRE de l'assistant (0.20.1) : budget de l'exercice en exécution, projection (à l'avancement et sur le réalisé comptable), réalisé par équipe et par mois, par workpackage. AGRÉGATS seulement
+ * (aucune ligne de coût, aucun nom de personne), version de RÉFÉRENCE du suivi. Il n'existe que si l'administrateur l'a activé (propriété PPM_AI_BUDGET = on), en mode API (jamais dans le texte à copier
+ * du mode manuel), et pour une personne qui voit déjà le budget de TOUT le projet.
+ */
+function copilotBudgetAllowed_(ctx, projectId) {
+  if (!ctx || String(getProp(PROP.AI_BUDGET, 'off') || 'off').toLowerCase().trim() !== 'on') return false;
+  try { return !!budgetAccess_(ctx, projectId).all; } catch (e) { return false; }
+}
+function copilotBudgetTool_(ctx, projectId) {
+  return {
+    declaration: { name: 'get_budget', description: 'Budget de l’exercice en exécution du projet : budget autorisé, prévu, valeur acquise, projection de fin d’année (à l’avancement et sur le réalisé comptable), réalisé par équipe et par mois, par workpackage. Montants agrégés. Le réalisé n’est pas suivi au livrable.', parameters: { type: 'object', properties: {} } },
+    handler: function () {
+      var ex = repoList('Exercise', function (x) { return !isTrue(x.deleted) && x.status === 'Exécution'; })[0];
+      if (!ex) return { error: 'Aucun exercice en exécution : pas de budget à analyser.' };
+      var project = mustGet('Project', projectId), rv = resolveDecompVersion_(project, 'ref'), v = envelopeView_(ctx, project, ex, rv.version), pj = v.projection, act = v.actuals && v.actuals.available ? v.actuals : null;
+      return { exercice: Number(ex.year), version_lue_par_le_suivi: rv.version ? rv.version.label : 'version en cours (aucune version validée)', budget_autorise: pj.budget, prevu_annee: pj.plan_year, prevu_a_ce_jour: pj.pv, valeur_acquise: pj.ev,
+        projection_a_l_avancement: pj.projected, ecart_au_budget: pj.gap, realise_a_ce_jour: act ? pj.actual_to_date : null, projection_sur_le_realise: act ? pj.projected_actual : null, ecart_projection_realise: act ? pj.gap_actual : null,
+        realise_par_mois: act ? act.months.map(function (m, i) { return { mois: m, realise: act.monthly[i] }; }).filter(function (x) { return x.realise !== 0; }) : [],
+        realise_par_equipe: act ? act.teams.map(function (t) { return { equipe: t.name, realise_a_ce_jour: t.to_date, realise_annee: t.total }; }) : [], realise_non_rattache_a_une_equipe: act ? act.unattached : null,
+        par_workpackage: pj.by_wp.map(function (w) { return { workpackage: (w.code ? w.code + ' ' : '') + w.name, enveloppe: w.allocated, prevu_annee: w.plan, valeur_acquise: w.ev, projection: w.projected, ecart: w.gap }; }),
+        precisions: 'Le réalisé comptable vient de l’import mensuel (CPN, équipe, mois) : il n’est pas suivi au livrable. Sans réalisé importé, les champs réalisé valent null.' };
+    }
+  };
+}
+
+function copilotTools_(data, projectId, brief, ctx) {
   var res = indexBy_(data.resources), wps = indexBy_(data.workpackages);
   var items = data.planitems.filter(function (i) { return i.project_id === projectId && !isTrue(i.deleted); });
   var ids = {};
@@ -246,6 +272,7 @@ function copilotTools_(data, projectId, brief) {
     return items.filter(function (i) { return i.id === ref; })[0] || items.filter(function (i) { return String(i.name).toLowerCase() === r; })[0] ||
       items.filter(function (i) { return String(i.name).toLowerCase().indexOf(r) >= 0; })[0] || null;
   };
+  var budgetTool = copilotBudgetAllowed_(ctx, projectId) ? copilotBudgetTool_(ctx, projectId) : null;
   return {
     declarations: [
       { name: 'get_brief', description: 'Faits chiffrés du projet : avancement, fin du plan, baseline, retards, jalons, alertes, risques.', parameters: { type: 'object', properties: {} } },
@@ -255,8 +282,9 @@ function copilotTools_(data, projectId, brief) {
         parameters: { type: 'object', properties: { item: { type: 'string', description: 'nom ou identifiant' }, shift_days: { type: 'integer' } }, required: ['item', 'shift_days'] } },
       { name: 'list_risks', description: 'Risques ouverts du projet.', parameters: { type: 'object', properties: {} } },
       { name: 'list_alerts', description: 'Constats du moteur de règles en attente de décision.', parameters: { type: 'object', properties: {} } }
-    ],
+    ].concat(budgetTool ? [budgetTool.declaration] : []),
     handlers: {
+      get_budget: function () { return budgetTool ? budgetTool.handler() : { error: 'Outil budgétaire non activé.' }; },
       get_brief: function () { return brief.facts; },
       list_items: function (a) {
         var f = a.filter || 'all';
@@ -343,7 +371,7 @@ defineAction('copilot.ask', function (p, ctx) {
   if (question.length > 1000) throw new PpmError('VALIDATION', 'Question trop longue (1 000 caractères au plus).');
   var data = loadCopilotData_(projectId);
   var brief = buildProjectBrief(data, projectId, todayStr(), data.holFor);
-  var tools = copilotTools_(data, projectId, brief);
+  var tools = copilotTools_(data, projectId, brief, aiUseManual_(ctx) ? null : ctx);   // le budget n'est jamais proposé dans le texte à copier du mode manuel
   if (aiUseManual_(ctx)) {
     var items = tools.handlers.list_items({ filter: 'all' });
     return runAi_(ctx, projectId, 'question', question, brief.facts, { extra: 'Livrables et jalons (JSON) :\n' + JSON.stringify(items) });

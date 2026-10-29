@@ -5,7 +5,7 @@
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.20.0';
+var PPM_VERSION = '0.20.1';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -130,6 +130,7 @@ var PROP = {
   WEBAPP_URL: 'PPM_WEBAPP_URL',
   PROJECTS_FOLDER: 'PPM_PROJECTS_FOLDER_ID',
   AI_MODE: 'PPM_AI_MODE',
+  AI_BUDGET: 'PPM_AI_BUDGET',   // 'on' : l'assistant (mode API seulement) peut consulter le budget agrégé du projet de ceux qui le voient ; 'off' par défaut (0.20.1)
   GEMINI_MODEL: 'PPM_GEMINI_MODEL',
   AI_QUOTA: 'PPM_AI_DAILY_QUOTA',
   LOGO_URL: 'PPM_LOGO_URL',

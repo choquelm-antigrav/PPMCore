@@ -70,10 +70,20 @@ defineAction('exercise.tracking', function (p, ctx) {
       planned_year: round2(plannedYear), planned_outside: round2(t.planned_total - plannedYear), planned_total: round2(t.planned_total), pv: round2(pv), ev: round2(t.ev), ev_gap: round2(t.ev - pv),
       remaining: base === null ? null : round2(base - plannedYear), clash: base !== null && plannedYear > base, monthly: t.monthly };
   }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
+  // le réalisé comptable de l'année, par équipe (0.20.1) : une équipe qui a consommé sans avoir de part de livrable apparaît aussi
+  var act = actualsView_(project, ex, today), actBy = {};
+  act.teams.forEach(function (t) { actBy[t.team_id] = t; });
+  teams.forEach(function (t) { t.actual_to_date = actBy[t.team_id] ? actBy[t.team_id].to_date : (act.available ? 0 : null); });
+  act.teams.forEach(function (t) {
+    if (teams.some(function (x) { return x.team_id === t.team_id; })) return;
+    teams.push({ team_id: t.team_id, name: t.name, country: '', granted: null, expected: null, basis: '', planned_year: 0, planned_outside: 0, planned_total: 0, pv: 0, ev: 0, ev_gap: 0, remaining: null, clash: false, monthly: months.map(function () { return 0; }), actual_to_date: t.to_date });
+  });
+  teams.sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
   var sum = function (f) { return round2(teams.reduce(function (s, t) { return s + (t[f] || 0); }, 0)); };
   var anyGranted = teams.some(function (t) { return t.granted !== null; }), anyExpected = teams.some(function (t) { return t.expected !== null; });
   var totals = { granted: anyGranted ? sum('granted') : null, expected: anyExpected ? sum('expected') : null, planned_year: sum('planned_year'), planned_outside: sum('planned_outside'), planned_total: sum('planned_total'), pv: sum('pv'), ev: sum('ev') };
   totals.ev_gap = round2(totals.ev - totals.pv);
+  totals.actual_to_date = act.available ? act.to_date : null; totals.actual_unattached = act.unattached;
   var base = totals.granted !== null ? totals.granted : totals.expected;
   totals.remaining = base === null ? null : round2(base - totals.planned_year);
   totals.clash = base !== null && totals.planned_year > base;

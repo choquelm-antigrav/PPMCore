@@ -322,6 +322,39 @@ function openPage(file, user, boot) {
   lg.value = ''; lg.dispatchEvent(new pgAdm.win.Event('input', { bubbles: true }));
   check(pgAdm.doc.getElementById('logo-strip').hidden, 'sans adresse : pas d’aperçu');
 
+  // ---------------------------------------------------------------- 0.20.1 : import mensuel du réalisé comptable (administrateur)
+  w.call(CP, 'cpn.set', { projectId: w.p1.id, cpn: 'cpn-777', cpn_label: 'Réalisé' });
+  const rteam = c.repoList('HierarchicalTeam')[0] || w.call(ADMIN, 'teams.create', { values: { name: 'RT1' } });
+  const mkBook = (rows) => {
+    const ss = c.SpreadsheetApp.create('Actuals du mois'), sh = ss.insertSheet('CUC Total Cost');
+    const head = Array.from({ length: 30 }, (_, i) => i === 9 ? 'WBS élément' : i === 11 ? 'cost center group' : i === 19 ? 'Month' : i === 20 ? 'Year' : i === 22 ? 'Actuals' : 'c' + i);
+    const grid = [head].concat(rows.map((r) => { const l = Array.from({ length: 30 }, () => ''); l[9] = r[0]; l[11] = r[1]; l[19] = r[2]; l[20] = r[3]; l[22] = r[4]; return l; }));
+    sh.getRange(1, 1, grid.length, 30).setValues(grid);
+    return 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/edit';
+  };
+  const ra = openPage('Admin.html', ADMIN);
+  await ra.until(() => ra.doc.getElementById('ra-book'));
+  check(/Réalisé comptable/.test(ra.doc.getElementById('zone-realise').textContent) && /CUC Total Cost/.test(ra.text('ra-help')) && /colonne J/.test(ra.text('ra-help')) && /colonne W/.test(ra.text('ra-help')) && /pas au livrable/.test(ra.text('ra-help')) && ra.doc.getElementById('ra-run').disabled, 'la zone « Réalisé comptable » dit le format attendu (onglet, colonnes J, L, T, U, W, pas au livrable) ; « Importer » est inactif avant l’analyse');
+  ra.click(ra.doc.getElementById('ra-analyze'));
+  await ra.until(() => /Collez d’abord/.test(ra.text('toast')));
+  check(c.repoList('ActualLine').length === 0, 'sans lien : rien ne part');
+  ra.doc.getElementById('ra-book').value = mkBook([['CPN-777', rteam.name, 'mars', 2026, '1 500,50'], ['CPN-777', rteam.name, 3, 2026, 500], ['CPN-000', rteam.name, 3, 2026, 10]]);
+  ra.click(ra.doc.getElementById('ra-analyze'));
+  await ra.until(() => ra.doc.getElementById('ra-counts'));
+  check(/Analyse sans erreur/.test(ra.text('ra-head')) && /1 à créer, 0 à remplacer/.test(ra.text('ra-counts')) && /2\s?000,50\s?€/.test(ra.text('ra-counts')) && /CPN-000/.test(ra.text('ra-warnings')) && !ra.doc.getElementById('ra-run').disabled, 'analyse : une ligne de réalisé (1 500,50 + 500), un CPN inconnu signalé, « Importer » actif');
+  check(c.repoList('ActualLine').length === 0, 'l’analyse n’écrit rien');
+  ra.click(ra.doc.getElementById('ra-run'));
+  await ra.until(() => c.repoList('ActualLine').length === 1);
+  await ra.until(() => /Import terminé/.test(ra.text('ra-status')));
+  const al = c.repoList('ActualLine')[0];
+  check(al.project_id === w.p1.id && al.team_id === rteam.id && Number(al.amount) === 2000.5 && al.month === '2026-03', 'importé : 2 000,50 € pour le projet, l’équipe et mars 2026');
+  await ra.until(() => /2026-03/.test(ra.text('ra-history')));
+  check(/Publié/.test(ra.text('ra-history')), 'l’historique des imports montre le fichier, publié');
+  ra.click(ra.doc.getElementById('ra-analyze'));
+  await ra.until(() => /Rien à importer/.test(ra.text('ra-head')));
+  check(ra.doc.getElementById('ra-run').disabled, 'le même fichier : « Rien à importer », « Importer » reste inactif');
+  check(!denied.doc.getElementById('ra-book'), 'un non-administrateur n’a pas cette zone');
+
   // ---------------------------------------------------------------- 0.17.3 : « Mes jalons » : le responsable déclare ses jalons passés depuis son compte
   const msLate = w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name: 'Revue échue de Rémi', item_type: 'Jalon', planned_start: '2026-10-01', planned_finish: '2026-10-01', wp_id: w.w1.id, owner_resource_id: w.remi.id } });
   const msSoon = w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name: 'Revue à venir de Rémi', item_type: 'Jalon', planned_start: '2026-10-20', planned_finish: '2026-10-20', wp_id: w.w1.id, owner_resource_id: w.remi.id } });

@@ -249,6 +249,18 @@ function envelopeView_(ctx, project, ex, version) {
     })
   };
 
+  // le RÉALISÉ comptable (0.20.1) : par mois et par équipe, depuis l'import mensuel ; la projection se lit aussi sur lui (réalisé à ce jour + reste à faire de l'année)
+  if (access.all) {
+    out.actuals = actualsView_(project, ex, today);
+    if (out.actuals.available) {
+      var restYear = round2(Math.max(0, tot.projected - tot.ev));
+      out.projection.actual_to_date = out.actuals.to_date; out.projection.actual_gap = round2(out.actuals.to_date - tot.pv);
+      out.projection.projected_actual = round2(out.actuals.to_date + restYear);
+      out.projection.gap_actual = refBudget === null ? null : round2(refBudget - out.projection.projected_actual);
+      out.projection.over_actual = refBudget !== null && out.projection.projected_actual > refBudget;
+    }
+  }
+
   // l'évolution depuis la baseline active du projet : ce que la décomposition valait quand on l'a figée, pour CET exercice (0.19.2 ; par exercice en 0.19.3)
   var bl = isBlank(project.active_baseline_id) ? null : repoGet('Baseline', project.active_baseline_id);
   if (!D.snapshot && bl && bl.status === 'Active' && isBlank(bl.scope_type)) {

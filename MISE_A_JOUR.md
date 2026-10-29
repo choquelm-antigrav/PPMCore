@@ -107,3 +107,9 @@ Pour un usage avec une vraie équipe, **déployez depuis le compte Workspace de 
 2. **Adopter les enveloppes** : le budget autorisé et les enveloppes de workpackages sont maintenant **par exercice**. Les anciennes valeurs sont **reprises en brouillon** (0.19.4) dans la **Décomposition du Budget** de chaque exercice : les vérifier et cliquer sur « Valider », onglet par onglet. **Rattacher les livrables à leur exercice** (bouton de la décomposition) : un livrable sans exercice ne compte plus dans aucun budget.
 3. Les feuilles `ExerciseVersion` et `ExerciseVersionLine` (versions figées de l'exercice, retirées) ne servent plus : on peut les supprimer à la main.
 4. Les baselines déjà figées gardent leur nom ; les nouvelles s'appellent `P1_n`, `P1_wp_n`, `P1_wp_sous-wp_n`. Les baselines figées avant cette version n'ont pas d'enveloppes par exercice : l'écart le dit (« non figé à l'époque »).
+
+## Passer à la 0.20.1 (réalisé comptable)
+
+1. Remplacer les fichiers, relancer **`A1_INSTALLER_PPM`** : la table `ActualLine` passe dans le classeur **Données** (nouvelle feuille, protégée) ; l'ancienne feuille du classeur Historique n'est plus utilisée (elle était vide).
+2. **Chaque mois** : page **Administration › Réalisé comptable** : coller le lien du nouveau classeur de la finance (onglet « CUC Total Cost »), **Analyser**, lire les avertissements (CPN ou équipes inconnus), **Importer**. Partager le classeur en lecture avec le compte qui exécute l'outil. Les CPN doivent exister dans l'outil (projet ou workpackage) ; les équipes se retrouvent par leur nom ou leur centre de coût.
+3. **Assistant** (facultatif) : pour que Gemini analyse le budget, définir la propriété du script **`PPM_AI_BUDGET`** à **`on`** (mode API de l'assistant, accès Gemini de l'entreprise).

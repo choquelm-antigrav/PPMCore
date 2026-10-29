@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.20.0">
+<meta name="ppm-version" content="0.20.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -603,6 +603,10 @@
   .ch-tip .tip-total { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--rule); }
   .wp-legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px; }
   .wp-legend .chip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border: 1px solid var(--rule); border-radius: 999px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
+  .chart-box .ch-actual { fill: none; stroke: var(--ok-ink, #1a7f4b); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+  .chart-box .ch-actual-dot { fill: var(--surface); stroke: var(--ok-ink, #1a7f4b); stroke-width: 2.4; }
+  .wp-legend .chip.static { cursor: default; }
+  .wp-legend .chip i.actual-key { width: 18px; height: 3px; border-radius: 2px; background: var(--ok-ink, #1a7f4b); }
   .wp-legend .chip i { width: 10px; height: 10px; border-radius: 3px; }
   .wp-legend .chip:hover { border-color: var(--muted); }
   .wp-legend .chip.off { opacity: .5; text-decoration: line-through; }
@@ -1492,8 +1496,14 @@ var BOOT = <?!= boot ?>;
     cards.appendChild(card('Prévu de l’année', eur(pj.plan_year), (pj.current_month ? 'à fin ' + MONTHS[pj.current_month - 1] + ' : ' : 'à ce jour : ') + eur(pj.pv)));
     cards.appendChild(card('Valeur acquise', eur(pj.ev), pj.ev - pj.pv < -0.5 ? 'en retard de ' + eur(pj.pv - pj.ev) + ' sur le prévu à ce jour' : 'parts × avancement des livrables', pj.ev - pj.pv < -0.5 ? 'alert' : ''));
     cards.appendChild(card('Projection de fin d’année', eur(pj.projected), pj.gap === null ? 'sans budget de référence' : (pj.over ? 'dépasse le budget de ' + eur(-pj.gap) : 'sous le budget de ' + eur(pj.gap)), pj.over ? 'alert' : ''));
+    var act = v.actuals && v.actuals.available ? v.actuals : null;
+    if (act) {
+      cards.appendChild(card('Réalisé à ce jour', eur(pj.actual_to_date), (pj.actual_gap > 0.5 ? 'au-dessus' : pj.actual_gap < -0.5 ? 'en dessous' : 'au niveau') + ' du prévu à ce jour' + (Math.abs(pj.actual_gap) > 0.5 ? ' (' + signed(pj.actual_gap) + ')' : ''), pj.actual_gap > 0.5 ? 'alert' : ''));
+      cards.appendChild(card('Projection sur le réalisé', eur(pj.projected_actual), pj.gap_actual === null ? 'réalisé + reste à faire' : (pj.over_actual ? 'dépasse le budget de ' + eur(-pj.gap_actual) : 'sous le budget de ' + eur(pj.gap_actual)), pj.over_actual ? 'alert' : ''));
+    }
     if (pj.committed_to_date !== null) cards.appendChild(card('Engagé (commandes d’achat)', eur(pj.committed_to_date), 'à ce jour, projet entier'));
     box.appendChild(cards);
+    if (!act && v.actuals) box.appendChild(el('p', { class: 'note', id: 'proj-no-actuals', text: 'Réalisé comptable non importé pour ' + pj.year + ' : la projection ne s’appuie que sur l’avancement. L’administrateur importe le réalisé chaque mois (page Administration).' }));
     if (pj.by_wp.length) {
       box.appendChild(table('proj-table', ['Workpackage', { t: 'Enveloppe' }, { t: 'Prévu de l’année' }, { t: 'Valeur acquise' }, { t: 'Projection' }, { t: 'Écart à l’enveloppe' }, 'État'], pj.by_wp.map(function (w) {
         var state2 = w.allocated === null ? badge('Pas de plafond') : w.over ? badge('En dépassement', 'alert') : badge('Dans l’enveloppe', 'ok');
@@ -1501,7 +1511,7 @@ var BOOT = <?!= boot ?>;
           cell(w.gap === null ? '—' : signed(w.gap), 'num' + (w.over ? ' late' : '')), cell(state2)]);
       })));
     }
-    box.appendChild(el('p', { class: 'note', id: 'proj-method', text: 'Méthode : ' + pj.method }));
+    box.appendChild(el('p', { class: 'note', id: 'proj-method', text: 'Méthode : ' + pj.method + (act ? ' Projection sur le réalisé : le réalisé à ce jour (importé de la comptabilité, par équipe et par mois, pas au livrable) + ce qu’il reste à faire d’ici la fin de l’année.' : '') }));
   }
 
   function fmtK(v) { return v >= 1e6 ? (v / 1e6).toFixed(1).replace('.', ',') + ' M€' : v >= 1e3 ? Math.round(v / 1e3) + ' k€' : Math.round(v) + ' €'; }
@@ -1523,10 +1533,12 @@ var BOOT = <?!= boot ?>;
       return el('button', { type: 'button', class: 'chip' + (on ? '' : ' off'), 'data-wp': key, 'aria-pressed': String(on), onclick: function () { hiddenWp[key] = on; renderGraph(v); } },
         [el('i', { style: 'background:' + colorOf(i) }), (sr.code ? sr.code + ' ' : '') + sr.name + ' · ' + eur(sr.total)]);
     }));
+    if (v.actuals && v.actuals.available) legend.appendChild(el('span', { class: 'chip static', id: 'legend-actual' }, [el('i', { class: 'actual-key' }), 'Réalisé cumulé (comptabilité)']));
     box.appendChild(legend);
     var perMonth = m.months.map(function (_, i) { return shown.reduce(function (t, sr) { return t + sr.values[i]; }, 0); });
     var run = 0, cum = perMonth.map(function (x) { run += x; return Math.round(run * 100) / 100; });
-    var maxBar = Math.max.apply(null, perMonth.concat([1])), maxCum = Math.max.apply(null, cum.concat(m.budget === null ? [] : [m.budget]).concat([1]));
+    var act = v.actuals && v.actuals.available ? v.actuals : null, actCum = act ? act.cumulative : [];
+    var maxBar = Math.max.apply(null, perMonth.concat([1])), maxCum = Math.max.apply(null, cum.concat(m.budget === null ? [] : [m.budget]).concat(actCum.filter(function (x) { return x !== null; })).concat([1]));
     var niceTop = function (max, n) { var step = Math.pow(10, Math.floor(Math.log(max / n) / Math.LN10)), k = max / n / step; step *= k <= 1 ? 1 : k <= 2 ? 2 : k <= 5 ? 5 : 10; return { step: step, top: Math.ceil(max / step) * step }; };
     var A = niceTop(maxBar * 1.08, 4), C = niceTop(maxCum * 1.06, 4);
     var band = (W - L - R) / 12, bw = band * 0.62, x0 = function (i) { return L + i * band + (band - bw) / 2; }, xc = function (i) { return L + i * band + band / 2; };
@@ -1561,6 +1573,11 @@ var BOOT = <?!= boot ?>;
       svg.appendChild(mk('text', { x: W - R - 6, y: yC(m.budget) - 7, 'text-anchor': 'end', class: 'ch-budget-label' }, 'Budget ' + fmtK(m.budget)));
     }
     svg.appendChild(mk('polyline', { points: cum.map(function (c, i) { return xc(i) + ',' + yC(c); }).join(' '), class: 'ch-cum' }));
+    if (act) {
+      var ap = []; actCum.forEach(function (c, i) { if (c !== null) ap.push(xc(i) + ',' + yC(c)); });
+      svg.appendChild(mk('polyline', { points: ap.join(' '), class: 'ch-actual', id: 'ch-actual-line' }));
+      actCum.forEach(function (c, i) { if (c !== null) svg.appendChild(mk('circle', { cx: xc(i), cy: yC(c), r: 4, class: 'ch-actual-dot' })); });
+    }
     cum.forEach(function (c, i) { svg.appendChild(mk('circle', { cx: xc(i), cy: yC(c), r: i + 1 === cur ? 5.5 : 3.5, class: 'ch-dot' + (i + 1 === cur ? ' now' : '') })); });
     if (cur >= 1 && cur <= 12) { svg.appendChild(mk('line', { x1: xc(cur - 1), x2: xc(cur - 1), y1: T - 6, y2: H - B, class: 'ch-now' })); svg.appendChild(mk('text', { x: xc(cur - 1), y: T - 10, 'text-anchor': 'middle', class: 'ch-cur' }, 'aujourd’hui')); }
     // survol : une bande par mois, une infobulle
@@ -1572,7 +1589,8 @@ var BOOT = <?!= boot ?>;
         tip.appendChild(el('strong', { text: MONTHS[i] + ' ' + m.year + (i + 1 > cur ? ' · à venir' : '') }));
         lines.forEach(function (l) { tip.appendChild(l); });
         tip.appendChild(el('div', { class: 'tip-total' }, [el('span', { text: 'Prévu du mois' }), el('b', { text: eur(perMonth[i]) })]));
-        tip.appendChild(el('div', { class: 'tip-total' }, [el('span', { text: 'Cumul' }), el('b', { text: eur(cum[i]) })]));
+        tip.appendChild(el('div', { class: 'tip-total' }, [el('span', { text: 'Cumul prévu' }), el('b', { text: eur(cum[i]) })]));
+        if (act && act.cumulative[i] !== null) { tip.appendChild(el('div', { class: 'tip-total' }, [el('span', { text: 'Réalisé du mois' }), el('b', { text: eur(act.monthly[i]) })])); tip.appendChild(el('div', { class: 'tip-total' }, [el('span', { text: 'Réalisé cumulé' }), el('b', { text: eur(act.cumulative[i]) })])); }
         if (m.committed) tip.appendChild(el('div', { class: 'tip-total' }, [el('span', { text: 'Engagé (projet entier)' }), el('b', { text: eur(m.committed[i]) })]));
         tip.hidden = false;
         var r0 = box.getBoundingClientRect ? box.getBoundingClientRect() : { left: 0, top: 0 };
@@ -1917,17 +1935,18 @@ var BOOT = <?!= boot ?>;
   function renderTrackTable(d) {
     var box = $('panel-track'); clear(box);
     if (!d.teams.length) { box.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucune part de livrable dans l’exercice ' + d.exercise.year + '.' }), el('span', { text: 'Rattachez des livrables à l’exercice et chiffrez leurs parts par équipe.' })])); setSummary('track', ''); return; }
+    var hasActual = d.totals.actual_to_date !== null && d.totals.actual_to_date !== undefined;
     var rows = d.teams.map(function (t) {
       return el('tr', { 'data-team': t.team_id }, [
         cell([t.name, el('small', { text: t.country })]),
         cell(t.granted !== null ? eur(t.granted) : t.expected !== null ? eur(t.expected) + ' (attendu)' : '—', 'num'),
         cell(eur(t.planned_year), 'num'),
         cell([signed(t.remaining), t.clash ? el('span', { class: 'badge alert', style: 'margin-left:6px', text: 'clash' }) : null], 'num' + (t.clash ? ' late' : '')),
-        cell(eur(t.pv), 'num'), cell(eur(t.ev), 'num'), cell(signed(t.ev_gap), 'num' + (t.ev_gap < -0.5 ? ' late' : ''))]);
+        cell(eur(t.pv), 'num'), cell(eur(t.ev), 'num'), cell(signed(t.ev_gap), 'num' + (t.ev_gap < -0.5 ? ' late' : ''))].concat(hasActual ? [cell(t.actual_to_date === null || t.actual_to_date === undefined ? '—' : eur(t.actual_to_date), 'num')] : []));
     });
     var tt = d.totals;
-    rows.push(el('tr', { class: 'total' }, [cell('Total'), cell(tt.granted !== null ? eur(tt.granted) : tt.expected !== null ? eur(tt.expected) + ' (attendu)' : '—', 'num'), cell(eur(tt.planned_year), 'num'), cell(signed(tt.remaining), 'num' + (tt.clash ? ' late' : '')), cell(eur(tt.pv), 'num'), cell(eur(tt.ev), 'num'), cell(signed(tt.ev_gap), 'num' + (tt.ev_gap < -0.5 ? ' late' : ''))]));
-    box.appendChild(table('track-table', ['Équipe', { t: 'Budget' }, { t: 'Prévu de l’année' }, { t: 'Reste' }, { t: 'Prévu à ce jour' }, { t: 'Valeur acquise' }, { t: 'Écart à ce jour' }], rows));
+    rows.push(el('tr', { class: 'total' }, [cell('Total'), cell(tt.granted !== null ? eur(tt.granted) : tt.expected !== null ? eur(tt.expected) + ' (attendu)' : '—', 'num'), cell(eur(tt.planned_year), 'num'), cell(signed(tt.remaining), 'num' + (tt.clash ? ' late' : '')), cell(eur(tt.pv), 'num'), cell(eur(tt.ev), 'num'), cell(signed(tt.ev_gap), 'num' + (tt.ev_gap < -0.5 ? ' late' : ''))].concat(hasActual ? [cell(eur(tt.actual_to_date), 'num')] : [])));
+    box.appendChild(table('track-table', ['Équipe', { t: 'Budget' }, { t: 'Prévu de l’année' }, { t: 'Reste' }, { t: 'Prévu à ce jour' }, { t: 'Valeur acquise' }, { t: 'Écart à ce jour' }].concat(hasActual ? [{ t: 'Réalisé à ce jour' }] : []), rows));
     var clashes = d.teams.filter(function (t) { return t.clash; }).length;
     setSummary('track', plural(d.teams.length, 'équipe', 'équipes') + (clashes ? ' · ' + plural(clashes, 'clash', 'clashs') : ''));
   }

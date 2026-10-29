@@ -235,11 +235,16 @@ var SCHEMA = {
     book: 'history', tech: false,
     cols: ['id', 'baseline_id', 'entity_type', 'entity_id', 'snapshot_json']
   },
+  /**
+   * Le RÉALISÉ comptable (0.20.1), par PROJET, ÉQUIPE et MOIS : une ligne par (CPN, équipe, année-mois), cumul des lignes du fichier d'actuals. Pas de réalisé au livrable. Modifiable : un nouveau fichier
+   * mensuel REMPLACE le montant d'une ligne existante (même CPN, équipe, mois), ne supprime jamais rien.
+   */
   ActualLine: {
-    book: 'history', tech: false,
-    cols: ['id', 'import_id', 'month', 'charge_code', 'resource_ref', 'cost_center', 'days', 'amount',
-      'matched_wp_id', 'matched_deliverable_id', 'match_status']
+    book: 'data',
+    cols: ['id', 'import_id', 'month', 'charge_code', 'cost_center', 'amount', 'project_id', 'wp_id', 'team_id', 'match_status', 'source_rows'],
+    required: ['month', 'charge_code', 'amount']
   },
+
   EvmSnapshot: {
     book: 'history', tech: false,
     cols: ['id', 'scope_type', 'scope_id', 'status_date', 'bac', 'pv', 'ev', 'ac', 'cpi', 'spi', 'eac']

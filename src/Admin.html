@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.20.0">
+<meta name="ppm-version" content="0.20.1">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <style>
@@ -83,6 +83,10 @@
     <div class="zone" id="zone-feries"><h2 class="sec">Jours fériés</h2></div>
     <section class="panel" id="panel-feries" aria-label="Jours fériés"></section>
   </div>
+  <div class="cell wide" id="cell-realise">
+    <div class="zone" id="zone-realise"><h2 class="sec">Réalisé comptable : import mensuel</h2></div>
+    <section class="panel" id="panel-realise" aria-label="Réalisé comptable"></section>
+  </div>
   <div class="cell wide" id="cell-programmes">
     <div class="zone" id="zone-programmes"><h2 class="sec">Programmes</h2></div>
     <section class="panel" id="panel-programmes" aria-label="Programmes"></section>
@@ -147,6 +151,7 @@ var BOOT = <?!= boot ?>;
     loadHealth();
     loadHolidays();
     loadPrograms();
+    renderRealise();
     loadBudgetParams();
     loadPortfolio();
     loadRights();
@@ -516,6 +521,61 @@ var BOOT = <?!= boot ?>;
     }
   }
 
+  // ------------------------------------------------------------ Réalisé comptable : import mensuel
+  /**
+   * Chaque mois, la finance fournit un NOUVEAU classeur Google Sheet (onglet « CUC Total Cost ») : CPN en colonne J « WBS élément », équipe en L « cost center group », mois en T, année en U, montant en W
+   * « Actuals ». L'outil en tire la consommation réelle par PROJET, ÉQUIPE et MOIS (pas au livrable). Analyser (rien n'est écrit), puis Importer : un nouveau fichier REMPLACE les montants des mois repris et
+   * n'efface rien. Réservé à l'administrateur.
+   */
+  function eurC(n) { return Number(n).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }); }
+  function renderRealise() {
+    var panel = $('panel-realise'); clear(panel);
+    var book = el('input', { type: 'text', id: 'ra-book', placeholder: 'https://docs.google.com/spreadsheets/d/…', autocomplete: 'off', 'aria-label': 'Lien du classeur de la finance', style: 'padding:8px 10px;border:1px solid var(--rule);border-radius:6px;width:100%;box-sizing:border-box' });
+    var report = el('div', { id: 'ra-report' }), history = el('div', { id: 'ra-history' });
+    var state2 = { ok: false };
+    var run = el('button', { type: 'button', class: 'btn primary', id: 'ra-run', text: 'Importer', disabled: true });
+    var status = el('span', { class: 'note', id: 'ra-status', role: 'status', 'aria-live': 'polite' });
+    var fail = function (e) { status.textContent = ''; toast(window.ppmErrorText ? ppmErrorText(e) : (e && e.message) || 'Opération impossible.', true); };
+    var showReport = function (r) {
+      clear(report); state2.ok = !!r.ok && !r.nothing_to_do; run.disabled = !state2.ok;
+      var c = r.counts || { create: 0, update: 0, same: 0 };
+      report.appendChild(el('p', { class: 'imp-head ' + (r.ok ? 'ok' : 'bad'), id: 'ra-head', role: 'status', text: !r.ok ? (r.errors && r.errors[0] ? r.errors[0].message : 'Rien d’exploitable.') : r.nothing_to_do ? 'Rien à importer : ce fichier est déjà dans l’outil.' : 'Analyse sans erreur : voici ce qui sera fait.' }));
+      if (r.ok) report.appendChild(el('ul', { class: 'imp-counts', id: 'ra-counts' }, [
+        el('li', { text: r.rows_read + ' lignes lues (en-têtes en ligne ' + r.header_row + ')' + (r.rows_ignored ? ', ' + r.rows_ignored + ' ignorées' : '') }),
+        el('li', { text: 'Réalisé par projet, équipe et mois' + (r.months ? ' (de ' + r.months.from + ' à ' + r.months.to + ')' : '') + ' : ' + c.create + ' à créer, ' + c.update + ' à remplacer, ' + c.same + ' inchangées' }),
+        el('li', { text: 'Total du fichier rattaché : ' + eurC(r.total) })]));
+      if (r.warnings && r.warnings.length) report.appendChild(el('ul', { class: 'imp-list', id: 'ra-warnings' }, r.warnings.map(function (w) { return el('li', { text: w }); })));
+    };
+    var loadHistory = function () {
+      call('actuals.imports', {}).then(function (list) {
+        clear(history);
+        if (!list.length) { history.appendChild(el('p', { class: 'muted', id: 'ra-none', text: 'Aucun import pour l’instant.' })); return; }
+        history.appendChild(el('h3', { class: 'imp-sub', text: 'Derniers imports' }));
+        history.appendChild(table(['Période', 'Statut', 'Lignes', 'Total', 'Par'], list.map(function (i) { return el('tr', {}, [el('td', { text: i.period }), el('td', { text: i.status }), el('td', { class: 'num', text: i.lines === null ? '—' : String(i.lines) }), el('td', { class: 'num', text: i.total === null ? '—' : eurC(i.total) }), el('td', { text: i.imported_by })]); })));
+      }).catch(function () { clear(history); });
+    };
+    var analyze = el('button', { type: 'button', class: 'btn', id: 'ra-analyze', text: 'Analyser', onclick: function () {
+      if (!String(book.value || '').trim()) { toast('Collez d’abord le lien du classeur.', true); return; }
+      status.textContent = 'Analyse…'; run.disabled = true;
+      call('actuals.import.analyze', { book: book.value }).then(function (r) { status.textContent = ''; showReport(r); }).catch(fail);
+    } });
+    run.addEventListener('click', function () {
+      var lot = 0;
+      var next = function () {
+        lot++; status.textContent = 'Import en cours — lot ' + lot + '…';
+        return call('actuals.import.run', { book: book.value }, true).then(function (r) { if (r.done) return r; if (lot >= 60) throw new Error('Import interrompu après 60 lots : relancez-le pour continuer.'); return next(); });
+      };
+      run.disabled = true;
+      next().then(function (r) { status.textContent = 'Import terminé.'; showReport(r.report); run.disabled = true; toast('Réalisé importé.'); loadHistory(); }).catch(function (e) { run.disabled = false; fail(e); });
+    });
+    book.addEventListener('input', function () { clear(report); run.disabled = true; });
+    panel.appendChild(box('Importer le réalisé du mois', [
+      el('p', { class: 'note', id: 'ra-help', text: 'Chaque mois, la finance fournit un nouveau classeur Google Sheet. Onglet « CUC Total Cost » : CPN en colonne J (« WBS élément »), équipe en colonne L (« cost center group »), mois en colonne T, année en colonne U, montant en colonne W (« Actuals »). L’outil en tire la consommation réelle par projet, équipe et mois (pas au livrable). Un nouveau fichier remplace les montants des mois qu’il reprend et n’efface rien ; un CPN ou une équipe inconnus sont signalés. Partagez le classeur en lecture avec le compte qui exécute l’outil.' }),
+      el('label', { class: 'lbl' }, ['Lien du classeur', book]),
+      el('div', { class: 'row', style: 'margin-top:8px' }, [analyze, run, status]), report, history]));
+    loadHistory();
+  }
+
   // ------------------------------------------------------------ Programmes : liste et création
   /**
    * Un programme regroupe des projets ; il n'avait pas d'écran de création (seulement l'import). L'administrateur le crée ici : code et nom (obligatoires), statut, description. Le Program Leader
@@ -629,7 +689,7 @@ var BOOT = <?!= boot ?>;
 
   // ------------------------------------------------------------ démarrage
   if (!BOOT.isAdmin) {
-    ['sante', 'feries', 'programmes', 'budget', 'donnees', 'droits', 'journaux'].forEach(function (t) { $('panel-' + t).hidden = true; $('zone-' + t).hidden = true; });
+    ['sante', 'feries', 'realise', 'programmes', 'budget', 'donnees', 'droits', 'journaux'].forEach(function (t) { $('panel-' + t).hidden = true; $('zone-' + t).hidden = true; });
     $('zone-reglages').hidden = true;
     empty($('panel-reglages'), 'Réservé aux administrateurs.', 'Vos réglages personnels sont dans « Mon compte ».');
   } else {

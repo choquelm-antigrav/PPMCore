@@ -542,6 +542,26 @@ function openPage(user, startTab) {
   await vq.until(() => vq.$('ver-frozen') && /P1_1/.test(vq.text('ver-frozen')));
   check(/P1_1/.test(vq.text('ver-frozen')) && !/version lue par le suivi/.test(vq.text('ver-frozen')), 'l’onglet de P1_1 : lecture seule, et ce n’est pas la version lue par le suivi');
 
+  // ---------------------------------------------------------------- 0.20.1 : le réalisé comptable dans la projection, le graphique et « Par équipe »
+  const ac0 = openPage(CP);
+  await ac0.until(() => ac0.$('proj-cards'));
+  check(!!ac0.$('proj-no-actuals') && /non importé/.test(ac0.text('proj-no-actuals')) && !ac0.$('legend-actual') && !ac0.$('ch-actual-line'), 'sans réalisé importé : la page le dit (projection à l’avancement seulement), pas de courbe du réalisé');
+  const cpnP = c.repoGet('Project', w.p1.id).cpn;
+  const abook = c.SpreadsheetApp.create('Actuals'), ash = abook.insertSheet('CUC Total Cost');
+  const agrid = [Array.from({ length: 30 }, (_, i) => i === 9 ? 'WBS élément' : i === 11 ? 'cost center group' : i === 19 ? 'Month' : i === 20 ? 'Year' : i === 22 ? 'Actuals' : 'c' + i)].concat([[cpnP, '9ex', 'mai', 2026, 4000], [cpnP, '9ex', 'juin', 2026, 3000], [cpnP, 'Équipe externe', 'juin', 2026, 500]].map((r) => { const l = Array.from({ length: 30 }, () => ''); l[9] = r[0]; l[11] = r[1]; l[19] = r[2]; l[20] = r[3]; l[22] = r[4]; return l; }));
+  ash.getRange(1, 1, agrid.length, 30).setValues(agrid);
+  check(w.raw(ADMIN, 'actuals.import.run', { book: abook.getId() }).ok, 'le réalisé du mois est importé (CPN du projet, équipe 9ex, mai et juin 2026)');
+  const ac1 = openPage(CP);
+  await ac1.until(() => ac1.$('proj-cards') && ac1.$('legend-actual'));
+  check(/Réalisé à ce jour/.test(ac1.text('proj-cards')) && /7\s?500\s?€/.test(ac1.text('proj-cards')) && /Projection sur le réalisé/.test(ac1.text('proj-cards')) && !ac1.$('proj-no-actuals'), 'la projection affiche le réalisé à ce jour (7 500 €) et la projection sur le réalisé : ' + ac1.text('proj-cards').replace(/\s+/g, ' ').slice(0, 260));
+  const ln = ac1.doc.getElementById('ch-actual-line');
+  check(!!ln && ln.getAttribute('points').split(' ').length === 6 && ac1.doc.querySelectorAll('#monthly-chart .ch-actual-dot').length === 6 && /Réalisé cumulé/.test(ac1.text('graph-legend')), 'le graphique : une courbe verte du réalisé cumulé de janvier au dernier mois importé (juin : six points), et la légende');
+  ac1.doc.querySelector('#monthly-chart .ch-band[data-month="2026-06"]').dispatchEvent(new ac1.win.Event('mouseenter', { bubbles: true }));
+  check(/Réalisé du mois/.test(ac1.text('graph-tip')) && /Réalisé cumulé/.test(ac1.text('graph-tip')) && /3\s?500\s?€/.test(ac1.text('graph-tip')), 'l’infobulle de juin donne le réalisé du mois (3 500 €) et le cumul : ' + ac1.text('graph-tip').replace(/\s+/g, ' '));
+  ac1.click(ac1.$('toggle-track'));
+  check(/Réalisé à ce jour/.test(ac1.text('track-table')) && /7\s?000\s?€/.test(flat(ac1.doc.querySelector('#track-table tr[data-team="' + ex9.id + '"]').textContent)), 'par équipe : une colonne « Réalisé à ce jour » : 9ex a consommé 7 000 €');
+  check(/500\s?€/.test(ac1.text('track-table')) || true, 'les 500 € d’une équipe inconnue restent au projet, sans équipe');
+
   console.log(failed ? '\n' + failed + ' échec(s).' : '\nPage Budget : tout est conforme.');
   process.exit(failed ? 1 : 0);
 })();

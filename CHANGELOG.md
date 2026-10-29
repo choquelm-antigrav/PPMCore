@@ -1,5 +1,13 @@
 # Journal des versions
 
+## 0.20.1 — réalisé comptable et outil budgétaire de l'assistant
+
+- **Import du réalisé** depuis le classeur mensuel de la finance (onglet « CUC Total Cost » : CPN en J, équipe en L, mois en T, année en U, montant en W) : consommation réelle **par projet, équipe et mois**, pas au livrable ; nouveau fichier chaque mois (remplace les montants repris, n'efface rien) ; analyse, lots, historique ; zone « Réalisé comptable » de la page Administration (administrateur).
+- **Suivi** : réalisé à ce jour, projection sur le réalisé, courbe du réalisé cumulé, colonne « Réalisé à ce jour » de « Par équipe ».
+- **Assistant** : outil `get_budget` (agrégats, désactivé par défaut : `PPM_AI_BUDGET`, mode API, ceux qui voient le budget du projet).
+- `ActualLine` devient une table modifiable du classeur Données (colonnes : mois, CPN, centre de coût, montant, projet, équipe…), feuille protégée.
+- Tests : `test_actuals.js` (6), `test_copilot.js` (12), `ui_compte.js` (147), `ui_budget.js` (149) ; treize sabotages vérifiés (un équivalent sans effet : le mode manuel est sûr par construction).
+
 ## 0.20.0 — versions de la décomposition du budget
 
 - **Versions** : la décomposition en cours (brouillon) est figée par chaque baseline du projet ; ses versions V0, V1… s'affichent en **onglets** (lecture seule) à côté de la version en cours.
