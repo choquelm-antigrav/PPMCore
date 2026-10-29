@@ -310,7 +310,8 @@ defineAction('budget.get', function (p, ctx) {
   var exercises = repoList('Exercise'), exById = indexBy_(exercises), exFilter = String(p.exerciseId || '');
   // exerciseId : un exercice (ses livrables), « __none » (les livrables sans exercice) ou vide (tous)
   var allItems = repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable'; });
-  var items = allItems.filter(function (i) { return !exFilter || (exFilter === '__none' ? isBlank(i.exercise_id) : i.exercise_id === exFilter); });
+  var onlyId = String(p.deliverableId || '');   // un seul livrable (la fenêtre « Coût du livrable » : toutes ses lignes, quel que soit l'exercice)
+  var items = allItems.filter(function (i) { return onlyId ? i.id === onlyId : (!exFilter || (exFilter === '__none' ? isBlank(i.exercise_id) : i.exercise_id === exFilter)); });
   var editable = {};
   items.forEach(function (i) { if (access.all || can(ctx, 'budget.edit', { type: 'planitem', id: i.id })) editable[i.id] = true; });
   var lines = repoList('BudgetLine', function (l) { return editable[l.deliverable_id]; });

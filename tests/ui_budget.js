@@ -63,8 +63,9 @@ function openPage(user, startTab) {
   const submitGf = () => $('gf-form').dispatchEvent(new win.Event('submit', { cancelable: true }));
   const submitPo = () => $('po-form').dispatchEvent(new win.Event('submit', { cancelable: true }));
   const set = (id, v) => { $(id).value = v; };
+  const input = (n) => n.dispatchEvent(new win.Event('input', { bubbles: true }));
   const row = (table, key, attr) => doc.querySelector('#' + table + ' tr[' + attr + '="' + key + '"]');
-  return { win, doc, until, $, click, change, text, zones, submitGf, submitPo, set, row };
+  return { win, doc, until, $, click, change, input, text, zones, submitGf, submitPo, set, row };
 }
 
 (async () => {
@@ -74,9 +75,9 @@ function openPage(user, startTab) {
   let p = openPage(CP);
   await p.until(() => p.$('bal-table'));
   check(p.text('title') === 'P1 Projet 1' && p.text('cpn-chip') === 'CPN-100 — Nacelle moteur', 'titre et CPN du projet : ' + p.text('cpn-chip'));
-  check(JSON.stringify(p.zones()) === JSON.stringify(['bilan', 'po', 'enveloppe', 'budget']), 'le chef de projet voit les quatre zones d’un coup, sans onglet : bilan, achats, enveloppe par workpackage, budget');
-  await p.until(() => p.$('po-add') && p.$('lines-table'));
-  check(!!p.$('bal-table') && !!p.$('po-table') === false && !!p.$('line-add'), 'bilan, achats et lignes de budget sont chargés ensemble sur la page');
+  check(JSON.stringify(p.zones()) === JSON.stringify(['bilan', 'po', 'enveloppe']), 'le chef de projet voit les trois zones du suivi : bilan, achats, décomposition du budget (plus de zone « Parts des livrables »)');
+  await p.until(() => p.$('po-add') && p.$('env-table'));
+  check(!!p.$('bal-table') && !!p.$('po-table') === false && !!p.doc.querySelector('.cost-btn'), 'bilan, achats et décomposition du budget (avec les boutons de coût des livrables) sont chargés ensemble sur la page');
   const bal = [...p.doc.querySelectorAll('#bal-table tbody tr[data-cpn]')].map((r) => r.getAttribute('data-cpn'));
   check(JSON.stringify(bal) === JSON.stringify(['CPN-100', 'CPN-200']), 'une ligne par CPN : ' + bal.join(', '));
   check(/8 000 €/.test(p.text('bal-table')) && /5 200 €/.test(p.text('bal-table')), 'budget externe (8 000 €) et interne (5 200 €) par CPN');
@@ -140,31 +141,41 @@ function openPage(user, startTab) {
   await p.until(() => !p.row('po-table', 'CB-LATE', 'data-po'));
   check(true, 'PO supprimée de la liste');
 
-  // ---------------------------------------------------------------- lignes de budget
-  await p.until(() => p.$('lines-table'));
-  check(p.doc.querySelectorAll('#lines-table tbody tr').length === 2 && /Part d’équipe/.test(p.text('lines-table')) && /T1A/.test(p.text('lines-table')) && /Forfait \(externe\)/.test(p.text('lines-table')) && !/Taux|TJM/.test(p.text('lines-table')), 'lignes existantes : une part d’équipe et un forfait, plus de taux');
-  check(/ j$/.test(flat(p.row('lines-table', c.repoList('BudgetLine').find((l) => l.deliverable_id === w.b.id).id, 'data-line').cells[5].textContent).trim()), 'la part dit son équivalent en jours (coût d’un ETP paramétré) : ' + flat(p.row('lines-table', c.repoList('BudgetLine').find((l) => l.deliverable_id === w.b.id).id, 'data-line').cells[5].textContent));
-  check(/Livrables sans budget/.test(p.text('panel-budget')), 'livrables sans budget signalés');
-  p.click(p.$('line-add'));
-  await p.until(() => p.$('genform').open);
-  p.set('gf-deliverable_id', w.a.id);
-  check(!p.$('gf-team_id').parentNode.hidden && p.$('gf-resource_id').parentNode.hidden, 'part d’équipe par défaut : l’équipe et le montant');
-  p.set('gf-kind', 'forfait'); p.change(p.$('gf-kind'));
-  check(p.$('gf-team_id').parentNode.hidden && !p.$('gf-resource_id').parentNode.hidden, 'forfait : une ressource externe');
-  const exts = [...p.$('gf-resource_id').options].map((o) => o.textContent);
+  // ---------------------------------------------------------------- coût d'un livrable (bouton € de la décomposition du budget)
+  await p.until(() => p.$('env-table'));
+  const costBtn = (item) => p.doc.querySelector('.cost-btn[data-item="' + item.id + '"]');
+  check(/Décomposition du Budget/.test(p.text('toggle-enveloppe')) && !p.$('lines-table') && !p.$('cell-budget'), 'la zone s’appelle « Décomposition du Budget » ; plus de zone « Parts des livrables »');
+  const itemRow = (item) => p.doc.querySelector('#env-table tr[data-item="' + item.id + '"]');
+  check(/Sans coût/.test(itemRow(w.a).textContent) && !!costBtn(w.a) && !!costBtn(w.b), 'un livrable sans ligne est signalé « Sans coût » ; chaque livrable a son bouton €');
+  const dline = c.repoList('BudgetLine').find((l) => l.deliverable_id === w.b.id);
+  p.click(costBtn(w.b));
+  await p.until(() => p.$('cost-dialog').open && p.$('cost-lines'));
+  check(/Coût du livrable/.test(p.text('cost-title')) && /Calcul/.test(p.text('cost-sub')) && p.doc.querySelectorAll('#cost-lines tbody tr').length === 1 && /Part d’équipe/.test(p.text('cost-lines')) && /T1A/.test(p.text('cost-lines')) && !/Taux|TJM/.test(p.text('cost-lines')), 'la fenêtre « Coût du livrable » : la part d’équipe du livrable, plus de taux');
+  check(/ j$/.test(flat(p.row('cost-lines', dline.id, 'data-line').cells[4].textContent).trim()), 'la part dit son équivalent en jours (coût d’un ETP paramétré) : ' + flat(p.row('cost-lines', dline.id, 'data-line').cells[4].textContent));
+  p.click(p.$('cost-close'));
+  p.click(costBtn(w.cc));
+  await p.until(() => p.$('cost-dialog').open && /Forfait/.test(p.text('cost-lines')));
+  check(/Forfait \(externe\)/.test(p.text('cost-lines')), 'un forfait externe dans la fenêtre de son livrable');
+  p.click(p.$('cost-close'));
+  p.click(costBtn(w.a));
+  await p.until(() => p.$('cost-dialog').open && p.$('cost-form'));
+  check(/n’a pas encore de coût/.test(p.text('cost-total')) && !p.$('cost-team').parentNode.hidden && p.$('cost-resource').parentNode.hidden, 'un livrable sans ligne : la fenêtre le dit ; part d’équipe par défaut : l’équipe et le montant (mêmes champs que « nouvelle part ou nouveau forfait »)');
+  p.set('cost-kind', 'forfait'); p.change(p.$('cost-kind'));
+  check(p.$('cost-team').parentNode.hidden && !p.$('cost-resource').parentNode.hidden, 'forfait : une ressource externe');
+  const exts = [...p.$('cost-resource').options].map((o) => o.textContent);
   check(exts.some((n) => /Xavier/.test(n)) && !exts.some((n) => /Mia|Rémi|Carla/.test(n)), 'seules les ressources externes sont proposées pour un forfait : ' + exts.join(' | '));
-  p.set('gf-kind', 'team'); p.change(p.$('gf-kind')); p.set('gf-amount', '2080'); p.submitGf();
-  await p.until(() => !p.$('gf-error').hidden);
-  check(/Choisissez une équipe/.test(p.text('gf-error')), 'sans équipe : message explicite : ' + p.text('gf-error'));
-  const teamOpts = [...p.$('gf-team_id').options].map((o) => o.textContent);
+  p.set('cost-kind', 'team'); p.change(p.$('cost-kind')); p.set('cost-amount', '2080'); p.click(p.$('cost-add'));
+  await p.until(() => !p.$('cost-error').hidden);
+  check(/Choisissez une équipe/.test(p.text('cost-error')), 'sans équipe : message explicite : ' + p.text('cost-error'));
+  const teamOpts = [...p.$('cost-team').options].map((o) => o.textContent);
   check(teamOpts.some((n) => /T1A — 3 caractères · FR/.test(n)), 'les équipes disent leur niveau budgétaire et leur pays : ' + teamOpts.join(' | '));
-  p.set('gf-team_id', w.team.id); p.submitGf();
+  p.set('cost-team', w.team.id); p.click(p.$('cost-add'));
   await p.until(() => c.repoList('BudgetLine').length === 3);
   const l3 = c.repoList('BudgetLine').find((l) => l.deliverable_id === w.a.id);
   check(l3.cost_type === 'Équipe' && Number(l3.planned_amount) === 2080 && l3.team_id === w.team.id, 'part d’équipe : 2 080 € pour T1A');
-  await p.until(() => p.row('lines-table', l3.id, 'data-line'));
-  check(/2 080 €/.test(flat(p.row('lines-table', l3.id, 'data-line').textContent)), 'ligne affichée');
-  p.click(p.row('lines-table', l3.id, 'data-line').querySelector('.line-phase'));
+  await p.until(() => p.row('cost-lines', l3.id, 'data-line'));
+  check(/2 080 €/.test(flat(p.row('cost-lines', l3.id, 'data-line').textContent)) && /2 080 €/.test(flat(itemRow(w.a).textContent)), 'ligne affichée dans la fenêtre, et le coût du livrable dans la décomposition');
+  p.click(p.row('cost-lines', l3.id, 'data-line').querySelector('.line-phase'));
   await p.until(() => p.$('genform').open && p.$('gf-text'));
   check(/^2026-10 2080/.test(p.$('gf-text').value), 'échéancier prérempli : ' + p.$('gf-text').value);
   p.set('gf-text', '2026-10 1000'); p.submitGf();
@@ -172,13 +183,21 @@ function openPage(user, startTab) {
   check(/doit égaler/.test(p.text('gf-error')), 'échéancier de somme fausse refusé');
   p.set('gf-text', '2026-10 1080\n2026-11 1000'); p.submitGf();
   await p.until(() => c.repoGet('BudgetLine', l3.id).phasing_mode === 'manuel');
-  await p.until(() => { const r0 = p.row('lines-table', l3.id, 'data-line'); return r0 && /à la main/.test(flat(r0.textContent)); });
+  await p.until(() => { const r0 = p.row('cost-lines', l3.id, 'data-line'); return r0 && /à la main/.test(flat(r0.textContent)); });
   check(true, 'échéancier à la main enregistré et signalé');
-  p.click(p.row('lines-table', l3.id, 'data-line').querySelector('.line-del'));
+  p.click(p.row('cost-lines', l3.id, 'data-line').querySelector('.line-edit'));
+  await p.until(() => p.$('genform').open && p.$('gf-amount'));
+  p.set('gf-amount', '2200'); p.submitGf();
+  await p.until(() => Number(c.repoGet('BudgetLine', l3.id).planned_amount) === 2200);
+  check(true, 'la ligne se modifie depuis la fenêtre');
+  await p.until(() => !p.$('genform').open && p.row('cost-lines', l3.id, 'data-line') && /2 200 €/.test(flat(p.row('cost-lines', l3.id, 'data-line').textContent)));
+  p.click(p.row('cost-lines', l3.id, 'data-line').querySelector('.line-del'));
   await p.until(() => p.$('confirm').open);
   p.click(p.$('confirm-ok'));
   await p.until(() => c.repoList('BudgetLine').length === 2);
-  check(true, 'ligne supprimée');
+  await p.until(() => !p.row('cost-lines', l3.id, 'data-line'));
+  check(/Sans coût/.test(itemRow(w.a).textContent), 'ligne supprimée : le livrable est de nouveau « Sans coût »');
+  p.click(p.$('cost-close'));
 
   // ---------------------------------------------------------------- CPN du projet
   w.call(CP, 'po.save', { values: { po_number: 'CB-100', cpn: 'CPN-100', resource_id: w.xavier.id, amount: 400, status: 'À faire', gr_due_date: '2026-12-15' } });
@@ -199,9 +218,9 @@ function openPage(user, startTab) {
   check(!!m.doc.querySelector('#po-table'), 'il voit les PO du projet et peut en créer');
   const r = openPage(RWP);
   await r.until(() => r.zones().length > 0 && r.$('panel-po'));
-  check(JSON.stringify(r.zones()) === JSON.stringify(['po', 'enveloppe', 'budget']), 'un Workpackage leader : achats, l’enveloppe de son workpackage et son budget : ' + r.zones().join(','));
-  await r.until(() => r.$('lines-table') || r.$('line-add'));
-  check(/Budget de votre périmètre/.test(r.text('panel-budget')), 'budget limité à son périmètre (un Workpackage leader ne voit que celui de son workpackage)');
+  check(JSON.stringify(r.zones()) === JSON.stringify(['po', 'enveloppe']), 'un Workpackage leader : achats et la décomposition de son workpackage : ' + r.zones().join(','));
+  await r.until(() => r.$('env-table'));
+  check(/Vous voyez le budget de votre workpackage/.test(r.text('panel-enveloppe')) && !!r.doc.querySelector('.cost-btn') && !r.doc.querySelector('.cost-btn[data-item="' + w.cc.id + '"]'), 'décomposition limitée à son périmètre : les livrables de son workpackage seulement, avec leur bouton de coût');
   const n = openPage(NOBODY);
   await n.until(() => /Accès réservé/.test(n.text('panel-bilan')));
   check(n.zones().length === 0, 'sans nomination dans l’équipe : rien d’accessible');
@@ -222,7 +241,7 @@ function openPage(user, startTab) {
   await dp.until(() => dp.doc.querySelector('#panel-program table.consol'));
   const rowsB = [...dp.doc.querySelectorAll('#panel-program tbody tr')];
   check(rowsB.length === 2 && /P1 Projet 1/.test(rowsB[0].textContent) && /P2 Projet vide/.test(rowsB[1].textContent) && /^Total/.test(norm(dp.doc.querySelector('#panel-program tfoot').textContent)), 'budget du programme : une ligne par projet et un total : ' + rowsB.length);
-  check(dp.doc.body.classList.contains('in-program') && ['cell-bilan', 'cell-po', 'cell-budget'].every((id) => [...dp.doc.querySelectorAll('style')].some((s) => s.textContent.includes('body.in-program #' + id))) && !dp.$('panel-program').hidden && /Budget — Programme/.test(dp.text('title')) && dp.$('cpn-edit').hidden, 'en vue programme, les cartes du projet sont masquées par une règle de la page (sans toucher à leur attribut) et le titre dit « Programme »');
+  check(dp.doc.body.classList.contains('in-program') && ['cell-bilan', 'cell-po', 'cell-enveloppe'].every((id) => [...dp.doc.querySelectorAll('style')].some((s) => s.textContent.includes('body.in-program #' + id))) && !dp.$('panel-program').hidden && /Budget — Programme/.test(dp.text('title')) && dp.$('cpn-edit').hidden, 'en vue programme, les cartes du projet sont masquées par une règle de la page (sans toucher à leur attribut) et le titre dit « Programme »');
   const balance = c.handleRequest({ action: 'budget.balance', params: { projectId: w.p1.id }, apiVersion: '1.0' }, 'admin@entreprise.com').data.totals;
   check(norm(rowsB[0].textContent).includes(norm(Math.round(balance.budget.total).toLocaleString('fr-FR') + ' €')), 'le montant d’un projet est celui de son bilan : ' + norm(rowsB[0].textContent).slice(0, 120));
   dp.click(dp.doc.querySelector('#panel-program tbody tr button.proj-open'));
@@ -234,33 +253,56 @@ function openPage(user, startTab) {
   await dp.until(() => dp.$('panel-program').hidden);
   check(dp.$('panel-program').hidden && dp.$('zone-program').hidden, 'revenir à un projet par la liste referme la vue programme');
 
-  // ---------------------------------------------------------------- enveloppe par workpackage (0.15.3)
+  // ---------------------------------------------------------------- décomposition du budget (enveloppes 0.15.3, livrables et jalons, brouillon et « Valider » 0.19.2)
   await p.until(() => p.$('env-table'));
-  const envRows = () => [...p.doc.querySelectorAll('#env-table tbody tr')];
+  const envRows = () => [...p.doc.querySelectorAll('#env-table tbody tr[data-wp]')];
   check(envRows().length === 3 && envRows().map((r) => r.cells[0].textContent.trim()).join('|') === '1 Conception|1.1 Calcul|2 Essais', 'un tableau en arbre : WP 1, son sous-workpackage 1.1, WP 2');
+  const rowsAll = [...p.doc.querySelectorAll('#env-table tbody tr')].map((r) => (r.classList.contains('wp-row') ? 'WP:' : r.classList.contains('is-milestone') ? 'J:' : 'L:') + r.cells[0].textContent.replace(/\s+/g, ' ').trim().replace(/^[▪◆]\s*/, ''));
+  check(rowsAll.findIndex((x) => /^WP:1 Conception/.test(x)) < rowsAll.findIndex((x) => /^L:Spécification/.test(x)) && rowsAll.findIndex((x) => /^L:Spécification/.test(x)) < rowsAll.findIndex((x) => /^WP:1\.1 Calcul/.test(x)) && rowsAll.findIndex((x) => /^WP:1\.1 Calcul/.test(x)) < rowsAll.findIndex((x) => /^L:Calcul/.test(x)) && rowsAll.findIndex((x) => /^L:Calcul/.test(x)) < rowsAll.findIndex((x) => /^WP:2 Essais/.test(x)), 'les livrables sont sous leur workpackage ou sous-workpackage, comme dans le WBS : ' + rowsAll.join(' | '));
+  check(p.doc.querySelectorAll('#env-table tr.is-milestone').length >= 1 && !p.doc.querySelector('#env-table tr.is-milestone .cost-btn') && !p.doc.querySelector('#env-table tr.is-deliverable input'), 'les jalons y figurent, sans bouton de coût ; un livrable n’a aucun champ « enveloppe »');
   check(/Budget autorisé\s*Non fixé/.test(p.text('panel-enveloppe')) && !!p.$('env-authorized'), 'rien n’est fixé : « pas de plafond », et le chef de projet a le champ du budget autorisé');
-  p.set('env-authorized', '20000'); p.change(p.$('env-authorized'));
-  await p.until(() => Number(c.repoGet('Project', w.p1.id).budget_authorized) === 20000);
-  await p.until(() => /Enveloppe enregistrée/.test(p.text('toast')));
-  check(Number(c.repoGet('Project', w.p1.id).budget_authorized) === 20000 && /Enveloppe enregistrée/.test(p.text('toast')), 'le budget autorisé s’enregistre en quittant le champ');
-  await p.until(() => /Budget autorisé\s*20\s?000/.test(p.text('panel-enveloppe')));
-  p.set('env-' + w.w1.id, '3000'); p.change(p.$('env-' + w.w1.id));
-  await p.until(() => Number(c.repoGet('WorkPackage', w.w1.id).budget_allocated) === 3000);
-  p.set('env-' + w.w2.id, '500'); p.change(p.$('env-' + w.w2.id));
-  await p.until(() => Number(c.repoGet('WorkPackage', w.w2.id).budget_allocated) === 500);
-  await p.until(() => /Dépassée de/.test(p.text('panel-enveloppe')));
+  check(p.$('env-validate').disabled && !p.$('env-validate').classList.contains('primary') && p.$('env-cancel').hidden, 'sans modification : « Valider » est grisé');
+  p.set('env-authorized', '20000'); p.input(p.$('env-authorized'));
+  check(!p.$('env-validate').disabled && p.$('env-validate').classList.contains('primary') && !p.$('env-cancel').hidden && /Modifications non enregistrées/.test(p.text('env-hint')) && p.$('env-authorized').classList.contains('changed'), 'une modification : « Valider » devient bleu, le champ est marqué, le rappel s’affiche');
+  p.set('env-' + w.w1.id, '3000'); p.input(p.$('env-' + w.w1.id));
+  p.set('env-' + w.w2.id, '500'); p.input(p.$('env-' + w.w2.id));
+  await wait(150);
+  check(c.repoGet('Project', w.p1.id).budget_authorized === '' || c.repoGet('Project', w.p1.id).budget_authorized === undefined || c.repoGet('Project', w.p1.id).budget_authorized === null, 'rien n’est enregistré tant que la personne ne valide pas : ni le budget autorisé');
+  check(!c.repoGet('WorkPackage', w.w1.id).budget_allocated && !c.repoGet('WorkPackage', w.w2.id).budget_allocated, 'ni les enveloppes des workpackages');
+  p.click(p.$('env-validate'));
+  await p.until(() => Number(c.repoGet('Project', w.p1.id).budget_authorized) === 20000 && Number(c.repoGet('WorkPackage', w.w2.id).budget_allocated) === 500);
+  await p.until(() => /Décomposition du budget enregistrée/.test(p.text('toast')));
+  check(Number(c.repoGet('WorkPackage', w.w1.id).budget_allocated) === 3000, 'un seul clic sur « Valider » enregistre tout : budget autorisé et enveloppes');
+  await p.until(() => p.$('env-validate') && p.$('env-validate').disabled);
+  check(/Budget autorisé\s*20\s?000/.test(p.text('panel-enveloppe')) && !p.$('env-validate').classList.contains('primary'), 'enregistré : « Valider » redevient gris');
   const wp2 = () => p.doc.querySelector('#env-table tr[data-wp="' + w.w2.id + '"]');
-  check(/Dépassée de/.test(wp2().textContent) && /Réparti entre les workpackages\s*3\s?500/.test(p.text('panel-enveloppe')), 'WP 2 : 8 000 € de coût pour 500 € d’enveloppe, signalé « dépassée » sans rien bloquer ; réparti : 3 500 €');
-  const before = p.$('env-' + w.w1.id).value;
-  p.set('env-' + w.w1.id, '30000'); p.change(p.$('env-' + w.w1.id));
-  await p.until(() => p.$('toast').classList.contains('error'));
-  check(/dépassent le budget autorisé/.test(p.text('toast')) && p.$('env-' + w.w1.id).value === before && Number(c.repoGet('WorkPackage', w.w1.id).budget_allocated) === 3000, 'au-delà du budget autorisé : refusé, message clair, le champ revient à sa valeur : ' + p.text('toast'));
+  check(/En dépassement/.test(wp2().textContent) && wp2().classList.contains('over') && /Réparti entre les workpackages\s*3\s?500/.test(p.text('panel-enveloppe')), 'WP 2 : 8 000 € de coût pour 500 € d’enveloppe : « En dépassement » ; réparti : 3 500 €');
+  check(!!wp2().querySelector('.badge.alert') && /En dépassement/.test(wp2().querySelector('.badge.alert').textContent), 'l’état « En dépassement » est un badge rouge');
+  // on peut écrire plus que la somme autorisée : accepté, signalé « en dépassement »
+  p.set('env-' + w.w1.id, '30000'); p.input(p.$('env-' + w.w1.id));
+  p.click(p.$('env-validate'));
+  await p.until(() => Number(c.repoGet('WorkPackage', w.w1.id).budget_allocated) === 30000);
+  await p.until(() => /30\s?500/.test(p.text('panel-enveloppe')));
+  check(!p.$('toast').classList.contains('error') && /dépasse le budget autorisé de/.test(p.text('panel-enveloppe')) && /en dépassement/.test(p.text('summary-enveloppe') || p.text('sum-enveloppe')), 'au-delà du budget autorisé : accepté ; le projet est « en dépassement » (réparti 30 500 € pour 20 000 €)');
+  // annuler les modifications
+  p.set('env-' + w.w2.id, '999'); p.input(p.$('env-' + w.w2.id));
+  p.click(p.$('env-cancel'));
+  check(p.$('env-' + w.w2.id).value === '500' && p.$('env-validate').disabled, '« Annuler les modifications » remet les valeurs enregistrées');
+  // quitter l'onglet avec un brouillon : on demande
+  p.set('env-' + w.w2.id, '777'); p.input(p.$('env-' + w.w2.id));
+  p.click(p.$('tab-op'));
+  await p.until(() => p.$('confirm').open);
+  check(/Abandonner les modifications non enregistrées/.test(p.text('confirm-title')) && p.$('tab-suivi').getAttribute('aria-selected') === 'true', 'changer d’onglet avec un brouillon : confirmation demandée, rien n’est perdu en silence');
+  p.click(p.$('confirm-cancel'));
+  check(p.$('env-' + w.w2.id).value === '777' && !p.$('env-validate').disabled, 'on reste sur la page avec son brouillon');
+  p.click(p.$('env-cancel'));
   const wl = openPage(RWP);
   await wl.until(() => wl.$('env-table'));
-  check(!wl.$('env-authorized') && !wl.$('env-' + w.w1.id) && !!wl.$('env-' + w.w11.id) && [...wl.doc.querySelectorAll('#env-table tbody tr')].length === 2 && /budget de votre workpackage/.test(wl.text('panel-enveloppe')), 'un Workpackage leader : pas le budget du projet, pas l’enveloppe de son propre WP, seulement la répartition de ses sous-workpackages ; il ne voit que son workpackage');
-  wl.set('env-' + w.w11.id, '1200'); wl.change(wl.$('env-' + w.w11.id));
+  check(!wl.$('env-authorized') && !wl.$('env-' + w.w1.id) && !!wl.$('env-' + w.w11.id) && [...wl.doc.querySelectorAll('#env-table tbody tr.wp-row')].length === 2 && /budget de votre workpackage/.test(wl.text('panel-enveloppe')), 'un Workpackage leader : pas le budget du projet, pas l’enveloppe de son propre WP, seulement la répartition de ses sous-workpackages ; il ne voit que son workpackage');
+  wl.set('env-' + w.w11.id, '1200'); wl.input(wl.$('env-' + w.w11.id));
+  wl.click(wl.$('env-validate'));
   await wl.until(() => Number(c.repoGet('WorkPackage', w.w11.id).budget_allocated) === 1200);
-  check(Number(c.repoGet('WorkPackage', w.w11.id).budget_allocated) === 1200, 'il répartit la sienne');
+  check(Number(c.repoGet('WorkPackage', w.w11.id).budget_allocated) === 1200, 'il répartit la sienne (après « Valider »)');
   const mm = openPage(MEMBER);
   await wait(250);
   check(mm.$('zone-enveloppe').hidden && mm.$('panel-enveloppe').hidden, 'un Contributor ne voit pas la zone');
@@ -313,7 +355,7 @@ function openPage(user, startTab) {
   // l'onglet OP : l'opération de planification de l'année suivante
   ex.click(ex.$('tab-op'));
   await ex.until(() => ex.$('exercise-table'));
-  check(ex.$('tab-op').getAttribute('aria-selected') === 'true' && ex.$('cell-synth').hidden && ex.$('cell-bilan').hidden && !ex.$('cell-exercice').hidden && !ex.$('cell-vers').hidden && !ex.$('cell-budget').hidden && !ex.$('tracking-chart'), 'OP 2027 : budget par équipe, versions et parts ; le suivi et les engagements ne s’affichent pas');
+  check(ex.$('tab-op').getAttribute('aria-selected') === 'true' && ex.$('cell-synth').hidden && ex.$('cell-bilan').hidden && !ex.$('cell-exercice').hidden && !ex.$('cell-vers').hidden && !ex.$('cell-enveloppe').hidden && !ex.$('tracking-chart'), 'OP 2027 : budget par équipe, versions et décomposition du budget ; le suivi et les engagements ne s’affichent pas');
   const picks = [ex.text('tab-suivi'), ex.text('tab-op')];
   check(picks.join('|') === 'Suivi budgétaire 2026|OP 2027', 'les deux onglets portent l’année de leur exercice : ' + picks.join(' | '));
   const tr = (team) => ex.doc.querySelector('#exercise-table tr[data-team="' + team + '"]');
@@ -325,25 +367,34 @@ function openPage(user, startTab) {
   check(/180\s?000/.test(ex.text('panel-exercice')) && /Écart avec l’accordé/.test(ex.text('panel-exercice')), 'cartes : attendu total et écart avec l’accordé');
   check(/Coût d’un ETP non paramétré pour DE en 2027/.test(ex.text('etp-missing')), 'l’Allemagne n’a pas de coût d’ETP en 2027 : la page le dit, sans inventer de jours : ' + ex.text('etp-missing').slice(0, 90));
   check(/ j/.test(cells(vm.id + '-total')[3]), 'équivalent en jours des parts de 1vm (coût de l’ETP de la France) : ' + cells(vm.id + '-total')[3]);
-  // saisie directe de l'attendu
-  ex.set('exp-' + ae.id, '65000'); ex.change(ex.$('exp-' + ae.id));
+  // saisie directe de l'attendu : en brouillon, enregistré seulement par « Valider » (0.19.2)
+  check(ex.$('ex-validate').disabled && !ex.$('ex-validate').classList.contains('primary'), 'budget par équipe : « Valider » grisé tant qu’il n’y a rien à enregistrer');
+  ex.set('exp-' + ae.id, '65000'); ex.input(ex.$('exp-' + ae.id));
+  check(!ex.$('ex-validate').disabled && ex.$('ex-validate').classList.contains('primary') && /Modifications non enregistrées/.test(ex.text('ex-hint')) && ex.$('exp-' + ae.id).classList.contains('changed'), 'une saisie : « Valider » devient bleu et le champ est marqué');
+  await wait(150);
+  check(!w.c.repoList('TeamBudget').some((b) => b.team_id === ae.id && Number(b.expected) === 65000), 'rien n’est enregistré à la saisie : seulement quand la personne clique sur « Valider »');
+  ex.click(ex.$('ex-validate'));
   await ex.until(() => w.c.repoList('TeamBudget').some((b) => b.team_id === ae.id && Number(b.expected) === 65000));
   await ex.until(() => /Budget enregistré/.test(ex.text('toast')));
   await ex.until(() => { const r = ex.doc.querySelector('#exercise-table tr[data-team="' + ae.id + '"]'); return !!r && /\+5\s?000/.test(flat(r.cells[4].textContent)); });
   check(/\+5\s?000/.test(cells(ae.id)[4]) && !tr(ae.id).cells[4].classList.contains('late'), 'l’attendu se saisit dans le tableau : l’écart de 2ae passe à +5 000 €, plus de rouge');
-  ex.set('exp-' + ae.id, '-3'); ex.change(ex.$('exp-' + ae.id));
+  ex.set('exp-' + ae.id, '-3'); ex.input(ex.$('exp-' + ae.id));
+  ex.click(ex.$('ex-validate'));
   await ex.until(() => ex.$('toast').classList.contains('error'));
-  check(/positif/.test(ex.text('toast')) && ex.$('exp-' + ae.id).value === '65000', 'valeur négative refusée, valeur précédente rétablie : ' + ex.text('toast'));
+  await ex.until(() => ex.$('exp-' + ae.id) && ex.$('exp-' + ae.id).value === '-3');
+  check(/positif/.test(ex.text('toast')) && Number(w.c.repoList('TeamBudget').find((b) => b.team_id === ae.id).expected) === 65000 && ex.$('ex-validate').classList.contains('primary'), 'valeur négative refusée, la valeur enregistrée est intacte, le brouillon reste à l’écran et « Valider » reste bleu : ' + ex.text('toast'));
+  ex.click(ex.$('ex-cancel'));
+  await ex.until(() => ex.$('exp-' + ae.id) && ex.$('exp-' + ae.id).value === '65000');
+  check(ex.$('ex-validate').disabled, '« Annuler les modifications » rétablit la valeur enregistrée');
   // ajouter une équipe au tableau
   check(![...ex.$('exercise-team-pick').options].some((o) => /Direction/.test(o.textContent)) && [...ex.$('exercise-team-pick').options].some((o) => /3xx/.test(o.textContent)) && ![...ex.$('exercise-team-pick').options].some((o) => /^2ae/.test(o.textContent)), 'les équipes proposées : 3 et 4 caractères, pas celles déjà au tableau');
   ex.set('exercise-team-pick', spare.id); ex.click(ex.$('exercise-team-add'));
   await ex.until(() => w.c.repoList('TeamBudget').some((b) => b.team_id === spare.id));
   await ex.until(() => ex.doc.querySelector('#exercise-table tr[data-team="' + spare.id + '"]'));
   check(!!ex.doc.querySelector('#exercise-table tr[data-team="' + spare.id + '"]'), 'une équipe ajoutée au tableau (attendu 0 €, à renseigner)');
-  // le budget par livrable suit l'exercice choisi
-  await ex.until(() => ex.$('lines-table'));
-  check(ex.doc.querySelectorAll('#lines-table tbody tr').length === 4 && /2027/.test(ex.text('lines-table')) && /Livrables sans exercice/.test(ex.text('panel-budget')) && !!ex.$('assign-open'), 'le budget par livrable ne montre que les lignes de l’exercice 2027 (4 parts) et propose de rattacher les livrables sans exercice');
-  // rattacher les livrables sans exercice
+  // le rattachement des livrables à l'exercice : depuis la décomposition du budget (plus de zone « Parts des livrables »)
+  await ex.until(() => ex.$('env-table'));
+  check(!ex.$('lines-table') && !!ex.$('assign-open') && /Rattacher les livrables sans exercice à l’exercice 2027/.test(ex.text('assign-open')), 'la décomposition propose de rattacher les livrables sans exercice à l’exercice de l’onglet (2027)');
   ex.click(ex.$('assign-open'));
   await ex.until(() => ex.$('genform').open && ex.$('gf-deliverable_id'));
   check(/Tous les livrables sans exercice/.test([...ex.$('gf-deliverable_id').options][0].textContent), 'rattacher : « tous les livrables sans exercice » par défaut');
@@ -434,6 +485,26 @@ function openPage(user, startTab) {
   const mm2 = openPage(MEMBER);
   await wait(250);
   check(mm2.$('zone-exercice').hidden && mm2.$('panel-exercice').hidden, 'un Contributor ne voit pas la zone de l’exercice');
+
+  // ---------------------------------------------------------------- 0.19.2 : l'évolution depuis la baseline, à même la décomposition
+  const nb = openPage(CP);
+  await nb.until(() => nb.$('env-table'));
+  check(![...nb.doc.querySelectorAll('#env-table th')].some((h) => /Depuis la baseline/.test(h.textContent)), 'sans baseline : pas de colonne d’évolution');
+  w.call(CP, 'baselines.create', { projectId: w.p1.id, justification: 'Référence pour l’essai', label: 'B0' });
+  const lineB = c.repoList('BudgetLine').find((l) => l.team_id === ex9.id);
+  w.call(CP, 'budget.line.save', { id: lineB.id, version: lineB.version, values: { planned_amount: Number(lineB.planned_amount) + 500 } });
+  w.call(CP, 'budget.envelope.set', { projectId: w.p1.id, allocations: [{ wpId: w.w2.id, amount: 1234 }] });
+  const bl = openPage(CP);
+  await bl.until(() => bl.$('env-table'));
+  check([...bl.doc.querySelectorAll('#env-table th')].some((h) => /Depuis la baseline B0/.test(h.textContent)), 'avec une baseline active : colonne « Depuis la baseline B0 »');
+  await bl.until(() => /enveloppe/.test(bl.doc.querySelector('#env-table tr[data-wp="' + w.w2.id + '"]').textContent) || true);
+  const wr2 = bl.doc.querySelector('#env-table tr[data-wp="' + w.w2.id + '"]');
+  check(/enveloppe .* → 1\s?234 €/.test(flat(wr2.cells[6].textContent)), 'un workpackage dont l’enveloppe a changé : « enveloppe … → 1 234 € » : ' + flat(wr2.cells[6].textContent));
+  const dlUp = [...bl.doc.querySelectorAll('#env-table tr.is-deliverable')].find((r) => /Livrable 2026/.test(r.cells[0].textContent) && /coût \+500/.test(flat(r.cells[6].textContent)));
+  check(!!dlUp, 'un livrable dont une ligne a augmenté de 500 € : « coût +500 € »');
+  const unchanged = [...bl.doc.querySelectorAll('#env-table tr.is-deliverable')].find((r) => /=/.test(r.cells[6].textContent));
+  check(!!unchanged, 'un livrable inchangé : « = »');
+  check(!!bl.doc.querySelector('#env-table tr.is-milestone') && bl.doc.querySelector('#env-table tr.is-milestone').cells[6].textContent.trim() === '', 'un jalon n’a pas de coût : cellule vide');
 
   console.log(failed ? '\n' + failed + ' échec(s).' : '\nPage Budget : tout est conforme.');
   process.exit(failed ? 1 : 0);

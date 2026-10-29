@@ -41,27 +41,44 @@ module.exports = function () {
     eq(w.set(CP, { authorized: '' }).data.totals.authorized, null, 'vide : plus de plafond');
   });
 
-  test('Règles de somme, vérifiées sur l’état final et avant toute écriture', () => {
+  test('Dépassements permis : écrire des enveloppes au-delà de la somme autorisée est accepté et signalé « en dépassement » ; seule règle : pas d’enveloppe de sous-workpackage sans celle de son parent', () => {
     const w = world();
-    const before = () => JSON.stringify([w.c.repoGet('Project', w.p1.id), w.c.repoList('WorkPackage')].map((x) => JSON.stringify(x)));
-    w.set(CP, { authorized: 3000, allocations: [{ wpId: w.w1.id, amount: 2000 }] });
-    const snap = before();
-    let e = w.set(CP, { allocations: [{ wpId: w.w2.id, amount: 1500 }] }).error;
-    eq([e.code, e.details.rule], ['VALIDATION', 'ENVELOPE_PROJECT'], 'les workpackages ne dépassent pas le budget autorisé');
-    e = w.set(CP, { authorized: 1500 }).error;
-    eq(e.details.rule, 'ENVELOPE_PROJECT', 'ni en baissant le budget autorisé sous ce qui est réparti');
-    e = w.set(CP, { allocations: [{ wpId: w.w11.id, amount: 2500 }] }).error;
-    eq(e.details.rule, 'ENVELOPE_WP', 'un sous-workpackage ne dépasse pas son parent');
-    e = w.set(CP, { allocations: [{ wpId: w.w1.id, amount: 400 }, { wpId: w.w11.id, amount: 500 }] }).error;
-    eq(e.details.rule, 'ENVELOPE_WP', 'ni en baissant le parent sous la somme de ses enfants, même dans le même envoi');
-    eq(before(), snap, 'aucune de ces tentatives n’a rien écrit : tout ou rien');
+    ok(w.set(CP, { authorized: 3000, allocations: [{ wpId: w.w1.id, amount: 2000 }] }).ok);
+    let r = w.set(CP, { allocations: [{ wpId: w.w2.id, amount: 1500 }] });                           // 3 500 € répartis pour 3 000 € autorisés
+    ok(r.ok, JSON.stringify(r.error));
+    eq([r.data.totals.allocated, r.data.totals.over, r.data.totals.over_alloc, r.data.totals.over_cost, r.data.totals.over_by], [3500, true, true, false, 500], 'les workpackages dépassent le budget autorisé : accepté, « en dépassement » de 500 €');
+    r = w.set(CP, { allocations: [{ wpId: w.w11.id, amount: 2500 }] });                              // le sous-workpackage dépasse son parent (2 000 €)
+    ok(r.ok, JSON.stringify(r.error));
+    const row1 = w.row(r.data, w.w1);
+    eq([row1.over, row1.over_alloc, row1.over_cost, row1.over_by], [true, true, false, 500], 'un sous-workpackage au-delà de son parent : accepté ; le parent est « en dépassement » de 500 €');
+    ok(w.set(CP, { authorized: 1500 }).ok && w.set(CP, { allocations: [{ wpId: w.w1.id, amount: 400 }, { wpId: w.w11.id, amount: 500 }] }).ok, 'baisser le budget autorisé ou le parent sous ce qui est réparti : accepté aussi');
+    const v = w.env();
+    eq([w.row(v, w.w1).over, w.row(v, w.w1).over_by, v.totals.over], [true, 1200, true], 'le coût prévu de 1 600 € dépasse l’enveloppe de 400 € : 1 200 €');
+    ok(!w.row(w.env(), w.w2).over || w.row(w.env(), w.w2).over_cost === false, 'un workpackage dans son enveloppe n’est pas en dépassement par erreur');
+    // la seule règle qui reste
     const fresh = world();
-    e = fresh.set(CP, { allocations: [{ wpId: fresh.w11.id, amount: 100 }] }).error;
+    const e = fresh.set(CP, { allocations: [{ wpId: fresh.w11.id, amount: 100 }] }).error;
     eq(e.details.rule, 'ENVELOPE_PARENT_EMPTY', 'pas d’enveloppe pour un sous-workpackage dont le parent n’en a pas');
     ok(fresh.set(CP, { allocations: [{ wpId: fresh.w1.id, amount: 1000 }, { wpId: fresh.w11.id, amount: 1000 }] }).ok, 'les deux dans le même envoi : parent d’abord, c’est l’état final qui compte');
     eq([fresh.set(CP, { authorized: -5 }).error.code, fresh.set(CP, { authorized: 'abc' }).error.code, fresh.set(CP, {}).error.code, fresh.set(CP, { allocations: [{ wpId: 'inconnu', amount: 1 }] }).error.code], ['VALIDATION', 'VALIDATION', 'VALIDATION', 'NOT_FOUND']);
     eq(fresh.set(CP, { authorized: '1 500,5' }).error.code, 'VALIDATION', 'un montant avec des espaces est refusé plutôt que deviné');
     eq(fresh.set(CP, { authorized: '2500,5' }).data.totals.authorized, 2500.5, 'la virgule décimale est comprise');
+  });
+
+  test('Décomposition du budget : les livrables et jalons sont sous leur workpackage, le coût d’un livrable est celui de ses lignes, un jalon n’a pas de coût', () => {
+    const w = world();
+    w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name: 'Revue de décomposition', item_type: 'Jalon', planned_start: '2026-11-02', planned_finish: '2026-11-02', wp_id: w.w1.id, owner_resource_id: w.mia.id } });
+    const v = w.env(), it = (n) => v.items.find((x) => x.name === n);
+    ok(Array.isArray(v.items) && v.items.length >= 4, 'la vue contient les livrables et les jalons : ' + v.items.map((x) => x.name).join(', '));
+    eq([it('Spécification').type, it('Spécification').wp_id === w.w1.id, it('Spécification').cost, it('Spécification').lines, it('Spécification').canEdit], ['Livrable', true, 1000, 1, true], 'un livrable : son workpackage, le coût de ses lignes, le nombre de lignes, modifiable par un responsable de budget');
+    eq([it('Calcul').wp_id === w.w11.id, it('Calcul').cost], [true, 600], 'sous le sous-workpackage qui le contient');
+    const m = it('Revue de décomposition');
+    eq([m.type, m.cost, m.lines, m.canEdit], ['Jalon', null, null, false], 'un jalon : pas de coût, pas de ligne, pas de bouton de coût');
+    const wpl = w.env(WPL);
+    ok(wpl.items.every((x) => !x.wp_id || wpl.rows.some((r) => r.wp_id === x.wp_id)), 'un Workpackage leader ne voit que les éléments de ses workpackages');
+    // le filtre par livrable de budget.get : toutes les lignes d'un livrable, quel que soit l'exercice
+    const g = w.call(CP, 'budget.get', { projectId: w.p1.id, deliverableId: w.a.id });
+    eq([g.lines.length, g.lines[0].deliverable_id === w.a.id, g.deliverables.length], [1, true, 1], 'budget.get avec deliverableId : un seul livrable et ses lignes');
   });
 
   test('Qui fixe quoi : le projet et les workpackages par le chef de projet, un sous-workpackage par son Workpackage leader ; chacun ne voit que son budget', () => {

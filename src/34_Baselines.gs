@@ -14,9 +14,11 @@
 
 /** Champs figés par table. La même liste définit ce qui entre dans le fil des changements. */
 var BASELINE_FIELDS = {
-  Project: ['start_date', 'end_date', 'holiday_country'],
-  WorkPackage: ['name', 'wbs_code', 'parent_wp_id', 'owner_resource_id', 'charge_code'],
-  PlanItem: ['name', 'item_type', 'wp_id', 'owner_resource_id', 'planned_start', 'planned_finish', 'milestone_category'],
+  // 0.19.2 : la DÉCOMPOSITION DU BUDGET est figée avec le planning : budget autorisé du projet, enveloppe de chaque workpackage, exercice de chaque livrable, et (ci-dessous) les lignes de coût.
+  // Une baseline figée avant la 0.19.2 ne les a pas : l'écart dit alors « non figé à l'époque » au lieu d'inventer une valeur.
+  Project: ['start_date', 'end_date', 'holiday_country', 'budget_authorized'],
+  WorkPackage: ['name', 'wbs_code', 'parent_wp_id', 'owner_resource_id', 'charge_code', 'budget_allocated'],
+  PlanItem: ['name', 'item_type', 'wp_id', 'owner_resource_id', 'planned_start', 'planned_finish', 'milestone_category', 'exercise_id'],
   Dependency: ['predecessor_id', 'successor_id', 'dep_type', 'lag_days'],
   BudgetLine: ['deliverable_id', 'resource_id', 'team_id', 'cost_type', 'fixed_amount', 'planned_amount']
 };
@@ -27,7 +29,7 @@ var FIELD_LABELS = {
   item_type: 'type', wp_id: 'workpackage', planned_start: 'début prévu', planned_finish: 'fin prévue',
   milestone_category: 'catégorie de jalon', predecessor_id: 'prédécesseur', successor_id: 'successeur',
   dep_type: 'type de lien', lag_days: 'décalage', deliverable_id: 'livrable', resource_id: 'ressource',
-  cost_type: 'type de coût', team_id: 'équipe', fixed_amount: 'forfait',
+  cost_type: 'type de coût', team_id: 'équipe', exercise_id: 'exercice', fixed_amount: 'forfait',
   planned_amount: 'montant prévu', progress_pct: 'avancement', baseline_frozen: 'baseline figée', budget_authorized: 'budget autorisé', budget_allocated: 'enveloppe budgétaire', deleted: 'suppression', '*': 'création ou suppression'
 };
 
@@ -119,6 +121,59 @@ function lastFinish_(snap) {
     if (!isBlank(d) && d > f) f = d;
   });
   return f || null;
+}
+
+/** Coût prévu par workpackage (lui et tout ce qu'il contient) et hors workpackage, d'après les lignes de budget d'un instantané. */
+function costByWpSnap_(snap) {
+  var cost = {}, none = 0, wps = snap.WorkPackage || {};
+  Object.keys(snap.BudgetLine || {}).forEach(function (id) {
+    var b = snap.BudgetLine[id], it = (snap.PlanItem || {})[b.deliverable_id];
+    if (!it) return;
+    var amount = Number(b.planned_amount) || 0, wid = it.wp_id || '', guard = 0;
+    if (!wid || !wps[wid]) { none = round2(none + amount); return; }
+    while (wid && wps[wid] && guard++ < 5) { cost[wid] = round2((cost[wid] || 0) + amount); wid = wps[wid].parent_wp_id || ''; }
+  });
+  return { byWp: cost, none: none };
+}
+
+/**
+ * La décomposition du budget entre deux instantanés (0.19.2) : budget autorisé du projet, enveloppe et coût prévu de chaque workpackage, et les lignes de coût ajoutées, retirées ou modifiées.
+ * `known` est faux quand l'instantané de référence ne contenait pas le champ (baseline antérieure à la 0.19.2) : l'écart n'est alors pas calculé.
+ */
+function diffDecomposition_(base, cur) {
+  var num = function (v) { return v === undefined || isBlank(v) ? null : Number(v); };
+  var bc = costByWpSnap_(base), cc = costByWpSnap_(cur);
+  var bProj = Object.keys(base.Project || {}).map(function (k) { return base.Project[k]; })[0] || {}, cProj = Object.keys(cur.Project || {}).map(function (k) { return cur.Project[k]; })[0] || {};
+  var ids = {}; Object.keys(base.WorkPackage || {}).concat(Object.keys(cur.WorkPackage || {})).forEach(function (id) { ids[id] = true; });
+  var wps = Object.keys(ids).map(function (id) {
+    var b = (base.WorkPackage || {})[id] || null, c = (cur.WorkPackage || {})[id] || null, ref = c || b;
+    var known = !!b && ('budget_allocated' in b), ba = known ? num(b.budget_allocated) : null, ca = c ? num(c.budget_allocated) : null;
+    var baseCost = b ? (bc.byWp[id] || 0) : null, cost = c ? (cc.byWp[id] || 0) : null;
+    var row = { wp_id: id, code: ref.wbs_code || '', name: ref.name, parent_id: ref.parent_wp_id || '', known: known, base_allocated: ba, allocated: ca, base_cost: baseCost, cost: cost,
+      cost_delta: baseCost === null || cost === null ? null : round2(cost - baseCost), allocated_changed: !!b && !!c && known && ba !== ca,
+      over: ca !== null && cost !== null && cost > ca, state: !b ? 'added' : !c ? 'removed' : 'same' };
+    if (row.state === 'same' && (row.allocated_changed || (row.cost_delta !== null && row.cost_delta !== 0))) row.state = 'changed';
+    return row;
+  }).sort(function (x, y) { return String(x.code).localeCompare(String(y.code), 'fr', { numeric: true }) || String(x.name).localeCompare(String(y.name), 'fr'); });
+  var lineIds = {}; Object.keys(base.BudgetLine || {}).concat(Object.keys(cur.BudgetLine || {})).forEach(function (id) { lineIds[id] = true; });
+  var lines = Object.keys(lineIds).map(function (id) {
+    var b = (base.BudgetLine || {})[id] || null, c = (cur.BudgetLine || {})[id] || null, ref = c || b;
+    var item = ((c ? cur : base).PlanItem || {})[ref.deliverable_id] || {};
+    var ba = b ? Number(b.planned_amount) || 0 : null, ca = c ? Number(c.planned_amount) || 0 : null;
+    return { line_id: id, deliverable_id: ref.deliverable_id, deliverable: item.name || '(livrable)', wp_id: item.wp_id || '', kind: ref.cost_type === 'Forfait' ? 'forfait' : 'team', team_id: ref.team_id || '', resource_id: ref.resource_id || '',
+      base_amount: ba, amount: ca, state: !b ? 'added' : !c ? 'removed' : (ba !== ca ? 'changed' : 'same') };
+  }).filter(function (l) { return l.state !== 'same'; }).sort(function (x, y) { return String(x.deliverable).localeCompare(String(y.deliverable), 'fr') || String(x.state).localeCompare(String(y.state)); });
+  var sum = function (m) { return round2(Object.keys(m.byWp).filter(function (k) { return true; }).reduce(function (t, k) { return t; }, 0)); };
+  var totalBase = 0, totalCur = 0;
+  Object.keys(base.BudgetLine || {}).forEach(function (id) { totalBase = round2(totalBase + (Number(base.BudgetLine[id].planned_amount) || 0)); });
+  Object.keys(cur.BudgetLine || {}).forEach(function (id) { totalCur = round2(totalCur + (Number(cur.BudgetLine[id].planned_amount) || 0)); });
+  var pKnown = ('budget_authorized' in bProj);
+  return {
+    project: { known: pKnown, base_authorized: pKnown ? num(bProj.budget_authorized) : null, authorized: num(cProj.budget_authorized), changed: pKnown && num(bProj.budget_authorized) !== num(cProj.budget_authorized) },
+    wps: wps, lines: lines,
+    totals: { envelope_changes: wps.filter(function (w) { return w.allocated_changed; }).length + (pKnown && num(bProj.budget_authorized) !== num(cProj.budget_authorized) ? 1 : 0), line_changes: lines.length,
+      cost_base: totalBase, cost: totalCur, cost_delta: round2(totalCur - totalBase), over: wps.filter(function (w) { return w.over; }).length }
+  };
 }
 
 /**
@@ -418,7 +473,11 @@ defineAction('baselines.refuse', function (p, ctx) {
  * Écarts entre la baseline (active par défaut) et l'état courant, ou entre deux baselines (compareTo).
  * Les montants ne sont renvoyés qu'à ceux qui ont le droit de modifier le budget du projet.
  */
-defineAction('baselines.diff', function (p, ctx) {
+/**
+ * Résout une demande d'écart à une baseline (périmètre, baseline de référence, baseline ou état actuel à comparer) : partagé par `baselines.diff` et `baselines.decomposition`.
+ * Renvoie `{ empty }` quand il n'y a pas de baseline de référence.
+ */
+function resolveDiff_(p, ctx) {
   var projectId = requireParam(p, 'projectId');
   var project = mustGet('Project', projectId);
   var scope = scopeFromParams_(p, projectId);
@@ -433,7 +492,7 @@ defineAction('baselines.diff', function (p, ctx) {
   repoList('WorkPackage', null, { includeDeleted: true }).forEach(function (w) { wpNames[w.id] = (w.wbs_code ? w.wbs_code + ' ' : '') + w.name; });
   var wpRows = repoList('WorkPackage', function (w) { return w.project_id === projectId; });
   var scopeInfo = { type: scope.type, id: scope.id, label: baselineScopeLabel_(scope, project, indexBy_(wpRows)) };
-  if (isBlank(baseId)) return { baseline: null, compareTo: null, items: [], totals: null, scope: scopeInfo };
+  if (isBlank(baseId)) return { empty: { baseline: null, compareTo: null, items: [], totals: null, scope: scopeInfo } };
   var base = mustGet('Baseline', baseId);
   if (base.project_id !== projectId || (base.status !== 'Active' && base.status !== 'Archivée')) {
     throw new PpmError('VALIDATION', 'Cette baseline n’est pas figée pour ce projet.');
@@ -453,8 +512,15 @@ defineAction('baselines.diff', function (p, ctx) {
   }
   var baseSnap = loadBaselineSnapshot_(base.id);
   if (against) baseSnap = restrictSnapshotToWps_(baseSnap, snapshotWpSet_(baseSnap, wpRows, scope.id));
-  var d = diffSnapshots(baseSnap, cur, loadHolidayMap(project.holiday_country || 'FR'));
   var seeBudget = can(ctx, 'budget.edit', scope.type === 'project' ? { type: 'project', id: projectId } : scope);
+  return { project: project, scope: scope, scopeInfo: scopeInfo, base: base, other: other, baseSnap: baseSnap, cur: cur, against: against, names: names, wpNames: wpNames, seeBudget: seeBudget };
+}
+
+defineAction('baselines.diff', function (p, ctx) {
+  var r = resolveDiff_(p, ctx);
+  if (r.empty) return r.empty;
+  var project = r.project, scope = r.scope, base = r.base, other = r.other, baseSnap = r.baseSnap, cur = r.cur, names = r.names, wpNames = r.wpNames, seeBudget = r.seeBudget, scopeInfo = r.scopeInfo, against = r.against;
+  var d = diffSnapshots(baseSnap, cur, loadHolidayMap(project.holiday_country || 'FR'));
   d.items.forEach(function (i) {
     i.base_owner_name = names[i.base_owner] || ''; i.owner_name = names[i.owner] || '';
     i.wp_name = wpNames[i.wp_id] || '';
@@ -467,6 +533,21 @@ defineAction('baselines.diff', function (p, ctx) {
   d.scope = scopeInfo;
   d.against = against ? 'project' : '';
   return d;
+});
+
+/**
+ * La décomposition du budget d'une baseline (0.19.2), à la demande : budget autorisé, enveloppe et coût prévu de chaque workpackage, lignes de coût ajoutées, retirées ou modifiées, par rapport à
+ * la baseline de référence (ou à une autre baseline : `compareTo`, pour suivre son évolution d'une baseline à l'autre). Mêmes paramètres que `baselines.diff` ; réservée à ceux qui voient le budget.
+ * Une action à part : la page Suivi n'en paie le coût (lecture des équipes) que lorsqu'on déplie la section.
+ */
+defineAction('baselines.decomposition', function (p, ctx) {
+  var r = resolveDiff_(p, ctx);
+  if (r.empty) return { baseline: null, decomposition: null, see_budget: false };
+  if (!r.seeBudget) throw new PpmError('FORBIDDEN', 'La décomposition du budget est réservée aux responsables de budget.');
+  var d = diffDecomposition_(r.baseSnap, r.cur);
+  var teamNames = {}; repoList('HierarchicalTeam', null, { includeDeleted: true }).forEach(function (t) { teamNames[t.id] = t.name; });
+  d.lines.forEach(function (l) { l.target = l.kind === 'team' ? (teamNames[l.team_id] || '(équipe)') : (r.names[l.resource_id] || '(ressource)'); l.wp_name = r.wpNames[l.wp_id] || ''; });
+  return { baseline: baselineView_(r.base, {}), compareTo: r.other ? baselineView_(r.other, {}) : null, scope: r.scopeInfo, decomposition: d, see_budget: true };
 });
 
 /**

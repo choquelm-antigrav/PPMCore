@@ -5,9 +5,10 @@
  * leader répartit à son tour la sienne entre ses sous-workpackages. Les lignes de budget des livrables (page Budget, « Budget par livrable ») restent la mesure du coût prévu :
  * la page les met en regard de l'enveloppe, workpackage par workpackage.
  *
- * RÈGLES. Les sous-workpackages d'un workpackage ne dépassent pas son enveloppe ; les workpackages de premier niveau ne dépassent pas l'enveloppe du projet (si elle est fixée) ;
- * un sous-workpackage ne reçoit rien tant que son parent n'a pas d'enveloppe. Dépasser l'enveloppe avec des lignes de budget n'est PAS bloqué : c'est signalé (« dépassé »), parce
- * que le coût d'un livrable est une information vraie qu'on ne refuse pas de saisir. Une enveloppe non fixée (vide) veut dire « pas de plafond », pas zéro.
+ * RÈGLES. (0.19.2) On peut écrire des enveloppes qui DÉPASSENT la somme autorisée : celles des sous-workpackages au-delà de leur workpackage, celles des workpackages au-delà du budget du projet, le coût
+ * des livrables au-delà d'une enveloppe. Rien n'est bloqué : c'est signalé par l'état « En dépassement » (en rouge), parce que ces montants sont une information vraie qu'on ne refuse pas de saisir.
+ * Une seule règle reste : un sous-workpackage ne reçoit rien tant que son parent n'a pas d'enveloppe. Une enveloppe non fixée (vide) veut dire « pas de plafond », pas zéro.
+ * La page Budget affiche la DÉCOMPOSITION DU BUDGET : workpackages, sous-workpackages, puis leurs livrables et jalons, dans un seul tableau (`items` de budget.envelope.get).
  *
  * QUI. Fixer l'enveloppe du projet et celles des workpackages de premier niveau : `budget.authorize` (chef de projet et au-dessus). Celle d'un sous-workpackage : un niveau strictement
  * supérieur au sien sur le workpackage parent (son Workpackage leader, et au-dessus). Chacun ne voit que ce qui relève de son budget : un Workpackage leader, son workpackage seulement.
@@ -63,7 +64,9 @@ function envelopeView_(ctx, project) {
       var childSum = round2((kids[w.id] || []).reduce(function (s, k) { return s + (Number(k.budget_allocated) || 0); }, 0));
       rows.push({
         wp_id: w.id, version: w.version, code: w.wbs_code || '', name: w.name, parent_id: w.parent_wp_id && visible(wpById[w.parent_wp_id] || {}) ? w.parent_wp_id : '', depth: depth,
-        allocated: alloc, cost: cost, remaining: alloc === null ? null : round2(alloc - cost), over: alloc !== null && cost > alloc,
+        allocated: alloc, cost: cost, remaining: alloc === null ? null : round2(alloc - cost), over: alloc !== null && (cost > alloc || childSum > alloc),
+        over_cost: alloc !== null && cost > alloc, over_alloc: alloc !== null && (kids[w.id] || []).length > 0 && childSum > alloc,
+        over_by: alloc === null ? 0 : round2(Math.max(0, cost - alloc, (kids[w.id] || []).length ? childSum - alloc : 0)),
         children_allocated: childSum, unallocated: alloc === null || !(kids[w.id] || []).length ? null : round2(alloc - childSum), canSet: canAllocateWp_(ctx, w)
       });
     }
@@ -77,7 +80,37 @@ function envelopeView_(ctx, project) {
   var out = { project: { id: project.id, code: project.code, name: project.name, version: project.version }, rows: rows, partial: !access.all, canSetProject: ctx.isAdmin || can(ctx, 'budget.authorize', { type: 'project', id: project.id }) };
   if (access.all) {
     out.totals = { authorized: authorized, allocated: allocated, reserve: authorized === null ? null : round2(authorized - allocated), cost: total, cost_without_wp: costs.none,
-      remaining: authorized === null ? null : round2(authorized - total), over: authorized !== null && total > authorized };
+      remaining: authorized === null ? null : round2(authorized - total), over: authorized !== null && (total > authorized || allocated > authorized),
+      over_cost: authorized !== null && total > authorized, over_alloc: authorized !== null && allocated > authorized,
+      over_by: authorized === null ? 0 : round2(Math.max(0, total - authorized, allocated - authorized)) };
+  }
+  // les livrables et jalons, sous leur workpackage : la décomposition du budget (0.19.2). Un livrable porte le coût de ses lignes ; un jalon n'a pas de coût.
+  var wpVisible = {}; rows.forEach(function (r) { wpVisible[r.wp_id] = true; });
+  var itemList = repoList('PlanItem', function (i) { return i.project_id === project.id && (i.item_type === 'Livrable' || i.item_type === 'Jalon'); });
+  var lineCount = {}, lineCost = {};
+  repoList('BudgetLine', function (l) { return true; }).forEach(function (l) { lineCount[l.deliverable_id] = (lineCount[l.deliverable_id] || 0) + 1; lineCost[l.deliverable_id] = round2((lineCost[l.deliverable_id] || 0) + (Number(l.planned_amount) || 0)); });
+  var exById = indexBy_(repoList('Exercise')), resNames = indexBy_(repoList('Resource')), ownerName = function (id) { return isBlank(id) || !resNames[id] ? '' : resNames[id].name; };
+  out.items = itemList.filter(function (i) { return i.wp_id ? !!wpVisible[i.wp_id] : access.all; }).map(function (i) {
+    var f = i.planned_finish || '';
+    return { id: i.id, version: i.version, wp_id: i.wp_id || '', name: i.name, type: i.item_type, owner: ownerName(i.owner_resource_id), start: i.planned_start || null, finish: f || null,
+      status: i.status || '', progress: Number(i.progress_pct) || 0, cost: i.item_type === 'Livrable' ? (lineCost[i.id] || 0) : null, lines: i.item_type === 'Livrable' ? (lineCount[i.id] || 0) : null,
+      exercise_year: i.exercise_id && exById[i.exercise_id] ? Number(exById[i.exercise_id].year) : null,
+      canEdit: i.item_type === 'Livrable' && (access.all || can(ctx, 'budget.edit', { type: 'planitem', id: i.id })) };
+  }).sort(function (a, b) { return String(a.start || '9999').localeCompare(String(b.start || '9999')) || String(a.name).localeCompare(String(b.name), 'fr'); });
+  // l'évolution depuis la baseline active du projet (0.19.2) : ce que la décomposition valait quand on l'a figée, pour chaque workpackage et chaque livrable
+  var bl = isBlank(project.active_baseline_id) ? null : repoGet('Baseline', project.active_baseline_id);
+  if (bl && bl.status === 'Active' && isBlank(bl.scope_type)) {
+    var snap = loadBaselineSnapshot_(bl.id), bcost = costByWpSnap_(snap), bitem = budgetByItem_(snap), bwp = snap.WorkPackage || {}, bnum = function (v) { return isBlank(v) ? null : Number(v); };
+    out.baseline = { id: bl.id, label: bl.label || ('B' + bl.number), number: Number(bl.number) || 0, decided_at: bl.decided_at || '' };
+    out.rows.forEach(function (r) {
+      var b = bwp[r.wp_id];
+      r.base = b ? { known: 'budget_allocated' in b, allocated: 'budget_allocated' in b ? bnum(b.budget_allocated) : null, cost: bcost.byWp[r.wp_id] || 0 } : { new: true };
+    });
+    out.items.forEach(function (x) { if (x.type === 'Livrable') x.base = (snap.PlanItem || {})[x.id] ? { cost: bitem[x.id] || 0 } : { new: true }; });
+    if (out.totals) {
+      var bp = Object.keys(snap.Project || {}).map(function (k) { return snap.Project[k]; })[0] || {};
+      out.totals.base = { known: 'budget_authorized' in bp, authorized: 'budget_authorized' in bp ? bnum(bp.budget_authorized) : null, cost: round2(Object.keys(snap.BudgetLine || {}).reduce(function (t, id) { return t + (Number(snap.BudgetLine[id].planned_amount) || 0); }, 0)) };
+    }
   }
   return out;
 }
@@ -111,15 +144,12 @@ defineAction('budget.envelope.set', function (p, ctx) {
       var v = envNumber_(x.amount, 'Enveloppe de « ' + w.name + ' »');
       if (v !== next[w.id]) { next[w.id] = v; changes.push({ table: 'WorkPackage', id: w.id, patch: { budget_allocated: v === '' ? '' : v }, version: w.version }); }
     });
-    // sommes : sur l'état final
-    var sumOf = function (list) { return round2(list.reduce(function (s, w) { return s + (next[w.id] === '' ? 0 : next[w.id]); }, 0)); };
-    var top = wps.filter(function (w) { return isBlank(w.parent_wp_id); });
-    if (authorized !== '' && sumOf(top) > authorized) throw new PpmError('VALIDATION', 'Les enveloppes des workpackages (' + sumOf(top) + ' €) dépassent le budget autorisé du projet (' + authorized + ' €).', { rule: 'ENVELOPE_PROJECT', allocated: sumOf(top), authorized: authorized });
+    // seule règle : un sous-workpackage ne reçoit rien tant que son parent n'a pas d'enveloppe (les dépassements de somme sont permis, voir l'en-tête)
     wps.filter(function (w) { return isBlank(w.parent_wp_id); }).forEach(function (w) {
-      var kids = wps.filter(function (k) { return k.parent_wp_id === w.id; }), s = sumOf(kids);
+      var kids = wps.filter(function (k) { return k.parent_wp_id === w.id; });
+      var s = round2(kids.reduce(function (t, k) { return t + (next[k.id] === '' ? 0 : next[k.id]); }, 0));
       if (!kids.length || s === 0) return;
       if (next[w.id] === '') throw new PpmError('VALIDATION', 'Fixez d’abord l’enveloppe de « ' + w.name + ' » : ses sous-workpackages ne peuvent pas en recevoir tant qu’elle est vide.', { rule: 'ENVELOPE_PARENT_EMPTY', wp: w.id });
-      if (s > next[w.id]) throw new PpmError('VALIDATION', 'Les enveloppes des sous-workpackages de « ' + w.name + ' » (' + s + ' €) dépassent la sienne (' + next[w.id] + ' €).', { rule: 'ENVELOPE_WP', wp: w.id, allocated: s, envelope: next[w.id] });
     });
     changes.forEach(function (c) { repoUpdate(c.table, c.id, c.patch, null, ctx.actx); });
     var fresh = mustGet('Project', project.id);

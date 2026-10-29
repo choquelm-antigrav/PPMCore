@@ -1,5 +1,14 @@
 # Journal des versions
 
+## 0.19.2 — décomposition du budget, enregistrement explicite, baselines
+
+- **Décomposition du Budget** (ex « Enveloppe par workpackage », dans les trois onglets) : workpackages, sous-workpackages, livrables et jalons dans un seul tableau ; un livrable n'a pas d'enveloppe ; bouton € de « Coût prévu » : fenêtre **« Coût du livrable »** (lignes, échéancier, ajout d'une part ou d'un forfait). **« Parts des livrables » supprimée.**
+- **Dépassements permis** : enveloppes au-delà de la somme autorisée acceptées, état **« En dépassement »** en rouge ; seule règle conservée : pas d'enveloppe de sous-workpackage sans celle de son parent.
+- **Valider** : brouillon dans la décomposition et dans le budget par équipe, bouton « Valider » grisé puis bleu, « Annuler les modifications », confirmation avant de perdre un brouillon (onglet, projet, fermeture).
+- **Baselines** : elles figent aussi budget autorisé, enveloppes des workpackages et exercice des livrables ; ces changements entrent dans le fil de validation ; **`baselines.decomposition`** (à la demande) donne l'écart de décomposition (enveloppes, coût par workpackage, lignes de coût), y compris d'une baseline à l'autre ; section dépliable dans Suivi ; colonne « Depuis la baseline » dans la décomposition ; baselines anciennes : « non figé à l'époque ».
+- Serveur : `budget.get` accepte `deliverableId` ; `budget.envelope.get` renvoie `items` et l'évolution depuis la baseline ; `resolveDiff_` partagé par `baselines.diff` et `baselines.decomposition`.
+- Tests : `test_baseline_budget.js` (7), `test_envelope.js`, `ui_budget.js` (131), `ui_suivi.js` (84) ; treize sabotages vérifiés (dont un rejoué sous une forme qui touche les jalons).
+
 ## 0.19.1 — planning, avancement hérité, programmes, import, WBS
 
 - **Planning** : « Marquer terminé » et déclaration d'avancement (avec correction) pour les livrables ; « Marquer le jalon passé » / « Rouvrir » pour les jalons (droit `milestone.pass`) ; mises à jour optimistes.

@@ -88,8 +88,8 @@ function openPage(file, user, boot, extraScript) {
   c.repoUpdate('BudgetLine', budgetLine.id, { fixed_amount: 1200 }, null, w.S);
   w.call(CP, 'planitems.create', { values: { project_id: w.p1.id, name: 'Rapport <img src=x>', item_type: 'Livrable', planned_start: '2026-11-02', planned_finish: '2026-11-06' } });
   p.click(p.doc.getElementById('reload'));
-  await p.until(() => p.doc.querySelectorAll('#panel-ecarts tbody tr').length === 3);
-  const rows = [...p.doc.querySelectorAll('#panel-ecarts tbody tr')].map((r) => [...r.cells].map((c2) => c2.textContent));
+  await p.until(() => p.doc.querySelectorAll('#panel-ecarts tbody tr[data-item]').length === 3);
+  const rows = [...p.doc.querySelectorAll('#panel-ecarts tbody tr[data-item]')].map((r) => [...r.cells].map((c2) => c2.textContent));
   check(rows[0][0].startsWith('Calcul') && rows[0][3] === '+3 jours' && rows[0][6] === 'Modifié', 'Calcul glissé de 3 jours : ' + rows[0].join(' | '));
   check(rows.some((r) => r[0].startsWith('Essais') && r[4] === 'Carla → Rémi'), 'changement de responsable');
   check(rows.some((r) => r[0].startsWith('Rapport <img') && r[6] === 'Ajouté'), 'élément ajouté, nom affiché en texte');
@@ -98,13 +98,26 @@ function openPage(file, user, boot, extraScript) {
   check(cards.some((x) => /^Éléments glissés1jusqu’à 3 jours ouvrés/.test(x)), 'carte des glissements : ' + cards.join(' / '));
   check(cards.some((x) => /^Budget prévu1\s200\s€\+200\s€ par rapport à la référence/.test(x)), 'budget et écart visibles pour le chef de projet : ' + cards.join(' / '));
   check(rows.some((r) => r[0].startsWith('Essais') && /\+200/.test(r[5])), 'écart de budget sur la ligne du livrable');
+  // la décomposition du budget figée avec la baseline (0.19.2) : section dépliable, lue à la demande
+  await p.until(() => p.doc.getElementById('decomp-toggle'));
+  const callsBefore = p.calls.filter((x) => x === 'baselines.decomposition').length;
+  check(p.doc.getElementById('decomp-toggle').getAttribute('aria-expanded') === 'false' && p.doc.getElementById('decomp-body').hidden && callsBefore === 0, 'écarts de baseline : la section « Décomposition du budget » est repliée et rien n’est chargé tant qu’on ne la déplie pas');
+  p.doc.getElementById('decomp-toggle').dispatchEvent(new p.win.Event('click', { bubbles: true }));
+  await p.until(() => p.doc.querySelector('#decomp-body tr[data-line]'));
+  check(p.calls.filter((x) => x === 'baselines.decomposition').length === 1 && !p.doc.getElementById('decomp-body').hidden, 'dépliée : l’action baselines.decomposition est appelée une seule fois');
+  check(/Essais/.test(p.text('decomp-body')) && /Modifié/.test(p.text('decomp-body')) && /1\s?000/.test(p.text('decomp-body')) && /1\s?200/.test(p.text('decomp-body')), 'la ligne de coût modifiée : 1 000 € → 1 200 € : ' + p.text('decomp-body').slice(0, 140));
+  check(/1 ligne de coût modifiée/.test(p.text('decomp-sum')) && /\+/.test(p.text('decomp-sum')), 'le titre résume : ' + p.text('decomp-sum'));
+  p.doc.getElementById('decomp-toggle').dispatchEvent(new p.win.Event('click', { bubbles: true }));
+  p.doc.getElementById('decomp-toggle').dispatchEvent(new p.win.Event('click', { bubbles: true }));
+  check(p.calls.filter((x) => x === 'baselines.decomposition').length === 1, 'replier puis déplier : pas de nouvel appel');
   const pm = openPage('Suivi.html', MEMBER);
   await pm.until(() => pm.doc.querySelector('#panel-ecarts .cards'));
   check(![...pm.doc.querySelectorAll('#panel-ecarts .card')].some((x) => /Budget/.test(x.textContent)) && ![...pm.doc.querySelectorAll('#panel-ecarts th')].some((x) => x.textContent === 'Budget'),
     'aucun montant pour un simple membre');
+  check(!pm.doc.getElementById('decomp-toggle'), 'et pas de section « Décomposition du budget » : réservée à ceux qui voient le budget');
   const only = p.doc.getElementById('only-changes');
   only.checked = false; only.dispatchEvent(new p.win.Event('change'));
-  check(p.doc.querySelectorAll('#panel-ecarts tbody tr').length === 5, 'tous les éléments, y compris identiques');
+  check(p.doc.querySelectorAll('#panel-ecarts tbody tr[data-item]').length === 5, 'tous les éléments, y compris identiques');
 
   // ---------------------------------------------------------------- changements à valider (0.15.3 : par le niveau du dessus)
   // le chef de projet ne valide que ce que font les niveaux en dessous de lui : ici, les dates de Rémi (Workpackage leader)
@@ -188,8 +201,8 @@ function openPage(file, user, boot, extraScript) {
   const to = p.doc.getElementById('cmp-to');
   to.value = [...to.options].find((o) => /B1/.test(o.textContent)).value;
   to.dispatchEvent(new p.win.Event('change'));
-  await p.until(() => p.doc.querySelectorAll('#panel-ecarts tbody tr').length === 3);
-  check(p.doc.querySelectorAll('#panel-ecarts tbody tr').length === 3, 'B0 comparée à B1 : les 3 écarts figés dans B1');
+  await p.until(() => p.doc.querySelectorAll('#panel-ecarts tbody tr[data-item]').length === 3);
+  check(p.doc.querySelectorAll('#panel-ecarts tbody tr[data-item]').length === 3, 'B0 comparée à B1 : les 3 écarts figés dans B1');
 
   // ---------------------------------------------------------------- agenda et Drive
   await p.until(() => p.doc.getElementById('ws-enable'));

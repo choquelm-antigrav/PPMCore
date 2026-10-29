@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.19.1">
+<meta name="ppm-version" content="0.19.2">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <?!= include('CommonProgram') ?>
@@ -14,6 +14,13 @@
   .bar select { min-width: 220px; }
   .card { padding: 12px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
   .early { color: var(--green); }
+  .decomp { margin: 0 0 14px; }
+  .sec-toggle { display: flex; align-items: baseline; gap: 8px; width: 100%; margin: 0; padding: 8px 10px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--surface); color: inherit; font: inherit; font-size: 15px; font-weight: 600; text-align: left; cursor: pointer; }
+  .sec-toggle:hover { border-color: var(--muted); }
+  .sec-toggle:focus-visible { outline: 2px solid var(--accent, #1f6feb); outline-offset: 2px; }
+  .sec-toggle .chev { flex: none; width: 14px; color: var(--muted); }
+  .sec-toggle .sec-sum { margin-left: auto; font-size: 13px; font-weight: 400; color: var(--muted); text-align: right; }
+  #decomp-body { margin-top: 10px; }
   .badge.active { background: var(--summary); color: #FFFFFF; }
   .badge.pending { background: var(--warn-bg); color: var(--warn-ink); }
   .badge.refused { background: var(--alert-bg); color: var(--alert-ink); }
@@ -265,6 +272,7 @@ var BOOT = <?!= boot ?>;
     if (cur.type === 'workpackage') { params.scopeType = 'workpackage'; params.scopeId = cur.id; if (vsProject) params.against = 'project'; }
     if (state.compare.base && !vsProject) params.baselineId = state.compare.base;
     if (state.compare.to && !vsProject) params.compareTo = state.compare.to;
+    state.diffParams = params; state.decomp = null;
     return call('baselines.diff', params).then(function (d) { state.diff = d; renderDiff(); }).catch(function (e) { failed(panel, e); });
   }
   function renderNoBaseline(panel) {
@@ -275,6 +283,59 @@ var BOOT = <?!= boot ?>;
       isWp ? 'Une baseline de workpackage fige ses dates, ses responsables et son budget : c’est sa référence locale, sans toucher à celle du projet.' : 'Une baseline fige les dates, les responsables, le budget et le périmètre du projet ; les écarts se mesurent ensuite par rapport à elle.', extra);
     var sb = scopeBar();
     if (sb) panel.insertBefore(sb, panel.firstChild);
+  }
+  /**
+   * La décomposition du budget figée avec la baseline (0.19.2) : budget autorisé, enveloppe et coût prévu de chaque workpackage, lignes de coût ajoutées, retirées ou modifiées. Lue à la demande
+   * (une action à part) quand on déplie la section, pour ne pas alourdir l'ouverture de la page.
+   */
+  function decompSection() {
+    var open = !!state.decompOpen, body = el('div', { id: 'decomp-body' });
+    var btn = el('button', { type: 'button', class: 'sec-toggle', id: 'decomp-toggle', 'aria-expanded': String(open), 'aria-controls': 'decomp-body' }, [el('span', { class: 'chev', 'aria-hidden': 'true', text: open ? '▾' : '▸' }), el('span', { class: 'sec-title', text: 'Décomposition du budget' }), el('span', { class: 'sec-sum', id: 'decomp-sum', text: state.decomp ? decompSummary(state.decomp.decomposition) : '' })]);
+    body.hidden = !open;
+    btn.addEventListener('click', function () {
+      state.decompOpen = !state.decompOpen;
+      btn.setAttribute('aria-expanded', String(state.decompOpen)); btn.querySelector('.chev').textContent = state.decompOpen ? '▾' : '▸'; body.hidden = !state.decompOpen;
+      if (state.decompOpen && !state.decomp) loadDecomp(body);
+    });
+    if (open) { if (state.decomp) renderDecomp(body); else loadDecomp(body); }
+    return el('div', { class: 'decomp', id: 'decomp' }, [btn, body]);
+  }
+  function loadDecomp(body) {
+    loading(body);
+    return call('baselines.decomposition', state.diffParams).then(function (r) { state.decomp = r; renderDecomp(body); var sum = $('decomp-sum'); if (sum) sum.textContent = decompSummary(r.decomposition); }).catch(function (e) { failed(body, e); });
+  }
+  function decompSummary(dc) {
+    if (!dc) return '';
+    var t = dc.totals;
+    return (t.envelope_changes ? plural(t.envelope_changes, 'enveloppe changée', 'enveloppes changées') : 'enveloppes inchangées') + ' · ' + plural(t.line_changes, 'ligne de coût modifiée', 'lignes de coût modifiées') + (t.cost_delta ? ' · coût ' + (t.cost_delta > 0 ? '+' : '−') + euros(Math.abs(t.cost_delta)) : '') + (t.over ? ' · ' + t.over + ' en dépassement' : '');
+  }
+  function renderDecomp(body) {
+    var r = state.decomp, dc = r.decomposition;
+    clear(body);
+    if (!dc) { body.appendChild(el('p', { class: 'note', text: 'Aucune décomposition à comparer.' })); return; }
+    var money = function (v) { return v === null || v === undefined ? 'non fixée' : euros(v); };
+    var pr = dc.project, cards = el('div', { class: 'cards' });
+    cards.appendChild(card('Budget autorisé', pr.known ? (pr.changed ? money(pr.base_authorized) + ' → ' + money(pr.authorized) : money(pr.authorized)) : money(pr.authorized), pr.known ? (pr.changed ? 'modifié depuis la référence' : 'comme la référence') : 'non figé dans cette baseline (antérieure à la 0.19.2)', pr.changed));
+    cards.appendChild(card('Coût prévu', euros(dc.totals.cost), dc.totals.cost_delta ? (dc.totals.cost_delta > 0 ? '+' : '−') + euros(Math.abs(dc.totals.cost_delta)) + ' par rapport à la référence (' + euros(dc.totals.cost_base) + ')' : 'comme la référence', dc.totals.cost_delta > 0));
+    body.appendChild(cards);
+    var stText = { added: ['Ajouté', 'added'], removed: ['Retiré', 'removed'], changed: ['Modifié', 'changed'], same: ['Identique', ''] };
+    var wpRows = dc.wps.filter(function (w) { return w.state !== 'same'; }).map(function (w) {
+      var env = w.known ? (w.allocated_changed ? money(w.base_allocated) + ' → ' + money(w.allocated) : money(w.allocated)) : (money(w.allocated) + ' (enveloppe non figée à l’époque)');
+      var cost = w.base_cost === null ? euros(w.cost) : (w.cost === null ? euros(w.base_cost) + ' → retiré' : euros(w.base_cost) + ' → ' + euros(w.cost));
+      return el('tr', { 'data-wp': w.wp_id }, [el('td', { text: (w.code ? w.code + ' ' : '') + w.name }), el('td', { class: 'num', text: env }), el('td', { class: 'num', text: cost }),
+        el('td', { class: 'num' + (w.cost_delta > 0 ? ' late' : ''), text: w.cost_delta === null ? '' : (w.cost_delta > 0 ? '+' : w.cost_delta < 0 ? '−' : '') + euros(Math.abs(w.cost_delta)) }),
+        el('td', {}, [w.over ? badge('En dépassement', 'removed') : badge(stText[w.state][0], stText[w.state][1])])]);
+    });
+    if (wpRows.length) body.appendChild(table(['Workpackage', 'Enveloppe', 'Coût prévu', 'Écart de coût', 'État'], wpRows));
+    else body.appendChild(el('p', { class: 'note', id: 'decomp-same', text: 'Aucun workpackage dont l’enveloppe ou le coût ait changé depuis la référence.' }));
+    if (dc.lines.length) {
+      body.appendChild(el('h3', { class: 'sub', text: 'Lignes de coût modifiées (' + dc.lines.length + ')' }));
+      body.appendChild(table(['Livrable', 'Équipe ou ressource', 'Référence', 'Comparé', 'État'], dc.lines.map(function (l) {
+        return el('tr', { 'data-line': l.line_id }, [el('td', {}, [l.deliverable, l.wp_name ? el('div', { class: 'muted', text: 'WP ' + l.wp_name }) : null]), el('td', { text: l.target }),
+          el('td', { class: 'num', text: l.base_amount === null ? '—' : euros(l.base_amount) }), el('td', { class: 'num', text: l.amount === null ? '—' : euros(l.amount) }), el('td', {}, [badge(stText[l.state][0], stText[l.state][1])])]);
+      })));
+    }
+    body.appendChild(el('p', { class: 'note', text: 'La décomposition du budget est figée avec la baseline : budget autorisé, enveloppe de chaque workpackage et lignes de coût de chaque livrable. Les changements qui suivent sont aussi à valider par le niveau du dessus (onglet « Changements à valider »).' }));
   }
   function renderDiff() {
     var panel = $('panel-ecarts'), d = state.diff, t = d.totals;
@@ -310,6 +371,7 @@ var BOOT = <?!= boot ?>;
     var hasBudget = d.seeBudget && (t.budget || t.budget_base);
     if (hasBudget) cards.appendChild(card('Budget prévu', euros(t.budget), t.budget_delta ? (t.budget_delta > 0 ? '+' : '') + euros(t.budget_delta) + ' par rapport à la référence' : 'Comme la référence', t.budget_delta > 0));
     panel.appendChild(cards);
+    if (d.seeBudget) panel.appendChild(decompSection());
 
     var items = d.items.filter(function (i) { return !state.onlyChanges || i.state !== 'same'; });
     if (!items.length) {

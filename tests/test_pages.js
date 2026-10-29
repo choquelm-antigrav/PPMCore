@@ -76,6 +76,6 @@ module.exports = function () {
       ok(h.indexOf('<main class="zones"') < h.indexOf('id="panel-') && h.lastIndexOf('</main>') > h.lastIndexOf('<section class="panel"'), f + ' : tous les panneaux sont dans la grille');
     });
     ok(/<div class="cell wide" id="cell-reglages">/.test(read('Admin.html')) && /<div class="cell wide" id="cell-journaux">/.test(read('Admin.html')), 'Administration : réglages et journaux sur toute la largeur');
-    ok(/<div class="cell wide" id="cell-budget">/.test(read('Budget.html')) && /<div class="cell wide" id="cell-mine">/.test(read('Compte.html')), 'Budget par livrable et actions de réunion : tableaux sur toute la largeur');
+    ok(/<div class="cell wide" id="cell-enveloppe">/.test(read('Budget.html')) && /<div class="cell wide" id="cell-mine">/.test(read('Compte.html')), 'Décomposition du budget et actions de réunion : tableaux sur toute la largeur');
   });
 };
