@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.21.1">
+<meta name="ppm-version" content="0.21.2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -1016,16 +1016,31 @@ var BOOT = <?!= boot ?>;
     var box = $('panel-settings'); clear(box);
     if (!on) return;
     var enabled = el('input', { type: 'checkbox', id: 'set-on', style: 'width:auto' }); enabled.checked = d.project.news_on;
-    var words = el('textarea', { id: 'set-words', maxlength: '500', placeholder: 'NAC-1, nacelle, ✈️ (séparés par des virgules)' }); words.value = d.project.keywords;
-    words.style.minHeight = '64px';
+    var calId = d.project.calendar_id || '';
     var save = el('button', { type: 'button', class: 'btn primary', id: 'set-save', text: 'Enregistrer', onclick: function () {
-      call('news.settings.set', { projectId: state.projectId, enabled: enabled.checked, keywords: words.value }, true).then(function () { toast('Réglages enregistrés.'); return load(); }).catch(fail); } });
+      call('news.settings.set', { projectId: state.projectId, enabled: enabled.checked }, true).then(function () { toast('Réglages enregistrés.'); return load(); }).catch(fail); } });
+    var calBox = el('div', { class: 'box', id: 'cal-box' }, [el('strong', { text: 'Agenda du projet' })]);
+    if (calId) {
+      calBox.appendChild(el('p', { class: 'note', id: 'cal-note' }, ['Invitez cette adresse à vos réunions, comme un participant : elles apparaissent alors dans le suivi du projet, sans repère dans le titre. ', el('code', { id: 'cal-id', text: calId }), '.']));
+      calBox.appendChild(el('div', { class: 'row' }, [el('button', { type: 'button', class: 'btn', id: 'cal-detach', text: 'Détacher cet agenda', onclick: function () {
+        call('news.calendar.set', { projectId: state.projectId, calendarId: '' }, true).then(function () { toast('Agenda détaché.'); return load(); }).catch(fail); } })]));
+    } else {
+      calBox.appendChild(el('p', { class: 'note', id: 'cal-note', text: 'Pas encore d’agenda : sans lui, aucune réunion n’est collectée. L’outil le crée au nom du compte qui l’exécute et le rend lisible par tout le domaine ; vous invitez ensuite son adresse à vos réunions.' }));
+      var existing = el('input', { type: 'text', id: 'cal-existing', placeholder: 'ou l’adresse d’un agenda existant', maxlength: '200', style: 'min-width:260px' });
+      calBox.appendChild(el('div', { class: 'row' }, [
+        el('button', { type: 'button', class: 'btn primary', id: 'cal-create', text: 'Créer l’agenda du projet', onclick: function () {
+          call('news.calendar.create', { projectId: state.projectId }, true).then(function (r) { toast(r.shared_to_domain ? 'Agenda créé et partagé au domaine.' : 'Agenda créé ; à partager au domaine à la main.'); return load(); }).catch(fail); } }),
+        existing,
+        el('button', { type: 'button', class: 'btn', id: 'cal-attach', text: 'Rattacher', onclick: function () {
+          call('news.calendar.set', { projectId: state.projectId, calendarId: existing.value }, true).then(function () { toast('Agenda rattaché.'); return load(); }).catch(fail); } })
+      ]));
+    }
     box.appendChild(el('div', { class: 'box form-grid' }, [
       el('label', { class: 'row', style: 'margin:0' }, [enabled, ' Activer la collecte automatique des réunions pour ce projet']),
-      el('label', { class: 'lbl' }, ['Repères : une réunion n’est collectée que si son titre contient un de ces mots (lettres, sigle, logo, titre)', words]),
-      el('p', { class: 'note', style: 'margin:0', text: 'Sans repère dans le titre, une réunion n’est jamais collectée, même si des membres du projet y sont invités ; si les repères de deux projets figurent dans le même titre, elle va dans « Réunions à trier ». La collecte lit l’agenda du compte qui exécute l’outil, à 1 h et à 13 h' + (d.project.last_collect ? ' ; dernière collecte : ' + frDate(d.project.last_collect) + '.' : '.') }),
+      el('p', { class: 'note', style: 'margin:0', text: 'La collecte lit l’agenda du projet à 1 h et à 13 h : toute réunion de cet agenda est celle du projet' + (d.project.last_collect ? ' ; dernière collecte : ' + frDate(d.project.last_collect) + '.' : '.') }),
       el('div', {}, [save])
     ]));
+    box.appendChild(calBox);
     var jl = el('div', { class: 'box' });
     jl.appendChild(el('strong', { text: 'Journal du projet' }));
     jl.appendChild(el('p', { class: 'note', id: 'journal-note' }, [d.project.journal_url ? el('span', {}, ['Un Google Doc tenu à jour par PPM, à joindre à Gemini avec le prompt du jour : ', el('a', { href: d.project.journal_url, target: '_blank', rel: 'noopener', id: 'journal-link', text: 'ouvrir le journal' }), '.']) : 'Pas encore créé : il se crée à la première collecte, ou tout de suite avec le bouton ci-dessous.']));
@@ -1059,13 +1074,13 @@ var BOOT = <?!= boot ?>;
     var d = state.data, me = d.me || '';
     var late = d.actions.filter(function (x) { return x.due_date && x.due_date < d.today; }).length;
     var mineTodo = me ? d.actions.filter(function (x) { return x.owner_id === me && (x.status === 'Proposée' || x.status === 'Contestée'); }).length : 0;
-    var kw = String(d.project.keywords || '').split(/[,;\n]+/).filter(function (k) { return k.trim(); }).length;
+    var hasCal = !!d.project.calendar_id;
     var today = !!d.digest && d.digest.date === d.today;
     applySection('digest', d.digest ? (today ? 'publiée aujourd’hui' : 'du ' + frDate(d.digest.date) + ' · pas de nouvelle depuis ' + plural(daysSince(d.digest.date), 'jour', 'jours')) : 'aucune publiée', d.access.manage && !today);
     applySection('actions', d.actions.length ? plural(d.actions.length, 'ouverte', 'ouvertes') + (late ? ' · ' + late + ' en retard' : '') + (mineTodo ? ' · ' + mineTodo + ' pour moi' : '') : 'aucune', late > 0 || mineTodo > 0);
     applySection('triage', d.triage.length ? plural(d.triage.length, 'réunion', 'réunions') : '', d.triage.length > 0);
     applySection('add', '', false);
-    applySection('settings', d.project.news_on ? 'collecte active · ' + plural(kw, 'repère', 'repères') : 'collecte non activée', !d.project.news_on || kw === 0);
+    applySection('settings', d.project.news_on ? (hasCal ? 'collecte active · agenda rattaché' : 'collecte active · pas d’agenda') : 'collecte non activée', !d.project.news_on || !hasCal);
   }
 
   // ------------------------------------------------------------ chargement

@@ -1,5 +1,12 @@
 # Journal des versions
 
+## 0.21.2 — la collecte des réunions lit l'agenda du projet
+
+- **Un agenda Google par projet** : créé par le chef de projet (bouton « Créer l'agenda du projet », ou rattachement d'un agenda existant), au nom du compte qui exécute l'outil, lisible par tout le domaine. Les personnes l'invitent à leurs réunions ; la collecte (1 h et 13 h) lit ces agendas et non plus l'agenda personnel de l'administrateur.
+- **Corrige** : une réunion n'apparaissait dans le suivi que si l'administrateur y était invité. Toute réunion de l'agenda d'un projet est maintenant celle de ce projet, **sans repère de titre**. Un projet sans agenda n'est pas lu ; un agenda illisible est signalé et n'arrête pas les autres.
+- Nouveaux : `news.calendar.create`, `news.calendar.set`. Champ `news_calendar_id` du projet (relancer `A1_INSTALLER_PPM`). Les repères de titre ne servent plus à la collecte.
+- **Non essayé avec de vrais agendas Google** : invitation d'un agenda secondaire, partage au domaine.
+
 ## 0.21.1 — le plan se compare à la baseline de référence ; totaux en direct
 
 - **Une seule référence** : la colonne « Depuis P1_0 » (et la dotation à la baseline) se compare à la baseline de RÉFÉRENCE, celle que lit le suivi (dernière baseline validée), et non plus à la baseline active. Tant qu'aucune baseline n'est validée, il n'y a pas de comparaison. Dans les onglets d'exploitation (préparation, archive), qui ne lisent pas la liste des versions, la baseline active sert encore de repli.

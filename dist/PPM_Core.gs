@@ -1,5 +1,5 @@
 /**
- * PPM Core 0.21.1 — fichier unique à installer (fabriqué par tools/build.js, empreinte 9c70ce238024).
+ * PPM Core 0.21.2 — fichier unique à installer (fabriqué par tools/build.js, empreinte 452b2be59a31).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
  * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs, 53_Roles.gs, 54_Validation.gs, 55_Plan.gs, 56_Import.gs, 57_Rights.gs, 58_ScopeBaselines.gs, 59_TeamImport.gs, 60_Exercise.gs, 63_ExerciseRules.gs, 64_ExerciseTracking.gs, 65_Actuals.gs.
  */
@@ -47,7 +47,7 @@ function A9_MIGRER_ROLES_SIMULATION() { return migrerRoles_(true); }
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.21.1';
+var PPM_VERSION = '0.21.2';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -330,7 +330,7 @@ var SCHEMA = {
     book: 'data',
     cols: ['id', 'code', 'name', 'program_id', 'manager_resource_id', 'status', 'holiday_country',
       'start_date', 'end_date', 'active_baseline_id', 'drive_folder_id', 'calendar_id', 'cpn', 'cpn_label',
-      'news_on', 'news_keywords', 'news_journal_id'],
+      'news_on', 'news_keywords', 'news_journal_id', 'news_calendar_id'],
     required: ['code', 'name'],
     enums: { status: ['Préparation', 'Actif', 'En pause', 'Clos'], holiday_country: COUNTRIES }
   },
@@ -10299,10 +10299,10 @@ var DEMO_EXPECTED = [['STR', 100000], ['AER', 20000], ['ESS', 80000], ['ESSB', 3
  *     aux membres), carte dans l'Overview, section dans le récapitulatif du matin.
  *  D. Actions : lues sans IA dans les « prochaines étapes » nominatives, proposées à chaque personne qui les accepte,
  *     les conteste ou les déclare faites.
- *  E. Repères : mots du titre qui rattachent une réunion à un projet (réglés par projet).
- *  F. Collecteur pilote : lit l'agenda du compte qui exécute le script (la spécification prévoit de commencer par le chef
- *     de projet), deux fois par jour. Une réunion est retenue si au moins deux membres du projet y sont invités ou si son titre
- *     contient un repère ; en cas d'égalité entre projets elle va dans la liste « à trier ». Les événements privés ne sont jamais lus.
+ *  E. Repères : mots du titre qui rattachent une réunion à un projet (0.12 : réglés par projet ; plus utilisés par la collecte depuis la 0.21.2).
+ *  F. Collecteur (0.21.2) : chaque projet a son AGENDA Google (créé par le compte qui exécute l'outil, lisible par tout le domaine) ; les personnes
+ *     l'invitent à leurs réunions et le collecteur lit ces agendas, deux fois par jour. Toute réunion de l'agenda d'un projet est celle de ce projet :
+ *     ni repère de titre, ni invitation de l'administrateur nécessaires. Les événements privés ne sont jamais lus.
  *
  * Fonctions de calcul pures (testées sans service Google) : newsNorm_, newsFindDate_, newsParseNotes_, newsParseActionLine_,
  * newsMatchProject_, newsValidateDigest_, newsPrompt_, newsJournalLines_.
@@ -10435,7 +10435,7 @@ defineAction('news.get', function (p, ctx) {
   var digest = repoList('NewsDigest', function (d) { return d.project_id === project.id; }).sort(function (a, b) { return String(b.digest_date).localeCompare(String(a.digest_date)) || String(b.created_at || '').localeCompare(String(a.created_at || '')); })[0] || null;
   var out = {
     access: access, me: ctx.resourceId || '',
-    project: { id: project.id, code: project.code, name: project.name, version: project.version, news_on: isTrue(project.news_on), keywords: String(project.news_keywords || ''),
+    project: { id: project.id, code: project.code, name: project.name, version: project.version, news_on: isTrue(project.news_on), keywords: String(project.news_keywords || ''), calendar_id: String(project.news_calendar_id || ''),
       journal_url: project.news_journal_id ? 'https://docs.google.com/document/d/' + project.news_journal_id + '/edit' : '', last_collect: getProp(PROP.NEWS_LAST, '') },
     meetings: meetings.map(function (m) { var v = newsMeetingView_(m, byMeeting[m.id] || []); v.action_list = (byMeeting[m.id] || []).map(function (a) { return newsActionView_(a, names, itemsById); }); return v; }),
     actions: allActions.filter(function (a) { return NEWS_OPEN.indexOf(a.status) >= 0; })
@@ -10558,11 +10558,39 @@ defineAction('news.triage.drop', function (p, ctx) {
 defineAction('news.settings.set', function (p, ctx) {
   var project = mustGet('Project', requireParam(p, 'projectId'));
   newsMustManage_(ctx, project);
-  var words = String(p.keywords || '').split(/[,;\n]+/).map(function (k) { return k.trim(); }).filter(Boolean);
-  if (words.length > 10) throw new PpmError('VALIDATION', 'Dix repères au plus par projet.');
-  if (words.some(function (k) { return k.length > 40; })) throw new PpmError('VALIDATION', 'Un repère fait 40 caractères au plus.');
-  var upd = repoUpdate('Project', project.id, { news_on: !!p.enabled, news_keywords: words.join(', ') }, null, ctx.actx);
-  return { enabled: isTrue(upd.news_on), keywords: upd.news_keywords };
+  var vals = { news_on: !!p.enabled };
+  if (p.keywords !== undefined) {   // les repères ne servent plus à la collecte (0.21.2) ; réglage gardé pour les appels existants
+    var words = String(p.keywords || '').split(/[,;\n]+/).map(function (k) { return k.trim(); }).filter(Boolean);
+    if (words.length > 10) throw new PpmError('VALIDATION', 'Dix repères au plus par projet.');
+    if (words.some(function (k) { return k.length > 40; })) throw new PpmError('VALIDATION', 'Un repère fait 40 caractères au plus.');
+    vals.news_keywords = words.join(', ');
+  }
+  var upd = repoUpdate('Project', project.id, vals, null, ctx.actx);
+  return { enabled: isTrue(upd.news_on), keywords: upd.news_keywords, calendar_id: upd.news_calendar_id || '' };
+});
+
+/** L'agenda du projet : créé par l'outil (propriété du compte qui l'exécute, lisible par tout le domaine) ; les personnes en invitent l'adresse à leurs réunions. */
+defineAction('news.calendar.create', function (p, ctx) {
+  var project = mustGet('Project', requireParam(p, 'projectId'));
+  newsMustManage_(ctx, project);
+  if (!isBlank(project.news_calendar_id)) throw new PpmError('VALIDATION', 'Ce projet a déjà un agenda : ' + project.news_calendar_id + '.');
+  var ad = newsAdapter_();
+  if (!ad.available || !ad.createCalendar) throw new PpmError('VALIDATION', 'Le service Calendar n’est pas disponible : activez-le dans le projet Apps Script, ou rattachez un agenda existant.');
+  var made = ad.createCalendar(project.code + ' — ' + project.name, 'Réunions du projet ' + project.code + ' (collectées par PPM). Invitez cette adresse à vos réunions pour qu’elles apparaissent dans le suivi du projet.');
+  var upd = repoUpdate('Project', project.id, { news_calendar_id: made.id }, null, ctx.actx);
+  return { calendar_id: upd.news_calendar_id, shared_to_domain: !!made.shared };
+});
+
+/** Rattache un agenda existant (adresse de l'agenda) au projet, ou le détache avec une adresse vide. */
+defineAction('news.calendar.set', function (p, ctx) {
+  var project = mustGet('Project', requireParam(p, 'projectId'));
+  newsMustManage_(ctx, project);
+  var id = String(p.calendarId || '').trim().toLowerCase();
+  if (id && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(id)) throw new PpmError('VALIDATION', 'L’adresse de l’agenda n’est pas valide (elle ressemble à une adresse e-mail).');
+  var other = id ? repoList('Project', function (x) { return x.id !== project.id && String(x.news_calendar_id || '').toLowerCase() === id; })[0] : null;
+  if (other) throw new PpmError('VALIDATION', 'Cet agenda est déjà celui du projet ' + other.code + '.');
+  var upd = repoUpdate('Project', project.id, { news_calendar_id: id }, null, ctx.actx);
+  return { calendar_id: upd.news_calendar_id || '' };
 });
 
 /** Les lignes du Journal : fiche du projet, puis chaque réunion de la plus récente à la plus ancienne. */
@@ -11023,10 +11051,11 @@ function realNews_() {
   var tz = function () { return typeof Session !== 'undefined' && Session.getScriptTimeZone ? Session.getScriptTimeZone() : 'Europe/Paris'; };
   return {
     available: !!hasCal,
-    listEvents: function (fromIso, toIso) {
+    /** Les événements d'UN agenda (celui d'un projet) : `calendarId` est l'adresse de l'agenda. */
+    listEvents: function (calendarId, fromIso, toIso) {
       var out = [], token = '';
       do {
-        var res = Calendar.Events.list('primary', { timeMin: fromIso, timeMax: toIso, singleEvents: true, orderBy: 'startTime', maxResults: 250, showDeleted: false, supportsAttachments: true, pageToken: token || undefined });
+        var res = Calendar.Events.list(calendarId, { timeMin: fromIso, timeMax: toIso, singleEvents: true, orderBy: 'startTime', maxResults: 250, showDeleted: false, supportsAttachments: true, pageToken: token || undefined });
         (res.items || []).forEach(function (e) {
           var dt = (e.start && (e.start.dateTime || e.start.date)) || '';
           out.push({
@@ -11040,6 +11069,14 @@ function realNews_() {
       } while (token);
       return out;
     },
+    /** Crée l'agenda d'un projet (propriété du compte qui exécute l'outil) et le rend lisible par tout le domaine ; rend son adresse. */
+    createCalendar: hasCal && Calendar.Calendars ? function (name, description) {
+      var cal = Calendar.Calendars.insert({ summary: name, description: description || '', timeZone: tz() });
+      var domain = '';
+      try { domain = String(Session.getEffectiveUser().getEmail()).split('@')[1] || ''; } catch (e) { domain = ''; }
+      if (domain) { try { Calendar.Acl.insert({ role: 'reader', scope: { type: 'domain', value: domain } }, cal.id); } catch (e) { /* le partage au domaine reste à faire à la main */ } }
+      return { id: cal.id, shared: !!domain };
+    } : null,
     readDoc: hasDoc ? function (fileId) { return String(DocumentApp.openById(fileId).getBody().getText()).slice(0, NEWS_DOC_MAX); } : null,
     upsertJournal: hasDoc ? function (title, lines, docId, folderId) {
       var doc = null, created = false;
@@ -11067,59 +11104,57 @@ function newsLooksLikeNotes_(att) {
 }
 
 /**
- * Une passe de collecte : les réunions de la fenêtre (depuis la dernière passe, un jour au plus par défaut) de l'agenda du compte du script. Une réunion n'est retenue que si son titre
- * contient un repère d'un projet (« Repères et journal du projet »).
- * Reprenable : une réunion déjà créée (même identifiant d'événement) n'est jamais recréée.
+ * Une passe de collecte : pour chaque projet qui a activé le fil ET qui a son agenda (0.21.2), les réunions de cet agenda dans la fenêtre (depuis la dernière passe, un jour au plus par défaut).
+ * Toute réunion de l'agenda d'un projet appartient à ce projet : il n'y a plus de repère de titre ni de réunion « à trier ». Les personnes invitent simplement l'agenda du projet à leur réunion.
+ * Reprenable : une réunion déjà créée pour ce projet (même identifiant d'événement dans son agenda) n'est jamais recréée.
  */
 function newsCollect_(opts) {
   opts = opts || {};
   var ad = newsAdapter_();
   var res = { created: 0, toTriage: 0, skippedPrivate: 0, ignored: 0, notes: 0, errors: 0, projects: 0, partial: false };
   if (!ad.available) { res.skipped = 'L’agenda n’est pas accessible (service Calendar).'; return res; }
-  var projects = repoList('Project', function (p) { return isTrue(p.news_on) && p.status !== 'Clos'; });
+  var all = repoList('Project', function (p) { return isTrue(p.news_on) && p.status !== 'Clos'; });
+  if (!all.length) { res.skipped = 'Aucun projet n’a activé le fil d’actualités.'; return res; }
+  var projects = all.filter(function (p) { return !isBlank(p.news_calendar_id); });
   res.projects = projects.length;
-  if (!projects.length) { res.skipped = 'Aucun projet n’a activé le fil d’actualités.'; return res; }
+  if (!projects.length) { res.skipped = 'Aucun projet n’a d’agenda : créez-le dans les réglages du fil du projet.'; return res; }
   var nowMsV = opts.nowMs || nowMs();
   var last = getProp(PROP.NEWS_LAST, '');
   var fromMs = last ? Math.max(Date.parse(last), nowMsV - 3 * 86400000) : nowMsV - 86400000;
   var base = newsBase_(), byEmail = {};
   base.resources.forEach(function (r) { if (!isBlank(r.email)) byEmail[String(r.email).toLowerCase()] = r; });
-  var specs = projects.map(function (pr) {
-    var ids = newsProjectMembers_(pr, base);   // les membres servent à retrouver le responsable d'une action, plus à rattacher la réunion
-    return { id: pr.id, keywords: newsKeywords_(pr), memberIds: ids, project: pr };
-  });
-  var specById = {}; specs.forEach(function (s) { specById[s.id] = s; });
-  var known = {}; repoList('Meeting', function (m) { return !isBlank(m.event_id); }).forEach(function (m) { known[m.event_id] = true; });
+  var known = {}; repoList('Meeting', function (m) { return !isBlank(m.event_id); }).forEach(function (m) { known[m.project_id + '|' + m.event_id] = true; });
   var deadline = nowMsV + (opts.budgetMs || NEWS_COLLECT_MS);
-  var events = ad.listEvents(new Date(fromMs).toISOString(), new Date(nowMsV).toISOString());
   var actx = JOB_ACTX, touched = {};
-  for (var i = 0; i < events.length; i++) {
-    if (nowMs() > deadline) { res.partial = true; break; }
-    var ev = events[i];
-    if (ev.cancelled) { res.ignored++; continue; }
-    if (ev.isPrivate) { res.skippedPrivate++; continue; }
-    var key = 'ev:' + ev.id;
-    if (known[ev.id] || known[key]) continue;
-    var match = newsMatchProject_({ title: ev.title }, specs);   // le repère du titre, rien d'autre
-    if (match.status === 'none') { res.ignored++; continue; }
-    var spec = match.status === 'ok' ? specById[match.projectId] : specById[match.candidates[0]];
-    var people = newsPeople_(base, spec.memberIds), texts = [], docUrl = '';
-    (ev.attachments || []).filter(newsLooksLikeNotes_).slice(0, 3).forEach(function (att) {
-      if (!ad.readDoc) return;
-      try { texts.push(ad.readDoc(att.fileId)); docUrl = docUrl || att.url; res.notes++; } catch (e) { res.errors++; }
-    });
-    var parsed = newsParseNotes_(texts.join('\n\n'), ev.date, people);
-    var names = ev.attendees.map(function (e) { return byEmail[e] ? byEmail[e].name : e.split('@')[0]; });
-    var mt = repoInsert('Meeting', {
-      project_id: match.status === 'ok' ? match.projectId : '', source: 'Agenda', event_id: ev.id, held_on: ev.date, title: newsClip_(ev.title, 140),
-      participants: newsClip_(names.join(', '), 400), doc_url: docUrl, attachments: newsAttachmentsJson_(ev.attachments), summary: parsed.summary, decisions: parsed.decisions.join('\n'),
-      status: match.status === 'ok' ? 'Publiée' : 'À trier', candidates: match.status === 'tie' ? match.candidates.join(',') : '', dedupe_key: key, added_by: 'collecteur'
-    }, actx);
-    known[ev.id] = true;
-    newsInsertActions_(mt, match.status === 'ok' ? match.projectId : '', parsed.actions, actx);
-    if (match.status === 'ok') { res.created++; touched[match.projectId] = true; } else res.toTriage++;
+  for (var pi = 0; pi < projects.length && !res.partial; pi++) {
+    var pr = projects[pi], events;
+    try { events = ad.listEvents(pr.news_calendar_id, new Date(fromMs).toISOString(), new Date(nowMsV).toISOString()); }
+    catch (e) { res.errors++; res.failed = (res.failed || []).concat(pr.code); continue; }   // l'agenda d'un projet illisible n'arrête pas les autres
+    var memberIds = newsProjectMembers_(pr, base), people = newsPeople_(base, memberIds);
+    for (var i = 0; i < events.length; i++) {
+      if (nowMs() > deadline) { res.partial = true; break; }
+      var ev = events[i];
+      if (ev.cancelled) { res.ignored++; continue; }
+      if (ev.isPrivate) { res.skippedPrivate++; continue; }
+      if (known[pr.id + '|' + ev.id]) continue;
+      var texts = [], docUrl = '';
+      (ev.attachments || []).filter(newsLooksLikeNotes_).slice(0, 3).forEach(function (att) {
+        if (!ad.readDoc) return;
+        try { texts.push(ad.readDoc(att.fileId)); docUrl = docUrl || att.url; res.notes++; } catch (e) { res.errors++; }
+      });
+      var parsed = newsParseNotes_(texts.join('\n\n'), ev.date, people);
+      var names = ev.attendees.map(function (e) { return byEmail[e] ? byEmail[e].name : e.split('@')[0]; });
+      var mt = repoInsert('Meeting', {
+        project_id: pr.id, source: 'Agenda', event_id: ev.id, held_on: ev.date, title: newsClip_(ev.title, 140),
+        participants: newsClip_(names.join(', '), 400), doc_url: docUrl, attachments: newsAttachmentsJson_(ev.attachments), summary: parsed.summary, decisions: parsed.decisions.join('\n'),
+        status: 'Publiée', candidates: '', dedupe_key: 'cal:' + pr.id + ':' + ev.id, added_by: 'collecteur'
+      }, actx);
+      known[pr.id + '|' + ev.id] = true;
+      newsInsertActions_(mt, pr.id, parsed.actions, actx);
+      res.created++; touched[pr.id] = true;
+    }
   }
-  if (!res.partial) setProp(PROP.NEWS_LAST, new Date(nowMsV).toISOString());
+  if (!res.partial && !res.failed) setProp(PROP.NEWS_LAST, new Date(nowMsV).toISOString());
   res.touched = Object.keys(touched);
   return res;
 }
@@ -11137,7 +11172,7 @@ function newsCollectRun() {
       }
     });
   }
-  var msg = r.skipped ? r.skipped : r.created + ' réunion(s) retenue(s), ' + r.toTriage + ' à trier, ' + r.notes + ' note(s) lue(s), ' + journals + ' journal(aux) mis à jour' + (r.partial ? ' (collecte partielle : reprise au prochain passage)' : '') + '.';
+  var msg = r.skipped ? r.skipped : (r.failed ? 'Agenda illisible pour ' + r.failed.join(', ') + ' ; ' : '') + r.created + ' réunion(s) retenue(s), ' + r.toTriage + ' à trier, ' + r.notes + ' note(s) lue(s), ' + journals + ' journal(aux) mis à jour' + (r.partial ? ' (collecte partielle : reprise au prochain passage)' : '') + '.';
   setProp(PROP.LAST_NEWS, JSON.stringify({ at: nowIso(), created: r.created || 0, toTriage: r.toTriage || 0, journals: journals }));
   console.log('[actualités] ' + msg);
   return msg;

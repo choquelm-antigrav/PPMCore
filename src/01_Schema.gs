@@ -27,7 +27,7 @@ var SCHEMA = {
     book: 'data',
     cols: ['id', 'code', 'name', 'program_id', 'manager_resource_id', 'status', 'holiday_country',
       'start_date', 'end_date', 'active_baseline_id', 'drive_folder_id', 'calendar_id', 'cpn', 'cpn_label',
-      'news_on', 'news_keywords', 'news_journal_id'],
+      'news_on', 'news_keywords', 'news_journal_id', 'news_calendar_id'],
     required: ['code', 'name'],
     enums: { status: ['Préparation', 'Actif', 'En pause', 'Clos'], holiday_country: COUNTRIES }
   },

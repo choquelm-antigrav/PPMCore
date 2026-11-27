@@ -103,7 +103,7 @@ function openPage(user, file, view) {
   await p.until(() => p.$('toggle-add').getAttribute('aria-expanded') === 'true');
   check(sec('add').open && !sec('actions').open, 'le choix de la personne est gardé quand la page se recharge');
   p.click(p.$('toggle-add'));
-  check(/Sans repère dans le titre, une réunion n’est jamais collectée/.test(p.text('panel-settings')) && /une réunion n’est collectée que si son titre contient un de ces mots/.test(p.text('panel-settings')) && !/au moins deux membres/.test(p.text('panel-settings')), 'la zone des repères dit la règle : pas de repère dans le titre, pas de collecte, même avec des membres invités');
+  check(/Pas encore d’agenda/.test(p.text('cal-note')) && !!p.$('cal-create') && !!p.$('cal-attach') && !p.$('set-words') && /toute réunion de cet agenda est celle du projet/.test(p.text('panel-settings')), 'les réglages parlent d’agenda : pas encore d’agenda, bouton de création, plus de repères de titre');
 
   // ---------------------------------------------------------------- réunions du fil : repliées, dépliées au clic, avec leurs pièces jointes
   c.repoInsert('Meeting', { project_id: w.p1.id, source: 'Agenda', event_id: 'evx', held_on: '2026-10-12', title: 'Revue structure P1', participants: 'Carla, Mia', doc_url: 'https://docs.test/cr', summary: 'On a validé le plan de calcul de la structure.',
@@ -210,10 +210,19 @@ function openPage(user, file, view) {
 
   // ---------------------------------------------------------------- repères et journal
   p.$('set-on').checked = true;
-  p.$('set-words').value = 'P1, Nacelle';
   p.click(p.$('set-save'));
   await p.until(() => /Réglages enregistrés/.test(p.text('toast')));
-  check(c.repoList('Project').find((x) => x.id === w.p1.id).news_on === true && /Nacelle/.test(c.repoList('Project').find((x) => x.id === w.p1.id).news_keywords), 'repères enregistrés dans le projet');
+  check(c.repoList('Project').find((x) => x.id === w.p1.id).news_on === true, 'collecte activée pour le projet');
+  c.NEWS_ADAPTER = { available: true, createCalendar: () => ({ id: 'cal-p1@group.calendar.google.com', shared: true }) };
+  await p.until(() => p.$('cal-create'));
+  p.click(p.$('cal-create'));
+  await p.until(() => p.$('cal-id'));
+  check(p.text('cal-id') === 'cal-p1@group.calendar.google.com' && /Invitez cette adresse/.test(p.text('cal-note')) && c.repoList('Project').find((x) => x.id === w.p1.id).news_calendar_id === 'cal-p1@group.calendar.google.com' && /agenda rattaché/.test(p.text('sum-settings')), 'l’agenda est créé : son adresse s’affiche avec la consigne (l’inviter aux réunions), enregistrée dans le projet');
+  p.click(p.$('cal-detach'));
+  await p.until(() => p.$('cal-create'));
+  p.$('cal-existing').value = 'Autre@Entreprise.com'; p.click(p.$('cal-attach'));
+  await p.until(() => p.$('cal-id'));
+  check(p.text('cal-id') === 'autre@entreprise.com', 'détacher puis rattacher un agenda existant : adresse normalisée');
   check(/Pas encore créé/.test(p.text('journal-note')), 'journal : pas encore créé');
   c.NEWS_ADAPTER = { available: true, upsertJournal: () => ({ id: 'jr1', url: 'https://docs.google.com/document/d/jr1/edit', created: true }) };
   p.click(p.$('journal-btn'));

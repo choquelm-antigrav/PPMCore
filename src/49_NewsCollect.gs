@@ -11,10 +11,11 @@ function realNews_() {
   var tz = function () { return typeof Session !== 'undefined' && Session.getScriptTimeZone ? Session.getScriptTimeZone() : 'Europe/Paris'; };
   return {
     available: !!hasCal,
-    listEvents: function (fromIso, toIso) {
+    /** Les événements d'UN agenda (celui d'un projet) : `calendarId` est l'adresse de l'agenda. */
+    listEvents: function (calendarId, fromIso, toIso) {
       var out = [], token = '';
       do {
-        var res = Calendar.Events.list('primary', { timeMin: fromIso, timeMax: toIso, singleEvents: true, orderBy: 'startTime', maxResults: 250, showDeleted: false, supportsAttachments: true, pageToken: token || undefined });
+        var res = Calendar.Events.list(calendarId, { timeMin: fromIso, timeMax: toIso, singleEvents: true, orderBy: 'startTime', maxResults: 250, showDeleted: false, supportsAttachments: true, pageToken: token || undefined });
         (res.items || []).forEach(function (e) {
           var dt = (e.start && (e.start.dateTime || e.start.date)) || '';
           out.push({
@@ -28,6 +29,14 @@ function realNews_() {
       } while (token);
       return out;
     },
+    /** Crée l'agenda d'un projet (propriété du compte qui exécute l'outil) et le rend lisible par tout le domaine ; rend son adresse. */
+    createCalendar: hasCal && Calendar.Calendars ? function (name, description) {
+      var cal = Calendar.Calendars.insert({ summary: name, description: description || '', timeZone: tz() });
+      var domain = '';
+      try { domain = String(Session.getEffectiveUser().getEmail()).split('@')[1] || ''; } catch (e) { domain = ''; }
+      if (domain) { try { Calendar.Acl.insert({ role: 'reader', scope: { type: 'domain', value: domain } }, cal.id); } catch (e) { /* le partage au domaine reste à faire à la main */ } }
+      return { id: cal.id, shared: !!domain };
+    } : null,
     readDoc: hasDoc ? function (fileId) { return String(DocumentApp.openById(fileId).getBody().getText()).slice(0, NEWS_DOC_MAX); } : null,
     upsertJournal: hasDoc ? function (title, lines, docId, folderId) {
       var doc = null, created = false;
@@ -55,59 +64,57 @@ function newsLooksLikeNotes_(att) {
 }
 
 /**
- * Une passe de collecte : les réunions de la fenêtre (depuis la dernière passe, un jour au plus par défaut) de l'agenda du compte du script. Une réunion n'est retenue que si son titre
- * contient un repère d'un projet (« Repères et journal du projet »).
- * Reprenable : une réunion déjà créée (même identifiant d'événement) n'est jamais recréée.
+ * Une passe de collecte : pour chaque projet qui a activé le fil ET qui a son agenda (0.21.2), les réunions de cet agenda dans la fenêtre (depuis la dernière passe, un jour au plus par défaut).
+ * Toute réunion de l'agenda d'un projet appartient à ce projet : il n'y a plus de repère de titre ni de réunion « à trier ». Les personnes invitent simplement l'agenda du projet à leur réunion.
+ * Reprenable : une réunion déjà créée pour ce projet (même identifiant d'événement dans son agenda) n'est jamais recréée.
  */
 function newsCollect_(opts) {
   opts = opts || {};
   var ad = newsAdapter_();
   var res = { created: 0, toTriage: 0, skippedPrivate: 0, ignored: 0, notes: 0, errors: 0, projects: 0, partial: false };
   if (!ad.available) { res.skipped = 'L’agenda n’est pas accessible (service Calendar).'; return res; }
-  var projects = repoList('Project', function (p) { return isTrue(p.news_on) && p.status !== 'Clos'; });
+  var all = repoList('Project', function (p) { return isTrue(p.news_on) && p.status !== 'Clos'; });
+  if (!all.length) { res.skipped = 'Aucun projet n’a activé le fil d’actualités.'; return res; }
+  var projects = all.filter(function (p) { return !isBlank(p.news_calendar_id); });
   res.projects = projects.length;
-  if (!projects.length) { res.skipped = 'Aucun projet n’a activé le fil d’actualités.'; return res; }
+  if (!projects.length) { res.skipped = 'Aucun projet n’a d’agenda : créez-le dans les réglages du fil du projet.'; return res; }
   var nowMsV = opts.nowMs || nowMs();
   var last = getProp(PROP.NEWS_LAST, '');
   var fromMs = last ? Math.max(Date.parse(last), nowMsV - 3 * 86400000) : nowMsV - 86400000;
   var base = newsBase_(), byEmail = {};
   base.resources.forEach(function (r) { if (!isBlank(r.email)) byEmail[String(r.email).toLowerCase()] = r; });
-  var specs = projects.map(function (pr) {
-    var ids = newsProjectMembers_(pr, base);   // les membres servent à retrouver le responsable d'une action, plus à rattacher la réunion
-    return { id: pr.id, keywords: newsKeywords_(pr), memberIds: ids, project: pr };
-  });
-  var specById = {}; specs.forEach(function (s) { specById[s.id] = s; });
-  var known = {}; repoList('Meeting', function (m) { return !isBlank(m.event_id); }).forEach(function (m) { known[m.event_id] = true; });
+  var known = {}; repoList('Meeting', function (m) { return !isBlank(m.event_id); }).forEach(function (m) { known[m.project_id + '|' + m.event_id] = true; });
   var deadline = nowMsV + (opts.budgetMs || NEWS_COLLECT_MS);
-  var events = ad.listEvents(new Date(fromMs).toISOString(), new Date(nowMsV).toISOString());
   var actx = JOB_ACTX, touched = {};
-  for (var i = 0; i < events.length; i++) {
-    if (nowMs() > deadline) { res.partial = true; break; }
-    var ev = events[i];
-    if (ev.cancelled) { res.ignored++; continue; }
-    if (ev.isPrivate) { res.skippedPrivate++; continue; }
-    var key = 'ev:' + ev.id;
-    if (known[ev.id] || known[key]) continue;
-    var match = newsMatchProject_({ title: ev.title }, specs);   // le repère du titre, rien d'autre
-    if (match.status === 'none') { res.ignored++; continue; }
-    var spec = match.status === 'ok' ? specById[match.projectId] : specById[match.candidates[0]];
-    var people = newsPeople_(base, spec.memberIds), texts = [], docUrl = '';
-    (ev.attachments || []).filter(newsLooksLikeNotes_).slice(0, 3).forEach(function (att) {
-      if (!ad.readDoc) return;
-      try { texts.push(ad.readDoc(att.fileId)); docUrl = docUrl || att.url; res.notes++; } catch (e) { res.errors++; }
-    });
-    var parsed = newsParseNotes_(texts.join('\n\n'), ev.date, people);
-    var names = ev.attendees.map(function (e) { return byEmail[e] ? byEmail[e].name : e.split('@')[0]; });
-    var mt = repoInsert('Meeting', {
-      project_id: match.status === 'ok' ? match.projectId : '', source: 'Agenda', event_id: ev.id, held_on: ev.date, title: newsClip_(ev.title, 140),
-      participants: newsClip_(names.join(', '), 400), doc_url: docUrl, attachments: newsAttachmentsJson_(ev.attachments), summary: parsed.summary, decisions: parsed.decisions.join('\n'),
-      status: match.status === 'ok' ? 'Publiée' : 'À trier', candidates: match.status === 'tie' ? match.candidates.join(',') : '', dedupe_key: key, added_by: 'collecteur'
-    }, actx);
-    known[ev.id] = true;
-    newsInsertActions_(mt, match.status === 'ok' ? match.projectId : '', parsed.actions, actx);
-    if (match.status === 'ok') { res.created++; touched[match.projectId] = true; } else res.toTriage++;
+  for (var pi = 0; pi < projects.length && !res.partial; pi++) {
+    var pr = projects[pi], events;
+    try { events = ad.listEvents(pr.news_calendar_id, new Date(fromMs).toISOString(), new Date(nowMsV).toISOString()); }
+    catch (e) { res.errors++; res.failed = (res.failed || []).concat(pr.code); continue; }   // l'agenda d'un projet illisible n'arrête pas les autres
+    var memberIds = newsProjectMembers_(pr, base), people = newsPeople_(base, memberIds);
+    for (var i = 0; i < events.length; i++) {
+      if (nowMs() > deadline) { res.partial = true; break; }
+      var ev = events[i];
+      if (ev.cancelled) { res.ignored++; continue; }
+      if (ev.isPrivate) { res.skippedPrivate++; continue; }
+      if (known[pr.id + '|' + ev.id]) continue;
+      var texts = [], docUrl = '';
+      (ev.attachments || []).filter(newsLooksLikeNotes_).slice(0, 3).forEach(function (att) {
+        if (!ad.readDoc) return;
+        try { texts.push(ad.readDoc(att.fileId)); docUrl = docUrl || att.url; res.notes++; } catch (e) { res.errors++; }
+      });
+      var parsed = newsParseNotes_(texts.join('\n\n'), ev.date, people);
+      var names = ev.attendees.map(function (e) { return byEmail[e] ? byEmail[e].name : e.split('@')[0]; });
+      var mt = repoInsert('Meeting', {
+        project_id: pr.id, source: 'Agenda', event_id: ev.id, held_on: ev.date, title: newsClip_(ev.title, 140),
+        participants: newsClip_(names.join(', '), 400), doc_url: docUrl, attachments: newsAttachmentsJson_(ev.attachments), summary: parsed.summary, decisions: parsed.decisions.join('\n'),
+        status: 'Publiée', candidates: '', dedupe_key: 'cal:' + pr.id + ':' + ev.id, added_by: 'collecteur'
+      }, actx);
+      known[pr.id + '|' + ev.id] = true;
+      newsInsertActions_(mt, pr.id, parsed.actions, actx);
+      res.created++; touched[pr.id] = true;
+    }
   }
-  if (!res.partial) setProp(PROP.NEWS_LAST, new Date(nowMsV).toISOString());
+  if (!res.partial && !res.failed) setProp(PROP.NEWS_LAST, new Date(nowMsV).toISOString());
   res.touched = Object.keys(touched);
   return res;
 }
@@ -125,7 +132,7 @@ function newsCollectRun() {
       }
     });
   }
-  var msg = r.skipped ? r.skipped : r.created + ' réunion(s) retenue(s), ' + r.toTriage + ' à trier, ' + r.notes + ' note(s) lue(s), ' + journals + ' journal(aux) mis à jour' + (r.partial ? ' (collecte partielle : reprise au prochain passage)' : '') + '.';
+  var msg = r.skipped ? r.skipped : (r.failed ? 'Agenda illisible pour ' + r.failed.join(', ') + ' ; ' : '') + r.created + ' réunion(s) retenue(s), ' + r.toTriage + ' à trier, ' + r.notes + ' note(s) lue(s), ' + journals + ' journal(aux) mis à jour' + (r.partial ? ' (collecte partielle : reprise au prochain passage)' : '') + '.';
   setProp(PROP.LAST_NEWS, JSON.stringify({ at: nowIso(), created: r.created || 0, toTriage: r.toTriage || 0, journals: journals }));
   console.log('[actualités] ' + msg);
   return msg;

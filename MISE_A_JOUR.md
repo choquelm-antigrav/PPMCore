@@ -122,3 +122,8 @@ Pour un usage avec une vraie équipe, **déployez depuis le compte Workspace de 
 4. **Versions** : figer une baseline pour conserver une version du plan (matrice et dotations). Les baselines antérieures n'ont pas les dotations : l'écart le dit.
 5. L'import et l'export de l'exercice par Google Sheet et l'import du réalisé sont retirés ; l'import de projets (page Administration) ne porte plus d'enveloppes.
 
+## Passer à la 0.21.2
+
+1. Remplacez le code, puis relancez `A1_INSTALLER_PPM` (colonne `news_calendar_id` du projet).
+2. Page Actualités, réglages de chaque projet : cochez la collecte, puis **Créer l'agenda du projet**. Prévenez les équipes d'**inviter l'adresse de cet agenda** à leurs réunions.
+3. Vérifiez avec une vraie réunion : l'agenda du projet la contient-il, et la collecte de 1 h ou 13 h la rattache-t-elle ?
