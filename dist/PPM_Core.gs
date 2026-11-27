@@ -1,5 +1,5 @@
 /**
- * PPM Core 0.21.0 — fichier unique à installer (fabriqué par tools/build.js, empreinte 5693e034496f).
+ * PPM Core 0.21.1 — fichier unique à installer (fabriqué par tools/build.js, empreinte 9c70ce238024).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
  * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs, 53_Roles.gs, 54_Validation.gs, 55_Plan.gs, 56_Import.gs, 57_Rights.gs, 58_ScopeBaselines.gs, 59_TeamImport.gs, 60_Exercise.gs, 63_ExerciseRules.gs, 64_ExerciseTracking.gs, 65_Actuals.gs.
  */
@@ -47,7 +47,7 @@ function A9_MIGRER_ROLES_SIMULATION() { return migrerRoles_(true); }
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.21.0';
+var PPM_VERSION = '0.21.1';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -12051,7 +12051,7 @@ function planExercise_(p) {
  * Le plan budgétaire d'un projet pour un exercice. `rows` : les workpackages (totaux = sommes) et leurs livrables, dans l'ordre du découpage, chacun avec ses cellules par équipe (`cells`), son
  * forfait externe, son total. `columns` : les équipes qui ont une part. `summary` : dotation · plan · écart par équipe (qui lit l'exercice). Les livrables hors de la vue de la personne sont absents.
  */
-function planView_(ctx, project, ex, version) {
+function planView_(ctx, project, ex, version, reference) {
   etpReset_();
   var access = budgetAccess_(ctx, project.id);
   if (!access.budget) throw new PpmError('FORBIDDEN', 'Le budget est réservé aux responsables de budget du projet.');
@@ -12129,9 +12129,10 @@ function planView_(ctx, project, ex, version) {
   out.unassigned = D.snapshot ? [] : repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable' && isBlank(i.exercise_id) && canEditItem(i); })
     .map(function (i) { return { id: i.id, name: i.name, wp: i.wp_id && wpById[i.wp_id] ? wpById[i.wp_id].name : '' }; });
 
-  // l'évolution depuis la baseline active : ce que le plan valait quand on l'a figée, pour CET exercice
-  var bl = isBlank(project.active_baseline_id) ? null : repoGet('Baseline', project.active_baseline_id);
-  if (!D.snapshot && bl && bl.status === 'Active' && isBlank(bl.scope_type)) {
+  // l'évolution depuis la baseline de RÉFÉRENCE (celle que lit le suivi, 0.21.1) : ce que le plan valait quand on l'a figée, pour CET exercice.
+  // `reference` : undefined = les versions n'ont pas été lues (onglets d'exploitation légers) : on se rabat sur la baseline active ; false = aucune baseline validée : pas de comparaison.
+  var bl = reference === undefined ? (isBlank(project.active_baseline_id) ? null : repoGet('Baseline', project.active_baseline_id)) : (reference ? repoGet('Baseline', reference.id) : null);
+  if (!D.snapshot && bl && (reference ? true : bl.status === 'Active') && isBlank(bl.scope_type)) {
     var snap = loadBaselineSnapshot_(bl.id), exOfNow = {};
     repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable'; }).forEach(function (i) { exOfNow[i.id] = i.exercise_id || ''; });
     var inEx = function (it, id) { return ('exercise_id' in it ? it.exercise_id : exOfNow[id]) === ex.id; };
@@ -12169,7 +12170,7 @@ defineAction('budget.plan.get', function (p, ctx) {
   var project = mustGet('Project', requireParam(p, 'projectId')), ex = planExercise_(p);
   // sans version demandée : le brouillon, sans lire baselines ni journal (la page s'ouvre en peu d'appels) ; `version` ou `withVersions` : la version, et la liste des versions
   var rv = (isBlank(p.version) && !isTrue(p.withVersions)) ? null : resolveDecompVersion_(project, p.version);
-  var view = planView_(ctx, project, ex, rv ? rv.version : null);
+  var view = planView_(ctx, project, ex, rv ? rv.version : null, rv ? rv.reference || false : undefined);
   if (rv) Object.assign(view, planVersionsView_(ctx, project, rv));
   view.exercises = repoList('Exercise', function (x) { return !isTrue(x.deleted); }).map(exerciseView_).sort(function (a, b) { return b.year - a.year; });
   return view;

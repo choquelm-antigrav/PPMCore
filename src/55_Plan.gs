@@ -78,7 +78,7 @@ function planExercise_(p) {
  * Le plan budgétaire d'un projet pour un exercice. `rows` : les workpackages (totaux = sommes) et leurs livrables, dans l'ordre du découpage, chacun avec ses cellules par équipe (`cells`), son
  * forfait externe, son total. `columns` : les équipes qui ont une part. `summary` : dotation · plan · écart par équipe (qui lit l'exercice). Les livrables hors de la vue de la personne sont absents.
  */
-function planView_(ctx, project, ex, version) {
+function planView_(ctx, project, ex, version, reference) {
   etpReset_();
   var access = budgetAccess_(ctx, project.id);
   if (!access.budget) throw new PpmError('FORBIDDEN', 'Le budget est réservé aux responsables de budget du projet.');
@@ -156,9 +156,10 @@ function planView_(ctx, project, ex, version) {
   out.unassigned = D.snapshot ? [] : repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable' && isBlank(i.exercise_id) && canEditItem(i); })
     .map(function (i) { return { id: i.id, name: i.name, wp: i.wp_id && wpById[i.wp_id] ? wpById[i.wp_id].name : '' }; });
 
-  // l'évolution depuis la baseline active : ce que le plan valait quand on l'a figée, pour CET exercice
-  var bl = isBlank(project.active_baseline_id) ? null : repoGet('Baseline', project.active_baseline_id);
-  if (!D.snapshot && bl && bl.status === 'Active' && isBlank(bl.scope_type)) {
+  // l'évolution depuis la baseline de RÉFÉRENCE (celle que lit le suivi, 0.21.1) : ce que le plan valait quand on l'a figée, pour CET exercice.
+  // `reference` : undefined = les versions n'ont pas été lues (onglets d'exploitation légers) : on se rabat sur la baseline active ; false = aucune baseline validée : pas de comparaison.
+  var bl = reference === undefined ? (isBlank(project.active_baseline_id) ? null : repoGet('Baseline', project.active_baseline_id)) : (reference ? repoGet('Baseline', reference.id) : null);
+  if (!D.snapshot && bl && (reference ? true : bl.status === 'Active') && isBlank(bl.scope_type)) {
     var snap = loadBaselineSnapshot_(bl.id), exOfNow = {};
     repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable'; }).forEach(function (i) { exOfNow[i.id] = i.exercise_id || ''; });
     var inEx = function (it, id) { return ('exercise_id' in it ? it.exercise_id : exOfNow[id]) === ex.id; };
@@ -196,7 +197,7 @@ defineAction('budget.plan.get', function (p, ctx) {
   var project = mustGet('Project', requireParam(p, 'projectId')), ex = planExercise_(p);
   // sans version demandée : le brouillon, sans lire baselines ni journal (la page s'ouvre en peu d'appels) ; `version` ou `withVersions` : la version, et la liste des versions
   var rv = (isBlank(p.version) && !isTrue(p.withVersions)) ? null : resolveDecompVersion_(project, p.version);
-  var view = planView_(ctx, project, ex, rv ? rv.version : null);
+  var view = planView_(ctx, project, ex, rv ? rv.version : null, rv ? rv.reference || false : undefined);
   if (rv) Object.assign(view, planVersionsView_(ctx, project, rv));
   view.exercises = repoList('Exercise', function (x) { return !isTrue(x.deleted); }).map(exerciseView_).sort(function (a, b) { return b.year - a.year; });
   return view;
