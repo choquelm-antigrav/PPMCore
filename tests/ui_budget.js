@@ -160,6 +160,11 @@ function openPage(user, startTab) {
   p.set('dot-' + w.team.id, '4000'); p.input(p.$('dot-' + w.team.id));
   check(!p.$('plan-validate').disabled && p.$('plan-validate').classList.contains('primary') && p.$(cellId(w.a, w.team)).classList.contains('changed') && c.repoList('BudgetLine').length === 2 && c.repoList('TeamBudget').length === 0, 'brouillon : « Valider » devient bleu, les champs modifiés sont marqués, rien n’est enregistré');
   check(/2 080 €/.test(flat(itemRow(w.a).textContent)) && /7 280 €/.test(flat(p.doc.querySelector('#plan-table tr.total').textContent)) && c.repoList('BudgetLine').length === 2, 'totaux en direct : le total du livrable et le total des livrables suivent la saisie, avant « Valider »');
+  const dotLive = p.doc.querySelector('#exercise-table tr[data-team="' + w.team.id + '"]');
+  check(!!dotLive && /4 000 €/.test(flat(dotLive.textContent)) && /7 280 €/.test(flat(dotLive.textContent)) && /clash/.test(flat(dotLive.textContent)) && c.repoList('TeamBudget').length === 0, 'clash en direct : dotation 4 000 € saisie, plan 7 280 € : le tableau des dotations signale le clash avant « Valider »');
+  p.set('dot-' + w.team.id, '9000'); p.input(p.$('dot-' + w.team.id));
+  check(!/clash/.test(flat(p.doc.querySelector('#exercise-table tr[data-team="' + w.team.id + '"]').textContent)), 'dotation relevée à 9 000 € : le clash disparaît en direct');
+  p.set('dot-' + w.team.id, '4000'); p.input(p.$('dot-' + w.team.id));
   p.click(p.$('plan-validate'));
   await p.until(() => c.repoList('BudgetLine').some((l) => l.deliverable_id === w.a.id && Number(l.planned_amount) === 2080) && c.repoList('TeamBudget').length === 1);
   const tb0 = c.repoList('TeamBudget')[0];
