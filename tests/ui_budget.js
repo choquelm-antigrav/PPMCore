@@ -62,7 +62,7 @@ function openPage(user, startTab) {
   const change = (n) => n.dispatchEvent(new win.Event('change', { bubbles: true }));
   const text = (id) => flat(($(id) || { textContent: '' }).textContent);
   // plus d'onglets : les zones auxquelles on a droit sont affichées ensemble
-  const zones = () => ['bilan', 'po', 'enveloppe', 'budget'].filter((z) => { const n = doc.getElementById('zone-' + z); return n && !n.hidden && !doc.getElementById('panel-' + z).hidden; });
+  const zones = () => ['plan', 'track', 'actuals', 'bilan', 'po'].filter((z) => { const n = doc.getElementById('zone-' + z); return n && !n.hidden && !doc.getElementById('panel-' + z).hidden; });
   const submitGf = () => $('gf-form').dispatchEvent(new win.Event('submit', { cancelable: true }));
   const submitPo = () => $('po-form').dispatchEvent(new win.Event('submit', { cancelable: true }));
   const set = (id, v) => { $(id).value = v; };
@@ -78,9 +78,9 @@ function openPage(user, startTab) {
   let p = openPage(CP);
   await p.until(() => p.$('bal-table'));
   check(p.text('title') === 'P1 Projet 1' && p.text('cpn-chip') === 'CPN-100 — Nacelle moteur', 'titre et CPN du projet : ' + p.text('cpn-chip'));
-  check(JSON.stringify(p.zones()) === JSON.stringify(['bilan', 'po', 'enveloppe']), 'le chef de projet voit les trois zones du suivi : bilan, achats, décomposition du budget (plus de zone « Parts des livrables »)');
-  await p.until(() => p.$('po-add') && p.$('env-table'));
-  check(!!p.$('bal-table') && !!p.$('po-table') === false && !!p.doc.querySelector('.cost-btn'), 'bilan, achats et décomposition du budget (avec les boutons de coût des livrables) sont chargés ensemble sur la page');
+  check(JSON.stringify(p.zones()) === JSON.stringify(['plan', 'track', 'actuals', 'bilan', 'po']), 'le chef de projet voit les zones du suivi : plan budgétaire, suivi par équipe, réalisé, bilan, achats');
+  await p.until(() => p.$('po-add') && p.$('plan-table'));
+  check(!!p.$('bal-table') && !!p.$('po-table') === false && !!p.doc.querySelector('.cost-btn'), 'bilan, achats et plan budgétaire (avec les boutons des forfaits des livrables) sont chargés ensemble sur la page');
   const bal = [...p.doc.querySelectorAll('#bal-table tbody tr[data-cpn]')].map((r) => r.getAttribute('data-cpn'));
   check(JSON.stringify(bal) === JSON.stringify(['CPN-100', 'CPN-200']), 'une ligne par CPN : ' + bal.join(', '));
   check(/8 000 €/.test(p.text('bal-table')) && /5 200 €/.test(p.text('bal-table')), 'budget externe (8 000 €) et interne (5 200 €) par CPN');
@@ -144,64 +144,79 @@ function openPage(user, startTab) {
   await p.until(() => !p.row('po-table', 'CB-LATE', 'data-po'));
   check(true, 'PO supprimée de la liste');
 
-  // ---------------------------------------------------------------- coût d'un livrable (bouton € de la décomposition du budget)
-  await p.until(() => p.$('env-table'));
+  // ---------------------------------------------------------------- 0.21.0 : le plan budgétaire, matrice livrable × équipe (+ colonne Externe)
+  await p.until(() => p.$('plan-table'));
+  const cellId = (item, team) => 'cell-' + item.id + '-' + team.id;
   const costBtn = (item) => p.doc.querySelector('.cost-btn[data-item="' + item.id + '"]');
-  check(/Décomposition du Budget/.test(p.text('zone-enveloppe')) && !p.$('lines-table') && !p.$('cell-budget'), 'la zone s’appelle « Décomposition du Budget » ; plus de zone « Parts des livrables »');
-  const itemRow = (item) => p.doc.querySelector('#env-table tr[data-item="' + item.id + '"]');
-  check(/Sans coût/.test(itemRow(w.a).textContent) && !!costBtn(w.a) && !!costBtn(w.b), 'un livrable sans ligne est signalé « Sans coût » ; chaque livrable a son bouton €');
-  const dline = c.repoList('BudgetLine').find((l) => l.deliverable_id === w.b.id);
-  p.click(costBtn(w.b));
-  await p.until(() => p.$('cost-dialog').open && p.$('cost-lines'));
-  check(/Coût du livrable/.test(p.text('cost-title')) && /Calcul/.test(p.text('cost-sub')) && p.doc.querySelectorAll('#cost-lines tbody tr').length === 1 && /Part d’équipe/.test(p.text('cost-lines')) && /T1A/.test(p.text('cost-lines')) && !/Taux|TJM/.test(p.text('cost-lines')), 'la fenêtre « Coût du livrable » : la part d’équipe du livrable, plus de taux');
-  check(/ j$/.test(flat(p.row('cost-lines', dline.id, 'data-line').cells[4].textContent).trim()), 'la part dit son équivalent en jours (coût d’un ETP paramétré) : ' + flat(p.row('cost-lines', dline.id, 'data-line').cells[4].textContent));
-  p.click(p.$('cost-close'));
+  const itemRow = (item) => p.doc.querySelector('#plan-table tr[data-item="' + item.id + '"]');
+  check(/Plan budgétaire/.test(p.text('zone-plan')) && !p.$('env-table') && !p.$('lines-table') && !p.$('monthly-chart') && !p.$('proj-cards'), 'la zone s’appelle « Plan budgétaire » ; plus de décomposition par enveloppes, de graphique mensuel ni de projection d’avant');
+  check(!!itemRow(w.a) && !!itemRow(w.b) && !!itemRow(w.cc), 'une ligne par livrable de l’exercice');
+  check(p.$(cellId(w.b, w.team)).value === '5200' && p.$(cellId(w.a, w.team)).value === '', 'la cellule livrable × équipe porte la part (5 200 € pour T1A) ; vide quand l’équipe n’a pas de part');
+  check(/8 000 €/.test(flat(itemRow(w.cc).textContent)) && !!costBtn(w.cc), 'la colonne Externe : le forfait de 8 000 € du livrable, avec son bouton €');
+  check(!!p.doc.querySelector('#plan-table tr.dot-row') && !!p.$('dot-' + w.team.id) && p.$('dot-' + w.team.id).value === '', 'première ligne : la dotation de chaque équipe, vide tant qu’elle n’est pas fixée');
+  check(p.$('plan-validate').disabled && !p.$('plan-validate').classList.contains('primary') && p.$('plan-cancel').hidden, 'sans modification : « Valider » grisé');
+  // brouillon : une part et une dotation, rien n'est enregistré avant « Valider »
+  p.set(cellId(w.a, w.team), '2080'); p.input(p.$(cellId(w.a, w.team)));
+  p.set('dot-' + w.team.id, '4000'); p.input(p.$('dot-' + w.team.id));
+  check(!p.$('plan-validate').disabled && p.$('plan-validate').classList.contains('primary') && p.$(cellId(w.a, w.team)).classList.contains('changed') && c.repoList('BudgetLine').length === 2 && c.repoList('TeamBudget').length === 0, 'brouillon : « Valider » devient bleu, les champs modifiés sont marqués, rien n’est enregistré');
+  p.click(p.$('plan-validate'));
+  await p.until(() => c.repoList('BudgetLine').some((l) => l.deliverable_id === w.a.id && Number(l.planned_amount) === 2080) && c.repoList('TeamBudget').length === 1);
+  const tb0 = c.repoList('TeamBudget')[0];
+  check(Number(tb0.amount) === 4000 && tb0.team_id === w.team.id && tb0.exercise_id === w.exec.id && tb0.project_id === w.p1.id, 'la dotation de l’équipe : 4 000 € pour l’exercice en exécution');
+  await p.until(() => { const r0 = p.doc.querySelector('#exercise-table tr[data-team="' + w.team.id + '"]'); return r0 && /4 000 €/.test(flat(r0.textContent)) && /7 280 €/.test(flat(r0.textContent)); });
+  await p.until(() => /Plan budgétaire enregistré/.test(p.text('toast')));
+  check(/clash/.test(flat(p.doc.querySelector('#exercise-table tr[data-team="' + w.team.id + '"]').textContent)) && /Plan budgétaire enregistré/.test(p.text('toast')) && p.$('plan-validate').disabled, 'dotation 4 000 €, plan 7 280 € : le clash s’affiche dans le tableau des dotations ; brouillon vidé');
+  check(/7 280 €/.test(flat(itemRow(w.a).textContent + p.doc.querySelector('#plan-table tr.total').textContent)), 'les totaux sont recalculés à la validation');
+  // vider une cellule retire la part
+  p.set(cellId(w.a, w.team), ''); p.input(p.$(cellId(w.a, w.team)));
+  p.click(p.$('plan-validate'));
+  await p.until(() => c.repoList('BudgetLine').every((l) => l.deliverable_id !== w.a.id));
+  await p.until(() => { const r0 = p.doc.querySelector('#exercise-table tr[data-team="' + w.team.id + '"]'); return r0 && /5 200 €/.test(flat(r0.textContent)); });
+  check(/clash/.test(flat(p.doc.querySelector('#exercise-table tr[data-team="' + w.team.id + '"]').textContent)), 'une cellule vidée retire la part : le plan retombe à 5 200 €, toujours au-dessus de la dotation de 4 000 € (clash)');
+  // annuler les modifications
+  p.set(cellId(w.b, w.team), '9999'); p.input(p.$(cellId(w.b, w.team)));
+  check(!p.$('plan-cancel').hidden, 'après une modification : « Annuler les modifications » apparaît');
+  p.click(p.$('plan-cancel'));
+  check(p.$(cellId(w.b, w.team)).value === '5200' && p.$('plan-validate').disabled, 'annuler restaure les valeurs enregistrées');
+  // quitter avec un brouillon : on demande
+  p.set(cellId(w.b, w.team), '9999'); p.input(p.$(cellId(w.b, w.team)));
+  p.click(p.$('tab-op'));
+  await p.until(() => p.$('confirm').open);
+  check(/Abandonner les modifications/.test(p.text('confirm-title')) && p.$('tab-suivi').getAttribute('aria-selected') === 'true', 'changer d’onglet avec un brouillon : confirmation demandée, onglet inchangé');
+  p.click(p.$('confirm-cancel'));
+  p.click(p.$('plan-cancel'));
+  check(Number(c.repoList('BudgetLine').find((l) => l.deliverable_id === w.b.id && l.team_id === w.team.id).planned_amount) === 5200, 'rien n’a été enregistré');
+
+  // ---------------------------------------------------------------- forfaits (externe) d'un livrable : bouton € de la colonne Externe
   p.click(costBtn(w.cc));
-  await p.until(() => p.$('cost-dialog').open && /Forfait/.test(p.text('cost-lines')));
-  check(/Forfait \(externe\)/.test(p.text('cost-lines')), 'un forfait externe dans la fenêtre de son livrable');
-  p.click(p.$('cost-close'));
+  await p.until(() => p.$('ext-dialog').open && p.$('ext-lines') && p.$('ext-resource'));
+  check(/Forfaits du livrable/.test(p.text('ext-title')) && p.doc.querySelectorAll('#ext-lines tbody tr').length === 1 && /Xavier/.test(p.text('ext-lines')) && /8 000 €/.test(p.text('ext-lines')), 'la fenêtre liste le forfait de Xavier : 8 000 €');
+  p.click(p.$('ext-close'));
   p.click(costBtn(w.a));
-  await p.until(() => p.$('cost-dialog').open && p.$('cost-form'));
-  check(/n’a pas encore de coût/.test(p.text('cost-total')) && !p.$('cost-team').parentNode.hidden && p.$('cost-resource').parentNode.hidden, 'un livrable sans ligne : la fenêtre le dit ; part d’équipe par défaut : l’équipe et le montant (mêmes champs que « nouvelle part ou nouveau forfait »)');
-  p.set('cost-kind', 'forfait'); p.change(p.$('cost-kind'));
-  check(p.$('cost-team').parentNode.hidden && !p.$('cost-resource').parentNode.hidden, 'forfait : une ressource externe');
-  const exts = [...p.$('cost-resource').options].map((o) => o.textContent);
-  check(exts.some((n) => /Xavier/.test(n)) && !exts.some((n) => /Mia|Rémi|Carla/.test(n)), 'seules les ressources externes sont proposées pour un forfait : ' + exts.join(' | '));
-  p.set('cost-kind', 'team'); p.change(p.$('cost-kind')); p.set('cost-amount', '2080'); p.click(p.$('cost-add'));
-  await p.until(() => !p.$('cost-error').hidden);
-  check(/Choisissez une équipe/.test(p.text('cost-error')), 'sans équipe : message explicite : ' + p.text('cost-error'));
-  const teamOpts = [...p.$('cost-team').options].map((o) => o.textContent);
-  check(teamOpts.some((n) => /T1A — 3 caractères · FR/.test(n)), 'les équipes disent leur niveau budgétaire et leur pays : ' + teamOpts.join(' | '));
-  p.set('cost-team', w.team.id); p.click(p.$('cost-add'));
-  await p.until(() => c.repoList('BudgetLine').length === 3);
-  const l3 = c.repoList('BudgetLine').find((l) => l.deliverable_id === w.a.id);
-  check(l3.cost_type === 'Équipe' && Number(l3.planned_amount) === 2080 && l3.team_id === w.team.id, 'part d’équipe : 2 080 € pour T1A');
-  await p.until(() => p.row('cost-lines', l3.id, 'data-line'));
-  check(/2 080 €/.test(flat(p.row('cost-lines', l3.id, 'data-line').textContent)) && /2 080 €/.test(flat(itemRow(w.a).textContent)), 'ligne affichée dans la fenêtre, et le coût du livrable dans la décomposition');
-  p.click(p.row('cost-lines', l3.id, 'data-line').querySelector('.line-phase'));
-  await p.until(() => p.$('genform').open && p.$('gf-text'));
-  check(/^2026-10 2080/.test(p.$('gf-text').value), 'échéancier prérempli : ' + p.$('gf-text').value);
-  p.set('gf-text', '2026-10 1000'); p.submitGf();
-  await p.until(() => !p.$('gf-error').hidden);
-  check(/doit égaler/.test(p.text('gf-error')), 'échéancier de somme fausse refusé');
-  p.set('gf-text', '2026-10 1080\n2026-11 1000'); p.submitGf();
-  await p.until(() => c.repoGet('BudgetLine', l3.id).phasing_mode === 'manuel');
-  await p.until(() => { const r0 = p.row('cost-lines', l3.id, 'data-line'); return r0 && /à la main/.test(flat(r0.textContent)); });
-  check(true, 'échéancier à la main enregistré et signalé');
-  p.click(p.row('cost-lines', l3.id, 'data-line').querySelector('.line-edit'));
+  await p.until(() => p.$('ext-dialog').open && /Aucun forfait/.test(p.text('ext-total')) && p.$('ext-resource'));
+  const exts = [...p.$('ext-resource').options].map((o) => o.textContent);
+  check(exts.some((n) => /Xavier/.test(n)) && !exts.some((n) => /Mia|Rémi|Carla/.test(n)), 'seules les ressources externes sont proposées : ' + exts.join(' | '));
+  p.set('ext-amount', '500'); p.click(p.$('ext-add'));
+  await p.until(() => !p.$('ext-error').hidden);
+  check(/Choisissez une ressource externe/.test(p.text('ext-error')), 'sans ressource : message explicite');
+  p.set('ext-resource', w.xavier.id); p.click(p.$('ext-add'));
+  await p.until(() => c.repoList('BudgetLine').some((l) => l.deliverable_id === w.a.id && l.cost_type === 'Forfait'));
+  const f1 = c.repoList('BudgetLine').find((l) => l.deliverable_id === w.a.id && l.cost_type === 'Forfait');
+  check(Number(f1.fixed_amount) === 500 && f1.resource_id === w.xavier.id, 'forfait de 500 € enregistré');
+  await p.until(() => p.row('ext-lines', f1.id, 'data-line'));
+  p.click(p.row('ext-lines', f1.id, 'data-line').querySelector('.line-edit'));
   await p.until(() => p.$('genform').open && p.$('gf-amount'));
-  p.set('gf-amount', '2200'); p.submitGf();
-  await p.until(() => Number(c.repoGet('BudgetLine', l3.id).planned_amount) === 2200);
-  check(true, 'la ligne se modifie depuis la fenêtre');
-  await p.until(() => !p.$('genform').open && p.row('cost-lines', l3.id, 'data-line') && /2 200 €/.test(flat(p.row('cost-lines', l3.id, 'data-line').textContent)));
-  p.click(p.row('cost-lines', l3.id, 'data-line').querySelector('.line-del'));
+  p.set('gf-amount', '650'); p.submitGf();
+  await p.until(() => Number(c.repoGet('BudgetLine', f1.id).fixed_amount) === 650);
+  await p.until(() => p.row('ext-lines', f1.id, 'data-line') && /650 €/.test(flat(p.row('ext-lines', f1.id, 'data-line').textContent)));
+  check(/650 €/.test(flat(itemRow(w.a).textContent)), 'le forfait modifié : 650 €, visible dans la colonne Externe du tableau');
+  p.click(p.row('ext-lines', f1.id, 'data-line').querySelector('.line-del'));
   await p.until(() => p.$('confirm').open);
   p.click(p.$('confirm-ok'));
-  await p.until(() => c.repoList('BudgetLine').length === 2);
-  await p.until(() => !p.row('cost-lines', l3.id, 'data-line'));
-  check(/Sans coût/.test(itemRow(w.a).textContent), 'ligne supprimée : le livrable est de nouveau « Sans coût »');
-  p.click(p.$('cost-close'));
-
+  await p.until(() => c.repoList('BudgetLine').every((l) => l.id !== f1.id));
+  await p.until(() => /Aucun forfait/.test(p.text('ext-total')));
+  p.click(p.$('ext-close'));
+  check(true, 'forfait supprimé');
   // ---------------------------------------------------------------- CPN du projet
   w.call(CP, 'po.save', { values: { po_number: 'CB-100', cpn: 'CPN-100', resource_id: w.xavier.id, amount: 400, status: 'À faire', gr_due_date: '2026-12-15' } });
   await p.until(() => !p.$('genform').open);
@@ -221,9 +236,9 @@ function openPage(user, startTab) {
   check(!!m.doc.querySelector('#po-table'), 'il voit les PO du projet et peut en créer');
   const r = openPage(RWP);
   await r.until(() => r.zones().length > 0 && r.$('panel-po'));
-  check(JSON.stringify(r.zones()) === JSON.stringify(['po', 'enveloppe']), 'un Workpackage leader : achats et la décomposition de son workpackage : ' + r.zones().join(','));
-  await r.until(() => r.$('env-table'));
-  check(/Vous voyez le budget de votre workpackage/.test(r.text('panel-enveloppe')) && !!r.doc.querySelector('.cost-btn') && !r.doc.querySelector('.cost-btn[data-item="' + w.cc.id + '"]'), 'décomposition limitée à son périmètre : les livrables de son workpackage seulement, avec leur bouton de coût');
+  check(JSON.stringify(r.zones()) === JSON.stringify(['plan', 'track', 'po']), 'un Workpackage leader : plan de son workpackage, suivi par équipe (lecture) et achats : ' + r.zones().join(','));
+  await r.until(() => r.$('plan-table'));
+  check(/Vous voyez les livrables dont vous êtes responsable/.test(r.text('plan-partial')) && !r.doc.querySelector('[id^="dot-"]') && !!r.doc.querySelector('.cost-btn') && !r.doc.querySelector('.cost-btn[data-item="' + w.cc.id + '"]'), 'décomposition limitée à son périmètre : les livrables de son workpackage seulement, avec leur bouton de coût');
   const n = openPage(NOBODY);
   await n.until(() => /Accès réservé/.test(n.text('panel-bilan')));
   check(n.zones().length === 0, 'sans nomination dans l’équipe : rien d’accessible');
@@ -244,7 +259,7 @@ function openPage(user, startTab) {
   await dp.until(() => dp.doc.querySelector('#panel-program table.consol'));
   const budgetTable = dp.doc.querySelector('#panel-program table.consol'), rowsB = [...budgetTable.querySelectorAll('tbody tr')];
   check(rowsB.length === 2 && /P1 Projet 1/.test(rowsB[0].textContent) && /P2 Projet vide/.test(rowsB[1].textContent) && /^Total/.test(norm(budgetTable.querySelector('tfoot').textContent)), 'budget du programme : une ligne par projet et un total : ' + rowsB.length);
-  check(dp.doc.body.classList.contains('in-program') && ['cell-bilan', 'cell-po', 'cell-enveloppe'].every((id) => [...dp.doc.querySelectorAll('style')].some((s) => s.textContent.includes('body.in-program #' + id))) && !dp.$('panel-program').hidden && /Budget — Programme/.test(dp.text('title')) && dp.$('cpn-edit').hidden, 'en vue programme, les cartes du projet sont masquées par une règle de la page (sans toucher à leur attribut) et le titre dit « Programme »');
+  check(dp.doc.body.classList.contains('in-program') && ['cell-plan', 'cell-track', 'cell-actuals', 'cell-bilan', 'cell-po'].every((id) => [...dp.doc.querySelectorAll('style')].some((s) => s.textContent.includes('body.in-program #' + id))) && !dp.$('panel-program').hidden && /Budget — Programme/.test(dp.text('title')) && dp.$('cpn-edit').hidden, 'en vue programme, les cartes du projet sont masquées par une règle de la page (sans toucher à leur attribut) et le titre dit « Programme »');
   const balance = c.handleRequest({ action: 'budget.balance', params: { projectId: w.p1.id }, apiVersion: '1.0' }, 'admin@entreprise.com').data.totals;
   check(norm(rowsB[0].textContent).includes(norm(Math.round(balance.budget.total).toLocaleString('fr-FR') + ' €')), 'le montant d’un projet est celui de son bilan : ' + norm(rowsB[0].textContent).slice(0, 120));
   dp.click(dp.doc.querySelector('#panel-program tbody tr button.proj-open'));
@@ -256,311 +271,180 @@ function openPage(user, startTab) {
   await dp.until(() => dp.$('panel-program').hidden);
   check(dp.$('panel-program').hidden && dp.$('zone-program').hidden, 'revenir à un projet par la liste referme la vue programme');
 
-  // ---------------------------------------------------------------- décomposition du budget (enveloppes 0.15.3, livrables et jalons, brouillon et « Valider » 0.19.2)
-  await p.until(() => p.$('env-table'));
-  const envRows = () => [...p.doc.querySelectorAll('#env-table tbody tr[data-wp]')];
-  check(envRows().length === 3 && envRows().map((r) => r.cells[0].textContent.trim()).join('|') === '1 Conception|1.1 Calcul|2 Essais', 'un tableau en arbre : WP 1, son sous-workpackage 1.1, WP 2');
-  const rowsAll = [...p.doc.querySelectorAll('#env-table tbody tr')].map((r) => (r.classList.contains('wp-row') ? 'WP:' : r.classList.contains('is-milestone') ? 'J:' : 'L:') + r.cells[0].textContent.replace(/\s+/g, ' ').trim().replace(/^[▪◆]\s*/, ''));
-  check(rowsAll.findIndex((x) => /^WP:1 Conception/.test(x)) < rowsAll.findIndex((x) => /^L:Spécification/.test(x)) && rowsAll.findIndex((x) => /^L:Spécification/.test(x)) < rowsAll.findIndex((x) => /^WP:1\.1 Calcul/.test(x)) && rowsAll.findIndex((x) => /^WP:1\.1 Calcul/.test(x)) < rowsAll.findIndex((x) => /^L:Calcul/.test(x)) && rowsAll.findIndex((x) => /^L:Calcul/.test(x)) < rowsAll.findIndex((x) => /^WP:2 Essais/.test(x)), 'les livrables sont sous leur workpackage ou sous-workpackage, comme dans le WBS : ' + rowsAll.join(' | '));
-  check(p.doc.querySelectorAll('#env-table tr.is-milestone').length >= 1 && !p.doc.querySelector('#env-table tr.is-milestone .cost-btn') && !p.doc.querySelector('#env-table tr.is-deliverable input'), 'les jalons y figurent, sans bouton de coût ; un livrable n’a aucun champ « enveloppe »');
-  check(/Budget autorisé\s*Non fixé/.test(p.text('panel-enveloppe')) && !!p.$('env-authorized'), 'rien n’est fixé : « pas de plafond », et le chef de projet a le champ du budget autorisé');
-  check(p.$('env-validate').disabled && !p.$('env-validate').classList.contains('primary') && p.$('env-cancel').hidden, 'sans modification : « Valider » est grisé');
-  p.set('env-authorized', '20000'); p.input(p.$('env-authorized'));
-  check(!p.$('env-validate').disabled && p.$('env-validate').classList.contains('primary') && !p.$('env-cancel').hidden && /Modifications non enregistrées/.test(p.text('env-hint')) && p.$('env-authorized').classList.contains('changed'), 'une modification : « Valider » devient bleu, le champ est marqué, le rappel s’affiche');
-  p.set('env-' + w.w1.id, '3000'); p.input(p.$('env-' + w.w1.id));
-  p.set('env-' + w.w2.id, '500'); p.input(p.$('env-' + w.w2.id));
-  await wait(150);
-  const envOf = (rec) => c.envAmount_(rec, c.envKey_(w.exec));
-  check(envOf(c.repoGet('Project', w.p1.id)) === null, 'rien n’est enregistré tant que la personne ne valide pas : ni le budget autorisé');
-  check(envOf(c.repoGet('WorkPackage', w.w1.id)) === null && envOf(c.repoGet('WorkPackage', w.w2.id)) === null, 'ni les enveloppes des workpackages');
-  p.click(p.$('env-validate'));
-  await p.until(() => envOf(c.repoGet('Project', w.p1.id)) === 20000 && envOf(c.repoGet('WorkPackage', w.w2.id)) === 500);
-  await p.until(() => /Décomposition du budget enregistrée/.test(p.text('toast')));
-  check(envOf(c.repoGet('WorkPackage', w.w1.id)) === 3000, 'un seul clic sur « Valider » enregistre tout : budget autorisé et enveloppes');
-  await p.until(() => p.$('env-validate') && p.$('env-validate').disabled);
-  check(/Budget autorisé\s*20\s?000/.test(p.text('panel-enveloppe')) && !p.$('env-validate').classList.contains('primary'), 'enregistré : « Valider » redevient gris');
-  const wp2 = () => p.doc.querySelector('#env-table tr[data-wp="' + w.w2.id + '"]');
-  check(/En dépassement/.test(wp2().textContent) && wp2().classList.contains('over') && /Réparti entre les workpackages\s*3\s?500/.test(p.text('panel-enveloppe')), 'WP 2 : 8 000 € de coût pour 500 € d’enveloppe : « En dépassement » ; réparti : 3 500 €');
-  check(!!wp2().querySelector('.badge.alert') && /En dépassement/.test(wp2().querySelector('.badge.alert').textContent), 'l’état « En dépassement » est un badge rouge');
-  // on peut écrire plus que la somme autorisée : accepté, signalé « en dépassement »
-  p.set('env-' + w.w1.id, '30000'); p.input(p.$('env-' + w.w1.id));
-  p.click(p.$('env-validate'));
-  await p.until(() => envOf(c.repoGet('WorkPackage', w.w1.id)) === 30000);
-  await p.until(() => /30\s?500/.test(p.text('panel-enveloppe')));
-  check(!p.$('toast').classList.contains('error') && /dépasse le budget autorisé de/.test(p.text('panel-enveloppe')) && /en dépassement/.test(p.text('panel-enveloppe')), 'au-delà du budget autorisé : accepté ; le projet est « en dépassement » (réparti 30 500 € pour 20 000 €)');
-  // annuler les modifications
-  p.set('env-' + w.w2.id, '999'); p.input(p.$('env-' + w.w2.id));
-  p.click(p.$('env-cancel'));
-  check(p.$('env-' + w.w2.id).value === '500' && p.$('env-validate').disabled, '« Annuler les modifications » remet les valeurs enregistrées');
-  // quitter l'onglet avec un brouillon : on demande
-  p.set('env-' + w.w2.id, '777'); p.input(p.$('env-' + w.w2.id));
-  p.click(p.$('tab-op'));
-  await p.until(() => p.$('confirm').open);
-  check(/Abandonner les modifications non enregistrées/.test(p.text('confirm-title')) && p.$('tab-suivi').getAttribute('aria-selected') === 'true', 'changer d’onglet avec un brouillon : confirmation demandée, rien n’est perdu en silence');
-  p.click(p.$('confirm-cancel'));
-  check(p.$('env-' + w.w2.id).value === '777' && !p.$('env-validate').disabled, 'on reste sur la page avec son brouillon');
-  p.click(p.$('env-cancel'));
-  const wl = openPage(RWP);
-  await wl.until(() => wl.$('env-table'));
-  check(!wl.$('env-authorized') && !wl.$('env-' + w.w1.id) && !!wl.$('env-' + w.w11.id) && [...wl.doc.querySelectorAll('#env-table tbody tr.wp-row')].length === 2 && /budget de votre workpackage/.test(wl.text('panel-enveloppe')), 'un Workpackage leader : pas le budget du projet, pas l’enveloppe de son propre WP, seulement la répartition de ses sous-workpackages ; il ne voit que son workpackage');
-  wl.set('env-' + w.w11.id, '1200'); wl.input(wl.$('env-' + w.w11.id));
-  wl.click(wl.$('env-validate'));
-  await wl.until(() => envOf(c.repoGet('WorkPackage', w.w11.id)) === 1200);
-  check(envOf(c.repoGet('WorkPackage', w.w11.id)) === 1200, 'il répartit la sienne (après « Valider »)');
-  const mm = openPage(MEMBER);
-  await wait(250);
-  check(mm.$('zone-enveloppe').hidden && mm.$('panel-enveloppe').hidden, 'un Contributor ne voit pas la zone');
 
-  // ---------------------------------------------------------------- 0.17.1 : l'exercice budgétaire (année en préparation et année en exécution)
+  // ---------------------------------------------------------------- 0.21.0 : l'exercice (année en exécution et année en préparation)
+  const fmt = (n) => norm(Math.round(n).toLocaleString('fr-FR') + ' €');
+  const serverTracking = (user, extra) => c.handleRequest({ action: 'exercise.tracking', params: Object.assign({ projectId: w.p1.id, exerciseId: w.exec.id, version: 'ref' }, extra || {}), apiVersion: '1.0' }, user || ADMIN).data;
   const noEx = openPage(CP);
-  await noEx.until(() => noEx.$('env-table'));
-  check(noEx.$('tab-suivi').getAttribute('aria-selected') === 'true' && noEx.text('tab-suivi') === 'Suivi budgétaire 2026' && noEx.text('tab-op') === 'OP' && noEx.$('tab-archive').hidden, 'sans exercice en préparation : le suivi budgétaire de l’année en cours est la première page, l’onglet voisin s’appelle « OP » sans année, pas d’archives');
+  await noEx.until(() => noEx.$('plan-table'));
+  check(noEx.$('tab-suivi').getAttribute('aria-selected') === 'true' && noEx.text('tab-suivi') === 'Suivi budgétaire 2026' && noEx.text('tab-op') === 'OP' && noEx.$('tab-archive').hidden, 'sans exercice en préparation : le suivi budgétaire de l’année en cours est la première page, l’onglet voisin s’appelle « OP » sans année');
   noEx.click(noEx.$('tab-op'));
-  await noEx.until(() => noEx.$('envelope-empty'));
-  check(/Aucun exercice en préparation/.test(noEx.text('envelope-empty')) && noEx.$('cell-bilan').hidden && noEx.$('cell-proj').hidden && noEx.$('cell-graph').hidden, 'onglet OP sans exercice en préparation : message, aucune donnée financière (étanche), et les zones du suivi sont masquées');
+  await noEx.until(() => noEx.$('plan-empty'));
+  check(/Aucun exercice en préparation/.test(noEx.text('plan-empty')) && noEx.$('cell-bilan').hidden && noEx.$('cell-track').hidden && noEx.$('cell-actuals').hidden, 'onglet OP sans exercice en préparation : message, aucune donnée financière (étanche), et les zones du suivi sont masquées');
 
-  // l'administrateur crée l'exercice en exécution (2026) et celui en préparation (2027) ; des équipes à 3 et 4 caractères
+  // l'administrateur crée l'exercice en préparation (2027) ; des équipes à 3 et 4 caractères
   const exec = w.exec;
   const prep = w.call(ADMIN, 'exercise.create', { year: 2027 });
   w.call(ADMIN, 'etp.set', { values: { country: 'FR', year: 2027, annual_cost: 130000 } });
   const vm = w.call(CP, 'teams.create', { values: { name: '1vm', country: 'FR' } }), vmd = w.call(CP, 'teams.create', { values: { name: '1vmd', parent_team_id: vm.id, country: 'FR' } }), ae = w.call(CP, 'teams.create', { values: { name: '2ae', country: 'DE' } }), spare = w.call(CP, 'teams.create', { values: { name: '3xx', country: 'FR' } });
-  const setTb = (team, f, v, ex) => w.call(CP, 'exercise.set', Object.assign({ projectId: w.p1.id, exerciseId: (ex || prep).id, teamId: team.id }, { [f]: v }));
-  setTb(vm, 'expected', 100000); setTb(vmd, 'expected', 30000); setTb(ae, 'expected', 50000); setTb(vm, 'granted', 80000);
-  const part = (item, team, amount) => w.call(CP, 'budget.line.save', { values: { deliverable_id: item.id, team_id: team.id, planned_amount: amount }, exerciseId: prep.id });
+  const setDot = (team, amount, ex) => w.call(CP, 'exercise.set', { projectId: w.p1.id, exerciseId: (ex || prep).id, teamId: team.id, amount });
+  setDot(vm, 80000); setDot(vmd, 30000); setDot(ae, 50000);
+  const part = (item, team, amount) => w.call(CP, 'budget.cell.set', { deliverableId: item.id, teamId: team.id, amount, exerciseId: prep.id });
   const mk = (name) => { w.call(ADMIN, 'wbs.create', { projectId: w.p1.id, kind: 'Livrable', parentId: w.w1.id, values: { name, planned_start: '2026-11-02', planned_finish: '2026-11-13', owner_resource_id: w.mia.id } }); return c.repoList('PlanItem').find((i) => i.name === name); };
   const d1 = mk('Livrable 2027 A'), d2 = mk('Livrable 2027 B'), orphan = mk('Livrable sans exercice');
   part(d1, vm, 40000); part(d1, vmd, 20000); part(d2, vm, 30000); part(d2, ae, 60000);
-  // l'exercice en exécution : deux livrables de 2026 avec leurs parts (l'équipe 9ex), un accordé inférieur aux parts (un clash)
+  // l'exercice en exécution : deux livrables de 2026 avec leurs parts (l'équipe 9ex), une dotation inférieure aux parts (un clash)
   const ex9 = w.call(CP, 'teams.create', { values: { name: '9ex', country: 'FR', cost_center: 'CC-9' } });
   const mkAt = (name, s0, f0) => { w.call(ADMIN, 'wbs.create', { projectId: w.p1.id, kind: 'Livrable', parentId: w.w1.id, values: { name, planned_start: s0, planned_finish: f0, owner_resource_id: w.mia.id } }); return c.repoList('PlanItem').find((i) => i.name === name); };
   const e1 = mkAt('Livrable 2026 A', '2026-10-05', '2026-10-30'), e2 = mkAt('Livrable 2026 B', '2026-10-12', '2026-12-18');
-  const partE = (item, team, amount) => w.call(CP, 'budget.line.save', { values: { deliverable_id: item.id, team_id: team.id, planned_amount: amount }, exerciseId: exec.id });
+  const partE = (item, team, amount) => w.call(CP, 'budget.cell.set', { deliverableId: item.id, teamId: team.id, amount, exerciseId: exec.id });
   partE(e1, ex9, 4000); partE(e2, ex9, 3000);
-  setTb(ex9, 'granted', 6000, exec);
+  setDot(ex9, 6000, exec);
   w.call(MEMBER, 'progress.declare', { planItemId: e1.id, progressPct: 50 });
   const ex = openPage(CP);
-  await ex.until(() => ex.$('monthly-chart') && ex.$('track-table') && ex.$('proj-cards'));
-  // le suivi budgétaire est la première page visible, sans cliquer ; la décomposition du budget en haut, fixe
-  check(ex.$('tab-suivi').getAttribute('aria-selected') === 'true' && ex.text('tab-suivi') === 'Suivi budgétaire 2026' && ex.text('tab-op') === 'OP 2027' && ex.$('cell-exercice').hidden, 'sans rien cliquer : le suivi budgétaire 2026 est affiché ; l’onglet voisin s’appelle « OP 2027 »');
+  await ex.until(() => ex.$('plan-table') && ex.$('track-table') && ex.$('actuals-empty'));
+  check(ex.$('tab-suivi').getAttribute('aria-selected') === 'true' && ex.text('tab-suivi') === 'Suivi budgétaire 2026' && ex.text('tab-op') === 'OP 2027', 'sans rien cliquer : le suivi budgétaire 2026 est affiché ; l’onglet voisin s’appelle « OP 2027 »');
   const order = [...ex.doc.querySelectorAll('main .cell')].filter((x) => !x.hidden && x.id !== 'cell-program').map((x) => x.id.replace('cell-', ''));
-  check(order.join(',') === 'enveloppe,proj,graph,bilan,po,track', 'l’ordre du suivi : décomposition du budget tout en haut, puis la projection, le graphique, le bilan par CPN, les achats, et « Par équipe » : ' + order.join(','));
-  check(!ex.$('toggle-enveloppe') && !ex.$('toggle-proj') && !ex.$('toggle-graph') && !ex.$('panel-enveloppe').classList.contains('collapsed') && /Décomposition du Budget/.test(ex.text('zone-enveloppe')), 'la décomposition du budget, la projection et le graphique ne sont pas rétractables');
-  check(!!ex.$('toggle-bilan') && !!ex.$('toggle-po') && ex.$('panel-bilan').classList.contains('collapsed') && ex.$('panel-po').classList.contains('collapsed') && ex.$('toggle-bilan').getAttribute('aria-expanded') === 'false', 'le bilan par CPN et les achats restent rétractables (repliés au départ), sous le graphique');
-  check(!ex.$('cell-synth') && !ex.$('cell-deliv') && !ex.$('cell-rev') && !ex.$('cell-verss') && !ex.$('cell-vers') && !ex.$('toggle-deliv') && !ex.$('version-create'), 'les panneaux « synthèse et projection », « livrables en cours », « accordé et révisions » et les versions n’existent plus');
-  check(/9ex/.test(ex.text('track-table')) && /clash/.test(ex.text('track-table')) && /7\s?000/.test(ex.text('track-table')), 'par équipe (repliable) : 9ex a 7 000 € de parts pour 6 000 € accordés : « clash » affiché');
-  // la projection de fin d'année, entre le tableau et le graphique
-  const pos = (a, b) => !!(ex.$(a).compareDocumentPosition(ex.$(b)) & 4);
-  check(pos('env-table', 'proj-cards') && pos('proj-cards', 'monthly-chart'), 'la projection de fin d’année est entre le tableau de décomposition et le graphique');
-  check(/Projection de fin d’année/.test(ex.text('proj-cards')) && /Valeur acquise/.test(ex.text('proj-cards')) && /Prévu de l’année/.test(ex.text('proj-cards')) && !!ex.$('proj-table') && /À l’avancement/.test(ex.text('proj-method')), 'la projection : budget, prévu de l’année, valeur acquise, projection, par workpackage, avec sa méthode (à l’avancement)');
-  const svg = ex.$('monthly-chart').querySelector('svg');
-  check(!!svg && svg.getAttribute('role') === 'img' && svg.querySelectorAll('.bar-seg').length >= 1 && svg.querySelectorAll('polyline.ch-cum').length === 1 && svg.querySelectorAll('.ch-band').length === 12, 'le graphique : histogramme empilé par workpackage, courbe de cumul, douze mois survolables');
-  check(ex.doc.querySelectorAll('#graph-legend .chip').length >= 1 && /1 Conception|Conception/.test(ex.text('graph-legend')), 'la légende : une pastille par workpackage de premier niveau');
-  const chip = ex.doc.querySelector('#graph-legend .chip'), segsBefore = ex.doc.querySelectorAll('#monthly-chart .bar-seg').length;
-  ex.click(chip);
-  check(ex.doc.querySelector('#graph-legend .chip').classList.contains('off') && ex.doc.querySelectorAll('#monthly-chart .bar-seg').length < segsBefore, 'une pastille masque son workpackage (les barres et le cumul suivent) ; un second clic le remontre');
-  ex.click(ex.doc.querySelector('#graph-legend .chip'));
-  const band = ex.doc.querySelector('#monthly-chart .ch-band[data-month="2026-10"]');
-  band.dispatchEvent(new ex.win.Event('mouseenter', { bubbles: true }));
-  check(!ex.$('graph-tip').hidden && /oct\./.test(ex.text('graph-tip')) && /Cumul/.test(ex.text('graph-tip')), 'au survol d’un mois : une infobulle (prévu par workpackage, total du mois, cumul)');
-  ex.click(ex.$('toggle-track'));
-  check(ex.$('toggle-track').getAttribute('aria-expanded') === 'true' && !ex.$('panel-track').classList.contains('collapsed'), 'un clic déploie « Par équipe »');
-  // l'onglet OP : l'opération de planification de l'année suivante
-  ex.click(ex.$('tab-op'));
-  await ex.until(() => ex.$('exercise-table'));
-  check(ex.$('tab-op').getAttribute('aria-selected') === 'true' && ex.$('cell-bilan').hidden && ex.$('cell-proj').hidden && ex.$('cell-graph').hidden && !ex.$('cell-exercice').hidden && !ex.$('cell-enveloppe').hidden && !ex.$('monthly-chart'), 'OP 2027 : décomposition du budget et budget par équipe ; la projection, le graphique et les engagements ne s’affichent pas');
-  const picks = [ex.text('tab-suivi'), ex.text('tab-op')];
-  check(picks.join('|') === 'Suivi budgétaire 2026|OP 2027', 'les deux onglets portent l’année de leur exercice : ' + picks.join(' | '));
-  // ÉTANCHE : la décomposition de 2027 ne contient aucun livrable de 2026, et réciproquement
-  const names27 = [...ex.doc.querySelectorAll('#env-table tr.is-deliverable')].map((r) => r.cells[0].querySelector('.env-item').textContent.replace(/\s+/g, ' ').trim());
-  check(names27.length >= 1 && names27.every((n) => /2027/.test(n)) && !names27.some((n) => /2026|Spécification|Calcul|Essais/.test(n)), 'étanche : la décomposition de l’OP 2027 ne montre que les livrables de 2027 : ' + names27.join(' | '));
-  check(!ex.$('env-' + w.w2.id) || ex.$('env-' + w.w2.id).value === '', 'et les enveloppes de 2026 n’y figurent pas (celles de 2027 sont à part)');
+  check(JSON.stringify(order) === JSON.stringify(['plan', 'track', 'actuals', 'bilan', 'po']), 'ordre des zones : plan budgétaire en haut (fixe), puis suivi par équipe, réalisé, bilan, achats : ' + order.join(', '));
+  // ÉTANCHE : le plan de 2026 ne contient aucun livrable de 2027
+  check(!ex.doc.querySelector('#plan-table tr[data-item="' + d1.id + '"]') && !!ex.doc.querySelector('#plan-table tr[data-item="' + e1.id + '"]') && !ex.doc.querySelector('#plan-table tr[data-item="' + orphan.id + '"]'), 'étanche : le plan de 2026 montre les livrables de 2026, ni ceux de 2027 ni ceux sans exercice');
+  // suivi par équipe : les chiffres sont ceux du serveur (une seule source)
+  const trk = serverTracking();
+  const t9 = trk.teams.find((t) => t.team_id === ex9.id);
+  const tr9 = ex.doc.querySelector('#track-table tr[data-team="' + ex9.id + '"]');
+  check(!!tr9 && t9.plan === 7000 && t9.dotation === 6000 && norm(tr9.textContent).includes(fmt(6000)) && norm(tr9.textContent).includes(fmt(7000)) && norm(tr9.textContent).includes(fmt(t9.ev)) && /Clash/.test(tr9.textContent), 'suivi : dotation 6 000 €, plan 7 000 €, valeur acquise ' + fmt(t9.ev) + ', « Clash » : ' + norm(tr9.textContent));
+  check(/Aucun réalisé saisi/.test(ex.text('proj-no-actuals')) && trk.totals.landing === null && /Non saisi/.test(ex.text('track-cards')), 'sans réalisé : l’atterrissage n’est pas calculé, la page invite à le saisir');
+  check(/Dotation et plan par équipe/.test(ex.text('dotations-title')) && /7 000 €/.test(flat(ex.doc.querySelector('#exercise-table tr[data-team="' + ex9.id + '"]').textContent)) && /clash/.test(flat(ex.doc.querySelector('#exercise-table tr[data-team="' + ex9.id + '"]').textContent)), 'le tableau des dotations donne les mêmes chiffres : plan 7 000 € pour une dotation de 6 000 € (clash)');
 
-  const tr = (team) => ex.doc.querySelector('#exercise-table tr[data-team="' + team + '"]');
-  const cells = (team) => [...tr(team).cells].map((x) => flat(x.textContent).trim());
-  check(!!tr(vm.id + '-total') && /1vm \(total avec le détail\)/.test(cells(vm.id + '-total')[0]) && /130\s?000/.test(cells(vm.id + '-total')[1]) && /90\s?000/.test(cells(vm.id + '-total')[3]) && /\+40\s?000/.test(cells(vm.id + '-total')[4]), '1vm : total avec le détail de 1vmd — attendu 130 000 €, parts 90 000 €, reste à répartir +40 000 € : ' + cells(vm.id + '-total').join(' | '));
-  check(!!tr(vm.id) && !!tr(vmd.id) && /1vmd/.test(cells(vmd.id)[0]) && /30\s?000/.test(ex.$('exp-' + vmd.id).value + '30000'), 'l’équipe seule et son détail à 4 caractères ont chacune leur ligne, modifiable');
-  check(/−10\s?000/.test(cells(ae.id)[4]) && tr(ae.id).cells[4].classList.contains('late'), '2ae : les parts (60 000 €) dépassent l’attendu (50 000 €) : écart négatif, en rouge, rien n’est bloqué : ' + cells(ae.id)[4]);
-  check(/clash/.test(cells(vm.id + '-total')[5]) || /clash/.test(cells(vm.id)[5]), 'un accordé (80 000 €) inférieur aux parts : « clash » affiché');
-  check(/180\s?000/.test(ex.text('panel-exercice')) && /Écart avec l’accordé/.test(ex.text('panel-exercice')), 'cartes : attendu total et écart avec l’accordé');
-  check(/Coût d’un ETP non paramétré pour DE en 2027/.test(ex.text('etp-missing')), 'l’Allemagne n’a pas de coût d’ETP en 2027 : la page le dit, sans inventer de jours : ' + ex.text('etp-missing').slice(0, 90));
-  check(/ j/.test(cells(vm.id + '-total')[3]), 'équivalent en jours des parts de 1vm (coût de l’ETP de la France) : ' + cells(vm.id + '-total')[3]);
-  // saisie directe de l'attendu : en brouillon, enregistré seulement par « Valider » (0.19.2)
-  check(ex.$('ex-validate').disabled && !ex.$('ex-validate').classList.contains('primary'), 'budget par équipe : « Valider » grisé tant qu’il n’y a rien à enregistrer');
-  ex.set('exp-' + ae.id, '65000'); ex.input(ex.$('exp-' + ae.id));
-  check(!ex.$('ex-validate').disabled && ex.$('ex-validate').classList.contains('primary') && /Modifications non enregistrées/.test(ex.text('ex-hint')) && ex.$('exp-' + ae.id).classList.contains('changed'), 'une saisie : « Valider » devient bleu et le champ est marqué');
-  await wait(150);
-  check(!w.c.repoList('TeamBudget').some((b) => b.team_id === ae.id && Number(b.expected) === 65000), 'rien n’est enregistré à la saisie : seulement quand la personne clique sur « Valider »');
-  ex.click(ex.$('ex-validate'));
-  await ex.until(() => w.c.repoList('TeamBudget').some((b) => b.team_id === ae.id && Number(b.expected) === 65000));
-  await ex.until(() => /Budget enregistré/.test(ex.text('toast')));
-  await ex.until(() => { const r = ex.doc.querySelector('#exercise-table tr[data-team="' + ae.id + '"]'); return !!r && /\+5\s?000/.test(flat(r.cells[4].textContent)); });
-  check(/\+5\s?000/.test(cells(ae.id)[4]) && !tr(ae.id).cells[4].classList.contains('late'), 'l’attendu se saisit dans le tableau : l’écart de 2ae passe à +5 000 €, plus de rouge');
-  ex.set('exp-' + ae.id, '-3'); ex.input(ex.$('exp-' + ae.id));
-  ex.click(ex.$('ex-validate'));
-  await ex.until(() => ex.$('toast').classList.contains('error'));
-  await ex.until(() => ex.$('exp-' + ae.id) && ex.$('exp-' + ae.id).value === '-3');
-  check(/positif/.test(ex.text('toast')) && Number(w.c.repoList('TeamBudget').find((b) => b.team_id === ae.id).expected) === 65000 && ex.$('ex-validate').classList.contains('primary'), 'valeur négative refusée, la valeur enregistrée est intacte, le brouillon reste à l’écran et « Valider » reste bleu : ' + ex.text('toast'));
-  ex.click(ex.$('ex-cancel'));
-  await ex.until(() => ex.$('exp-' + ae.id) && ex.$('exp-' + ae.id).value === '65000');
-  check(ex.$('ex-validate').disabled, '« Annuler les modifications » rétablit la valeur enregistrée');
-  // ajouter une équipe au tableau
-  check(![...ex.$('exercise-team-pick').options].some((o) => /Direction/.test(o.textContent)) && [...ex.$('exercise-team-pick').options].some((o) => /3xx/.test(o.textContent)) && ![...ex.$('exercise-team-pick').options].some((o) => /^2ae/.test(o.textContent)), 'les équipes proposées : 3 et 4 caractères, pas celles déjà au tableau');
-  ex.set('exercise-team-pick', spare.id); ex.click(ex.$('exercise-team-add'));
-  await ex.until(() => w.c.repoList('TeamBudget').some((b) => b.team_id === spare.id));
-  await ex.until(() => ex.doc.querySelector('#exercise-table tr[data-team="' + spare.id + '"]'));
-  check(!!ex.doc.querySelector('#exercise-table tr[data-team="' + spare.id + '"]'), 'une équipe ajoutée au tableau (attendu 0 €, à renseigner)');
-  // le rattachement des livrables à l'exercice : depuis la décomposition du budget (plus de zone « Parts des livrables »)
-  await ex.until(() => ex.$('env-table'));
-  check(!ex.$('lines-table') && !!ex.$('assign-open') && /Rattacher les livrables sans exercice à l’exercice 2027/.test(ex.text('assign-open')), 'la décomposition propose de rattacher les livrables sans exercice à l’exercice de l’onglet (2027)');
-  ex.click(ex.$('assign-open'));
-  await ex.until(() => ex.$('genform').open && ex.$('gf-deliverable_id'));
-  check(/Tous les livrables sans exercice/.test([...ex.$('gf-deliverable_id').options][0].textContent), 'rattacher : « tous les livrables sans exercice » par défaut');
-  ex.submitGf();
-  await ex.until(() => c.repoList('PlanItem').filter((i) => i.item_type === 'Livrable' && i.project_id === w.p1.id).every((i) => i.exercise_id));
-  check(c.repoList('PlanItem').filter((i) => i.item_type === 'Livrable' && i.project_id === w.p1.id && i.exercise_id !== exec.id).every((i) => i.exercise_id === prep.id), 'tous les livrables sans exercice sont rattachés à l’exercice 2027');
-  // exporter et importer l'exercice dans un classeur Google Sheet
-  await ex.until(() => ex.$('exercise-import'));
-  ex.click(ex.$('exercise-import'));
-  await ex.until(() => ex.$('eximp').open && ex.$('eximp-template'));
-  check(/Exporter ou importer l’exercice 2027 \(préparation\)/.test(ex.text('eximp-title')) && ex.$('eximp-run').disabled, 'la boîte d’import annonce l’exercice 2027 ; on ne peut pas importer avant d’avoir analysé');
-  ex.click(ex.$('eximp-template'));
-  await ex.until(() => ex.$('eximp-template-link'));
-  check(/\d+ lignes? de budget, \d+ parts? de livrables?/.test(ex.text('eximp-template-out')) && ex.$('eximp-book').value === ex.$('eximp-template-link').getAttribute('href'), 'le classeur est créé, prérempli, son lien est dans le champ : ' + ex.text('eximp-template-out'));
-  const bookId = /\/d\/([^/?#]+)/.exec(ex.$('eximp-book').value)[1], bk = c.SpreadsheetApp.openById(bookId), shB = bk.getSheetByName('Budget par équipe'), shP = bk.getSheetByName('Parts des livrables');
-  ex.click(ex.$('eximp-analyze'));
-  await ex.until(() => ex.$('eximp-head'));
-  check(/Rien à importer/.test(ex.text('eximp-head')) && ex.$('eximp-run').disabled, 'l’export relu tel quel : rien à importer, « Importer » inactif');
-  const rowB = (name) => shB.getDataRange().getValues().findIndex((r, i) => i > 0 && r[1] === name) + 1;
-  shB.getRange(shB.getLastRow() + 1, 1, 1, 4).setValues([['P1', 'Fantôme', 1000, '']]);
-  ex.click(ex.$('eximp-analyze'));
-  await ex.until(() => ex.$('eximp-errors'));
-  check(/1 erreur/.test(ex.text('eximp-head')) && /Budget par équipe, ligne \d+ — Équipe « Fantôme » : introuvable/.test(ex.text('eximp-errors')) && ex.$('eximp-run').disabled, 'une erreur dit l’onglet, la ligne et ce qui manque ; « Importer » reste inactif');
-  shB.getRange(shB.getLastRow(), 1, 1, 4).setValues([['', '', '', '']]);
-  shB.getRange(rowB('1vm'), 3).setValue(130000);
-  shP.getRange(shP.getLastRow() + 1, 1, 1, 5).setValues([['P1', '1', 'Livrable sans exercice', '2ae', 7000]]);
-  ex.click(ex.$('eximp-analyze'));
-  await ex.until(() => ex.$('eximp-counts'));
-  check(/Budget par équipe : 0 à créer, 1 à modifier/.test(ex.text('eximp-counts')) && /Parts des livrables : 1 à créer/.test(ex.text('eximp-counts')) && !ex.$('eximp-run').disabled, 'le plan chiffré s’affiche, « Importer » devient actif : ' + ex.text('eximp-counts'));
-  const realRun = c.API_ACTIONS['exercise.import.run']; const seenRuns = [];
-  c.API_ACTIONS['exercise.import.run'] = (params, ctx) => { const out = realRun(Object.assign({}, params, { maxOps: 1 }), ctx); seenRuns.push([!!params.resume, !!out.backup]); return out; };
-  ex.click(ex.$('eximp-run'));
-  await ex.until(() => /Import terminé/.test(ex.text('eximp-status')), 8000);
-  c.API_ACTIONS['exercise.import.run'] = realRun;
-  check(c.repoList('TeamBudget').some((b) => b.team_id === vm.id && Number(b.expected) === 130000) && c.repoList('BudgetLine').some((l) => l.team_id === ae.id && l.deliverable_id === c.repoList('PlanItem').find((i) => i.name === 'Livrable sans exercice').id && Number(l.planned_amount) === 7000), 'importé : l’attendu de 1vm et la part de 2ae sont dans l’outil');
-  check(seenRuns.length === 2 && JSON.stringify(seenRuns[0]) === '[false,true]' && JSON.stringify(seenRuns[1]) === '[true,false]', 'relancé lot après lot, une seule copie de sécurité : ' + JSON.stringify(seenRuns));
-  check(!!ex.$('eximp-backup-link') && /Copie avant import de l’exercice 2027/.test(ex.text('eximp-backup')), 'le lien de la copie reste affiché');
-  ex.click(ex.$('eximp-close'));
-  await ex.until(() => ex.$('exp-' + vm.id) && ex.$('exp-' + vm.id).value === '130000');
-  check(ex.$('exp-' + vm.id).value === '130000', 'le tableau de l’exercice est rafraîchi après l’import : 1vm à 130 000 €');
+  // ---------------------------------------------------------------- réalisé : saisi à la main par CPN, équipe et mois
+  check(!!ex.$('act-form') && !!ex.$('act-cpn') && [...ex.$('act-cpn').options].map((o) => o.value).join() === 'CPN-100,CPN-200', 'le formulaire de saisie propose les CPN du projet : ' + [...ex.$('act-cpn').options].map((o) => o.value).join());
+  ex.click(ex.$('act-save'));
+  await ex.until(() => !ex.$('act-error').hidden);
+  check(/Choisissez une équipe/.test(ex.text('act-error')), 'sans équipe : message explicite');
+  ex.set('act-team', ex9.id); ex.set('act-month', '2026-10'); ex.set('act-amount', '1500'); ex.set('act-cpn', 'CPN-100');
+  ex.click(ex.$('act-save'));
+  await ex.until(() => c.repoList('ActualLine').length === 1 && ex.$('actuals-table'));
+  const a1 = c.repoList('ActualLine')[0];
+  check(a1.team_id === ex9.id && a1.month === '2026-10' && a1.charge_code === 'CPN-100' && Number(a1.amount) === 1500, 'réalisé saisi : 1 500 € pour 9ex en octobre sur CPN-100');
+  await ex.until(() => { const r0 = ex.doc.querySelector('#track-table tr[data-team="' + ex9.id + '"]'); return r0 && /1 500 €/.test(flat(r0.textContent)); });
+  const trk2 = serverTracking(), t92 = trk2.teams.find((t) => t.team_id === ex9.id);
+  check(t92.actual_to_date === 1500 && t92.landing === Math.round((1500 + Math.max(0, 7000 - t92.ev)) * 100) / 100 && norm(ex.doc.querySelector('#track-table tr[data-team="' + ex9.id + '"]').textContent).includes(fmt(t92.landing)), 'atterrissage = réalisé à ce jour + reste à faire : ' + fmt(t92.landing) + ' (comme le serveur)');
+  check(/CPN-100 1 500 €/.test(ex.text('actuals-cpn')) && !ex.$('proj-no-actuals'), 'le réalisé par CPN s’affiche et l’invitation à saisir disparaît');
+  // modifier la même combinaison remplace le montant
+  ex.click(ex.doc.querySelector('#actuals-lines .act-edit'));
+  check(ex.$('act-team').value === ex9.id && ex.$('act-month').value === '2026-10' && ex.$('act-amount').value === '1500', 'Modifier remplit le formulaire avec la saisie');
+  ex.set('act-amount', '1800'); ex.click(ex.$('act-save'));
+  await ex.until(() => Number(c.repoGet('ActualLine', a1.id).amount) === 1800);
+  check(c.repoList('ActualLine').length === 1, 'saisir à nouveau la même combinaison remplace le montant (l’historique des autres mois est conservé)');
+  await ex.until(() => ex.doc.querySelectorAll('#actuals-lines tbody tr').length === 1 && /1 800 €/.test(ex.text('actuals-lines')));
+  // un autre mois s'ajoute (l'historique), un avoir se saisit en négatif
+  ex.set('act-team', ex9.id); ex.set('act-month', '2026-09'); ex.set('act-amount', '-200'); ex.click(ex.$('act-save'));
+  await ex.until(() => c.repoList('ActualLine').length === 2);
+  check(c.repoList('ActualLine').some((l) => l.month === '2026-09' && Number(l.amount) === -200), 'un avoir (montant négatif) sur un autre mois : l’historique est conservé');
+  await ex.until(() => ex.doc.querySelectorAll('#actuals-lines tbody tr').length === 2);
+  ex.click(ex.doc.querySelector('#actuals-lines tr[data-line="' + c.repoList('ActualLine').find((l) => l.month === '2026-09').id + '"] .act-del'));
+  await ex.until(() => c.repoList('ActualLine').length === 1);
+  check(true, 'Retirer supprime la saisie du mois');
+  // un Workpackage leader ne saisit pas le réalisé
+  const wl3 = openPage(RWP);
+  await wl3.until(() => wl3.$('track-table'));
+  check(wl3.$('zone-actuals').hidden && wl3.$('cell-actuals').hidden, 'le réalisé est réservé au chef de projet et au-dessus : un Workpackage leader ne voit pas la zone');
+
+  // ---------------------------------------------------------------- l'onglet OP : le plan de l'année suivante
+  const opP = openPage(CP);
+  await opP.until(() => opP.$('plan-table') && opP.$('tab-op'));
+  opP.click(opP.$('tab-op'));
+  await opP.until(() => opP.$('dot-' + vm.id) && opP.doc.querySelector('#plan-table tr[data-item="' + d1.id + '"]'));
+  check(opP.text('tab-op') === 'OP 2027' && opP.$('tab-op').getAttribute('aria-selected') === 'true' && !opP.$('version-bar') && !opP.doc.querySelector('#plan-table tr[data-item="' + e1.id + '"]'), 'onglet OP 2027 : le plan de 2027 sans les livrables de 2026 (étanche) ; pas de versions dans l’OP');
+  const rowVm = opP.doc.querySelector('#exercise-table tr[data-team="' + vm.id + '-total"]'), rowAe = opP.doc.querySelector('#exercise-table tr[data-team="' + ae.id + '"]');
+  check(/110 000 €/.test(flat(rowVm.textContent)) && /90 000 €/.test(flat(rowVm.textContent)) && /\+20 000 €/.test(flat(rowVm.textContent)), '1vm avec son détail 1vmd : dotation 110 000 €, plan 90 000 €, reste 20 000 € : ' + flat(rowVm.textContent));
+  check(/50 000 €/.test(flat(rowAe.textContent)) && /60 000 €/.test(flat(rowAe.textContent)) && /clash/.test(flat(rowAe.textContent)), '2ae : plan 60 000 € pour 50 000 € de dotation : clash');
+  check(!!opP.doc.querySelector('#plan-table th[data-team="' + vmd.id + '"]') && /détail de 1vm/.test(flat(opP.doc.querySelector('#plan-table th[data-team="' + vmd.id + '"]').textContent)), 'l’équipe à 4 caractères est une colonne « détail de 1vm »');
+  // la dotation se saisit dans la première ligne
+  opP.set('dot-' + vm.id, '85000'); opP.input(opP.$('dot-' + vm.id));
+  opP.click(opP.$('plan-validate'));
+  await opP.until(() => c.repoList('TeamBudget').some((b) => b.team_id === vm.id && b.exercise_id === prep.id && Number(b.amount) === 85000));
+  await opP.until(() => { const r0 = opP.doc.querySelector('#exercise-table tr[data-team="' + vm.id + '-total"]'); return r0 && /115 000 €/.test(flat(r0.textContent)); });
+  check(true, 'dotation 1vm : 80 000 € → 85 000 € ; avec le détail : 115 000 €');
+  // une colonne équipe ajoutée à la main, puis une part dans cette colonne
+  const pick = opP.$('plan-team-pick');
+  check(!![...pick.options].find((o) => o.value === spare.id) && ![...pick.options].find((o) => o.value === vm.id), 'on ajoute une colonne pour une équipe qui n’en a pas encore : 3xx proposée, 1vm déjà présente');
+  pick.value = spare.id; opP.click(opP.$('plan-team-add'));
+  await opP.until(() => opP.$('cell-' + d1.id + '-' + spare.id));
+  opP.set('cell-' + d1.id + '-' + spare.id, '1000'); opP.input(opP.$('cell-' + d1.id + '-' + spare.id));
+  opP.click(opP.$('plan-validate'));
+  await opP.until(() => c.repoList('BudgetLine').some((l) => l.deliverable_id === d1.id && l.team_id === spare.id && Number(l.planned_amount) === 1000));
+  check(true, 'une part dans la colonne ajoutée : 1 000 € de 3xx sur le livrable 2027 A');
+  // livrables sans exercice : rattachement groupé à l'exercice de l'onglet
+  await opP.until(() => opP.$('assign-open'));
+  check(/\(1\)/.test(opP.text('assign-open')) && /2027/.test(opP.text('assign-open')), 'un livrable sans exercice : bouton de rattachement à 2027 : ' + opP.text('assign-open'));
+  opP.click(opP.$('assign-open'));
+  await opP.until(() => opP.$('genform').open);
+  opP.submitGf();
+  await opP.until(() => c.repoGet('PlanItem', orphan.id).exercise_id === prep.id);
+  check(true, 'rattaché à l’exercice 2027');
   // lecture seule pour un Workpackage leader
   const wl2 = openPage(RWP);
   await wl2.until(() => wl2.$('track-table'));
   wl2.click(wl2.$('tab-op'));
-  await wl2.until(() => wl2.$('exercise-table'));
-  check(!wl2.doc.querySelector('[id^="exp-"]') && /Lecture seule/.test(wl2.text('exercise-note')) && !wl2.$('exercise-team-add'), 'un Workpackage leader voit l’exercice du projet en lecture seule : ni champs, ni ajout');
+  await wl2.until(() => wl2.$('plan-table') && wl2.$('exercise-table'));
+  check(!wl2.doc.querySelector('[id^="dot-"]') && /Plan budgétaire/.test(wl2.text('zone-plan')), 'un Workpackage leader voit les dotations en lecture seule : aucun champ de dotation');
   const mm2 = openPage(MEMBER);
   await wait(250);
-  check(mm2.$('zone-exercice').hidden && mm2.$('panel-exercice').hidden, 'un Contributor ne voit pas la zone de l’exercice');
+  check(mm2.$('zone-plan').hidden && mm2.$('panel-plan').hidden && mm2.$('zone-track').hidden, 'un Contributor ne voit ni le plan ni le suivi par équipe');
 
-  // ---------------------------------------------------------------- 0.19.2 : l'évolution depuis la baseline, à même la décomposition
+  // ---------------------------------------------------------------- l'évolution depuis la baseline, à même le plan
   const nb = openPage(CP);
-  await nb.until(() => nb.$('env-table'));
-  check(![...nb.doc.querySelectorAll('#env-table th')].some((h) => /Depuis la baseline/.test(h.textContent)), 'sans baseline : pas de colonne d’évolution');
+  await nb.until(() => nb.$('plan-table'));
+  check(![...nb.doc.querySelectorAll('#plan-table th')].some((h) => /Depuis/.test(h.textContent)), 'sans baseline : pas de colonne d’évolution');
   w.call(CP, 'baselines.create', { projectId: w.p1.id, justification: 'Référence pour l’essai', label: 'B0' });
-  const lineB = c.repoList('BudgetLine').find((l) => l.team_id === ex9.id);
-  w.call(CP, 'budget.line.save', { id: lineB.id, version: lineB.version, values: { planned_amount: Number(lineB.planned_amount) + 500 } });
-  w.call(CP, 'budget.envelope.set', { projectId: w.p1.id, allocations: [{ wpId: w.w2.id, amount: 1234 }] });
+  w.call(CP, 'budget.cell.set', { deliverableId: e1.id, teamId: ex9.id, amount: 4500, exerciseId: exec.id });
+  setDot(ex9, 6500, exec);
   const bl = openPage(CP);
-  await bl.until(() => bl.$('env-table'));
-  check([...bl.doc.querySelectorAll('#env-table th')].some((h) => /Depuis la baseline P1_0/.test(h.textContent)), 'avec une baseline active : colonne « Depuis la baseline P1_0 »');
-  await bl.until(() => /enveloppe/.test(bl.doc.querySelector('#env-table tr[data-wp="' + w.w2.id + '"]').textContent) || true);
-  const wr2 = bl.doc.querySelector('#env-table tr[data-wp="' + w.w2.id + '"]');
-  check(/enveloppe .* → 1\s?234 €/.test(flat(wr2.cells[6].textContent)), 'un workpackage dont l’enveloppe a changé : « enveloppe … → 1 234 € » : ' + flat(wr2.cells[6].textContent));
-  const dlUp = [...bl.doc.querySelectorAll('#env-table tr.is-deliverable')].find((r) => /Livrable 2026/.test(r.cells[0].textContent) && /coût \+500/.test(flat(r.cells[6].textContent)));
-  check(!!dlUp, 'un livrable dont une ligne a augmenté de 500 € : « coût +500 € »');
-  const unchanged = [...bl.doc.querySelectorAll('#env-table tr.is-deliverable')].find((r) => /=/.test(r.cells[6].textContent));
-  check(!!unchanged, 'un livrable inchangé : « = »');
-  check(!!bl.doc.querySelector('#env-table tr.is-milestone') && bl.doc.querySelector('#env-table tr.is-milestone').cells[6].textContent.trim() === '', 'un jalon n’a pas de coût : cellule vide');
+  await bl.until(() => bl.$('plan-table') && bl.$('version-bar'));
+  check([...bl.doc.querySelectorAll('#plan-table th')].some((h) => /Depuis P1_0/.test(h.textContent)), 'avec une baseline active : colonne « Depuis P1_0 »');
+  const rowE1 = bl.doc.querySelector('#plan-table tr[data-item="' + e1.id + '"]'), rowE2 = bl.doc.querySelector('#plan-table tr[data-item="' + e2.id + '"]');
+  check(/\+500 €/.test(flat(rowE1.cells[rowE1.cells.length - 1].textContent)) && /=/.test(rowE2.cells[rowE2.cells.length - 1].textContent), 'un livrable dont la part a augmenté de 500 € : « +500 € » ; un inchangé : « = »');
+  const rowD9 = bl.doc.querySelector('#exercise-table tr[data-team="' + ex9.id + '"]');
+  check(/6 000 €/.test(flat(rowD9.cells[rowD9.cells.length - 1].textContent)) && /\+500 €/.test(flat(rowD9.cells[rowD9.cells.length - 1].textContent)), 'la dotation à la baseline (6 000 €) et son évolution (+500 €) : ' + flat(rowD9.cells[rowD9.cells.length - 1].textContent));
 
-  // ---------------------------------------------------------------- 0.19.3 : les valeurs d'avant sont reprises en brouillon, l'écart s'affiche en direct
-  c.repoUpdate('Project', w.p1.id, { budget_authorized: 7000 }, null, w.S);
-  c.repoUpdate('WorkPackage', w.w1.id, { budget_allocated: 2500 }, null, w.S);
-  const lg = openPage(CP);
-  await lg.until(() => lg.$('env-table'));
-  lg.click(lg.$('tab-op'));
-  await lg.until(() => lg.$('env-authorized') && lg.$('env-' + w.w1.id) && lg.$('env-legacy-note'));
-  check(lg.$('env-authorized').value === '7000' && lg.$('env-' + w.w1.id).value === '2500' && !lg.$('env-validate').disabled && lg.$('env-validate').classList.contains('primary') && /valeurs d’avant/.test(lg.text('env-legacy-note')), 'OP 2027 : les anciennes enveloppes sont reprises en brouillon (rien à ressaisir) ; « Valider » est bleu et la page le dit');
-  check(c.envAmount_(c.repoGet('Project', w.p1.id), c.envKey_(prep)) === null && c.envAmount_(c.repoGet('WorkPackage', w.w1.id), c.envKey_(prep)) === null, 'rien n’est enregistré pour 2027 tant qu’on ne valide pas');
-  check(lg.text('env-' + w.w1.id + '-delta') === '', 'aucun écart tant qu’on n’a pas modifié la valeur reprise');
-  lg.set('env-' + w.w1.id, '3000'); lg.input(lg.$('env-' + w.w1.id));
-  check(/\+500\s?€ vs avant \(2\s?500\s?€\)/.test(lg.text('env-' + w.w1.id + '-delta')) && lg.$('env-' + w.w1.id + '-delta').classList.contains('up'), 'l’écart avec la valeur d’avant s’affiche en direct : ' + lg.text('env-' + w.w1.id + '-delta'));
-  lg.set('env-' + w.w1.id, '2000'); lg.input(lg.$('env-' + w.w1.id));
-  check(/−500\s?€ vs avant/.test(lg.text('env-' + w.w1.id + '-delta')) && lg.$('env-' + w.w1.id + '-delta').classList.contains('down'), 'et il passe en baisse quand on descend : ' + lg.text('env-' + w.w1.id + '-delta'));
-  lg.click(lg.$('env-validate'));
-  await lg.until(() => c.envAmount_(c.repoGet('WorkPackage', w.w1.id), c.envKey_(prep)) === 2000 && c.envAmount_(c.repoGet('Project', w.p1.id), c.envKey_(prep)) === 7000);
-  check(c.envAmount_(c.repoGet('WorkPackage', w.w1.id), c.envKey_(exec)) !== 2000, 'adopté pour 2027 seulement : l’exercice 2026 garde ses propres valeurs');
-  await lg.until(() => lg.$('env-validate') && lg.$('env-validate').disabled && !lg.$('env-legacy-note'));
-  check(lg.text('env-' + w.w1.id + '-delta') === '', 'enregistré : plus de reprise, plus d’écart');
-
-  // ---------------------------------------------------------------- 0.20.0 : les versions de la décomposition (suivi)
+  // ---------------------------------------------------------------- les versions du plan (suivi)
   const DPL = 'dora@entreprise.com';
   const vp = openPage(CP);
-  await vp.until(() => vp.$('version-bar') && vp.$('env-table'));
-  check(/P1_0/.test(vp.text('ver-pending')) && /en attente de validation/.test(vp.text('ver-pending')) && /Dora/.test(vp.text('ver-pending')) && /pas prise en compte dans le suivi/.test(vp.text('ver-pending')), 'la baseline P1_0 est en attente : la page le dit, nomme Dora, et précise que cette version n’est pas prise en compte dans le suivi : ' + vp.text('ver-pending'));
+  await vp.until(() => vp.$('version-bar') && vp.$('plan-table'));
+  check(/P1_0/.test(vp.text('ver-pending')) && /en attente de validation/.test(vp.text('ver-pending')) && /Dora/.test(vp.text('ver-pending')) && /pas prise en compte dans le suivi/.test(vp.text('ver-pending')), 'la baseline P1_0 est en attente : la page le dit, nomme Dora, et précise qu’elle n’est pas prise en compte dans le suivi : ' + vp.text('ver-pending'));
   const p0 = c.repoList('Baseline').find((b) => b.label === 'P1_0');
-  check(!vp.$('vt-ref') && vp.$('vt-live').getAttribute('aria-selected') === 'true' && /à valider/.test(vp.text('vt-' + p0.id)) && vp.$('vt-' + p0.id).classList.contains('pending') && !!vp.$('version-new'), 'onglets : « Version en cours » (aucune version validée : le suivi la lit) et la version P1_0 « à valider » ⏳ ; le bouton « Figer une nouvelle version » est proposé');
-  check(/Aucune version validée|en attente de validation/.test(vp.text('version-bar')) && !!vp.doc.querySelector('#env-table input.env-input'), 'tant que rien n’est validé, la décomposition du suivi reste modifiable (c’est la version en cours)');
+  check(!vp.$('vt-ref') && vp.$('vt-live').getAttribute('aria-selected') === 'true' && /à valider/.test(vp.text('vt-' + p0.id)) && vp.$('vt-' + p0.id).classList.contains('pending') && !!vp.$('version-new'), 'onglets : « Version en cours » (aucune version validée : le suivi la lit) et la version P1_0 à valider');
+  check(!!vp.doc.querySelector('#plan-table input.env-input'), 'tant que rien n’est validé, le plan du suivi reste modifiable (c’est la version en cours)');
   // le DPL valide P1_0 ; la saisie change ensuite ; le suivi lit toujours P1_0
   const ackIds = w.call(DPL, 'changes.feed', { projectId: w.p1.id }).items.filter((x) => x.table === 'Baseline' && x.entity_id === p0.id).map((x) => x.id);
   w.call(DPL, 'changes.ack', { ids: ackIds });
-  const frozenCost = c.repoList('BudgetLine').filter((l) => c.repoGet('PlanItem', l.deliverable_id).exercise_id === exec.id).reduce((t, l) => t + Number(l.planned_amount), 0);
-  w.call(CP, 'budget.envelope.set', { projectId: w.p1.id, exerciseId: exec.id, authorized: 55555, allocations: [{ wpId: w.w1.id, amount: 777 }] });
+  const planRef = serverTracking().totals.plan;
+  w.call(CP, 'budget.cell.set', { deliverableId: e2.id, teamId: ex9.id, amount: 9999, exerciseId: exec.id });
   const vq = openPage(CP);
-  await vq.until(() => vq.$('vt-ref') && vq.$('env-table'));
-  check(/Suivi · P1_0/.test(vq.text('vt-ref')) && vq.$('vt-ref').getAttribute('aria-selected') === 'true' && vq.$('vt-ref').classList.contains('ref') && /lue par le suivi/.test(vq.text('vt-ref')), 'P1_0 validée : l’onglet « Suivi · P1_0 » ✓ est sélectionné, c’est la version lue par le suivi');
-  check(!vq.doc.querySelector('#env-table input.env-input') && /lecture seule/.test(vq.text('ver-frozen')) && /version lue par le suivi/.test(vq.text('ver-frozen')) && !vq.$('env-validate'), 'la version figée est en lecture seule : aucun champ, pas de « Valider » : ' + vq.text('ver-frozen'));
-  const wpRow = (pg) => pg.doc.querySelector('#env-table tr[data-wp="' + w.w1.id + '"]');
-  check(!/777/.test(wpRow(vq).textContent), 'elle montre ce qui a été figé, pas la saisie d’aujourd’hui (777 €) ');
+  await vq.until(() => vq.$('vt-ref') && vq.$('plan-table') && vq.$('track-table'));
+  check(/Suivi · P1_0/.test(vq.text('vt-ref')) && vq.$('vt-ref').getAttribute('aria-selected') === 'true' && vq.$('vt-ref').classList.contains('ref') && /lue par le suivi/.test(vq.text('vt-ref')), 'P1_0 validée : l’onglet « Suivi · P1_0 » ✓ est sélectionné : c’est la version lue par le suivi');
+  check(!vq.doc.querySelector('#plan-table input.env-input') && /lecture seule/.test(vq.text('ver-frozen')) && !vq.$('plan-validate') && /Version figée/.test(vq.text('plan-readonly')), 'la version figée est en lecture seule : aucun champ, pas de « Valider » : ' + vq.text('ver-frozen'));
+  check(!/9 999/.test(vq.text('plan-table')) && !/9 999/.test(vq.text('track-table')), 'elle montre ce qui a été figé, pas la saisie d’aujourd’hui (9 999 €)');
+  check(norm(vq.text('track-cards')).includes(fmt(planRef)) && planRef < 9999 + 4500, 'le suivi par équipe lit la version de référence : plan ' + fmt(planRef));
   vq.click(vq.$('vt-live'));
-  await vq.until(() => vq.doc.querySelector('#env-table input.env-input') && vq.$('ver-live'));
-  check(vq.$('env-' + w.w1.id).value === '777' && /pas prises en compte dans le suivi/.test(vq.text('ver-live')) && !!vq.$('env-validate'), 'la version en cours montre la saisie (777 €), modifiable ; elle précise que ces modifications ne sont pas prises en compte dans le suivi tant qu’une version figée qui les contient n’est pas validée');
-  // le suivi (projection, graphique) lit toujours la version de référence, même sur l’onglet de la version en cours
-  check(vq.$('env-authorized').value === '55555' && /20\s?000/.test(vq.text('proj-cards')) && !/55\s?555/.test(vq.text('proj-cards')), 'la version en cours montre 55 555 € de budget autorisé ; la projection et le graphique, eux, restent sur la version de référence (20 000 €) pendant qu’on l’édite');
+  await vq.until(() => vq.doc.querySelector('#plan-table input.env-input') && vq.$('ver-live'));
+  check(vq.$('cell-' + e2.id + '-' + ex9.id).value === '9999' && /pas prises en compte dans le suivi/.test(vq.text('ver-live')) && !!vq.$('plan-validate'), 'la version en cours montre la saisie (9 999 €), modifiable ; elle précise que ces modifications ne sont pas prises en compte dans le suivi tant qu’une version figée qui les contient n’est pas validée');
+  check(norm(vq.text('track-cards')).includes(fmt(planRef)), 'le suivi reste sur la version de référence pendant qu’on lit la version en cours');
   // figer une nouvelle version
   vq.click(vq.$('version-new'));
   await vq.until(() => vq.$('genform').open && vq.$('gf-reason'));
   vq.submitGf();
   await vq.until(() => !vq.$('gf-error').hidden);
   check(/justification est obligatoire|motif/i.test(vq.text('gf-error')), 'sans motif : refusé : ' + vq.text('gf-error'));
-  vq.set('gf-reason', 'Budget revu après la revue de décembre'); vq.submitGf();
+  vq.set('gf-reason', 'Plan revu après la revue de décembre'); vq.submitGf();
   await vq.until(() => c.repoList('Baseline').some((b) => b.label === 'P1_1'));
   await vq.until(() => vq.$('ver-pending') && /P1_1/.test(vq.text('ver-pending')));
   const p1 = c.repoList('Baseline').find((b) => b.label === 'P1_1');
-  check(/P1_1/.test(vq.text('ver-pending')) && /Suivi · P1_0/.test(vq.text('vt-ref')) && /à valider/.test(vq.text('vt-' + p1.id)), 'la nouvelle version P1_1 apparaît en attente ; le suivi continue de lire P1_0 : ' + vq.text('ver-pending'));
-  // une version se consulte par son onglet
+  check(/Suivi · P1_0/.test(vq.text('vt-ref')) && /à valider/.test(vq.text('vt-' + p1.id)), 'la nouvelle version P1_1 apparaît en attente ; le suivi continue de lire P1_0');
   vq.click(vq.$('vt-' + p1.id));
   await vq.until(() => vq.$('ver-frozen') && /P1_1/.test(vq.text('ver-frozen')));
-  check(/P1_1/.test(vq.text('ver-frozen')) && !/version lue par le suivi/.test(vq.text('ver-frozen')), 'l’onglet de P1_1 : lecture seule, et ce n’est pas la version lue par le suivi');
-
-  // ---------------------------------------------------------------- 0.20.1 : le réalisé comptable dans la projection, le graphique et « Par équipe »
-  const ac0 = openPage(CP);
-  await ac0.until(() => ac0.$('proj-cards'));
-  check(!!ac0.$('proj-no-actuals') && /non importé/.test(ac0.text('proj-no-actuals')) && !ac0.$('legend-actual') && !ac0.$('ch-actual-line'), 'sans réalisé importé : la page le dit (projection à l’avancement seulement), pas de courbe du réalisé');
-  const cpnP = c.repoGet('Project', w.p1.id).cpn;
-  const abook = c.SpreadsheetApp.create('Actuals'), ash = abook.insertSheet('CUC Total Cost');
-  const agrid = [Array.from({ length: 30 }, (_, i) => i === 9 ? 'WBS élément' : i === 11 ? 'cost center group' : i === 19 ? 'Month' : i === 20 ? 'Year' : i === 22 ? 'Actuals' : 'c' + i)].concat([[cpnP, '9ex', 'mai', 2026, 4000], [cpnP, '9ex', 'juin', 2026, 3000], [cpnP, 'Équipe externe', 'juin', 2026, 500]].map((r) => { const l = Array.from({ length: 30 }, () => ''); l[9] = r[0]; l[11] = r[1]; l[19] = r[2]; l[20] = r[3]; l[22] = r[4]; return l; }));
-  ash.getRange(1, 1, agrid.length, 30).setValues(agrid);
-  check(w.raw(ADMIN, 'actuals.import.run', { book: abook.getId() }).ok, 'le réalisé du mois est importé (CPN du projet, équipe 9ex, mai et juin 2026)');
-  const ac1 = openPage(CP);
-  await ac1.until(() => ac1.$('proj-cards') && ac1.$('legend-actual'));
-  check(/Réalisé à ce jour/.test(ac1.text('proj-cards')) && /7\s?500\s?€/.test(ac1.text('proj-cards')) && /Projection sur le réalisé/.test(ac1.text('proj-cards')) && !ac1.$('proj-no-actuals'), 'la projection affiche le réalisé à ce jour (7 500 €) et la projection sur le réalisé : ' + ac1.text('proj-cards').replace(/\s+/g, ' ').slice(0, 260));
-  const ln = ac1.doc.getElementById('ch-actual-line');
-  check(!!ln && ln.getAttribute('points').split(' ').length === 6 && ac1.doc.querySelectorAll('#monthly-chart .ch-actual-dot').length === 6 && /Réalisé cumulé/.test(ac1.text('graph-legend')), 'le graphique : une courbe verte du réalisé cumulé de janvier au dernier mois importé (juin : six points), et la légende');
-  ac1.doc.querySelector('#monthly-chart .ch-band[data-month="2026-06"]').dispatchEvent(new ac1.win.Event('mouseenter', { bubbles: true }));
-  check(/Réalisé du mois/.test(ac1.text('graph-tip')) && /Réalisé cumulé/.test(ac1.text('graph-tip')) && /3\s?500\s?€/.test(ac1.text('graph-tip')), 'l’infobulle de juin donne le réalisé du mois (3 500 €) et le cumul : ' + ac1.text('graph-tip').replace(/\s+/g, ' '));
-  ac1.click(ac1.$('toggle-track'));
-  check(/Réalisé à ce jour/.test(ac1.text('track-table')) && /7\s?000\s?€/.test(flat(ac1.doc.querySelector('#track-table tr[data-team="' + ex9.id + '"]').textContent)), 'par équipe : une colonne « Réalisé à ce jour » : 9ex a consommé 7 000 €');
-  check(/500\s?€/.test(ac1.text('track-table')) || true, 'les 500 € d’une équipe inconnue restent au projet, sans équipe');
+  check(/P1_1/.test(vq.text('ver-frozen')) && !/version lue par le suivi/.test(vq.text('ver-frozen')) && /9 999/.test(vq.text('plan-table')), 'l’onglet de P1_1 : lecture seule, avec le plan figé (9 999 €), et ce n’est pas la version lue par le suivi');
 
   console.log(failed ? '\n' + failed + ' échec(s).' : '\nPage Budget : tout est conforme.');
   process.exit(failed ? 1 : 0);

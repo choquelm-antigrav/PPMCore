@@ -214,9 +214,8 @@ function detachItem_(itemId, actx) {
   deps.forEach(function (d) { repoSoftDelete('Dependency', d.id, null, actx); });
   var reqs = repoList('MilestoneRequirement', function (r) { return r.milestone_id === itemId || r.deliverable_id === itemId; });
   reqs.forEach(function (r) { repoSoftDelete('MilestoneRequirement', r.id, null, actx); });
-  // Budget et répartition des PO du livrable : la ligne de budget et ses mois, le lien de PO (le montant de la PO reste, « non affecté »).
+  // Budget et répartition des PO du livrable : la ligne de budget, le lien de PO (le montant de la PO reste, « non affecté »).
   repoList('BudgetLine', function (l) { return l.deliverable_id === itemId; }).forEach(function (l) {
-    repoList('BudgetPhasing', function (x) { return x.budget_line_id === l.id; }).forEach(function (x) { repoSoftDelete('BudgetPhasing', x.id, null, actx); });
     repoSoftDelete('BudgetLine', l.id, null, actx);
   });
   repoList('PurchaseOrderLink', function (l) { return l.deliverable_id === itemId; }).forEach(function (l) { repoSoftDelete('PurchaseOrderLink', l.id, null, actx); });

@@ -330,5 +330,5 @@ var DEMO_NEXT_YEAR = [
   ['Dossier de certification v2', [['MAT', 35000], ['ESSV', 25000]], 20, 45]
 ];
 
-/** Le budget attendu de l'exercice en préparation : [équipe, montant]. STR a du budget non réparti, AER est en dépassement, CON n'a encore aucun livrable. */
+/** La dotation de l'exercice en préparation : [équipe, montant]. STR a du budget non réparti, AER est en dépassement, CON n'a encore aucun livrable. */
 var DEMO_EXPECTED = [['STR', 100000], ['AER', 20000], ['ESS', 80000], ['ESSB', 30000], ['IND', 45000], ['SYS', 80000], ['MAT', 40000], ['CON', 30000]];

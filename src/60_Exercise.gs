@@ -1,18 +1,18 @@
 /**
  * PPM Core — 0.17.1 : l'EXERCICE BUDGÉTAIRE annuel.
  *
- * Chaque année, on passe d'un budget attendu PAR ÉQUIPE à une liste de livrables chiffrés par équipe qui tient dans ce budget, puis on suit l'exécution.
- *   - Avant l'été : le budget ATTENDU par équipe à 3 caractères (ex. « 1vm »), par projet. Une équipe à 4 caractères (« 1vmd », rattachée à « 1vm ») est un détail facultatif qui s'additionne
+ * Chaque année, une DOTATION par équipe (un seul montant annuel, saisi et révisé) face au PLAN BUDGÉTAIRE : le tableau livrable × équipe (43_Budget.gs, 55_Plan.gs).
+ *   - La dotation d'une équipe à 3 caractères (ex. « 1vm ») est saisie par projet. Une équipe à 4 caractères (« 1vmd », rattachée à « 1vm ») est un détail facultatif qui s'additionne
  *     dans sa parente. Le niveau se lit au NOMBRE DE CARACTÈRES du nom de l'équipe.
- *   - Septembre : les livrables, chacun avec une PART PAR ÉQUIPE en montant libre (43_Budget.gs). Pour chaque équipe : attendu · total des parts · écart.
- *   - Décembre : le budget ACCORDÉ, qui peut être réduit : l'écart avec les parts est le CLASH, résorbé en redéfinissant les livrables. Février et avril : l'accordé peut être revu.
+ *   - Pour chaque équipe : dotation · plan (total de ses parts de livrables) · écart. Quand la dotation est réduite sous le plan, c'est le CLASH, résorbé en redéfinissant les livrables.
+ *   - Les révisions successives de la dotation et du plan se gardent par les versions (les baselines du projet).
  * On AFFICHE les écarts, on ne bloque jamais. Un exercice est en Préparation (l'année qui vient), en Exécution (l'année en cours) ou Clos ; au plus un de chaque état ; un livrable n'a
  * qu'un exercice.
  *
  * COÛT D'UN ETP. Il n'y a plus aucun taux journalier : seulement le coût annuel d'un ETP par pays et par année (administrateur). Un montant se convertit en jours par :
  *   jours = montant ÷ (coût annuel de l'ETP du pays ÷ jours ouvrés de l'année dans le pays) ; le pays est celui de l'équipe ; sans coût paramétré : null (« à paramétrer »), jamais un faux chiffre.
  *
- * Droits : exercise.read (Workpackage leader et au-dessus, en profondeur) ; exercise.edit (chef de projet et au-dessus) saisit l'attendu et l'accordé de son projet ; exercices et coût d'un ETP :
+ * Droits : exercise.read (Workpackage leader et au-dessus, en profondeur) ; exercise.edit (chef de projet et au-dessus) saisit la dotation de son projet ; exercices et coût d'un ETP :
  * administrateur.
  */
 
@@ -154,7 +154,7 @@ defineAction('budget.deliverable.exercise', function (p, ctx) {
 // ---------------------------------------------------------------- le tableau d'un exercice
 
 /**
- * Les données d'un exercice pour des projets : budgets d'équipe, livrables de l'exercice et leurs parts par équipe.
+ * Les données d'un exercice pour des projets : dotations d'équipe, livrables de l'exercice et leurs parts par équipe (le plan budgétaire).
  */
 function exerciseData_(ex, projectIds) {
   var inProj = {}; projectIds.forEach(function (id) { inProj[id] = true; });
@@ -168,12 +168,13 @@ function exerciseData_(ex, projectIds) {
 }
 
 /**
- * Le tableau par équipe : une ligne par équipe à 3 caractères (avec ses équipes à 4 caractères en détail), attendu · accordé · parts · écarts. Les équipes à 4 caractères sans parente à 3
+ * Le tableau par équipe : une ligne par équipe à 3 caractères (avec ses équipes à 4 caractères en détail), DOTATION · plan (parts des livrables) · écart. Les équipes à 4 caractères sans parente à 3
  * caractères (`orphans`) et les équipes hors règle (`unruled`) sont à part, car elles ne s'additionnent nulle part. `projectId` restreint à un projet (sinon tous ceux de `data`).
+ * Le « clash » : le plan d'une équipe dépasse sa dotation.
  */
 function exerciseTable_(ex, data, projectId) {
   var rows = {}, orphans = {}, unruled = {};
-  var make = function (t) { return { team_id: t.id, name: t.name, country: t.country || 'FR', expected: null, granted: null, parts: 0, own: { expected: null, granted: null, parts: 0 }, children: {} }; };
+  var make = function (t) { return { team_id: t.id, name: t.name, country: t.country || 'FR', dotation: null, parts: 0, own: { dotation: null, parts: 0 }, children: {} }; };
   var locate = function (t) {
     var lvl = teamLevel_(t);
     if (lvl === 3) return { map: rows, root: t, child: null };
@@ -188,14 +189,12 @@ function exerciseTable_(ex, data, projectId) {
     if (!t || isTrue(t.deleted)) return;
     var loc = locate(t), row = loc.map[loc.root.id] = loc.map[loc.root.id] || make(loc.root);
     addTo(row, field, v);
-    if (loc.child) { var ch = row.children[loc.child.id] = row.children[loc.child.id] || { team_id: loc.child.id, name: loc.child.name, expected: null, granted: null, parts: 0 }; addTo(ch, field, v); }
+    if (loc.child) { var ch = row.children[loc.child.id] = row.children[loc.child.id] || { team_id: loc.child.id, name: loc.child.name, dotation: null, parts: 0 }; addTo(ch, field, v); }
     else addTo(row.own, field, v);
   };
   data.budgets.forEach(function (b) {
     if (projectId && b.project_id !== projectId) return;
-    var t = data.teamById[b.team_id];
-    if (!isBlank(b.expected)) apply(t, 'expected', Number(b.expected));
-    if (!isBlank(b.granted)) apply(t, 'granted', Number(b.granted));
+    if (!isBlank(b.amount)) apply(data.teamById[b.team_id], 'dotation', Number(b.amount));
   });
   data.lines.forEach(function (l) {
     var it = data.itemById[l.deliverable_id];
@@ -204,28 +203,27 @@ function exerciseTable_(ex, data, projectId) {
   });
   var finish = function (r) {
     var days = function (x) { return x === null ? null : daysFromAmount_(x, r.country, Number(ex.year)); };
-    ['expected', 'granted', 'parts'].forEach(function (f) { if (r[f] !== null) r[f] = round2(r[f]); });
+    ['dotation', 'parts'].forEach(function (f) { if (r[f] !== null) r[f] = round2(r[f]); });
     return Object.assign(r, {
-      gap_expected: r.expected === null ? null : round2(r.expected - r.parts),
-      gap_granted: r.granted === null ? null : round2(r.granted - r.parts),
-      clash: r.granted !== null && r.parts > r.granted,
-      expected_days: days(r.expected), granted_days: days(r.granted), parts_days: days(r.parts),
+      gap: r.dotation === null ? null : round2(r.dotation - r.parts),
+      clash: r.dotation !== null && r.parts > r.dotation,
+      dotation_days: days(r.dotation), parts_days: days(r.parts),
       children: Object.keys(r.children).map(function (k) { return r.children[k]; }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); })
     });
   };
   var list = function (m) { return Object.keys(m).map(function (k) { return finish(m[k]); }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); }); };
   var out = { rows: list(rows), orphans: list(orphans), unruled: list(unruled) };
-  var sum = function (f) { var any = false, t = 0; out.rows.concat(out.orphans, out.unruled).forEach(function (r) { if (r[f] !== null) { any = true; t += r[f]; } }); return any ? round2(t) : null; };
-  out.totals = { expected: sum('expected'), granted: sum('granted'), parts: round2(out.rows.concat(out.orphans, out.unruled).reduce(function (a, r) { return a + r.parts; }, 0)) };
-  out.totals.gap_expected = out.totals.expected === null ? null : round2(out.totals.expected - out.totals.parts);
-  out.totals.gap_granted = out.totals.granted === null ? null : round2(out.totals.granted - out.totals.parts);
-  out.totals.clash = out.totals.granted !== null && out.totals.parts > out.totals.granted;
+  var all = out.rows.concat(out.orphans, out.unruled);
+  var dot = null; all.forEach(function (r) { if (r.dotation !== null) dot = (dot === null ? 0 : dot) + r.dotation; });
+  out.totals = { dotation: dot === null ? null : round2(dot), parts: round2(all.reduce(function (a, r) { return a + r.parts; }, 0)) };
+  out.totals.gap = out.totals.dotation === null ? null : round2(out.totals.dotation - out.totals.parts);
+  out.totals.clash = out.totals.dotation !== null && out.totals.parts > out.totals.dotation;
   return out;
 }
 
 function exerciseTeamChoices_(teams) {
   var byId = indexBy_(teams);
-  return teams.filter(function (t) { return teamLevel_(t) > 0; }).map(function (t) {
+  return teams.filter(function (t) { return teamLevel_(t) > 0 && !isTrue(t.deleted); }).map(function (t) {
     var par = isBlank(t.parent_team_id) ? null : byId[t.parent_team_id];
     return { id: t.id, name: t.name, level: teamLevel_(t), country: t.country || 'FR', parent: par ? par.name : '', orphan: teamLevel_(t) === 4 && !(par && teamLevel_(par) === 3) };
   }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
@@ -242,7 +240,7 @@ defineAction('exercise.get', function (p, ctx) {
   table.rows.concat(table.orphans, table.unruled).forEach(function (r) { countries[r.country] = true; });
   return Object.assign({
     exercise: exerciseView_(ex), project: { id: project.id, code: project.code, name: project.name },
-    can_edit: canEdit && ex.status !== 'Clos', can_edit_expected: canEdit && ex.status === 'Préparation', can_edit_granted: canEdit && ex.status !== 'Clos',
+    can_edit: canEdit && ex.status !== 'Clos',
     teams: exerciseTeamChoices_(data.teams),
     etp_missing: Object.keys(countries).filter(function (c) { return etpCostOf_(c, Number(ex.year)) === null; }).sort(),
     deliverables: data.items.length
@@ -260,7 +258,7 @@ defineAction('exercise.program', function (p, ctx) {
   var data = exerciseData_(ex, projects.map(function (x) { return x.id; }));
   var perProject = projects.map(function (x) {
     var t = exerciseTable_(ex, data, x.id).totals;
-    return { id: x.id, code: x.code, name: x.name, expected: t.expected, granted: t.granted, parts: t.parts, gap_expected: t.gap_expected, gap_granted: t.gap_granted, clash: t.clash };
+    return { id: x.id, code: x.code, name: x.name, dotation: t.dotation, parts: t.parts, gap: t.gap, clash: t.clash };
   }).sort(function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); });
   var table = exerciseTable_(ex, data, '');
   return Object.assign({ exercise: exerciseView_(ex), program: { id: program.id, code: program.code, name: program.name }, projects: perProject }, table);
@@ -278,8 +276,8 @@ function exerciseTeamCheck_(team) {
 }
 
 /**
- * Saisir l'attendu et/ou l'accordé d'une équipe sur un projet. Le chef de projet et au-dessus. L'attendu se fige quand l'exercice passe en exécution ; l'accordé reste modifiable
- * (février, avril) jusqu'à la clôture. Une valeur vide efface ; une ligne sans aucune valeur disparaît.
+ * Saisir la DOTATION d'une équipe sur un projet (le montant annuel qui lui est donné). Le chef de projet et au-dessus ; révisable jusqu'à la clôture de l'exercice (chaque révision se garde dans
+ * une baseline). Un montant vide efface la dotation.
  */
 defineAction('exercise.set', function (p, ctx) {
   var project = mustGet('Project', requireParam(p, 'projectId'));
@@ -289,26 +287,22 @@ defineAction('exercise.set', function (p, ctx) {
   var team = mustGet('HierarchicalTeam', requireParam(p, 'teamId'));
   var teamErr = exerciseTeamCheck_(team);
   if (teamErr) throw new PpmError('VALIDATION', teamErr);
-  var touched = ['expected', 'granted'].filter(function (f) { return f in p; });
-  if (!touched.length) throw new PpmError('VALIDATION', 'Rien à enregistrer : donnez l’attendu ou l’accordé.');
-  if (touched.indexOf('expected') >= 0 && ex.status !== 'Préparation') throw new PpmError('VALIDATION', 'Le budget attendu est figé : l’exercice ' + ex.year + ' est en ' + ex.status.toLowerCase() + '.');
-  var values = {};
-  touched.forEach(function (f) {
-    if (isBlank(p[f])) { values[f] = ''; return; }
-    var n = Number(String(p[f]).replace(',', '.'));
-    if (isNaN(n) || n < 0 || n > 1e10) throw new PpmError('VALIDATION', (f === 'expected' ? 'Budget attendu' : 'Budget accordé') + ' : un nombre positif ou nul.');
-    values[f] = round2(n);
-  });
+  if (!('amount' in p)) throw new PpmError('VALIDATION', 'Rien à enregistrer : donnez la dotation (vide pour l’effacer).');
+  var amount = '';
+  if (!isBlank(p.amount)) {
+    var n = Number(String(p.amount).replace(',', '.'));
+    if (isNaN(n) || n < 0 || n > 1e10) throw new PpmError('VALIDATION', 'Dotation : un nombre positif ou nul.');
+    amount = round2(n);
+  }
   return withLock(function () {
     var row = repoList('TeamBudget', function (b) { return b.exercise_id === ex.id && b.project_id === project.id && b.team_id === team.id; })[0];
     if (!row) {
-      if (touched.every(function (f) { return values[f] === ''; })) return { saved: false };
-      repoInsert('TeamBudget', Object.assign({ exercise_id: ex.id, project_id: project.id, team_id: team.id, expected: '', granted: '' }, values), ctx.actx);
+      if (amount === '') return { saved: false };
+      repoInsert('TeamBudget', { exercise_id: ex.id, project_id: project.id, team_id: team.id, amount: amount }, ctx.actx);
       return { saved: true };
     }
-    var next = Object.assign({ expected: row.expected, granted: row.granted }, values);
-    if (isBlank(next.expected) && isBlank(next.granted)) { repoSoftDelete('TeamBudget', row.id, null, ctx.actx); return { saved: true, removed: true }; }
-    repoUpdate('TeamBudget', row.id, values, null, ctx.actx);
+    if (amount === '') { repoSoftDelete('TeamBudget', row.id, null, ctx.actx); return { saved: true, removed: true }; }
+    repoUpdate('TeamBudget', row.id, { amount: amount }, null, ctx.actx);
     return { saved: true };
   });
 });

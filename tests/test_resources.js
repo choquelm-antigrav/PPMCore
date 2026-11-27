@@ -55,7 +55,8 @@ module.exports = function () {
 
   test('Budget : une part d’équipe en montant libre, un externe au forfait ; le budget externe compte les forfaits', () => {
     const w = world();
-    const line = (v) => w.raw(CP, 'budget.line.save', { values: v });
+    const ex = w.call(ADMIN, 'exercise.create', { year: 2026 }); w.call(ADMIN, 'exercise.setStatus', { id: ex.id, status: 'Exécution' });
+    const line = (v) => w.raw(CP, 'budget.line.save', { values: v, exerciseId: ex.id });
     const t1 = w.call(CP, 'teams.create', { values: { name: 'T1A', country: 'FR' } });
     const a = line({ deliverable_id: w.b.id, team_id: t1.id, planned_amount: 5000 });
     ok(a.ok, JSON.stringify(a.error));
@@ -67,8 +68,8 @@ module.exports = function () {
     eq(x.data.planned_amount, 4500);
     eq(line({ deliverable_id: w.b.id, resource_id: w.xavier.id }).error.code, 'VALIDATION', 'ni montant ni forfait : refusé');
     ok(/ressource externe/.test(line({ deliverable_id: w.b.id, resource_id: w.remi.id, fixed_amount: 100 }).error.message), 'un forfait avec un interne : refusé, le budget interne se saisit par équipe');
-    const g = w.call(CP, 'budget.get', { projectId: w.p1.id });
-    eq([g.totals.external, g.totals.internal, g.totals.total], [7500, 6000, 13500], 'le budget externe compte les forfaits ; l’interne, les parts d’équipe');
+    const g = w.call(CP, 'budget.plan.get', { projectId: w.p1.id, exerciseId: ex.id });
+    eq([g.totals.external, g.totals.total - g.totals.external, g.totals.total], [7500, 6000, 13500], 'le budget externe compte les forfaits ; l’interne, les parts d’équipe');
     const bal = w.call(CP, 'budget.balance', { projectId: w.p1.id });
     eq([bal.totals.budget.external, bal.totals.budget.internal], [7500, 6000]);
     const opt = w.call(CP, 'po.options', { projectId: w.p1.id });

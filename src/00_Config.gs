@@ -5,7 +5,7 @@
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.20.1';
+var PPM_VERSION = '0.21.0';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -77,12 +77,11 @@ var PERMISSION_LEVEL = {
   'baseline.request': 'CONTRIB',
   'budget.edit':      'WPL',
   'import.run':      'CP',            // importer le WBS par classeur (56_Import.gs)
-  'budget.authorize': 'CP',            // fixer l'enveloppe autorisée du projet et la répartir entre les workpackages (un sous-workpackage : par son Workpackage leader)
   'cpn.edit':         'CP',
   'po.edit':          'CONTRIB',
   'exercise.read':    'WPL',     // voir l'exercice budgétaire (60_Exercise.gs), en entier, au global
-  'exercise.edit':    'CP',      // saisir le budget attendu et accordé par équipe d'un projet
-  'actuals.manage':   'CP',
+  'exercise.edit':    'CP',      // saisir la dotation de chaque équipe d'un projet
+  'actuals.manage':   'CP',      // saisir à la main le réalisé comptable (par CPN, équipe et mois)
   'roles.assign':     'DO',      // poser un rôle : le niveau exact dépend du rôle posé (voir roleAssignError_ dans 05_Rbac.gs)
   'resource.edit':    'CP',      // créer et modifier les personnes (page Ressources)
   'risk.create':      'CONTRIB',

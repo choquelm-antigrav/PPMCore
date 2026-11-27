@@ -27,13 +27,13 @@ var SCHEMA = {
     book: 'data',
     cols: ['id', 'code', 'name', 'program_id', 'manager_resource_id', 'status', 'holiday_country',
       'start_date', 'end_date', 'active_baseline_id', 'drive_folder_id', 'calendar_id', 'cpn', 'cpn_label',
-      'news_on', 'news_keywords', 'news_journal_id', 'budget_authorized', 'envelopes_json'],   // enveloppe autorisée PAR EXERCICE : envelopes_json { exercice: montant } (55_Envelope.gs, 0.19.3) ; budget_authorized n'est plus utilisé
+      'news_on', 'news_keywords', 'news_journal_id'],
     required: ['code', 'name'],
     enums: { status: ['Préparation', 'Actif', 'En pause', 'Clos'], holiday_country: COUNTRIES }
   },
   WorkPackage: {
     book: 'data',
-    cols: ['id', 'project_id', 'parent_wp_id', 'wbs_code', 'name', 'owner_resource_id', 'charge_code', 'cpn', 'cpn_label', 'budget_allocated', 'active_baseline_id', 'envelopes_json'],   // part de l'enveloppe PAR EXERCICE : envelopes_json { exercice: montant } (0.19.3) ; budget_allocated n'est plus utilisé
+    cols: ['id', 'project_id', 'parent_wp_id', 'wbs_code', 'name', 'owner_resource_id', 'charge_code', 'cpn', 'cpn_label', 'active_baseline_id'],
     required: ['project_id', 'name']
   },
   PlanItem: {
@@ -132,16 +132,16 @@ var SCHEMA = {
     required: ['year', 'status'],
     enums: { status: ['Préparation', 'Exécution', 'Clos'] }
   },
-  /** Le budget d'une équipe sur un projet pour un exercice : ce qui est ATTENDU (avant l'été) et ce qui est ACCORDÉ (décembre, révisions de février et d'avril). */
+  /** La DOTATION d'une équipe sur un projet pour un exercice : un seul montant annuel, saisi (et révisé : chaque révision se garde dans une baseline). */
   TeamBudget: {
     book: 'data',
-    cols: ['id', 'exercise_id', 'project_id', 'team_id', 'expected', 'granted'],
+    cols: ['id', 'exercise_id', 'project_id', 'team_id', 'amount'],
     required: ['exercise_id', 'project_id', 'team_id']
   },
   BudgetLine: {
     book: 'data',
-    // « Équipe » : la part d'une équipe sur un livrable, un montant libre (team_id) ; « Forfait » : un forfait auprès d'une ressource externe (resource_id)
-    cols: ['id', 'deliverable_id', 'resource_id', 'team_id', 'cost_type', 'fixed_amount', 'planned_amount', 'phasing_mode', 'is_external'],
+    // Le PLAN BUDGÉTAIRE : une cellule livrable × équipe. « Équipe » : la part d'une équipe sur un livrable, un montant annuel libre (team_id) ; « Forfait » : la colonne Externe, un forfait auprès d'une ressource externe (resource_id)
+    cols: ['id', 'deliverable_id', 'resource_id', 'team_id', 'cost_type', 'fixed_amount', 'planned_amount', 'is_external'],
     required: ['deliverable_id', 'cost_type'],
     enums: { cost_type: ['Équipe', 'Forfait'] }
   },
@@ -158,20 +158,10 @@ var SCHEMA = {
     cols: ['id', 'po_id', 'deliverable_id', 'amount'],
     required: ['po_id', 'deliverable_id', 'amount']
   },
-  BudgetPhasing: {
-    book: 'data',
-    cols: ['id', 'budget_line_id', 'month', 'amount'],
-    required: ['budget_line_id', 'month']
-  },
   ProgressUpdate: {
     book: 'data',
     cols: ['id', 'deliverable_id', 'resource_id', 'declared_at', 'progress_pct', 'comment'],
     required: ['deliverable_id', 'progress_pct']
-  },
-  ActualImport: {
-    book: 'data',
-    cols: ['id', 'period', 'source_file_id', 'mapping_json', 'status', 'imported_by'],
-    enums: { status: ['Brouillon', 'Contrôlé', 'Publié', 'Remplacé'] }
   },
 
   // ---------- Classeur Données : risques, baselines, IA ----------
@@ -236,13 +226,13 @@ var SCHEMA = {
     cols: ['id', 'baseline_id', 'entity_type', 'entity_id', 'snapshot_json']
   },
   /**
-   * Le RÉALISÉ comptable (0.20.1), par PROJET, ÉQUIPE et MOIS : une ligne par (CPN, équipe, année-mois), cumul des lignes du fichier d'actuals. Pas de réalisé au livrable. Modifiable : un nouveau fichier
-   * mensuel REMPLACE le montant d'une ligne existante (même CPN, équipe, mois), ne supprime jamais rien.
+   * Le RÉALISÉ comptable (0.21.0), SAISI À LA MAIN par projet, CPN, équipe et mois : une ligne par (CPN, équipe, année-mois), dont le montant se remplace. L'historique mensuel est gardé.
+   * Pas de réalisé au livrable.
    */
   ActualLine: {
     book: 'data',
-    cols: ['id', 'import_id', 'month', 'charge_code', 'cost_center', 'amount', 'project_id', 'wp_id', 'team_id', 'match_status', 'source_rows'],
-    required: ['month', 'charge_code', 'amount']
+    cols: ['id', 'project_id', 'charge_code', 'team_id', 'month', 'amount'],
+    required: ['project_id', 'team_id', 'month', 'amount']
   },
 
   EvmSnapshot: {
@@ -272,7 +262,7 @@ var REF_TARGETS = {
   resource_id: 'Resource', team_id: 'HierarchicalTeam', parent_team_id: 'HierarchicalTeam', exercise_id: 'Exercise',
   milestone_id: 'PlanItem', deliverable_id: 'PlanItem', predecessor_id: 'PlanItem',
   successor_id: 'PlanItem', linked_item_id: 'PlanItem', budget_line_id: 'BudgetLine',
-  active_baseline_id: 'Baseline', baseline_id: 'Baseline', addon_id: 'Addon', import_id: 'ActualImport'
+  active_baseline_id: 'Baseline', baseline_id: 'Baseline', addon_id: 'Addon'
 };
 
 var DATE_COLS = ['start_date', 'end_date', 'planned_start', 'planned_finish', 'actual_finish',
@@ -287,8 +277,6 @@ var NUMBER_RULES = {
   impact: { min: 1, max: 5, integer: true },
   lag_days: { integer: true },
   annual_cost: { min: 0 },
-  expected: { min: 0 },
-  granted: { min: 0 },
   capacity_days_month: { min: 0 },
   fixed_amount: { min: 0 },
   financial_value: {}

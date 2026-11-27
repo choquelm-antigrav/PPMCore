@@ -147,9 +147,10 @@ module.exports = function () {
   test('Outil budgétaire de l’assistant : désactivé par défaut, activé par l’administrateur, réservé à ceux qui voient le budget du projet, jamais dans le mode manuel, agrégats sans noms', () => {
     const w = lot2World(), ADMIN = 'admin@entreprise.com', RWP = 'remi@entreprise.com';
     const e0 = w.call(ADMIN, 'exercise.create', { year: 2026 }), exec = w.call(ADMIN, 'exercise.setStatus', { id: e0.id, status: 'Exécution' });
-    w.call(CP, 'budget.line.save', { values: { deliverable_id: w.a.id, resource_id: w.xavier.id, cost_type: 'Forfait', fixed_amount: 1000 }, exerciseId: exec.id });
     const team = w.call(CP, 'teams.create', { values: { name: '1vm' } });
-    w.c.repoInsert('ActualLine', { month: '2026-09', charge_code: 'CPN-1', cost_center: '1vm', amount: 600, project_id: w.p1.id, team_id: team.id, match_status: 'Rattaché' }, w.S);
+    w.call(CP, 'budget.cell.set', { deliverableId: w.a.id, teamId: team.id, amount: 1000, exerciseId: exec.id });
+    w.call(CP, 'exercise.set', { projectId: w.p1.id, exerciseId: exec.id, teamId: team.id, amount: 3000 });
+    w.c.repoInsert('ActualLine', { month: '2026-09', charge_code: '', amount: 600, project_id: w.p1.id, team_id: team.id }, w.S);
     w.c.setProp(w.c.PROP.AI_MODE, 'api');
     const requests = [], script = [];
     w.c.AI_PROVIDER = { name: 'faux', generate: (req) => { requests.push(JSON.parse(JSON.stringify(req))); return script.shift(); } };
@@ -161,14 +162,14 @@ module.exports = function () {
     const q = ask(CP);
     ok(requests[1].tools.some((t) => t.name === 'get_budget') && q.steps.includes('get_budget'), 'activé : la cheffe de projet (elle voit le budget) a l’outil, et le modèle l’appelle');
     const resp = requests[2].contents[requests[2].contents.length - 1].parts[0].functionResponse.response.content;
-    eq([resp.exercice, resp.realise_a_ce_jour, resp.realise_par_equipe, resp.prevu_annee], [2026, 600, [{ equipe: '1vm', realise_a_ce_jour: 600, realise_annee: 600 }], 1000], 'le Core renvoie des agrégats : exercice, réalisé à ce jour, par équipe, prévu');
+    eq([resp.exercice, resp.dotation, resp.plan, resp.realise_a_ce_jour, resp.atterrissage, resp.par_equipe], [2026, 3000, 1000, 600, 1600, [{ equipe: '1vm', dotation: 3000, plan: 1000, valeur_acquise: 0, realise_a_ce_jour: 600, atterrissage: 1600, reste_sur_dotation: 1400 }]], 'le Core renvoie des agrégats : exercice, dotation, plan, réalisé à ce jour, atterrissage, par équipe');
     const txt = JSON.stringify(resp);
     ok(txt.indexOf('@') < 0 && !/cost_type|fixed_amount|owner|resource/.test(txt), 'aucune ligne de coût, aucune adresse, aucun nom de personne');
     script.push({ text: 'Rien.', calls: [] }); ask(RWP);
     ok(!requests[3].tools.some((t) => t.name === 'get_budget'), 'un responsable de workpackage ne voit pas le budget du projet entier : pas d’outil');
     w.c.setProp(w.c.PROP.AI_MODE, 'manual'); w.c.AI_PROVIDER = null;
     const m = w.call(CP, 'copilot.ask', { projectId: w.p1.id, question: 'Où en est le budget ?' });
-    ok(!/réalisé|prevu_annee|budget_autorise/i.test(m.prompt), 'mode manuel : le budget n’est jamais dans le texte à copier');
+    ok(!/réalisé|atterrissage|dotation/i.test(m.prompt), 'mode manuel : le budget n’est jamais dans le texte à copier');
   });
 
   test('Garde-fou des chiffres : dates, décimales, numéros de liste', () => {

@@ -1,13 +1,14 @@
 /**
- * PPM Core — 0.19.0 : le SUIVI BUDGÉTAIRE de l'exercice en exécution.
+ * PPM Core — 0.21.0 : le SUIVI BUDGÉTAIRE de l'exercice en exécution, lu dans le plan budgétaire.
  *
- * Pendant l'année, on suit l'avancement des livrables contre le budget : pour un projet et un exercice (par défaut celui en exécution), par équipe et au total :
- *   ACCORDÉ        le budget accordé (ou, à défaut, attendu) ;
- *   PRÉVU          les parts des livrables étalées par mois (BudgetPhasing) : prévu de l'année, prévu à ce jour, prévu au-delà de l'année ;
- *   VALEUR ACQUISE les parts × l'avancement du livrable : ce que l'avancement « vaut » ; son écart au prévu à ce jour dit si l'on est en avance ou en retard sur le budget ;
- *   ENGAGÉ         les commandes d'achat engagées du projet (une PO compte en totalité le mois de son lancement ; pas de répartition par équipe).
- * Les séries mensuelles cumulées alimentent le graphique de la page Budget. Le réalisé importé et la projection de fin d'année viennent ensuite (`projection.available`).
- * Droit : exercise.read (Workpackage leader et au-dessus). Les écarts s'affichent, rien ne bloque.
+ * Pour un projet et un exercice (par défaut celui en exécution), par équipe et au total, tout vient du MÊME tableau livrable × équipe :
+ *   DOTATION       le montant donné à l'équipe (60_Exercise.gs) ;
+ *   PLAN           le total des parts de l'équipe sur les livrables de l'exercice ;
+ *   VALEUR ACQUISE les parts × l'avancement du livrable : ce que l'avancement « vaut » ;
+ *   RÉALISÉ        ce que l'équipe a consommé (saisi à la main, 65_Actuals.gs), cumulé à ce jour et sur l'année ;
+ *   ATTERRISSAGE   réalisé à ce jour + reste à faire (plan − valeur acquise) : où l'équipe finit l'année, contre sa dotation ;
+ *   ENGAGÉ         les commandes d'achat engagées du projet, face au budget externe (colonne Externe du plan) : pas de répartition par équipe.
+ * Le réalisé n'est comparé qu'au niveau de l'équipe (et du projet) : il n'est pas suivi au livrable. Droit : exercise.read. Les écarts s'affichent, rien ne bloque.
  */
 
 /** L'équipe qui porte la ligne dans le tableau : l'équipe à 3 caractères, la parente d'une équipe à 4 caractères, sinon l'équipe elle-même (hors règle ou orpheline). */
@@ -24,88 +25,63 @@ defineAction('exercise.tracking', function (p, ctx) {
   requireCan(ctx, 'exercise.read', { type: 'project', id: project.id });
   var ex = !isBlank(p.exerciseId) ? mustGet('Exercise', p.exerciseId) : repoList('Exercise', function (e) { return e.status === 'Exécution'; })[0];
   if (!ex) throw new PpmError('NOT_FOUND', 'Aucun exercice en exécution : le suivi budgétaire porte sur l’année en cours.');
-  var today = todayStr(), year = Number(ex.year), curIdx = Number(today.slice(0, 4)) < year ? 0 : (Number(today.slice(0, 4)) > year ? 12 : Number(today.slice(5, 7)));
-  var months = []; for (var m = 1; m <= 12; m++) months.push(year + '-' + (m < 10 ? '0' : '') + m);
-  var idxOf = {}; months.forEach(function (mm, i) { idxOf[mm] = i + 1; });
-  var data = exerciseData_(ex, [project.id]), table, phasing, lineById;
-  // une version de la décomposition (0.20.0) : le suivi lit la version de référence (les parts d'équipe et leur échéancier figés), pas le brouillon
-  var rvT = isBlank(p.version) ? null : resolveDecompVersion_(project, p.version);
-  if (rvT && rvT.version) {
-    var Dt = decompDataset_(project, ex, rvT.version);
-    var its = Dt.items.filter(function (i) { return i.item_type === 'Livrable' && i.exercise_id === ex.id; }), itIds = indexBy_(its);
-    data.items = its; data.itemById = itIds;
-    data.lines = Dt.lines.filter(function (l) { return itIds[l.deliverable_id] && l.cost_type !== 'Forfait' && !isBlank(l.team_id); });
-    lineById = indexBy_(data.lines); phasing = Dt.phasing.filter(function (x) { return !!lineById[x.budget_line_id]; });
-  } else { lineById = indexBy_(data.lines); phasing = repoList('BudgetPhasing', function (x) { return !!lineById[x.budget_line_id]; }); }
-  table = exerciseTable_(ex, data, project.id);
+  var today = todayStr(), year = Number(ex.year);
+  // une version du plan (une baseline) : le suivi lit la version de référence (cellules et dotations figées), pas le brouillon
+  var rv = isBlank(p.version) ? null : resolveDecompVersion_(project, p.version);
+  var D = decompDataset_(project, ex, rv && rv.version ? rv.version : null), data = planData_(D, ex, project);
+  var table = exerciseTable_(ex, data, project.id);
   var teamRows = {};
   var row = function (team) {
-    var id = team.id;
-    if (!teamRows[id]) teamRows[id] = { team_id: id, name: team.name, country: team.country || 'FR', granted: null, expected: null, monthly: months.map(function () { return 0; }), planned_total: 0, ev: 0 };
-    return teamRows[id];
+    if (!teamRows[team.id]) teamRows[team.id] = { team_id: team.id, name: team.name, country: team.country || 'FR', dotation: null, plan: 0, ev: 0 };
+    return teamRows[team.id];
   };
-  table.rows.concat(table.orphans, table.unruled).forEach(function (r) { var t = row({ id: r.team_id, name: r.name, country: r.country }); t.granted = r.granted; t.expected = r.expected; });
-  var rootOfLine = {};
+  table.rows.concat(table.orphans, table.unruled).forEach(function (r) { row({ id: r.team_id, name: r.name, country: r.country }).dotation = r.dotation; });
   data.lines.forEach(function (l) {
     var root = exerciseRootTeam_(data, data.teamById[l.team_id]);
     if (!root) return;
-    rootOfLine[l.id] = root.id;
     var t = row(root), it = data.itemById[l.deliverable_id], amount = Number(l.planned_amount) || 0;
-    t.planned_total += amount;
+    t.plan += amount;
     t.ev += amount * Math.max(0, Math.min(100, Number(it.progress_pct) || 0)) / 100;
   });
-  var itemPv = {};
-  phasing.forEach(function (x) {
-    var l = lineById[x.budget_line_id], rid = rootOfLine[l.id], i = idxOf[x.month], amount = Number(x.amount) || 0;
-    if (!rid || !i) return;
-    teamRows[rid].monthly[i - 1] += amount;
-    if (i <= curIdx) itemPv[l.deliverable_id] = (itemPv[l.deliverable_id] || 0) + amount;
-  });
-  var teams = Object.keys(teamRows).map(function (id) {
-    var t = teamRows[id], pv = 0, plannedYear = 0;
-    t.monthly = t.monthly.map(round2);
-    t.monthly.forEach(function (v, i) { plannedYear += v; if (i + 1 <= curIdx) pv += v; });
-    var base = t.granted !== null ? t.granted : t.expected;
-    return { team_id: t.team_id, name: t.name, country: t.country, granted: t.granted, expected: t.expected, basis: t.granted !== null ? 'accordé' : (t.expected !== null ? 'attendu' : ''),
-      planned_year: round2(plannedYear), planned_outside: round2(t.planned_total - plannedYear), planned_total: round2(t.planned_total), pv: round2(pv), ev: round2(t.ev), ev_gap: round2(t.ev - pv),
-      remaining: base === null ? null : round2(base - plannedYear), clash: base !== null && plannedYear > base, monthly: t.monthly };
-  }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
-  // le réalisé comptable de l'année, par équipe (0.20.1) : une équipe qui a consommé sans avoir de part de livrable apparaît aussi
+  // le réalisé de l'année, par équipe : une équipe qui a consommé sans avoir de part de livrable apparaît aussi
   var act = actualsView_(project, ex, today), actBy = {};
   act.teams.forEach(function (t) { actBy[t.team_id] = t; });
-  teams.forEach(function (t) { t.actual_to_date = actBy[t.team_id] ? actBy[t.team_id].to_date : (act.available ? 0 : null); });
-  act.teams.forEach(function (t) {
-    if (teams.some(function (x) { return x.team_id === t.team_id; })) return;
-    teams.push({ team_id: t.team_id, name: t.name, country: '', granted: null, expected: null, basis: '', planned_year: 0, planned_outside: 0, planned_total: 0, pv: 0, ev: 0, ev_gap: 0, remaining: null, clash: false, monthly: months.map(function () { return 0; }), actual_to_date: t.to_date });
-  });
-  teams.sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
+  act.teams.forEach(function (t) { if (!teamRows[t.team_id]) row({ id: t.team_id, name: t.name, country: '' }); });
+  var teams = Object.keys(teamRows).map(function (id) {
+    var t = teamRows[id], a = actBy[id] || null, plan = round2(t.plan), ev = round2(t.ev);
+    var actualToDate = act.available ? (a ? a.to_date : 0) : null, actualYear = act.available ? (a ? a.total : 0) : null;
+    var landing = act.available ? round2(actualToDate + Math.max(0, plan - ev)) : null;
+    return { team_id: t.team_id, name: t.name, country: t.country, dotation: t.dotation, plan: plan, ev: ev, progress_pct: plan > 0 ? Math.round(ev / plan * 100) : null,
+      actual_to_date: actualToDate, actual_year: actualYear, consumed_pct: act.available && plan > 0 ? Math.round(actualToDate / plan * 100) : null,
+      landing: landing, remaining: t.dotation === null ? null : round2(t.dotation - (landing === null ? plan : landing)),
+      clash: t.dotation !== null && plan > t.dotation, over: t.dotation !== null && landing !== null && landing > t.dotation };
+  }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
   var sum = function (f) { return round2(teams.reduce(function (s, t) { return s + (t[f] || 0); }, 0)); };
-  var anyGranted = teams.some(function (t) { return t.granted !== null; }), anyExpected = teams.some(function (t) { return t.expected !== null; });
-  var totals = { granted: anyGranted ? sum('granted') : null, expected: anyExpected ? sum('expected') : null, planned_year: sum('planned_year'), planned_outside: sum('planned_outside'), planned_total: sum('planned_total'), pv: sum('pv'), ev: sum('ev') };
-  totals.ev_gap = round2(totals.ev - totals.pv);
-  totals.actual_to_date = act.available ? act.to_date : null; totals.actual_unattached = act.unattached;
-  var base = totals.granted !== null ? totals.granted : totals.expected;
-  totals.remaining = base === null ? null : round2(base - totals.planned_year);
-  totals.clash = base !== null && totals.planned_year > base;
-  // engagé : les commandes d'achat du projet, par mois
+  var anyDot = teams.some(function (t) { return t.dotation !== null; });
+  var totals = { dotation: anyDot ? sum('dotation') : null, plan: sum('plan'), ev: sum('ev'), actual_to_date: act.available ? act.to_date : null, actual_year: act.available ? sum('actual_year') : null, actual_unattached: act.unattached };
+  totals.progress_pct = totals.plan > 0 ? Math.round(totals.ev / totals.plan * 100) : null;
+  totals.consumed_pct = act.available && totals.plan > 0 ? Math.round(totals.actual_to_date / totals.plan * 100) : null;
+  totals.landing = act.available ? round2(sum('landing') + act.unattached) : null;
+  totals.remaining = totals.dotation === null ? null : round2(totals.dotation - (totals.landing === null ? totals.plan : totals.landing));
+  totals.clash = totals.dotation !== null && totals.plan > totals.dotation;
+  totals.over = totals.dotation !== null && totals.landing !== null && totals.landing > totals.dotation;
+  // externe : les forfaits du plan face aux commandes d'achat engagées de l'année
   var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; });
-  var committed = committedByMonth_(projectOrders_(project.id, wps)), cm = months.map(function (mm) { return round2(committed[mm] || 0); });
-  var cum = function (arr, upTo) { var s = 0; return arr.map(function (v, i) { s = round2(s + v); return upTo === null || i + 1 <= upTo ? s : null; }); };
-  var plannedMonthly = months.map(function (_, i) { return round2(teams.reduce(function (s, t) { return s + t.monthly[i]; }, 0)); });
-  totals.committed_to_date = round2(cm.reduce(function (s, v, i) { return i + 1 <= curIdx ? s + v : s; }, 0));
-  totals.committed_year = round2(cm.reduce(function (s, v) { return s + v; }, 0));
-  // livrables : prévu à ce jour, valeur acquise
+  var itemIds = {}; data.items.forEach(function (i) { itemIds[i.id] = true; });
+  var external = round2(D.lines.filter(function (l) { return l.cost_type === 'Forfait' && itemIds[l.deliverable_id]; }).reduce(function (s, l) { return s + (Number(l.planned_amount) || 0); }, 0));
+  var committed = round2(projectOrders_(project.id, wps).filter(function (o) { return PO_COMMITTED.indexOf(o.status) >= 0 && poYear_(o) === year; }).reduce(function (s, o) { return s + (Number(o.amount) || 0); }, 0));
+  totals.external = { plan: external, committed: committed, remaining: round2(external - committed), over: committed > external + 0.005 };
+  // livrables : plan, valeur acquise
   var wpById = indexBy_(wps);
   var deliverables = data.items.map(function (it) {
     var ls = data.lines.filter(function (l) { return l.deliverable_id === it.id; }), total = round2(ls.reduce(function (s, l) { return s + (Number(l.planned_amount) || 0); }, 0));
-    var progress = Math.max(0, Math.min(100, Number(it.progress_pct) || 0)), pv = round2(itemPv[it.id] || 0), ev = round2(total * progress / 100), w = it.wp_id ? wpById[it.wp_id] : null;
-    return { id: it.id, name: it.name, wp: w ? ((w.wbs_code ? w.wbs_code + ' ' : '') + w.name) : '', status: it.status, progress: progress, finish: it.planned_finish || '', parts: round2(total), pv: pv, ev: ev, ev_gap: round2(ev - pv),
+    var progress = Math.max(0, Math.min(100, Number(it.progress_pct) || 0)), w = it.wp_id ? wpById[it.wp_id] : null;
+    return { id: it.id, name: it.name, wp: w ? ((w.wbs_code ? w.wbs_code + ' ' : '') + w.name) : '', status: it.status, progress: progress, finish: it.planned_finish || '', plan: total, ev: round2(total * progress / 100),
       teams: ls.map(function (l) { var t = data.teamById[l.team_id]; return t ? t.name : ''; }).filter(Boolean).sort().join(', ') };
-  }).sort(function (a, b) { return a.ev_gap - b.ev_gap || String(a.name).localeCompare(String(b.name), 'fr'); });
+  }).sort(function (a, b) { return b.plan - a.plan || String(a.name).localeCompare(String(b.name), 'fr'); });
   return {
-    exercise: { id: ex.id, year: year, status: ex.status }, project: { id: project.id, code: project.code, name: project.name }, today: today, current_month: curIdx, months: months,
-    totals: totals, teams: teams, deliverables: deliverables,
-    series: { planned_cum: cum(plannedMonthly, null), committed_cum: cum(cm, curIdx), granted: base, granted_basis: totals.granted !== null ? 'accordé' : (totals.expected !== null ? 'attendu' : '') },
-    projection: { available: false, reason: 'Le réalisé n’est pas encore importé : la projection de fin d’année s’appuie sur lui.' }
+    exercise: { id: ex.id, year: year, status: ex.status }, project: { id: project.id, code: project.code, name: project.name }, today: today, version: D.versionInfo ? { id: D.versionInfo.id, label: D.versionInfo.label } : null,
+    totals: totals, teams: teams, deliverables: deliverables, actuals: { available: act.available, months: act.months, monthly: act.monthly, cumulative: act.cumulative, last_month: act.last_month, by_cpn: act.by_cpn },
+    projection: { available: act.available, reason: act.available ? '' : 'Aucun réalisé saisi pour ' + year + ' : l’atterrissage s’appuie sur lui.' }
   };
 });

@@ -14,14 +14,14 @@
 
 /** Champs figés par table. La même liste définit ce qui entre dans le fil des changements. */
 var BASELINE_FIELDS = {
-  // 0.19.2 : la DÉCOMPOSITION DU BUDGET est figée avec le planning : budget autorisé du projet, enveloppe de chaque workpackage, exercice de chaque livrable, et (ci-dessous) les lignes de coût.
-  // Une baseline figée avant la 0.19.2 ne les a pas : l'écart dit alors « non figé à l'époque » au lieu d'inventer une valeur.
-  // (0.19.3) l'enveloppe est PAR EXERCICE : `envelopes_json` { exercice : montant } ; les anciens champs budget_authorized et budget_allocated ne sont plus figés.
-  Project: ['start_date', 'end_date', 'holiday_country', 'envelopes_json'],
-  WorkPackage: ['name', 'wbs_code', 'parent_wp_id', 'owner_resource_id', 'charge_code', 'envelopes_json'],
+  // 0.21.0 : le PLAN BUDGÉTAIRE est figé avec le planning : exercice de chaque livrable, cellules livrable × équipe (BudgetLine) et dotation de chaque équipe (TeamBudget).
+  // Une baseline figée avant la 0.21.0 n'a pas les dotations : l'écart dit alors « non figé à l'époque » au lieu d'inventer une valeur.
+  Project: ['start_date', 'end_date', 'holiday_country'],
+  WorkPackage: ['name', 'wbs_code', 'parent_wp_id', 'owner_resource_id', 'charge_code'],
   PlanItem: ['name', 'item_type', 'wp_id', 'owner_resource_id', 'planned_start', 'planned_finish', 'milestone_category', 'exercise_id'],
   Dependency: ['predecessor_id', 'successor_id', 'dep_type', 'lag_days'],
-  BudgetLine: ['deliverable_id', 'resource_id', 'team_id', 'cost_type', 'fixed_amount', 'planned_amount']
+  BudgetLine: ['deliverable_id', 'resource_id', 'team_id', 'cost_type', 'fixed_amount', 'planned_amount'],
+  TeamBudget: ['exercise_id', 'team_id', 'amount']
 };
 
 var FIELD_LABELS = {
@@ -31,14 +31,14 @@ var FIELD_LABELS = {
   milestone_category: 'catégorie de jalon', predecessor_id: 'prédécesseur', successor_id: 'successeur',
   dep_type: 'type de lien', lag_days: 'décalage', deliverable_id: 'livrable', resource_id: 'ressource',
   cost_type: 'type de coût', team_id: 'équipe', exercise_id: 'exercice', fixed_amount: 'forfait',
-  planned_amount: 'montant prévu', progress_pct: 'avancement', baseline_frozen: 'baseline figée', envelopes_json: 'enveloppes budgétaires', budget_authorized: 'budget autorisé', budget_allocated: 'enveloppe budgétaire', deleted: 'suppression', '*': 'création ou suppression'
+  planned_amount: 'montant prévu', amount: 'dotation', progress_pct: 'avancement', baseline_frozen: 'baseline figée', deleted: 'suppression', '*': 'création ou suppression'
 };
 
 // ---------------------------------------------------------------- instantanés
 
-/** data : { projects, workpackages, planitems, dependencies, budgetLines, phasing } (lignes vivantes). */
+/** data : { projects, workpackages, planitems, dependencies, budgetLines, teamBudgets } (lignes vivantes). */
 function projectSnapshot_(data, projectId, scope) {
-  var snap = { Project: {}, WorkPackage: {}, PlanItem: {}, Dependency: {}, BudgetLine: {} };
+  var snap = { Project: {}, WorkPackage: {}, PlanItem: {}, Dependency: {}, BudgetLine: {}, TeamBudget: {} };
   var project = indexBy_(data.projects)[projectId];
   if (project) snap.Project[project.id] = pickFields(project, BASELINE_FIELDS.Project);
   data.workpackages.forEach(function (w) {
@@ -50,15 +50,12 @@ function projectSnapshot_(data, projectId, scope) {
   data.dependencies.forEach(function (d) {
     if (snap.PlanItem[d.successor_id]) snap.Dependency[d.id] = pickFields(d, BASELINE_FIELDS.Dependency);
   });
-  var phasing = {};
-  (data.phasing || []).forEach(function (ph) {
-    (phasing[ph.budget_line_id] = phasing[ph.budget_line_id] || []).push({ month: ph.month, amount: Number(ph.amount) || 0 });
-  });
   (data.budgetLines || []).forEach(function (b) {
     if (!snap.PlanItem[b.deliverable_id]) return;
-    var rec = pickFields(b, BASELINE_FIELDS.BudgetLine);
-    rec.phasing = (phasing[b.id] || []).sort(function (x, y) { return String(x.month) < String(y.month) ? -1 : 1; });
-    snap.BudgetLine[b.id] = rec;
+    snap.BudgetLine[b.id] = pickFields(b, BASELINE_FIELDS.BudgetLine);
+  });
+  (data.teamBudgets || []).forEach(function (t) {
+    if (t.project_id === projectId) snap.TeamBudget[t.id] = pickFields(t, BASELINE_FIELDS.TeamBudget);
   });
   if (scope && scope.type === 'workpackage') {
     return restrictSnapshotToWps_(snap, wpSubtreeIds_(data.workpackages.filter(function (w) { return w.project_id === projectId; }), scope.id));
@@ -77,7 +74,7 @@ function snapshotToRows_(baselineId, snap) {
 }
 
 function rowsToSnapshot_(rows) {
-  var snap = { Project: {}, WorkPackage: {}, PlanItem: {}, Dependency: {}, BudgetLine: {} };
+  var snap = { Project: {}, WorkPackage: {}, PlanItem: {}, Dependency: {}, BudgetLine: {}, TeamBudget: {} };
   rows.forEach(function (r) {
     if (!snap[r.entity_type]) snap[r.entity_type] = {};
     snap[r.entity_type][r.entity_id] = parseJsonSafe(r.snapshot_json, {});
@@ -88,7 +85,7 @@ function rowsToSnapshot_(rows) {
 function loadSnapshotData_() {
   return {
     projects: repoList('Project'), workpackages: repoList('WorkPackage'), planitems: repoList('PlanItem'),
-    dependencies: repoList('Dependency'), budgetLines: repoList('BudgetLine'), phasing: repoList('BudgetPhasing')
+    dependencies: repoList('Dependency'), budgetLines: repoList('BudgetLine'), teamBudgets: repoList('TeamBudget')
   };
 }
 
@@ -138,23 +135,19 @@ function costByWpSnap_(snap, include) {
 }
 
 /**
- * La décomposition du budget entre deux instantanés (0.19.2) : budget autorisé du projet, enveloppe et coût prévu de chaque workpackage, et les lignes de coût ajoutées, retirées ou modifiées.
- * `known` est faux quand l'instantané de référence ne contenait pas le champ (baseline antérieure à la 0.19.2) : l'écart n'est alors pas calculé.
+ * Le PLAN BUDGÉTAIRE entre deux instantanés (0.21.0) : coût prévu de chaque workpackage (somme des cellules de ses livrables), cellules livrable × équipe (et forfaits) ajoutées, retirées
+ * ou modifiées, et dotations d'équipe qui ont changé, pour un exercice.
  */
-function diffDecomposition_(base, cur, exercise, exOfNow) {
-  var num = function (v) { return v === undefined || isBlank(v) ? null : Number(v); };
+function diffPlan_(base, cur, exercise, exOfNow) {
   var inEx = function (it, id) { return ('exercise_id' in it ? it.exercise_id : (exOfNow || {})[id]) === exercise.id; };
   var bc = costByWpSnap_(base, inEx), cc = costByWpSnap_(cur, inEx);
-  var bProj = Object.keys(base.Project || {}).map(function (k) { return base.Project[k]; })[0] || {}, cProj = Object.keys(cur.Project || {}).map(function (k) { return cur.Project[k]; })[0] || {};
   var ids = {}; Object.keys(base.WorkPackage || {}).concat(Object.keys(cur.WorkPackage || {})).forEach(function (id) { ids[id] = true; });
   var wps = Object.keys(ids).map(function (id) {
     var b = (base.WorkPackage || {})[id] || null, c = (cur.WorkPackage || {})[id] || null, ref = c || b;
-    var known = !!b && ('envelopes_json' in b), ba = known ? envAmount_(b, exercise.key) : null, ca = c ? envAmount_(c, exercise.key) : null;
     var baseCost = b ? (bc.byWp[id] || 0) : null, cost = c ? (cc.byWp[id] || 0) : null;
-    var row = { wp_id: id, code: ref.wbs_code || '', name: ref.name, parent_id: ref.parent_wp_id || '', known: known, base_allocated: ba, allocated: ca, base_cost: baseCost, cost: cost,
-      cost_delta: baseCost === null || cost === null ? null : round2(cost - baseCost), allocated_changed: !!b && !!c && known && ba !== ca,
-      over: ca !== null && cost !== null && cost > ca, state: !b ? 'added' : !c ? 'removed' : 'same' };
-    if (row.state === 'same' && (row.allocated_changed || (row.cost_delta !== null && row.cost_delta !== 0))) row.state = 'changed';
+    var row = { wp_id: id, code: ref.wbs_code || '', name: ref.name, parent_id: ref.parent_wp_id || '', base_cost: baseCost, cost: cost,
+      cost_delta: baseCost === null || cost === null ? null : round2(cost - baseCost), state: !b ? 'added' : !c ? 'removed' : 'same' };
+    if (row.state === 'same' && row.cost_delta !== null && row.cost_delta !== 0) row.state = 'changed';
     return row;
   }).sort(function (x, y) { return String(x.code).localeCompare(String(y.code), 'fr', { numeric: true }) || String(x.name).localeCompare(String(y.name), 'fr'); });
   var lineIds = {}; Object.keys(base.BudgetLine || {}).concat(Object.keys(cur.BudgetLine || {})).forEach(function (id) { lineIds[id] = true; });
@@ -168,16 +161,19 @@ function diffDecomposition_(base, cur, exercise, exOfNow) {
     return { line_id: id, deliverable_id: ref.deliverable_id, deliverable: item.name || '(livrable)', wp_id: item.wp_id || '', kind: ref.cost_type === 'Forfait' ? 'forfait' : 'team', team_id: ref.team_id || '', resource_id: ref.resource_id || '',
       base_amount: ba, amount: ca, state: !b ? 'added' : !c ? 'removed' : (ba !== ca ? 'changed' : 'same') };
   }).filter(function (l) { return l.state !== 'same'; }).sort(function (x, y) { return String(x.deliverable).localeCompare(String(y.deliverable), 'fr') || String(x.state).localeCompare(String(y.state)); });
-  var sum = function (m) { return round2(Object.keys(m.byWp).filter(function (k) { return true; }).reduce(function (t, k) { return t; }, 0)); };
   var totalBase = 0, totalCur = 0;
   var addTotal = function (snap, which) { Object.keys(snap.BudgetLine || {}).forEach(function (id) { var bl1 = snap.BudgetLine[id], it1 = (snap.PlanItem || {})[bl1.deliverable_id]; if (it1 && inEx(it1, bl1.deliverable_id)) { if (which === 'b') totalBase = round2(totalBase + (Number(bl1.planned_amount) || 0)); else totalCur = round2(totalCur + (Number(bl1.planned_amount) || 0)); } }); };
   addTotal(base, 'b'); addTotal(cur, 'c');
-  var pKnown = ('envelopes_json' in bProj), bAuth = pKnown ? envAmount_(bProj, exercise.key) : null, cAuth = envAmount_(cProj, exercise.key);
+  // les dotations d'équipe de l'exercice
+  var dot = function (snap) { var m = {}; Object.keys(snap.TeamBudget || {}).forEach(function (id) { var t = snap.TeamBudget[id]; if (t.exercise_id === exercise.id && !isBlank(t.amount)) m[t.team_id] = round2((m[t.team_id] || 0) + Number(t.amount)); }); return m; };
+  var bd = dot(base), cd = dot(cur), tids = {}; Object.keys(bd).concat(Object.keys(cd)).forEach(function (id) { tids[id] = true; });
+  var dotations = Object.keys(tids).map(function (id) {
+    var b = bd[id] === undefined ? null : bd[id], c = cd[id] === undefined ? null : cd[id];
+    return { team_id: id, base_amount: b, amount: c, state: b === null ? 'added' : c === null ? 'removed' : (b !== c ? 'changed' : 'same') };
+  }).filter(function (d) { return d.state !== 'same'; });
   return {
-    project: { known: pKnown, base_authorized: bAuth, authorized: cAuth, changed: pKnown && bAuth !== cAuth },
-    wps: wps, lines: lines,
-    totals: { envelope_changes: wps.filter(function (w) { return w.allocated_changed; }).length + (pKnown && bAuth !== cAuth ? 1 : 0), line_changes: lines.length,
-      cost_base: totalBase, cost: totalCur, cost_delta: round2(totalCur - totalBase), over: wps.filter(function (w) { return w.over; }).length }
+    wps: wps, lines: lines, dotations: dotations,
+    totals: { line_changes: lines.length, dotation_changes: dotations.length, cost_base: totalBase, cost: totalCur, cost_delta: round2(totalCur - totalBase) }
   };
 }
 
@@ -264,6 +260,7 @@ function buildChangeFeed(events, projectId, since, names, opts) {
     if (table === 'Project') return 'Projet';
     if (table === 'Dependency') return names.dep[id] || 'Dépendance';
     if (table === 'BudgetLine') return names.budget[id] ? 'Budget de ' + names.budget[id] : 'Ligne budgétaire';
+    if (table === 'TeamBudget') { var tn = teamBudgetName_(names, id); return tn ? 'Dotation de ' + tn : 'Dotation'; }
     if (table === 'Baseline') return names.baseline[id] || 'Baseline';
     return table;
   };
@@ -273,9 +270,6 @@ function buildChangeFeed(events, projectId, since, names, opts) {
     if (field === 'wp_id' || field === 'parent_wp_id') return names.wp[v] || v;
     if (field === 'predecessor_id' || field === 'successor_id' || field === 'deliverable_id') return names.item[v] || v;
     if (field === 'deleted') return isTrue(v) ? 'supprimé' : 'actif';
-    if (field === 'envelopes_json') {
-      var o = parseJsonSafe(v, {}); return Object.keys(o).map(function (k) { return 'exercice ' + String(k).split(':')[0] + ' : ' + o[k] + ' €'; }).join(' ; ');
-    }
     return String(v);
   };
   var rows = events.filter(function (e) {
@@ -299,8 +293,18 @@ function buildChangeFeed(events, projectId, since, names, opts) {
 }
 
 /** Noms lisibles pour le fil et les journaux. Les noms de baselines (qui lisent trois tables de plus) ne sont chargés que si on les demande : le fil de validation, pas les journaux de l'administration. */
+/** Le nom de l'équipe d'une dotation, lu à la demande (deux tables que la plupart des pages n'ont pas besoin de charger pour nommer un changement). */
+function teamBudgetName_(names, id) {
+  if (!names.teambudgetLoaded) {
+    var teamNm = {}; repoList('HierarchicalTeam', null, { includeDeleted: true }).forEach(function (t) { teamNm[t.id] = t.name; });
+    repoList('TeamBudget', null, { includeDeleted: true }).forEach(function (b) { names.teambudget[b.id] = teamNm[b.team_id] || ''; });
+    names.teambudgetLoaded = true;
+  }
+  return names.teambudget[id] || '';
+}
+
 function feedNames_(withBaselines) {
-  var names = { resource: {}, item: {}, wp: {}, dep: {}, budget: {}, byEmail: {}, baseline: {} };
+  var names = { resource: {}, item: {}, wp: {}, dep: {}, budget: {}, teambudget: {}, byEmail: {}, baseline: {} };
   repoList('Resource', null, { includeDeleted: true }).forEach(function (r) {
     names.resource[r.id] = r.name;
     if (!isBlank(r.email)) names.byEmail[String(r.email).toLowerCase()] = r.name;
@@ -518,7 +522,7 @@ defineAction('baselines.refuse', function (p, ctx) {
  * Les montants ne sont renvoyés qu'à ceux qui ont le droit de modifier le budget du projet.
  */
 /**
- * Résout une demande d'écart à une baseline (périmètre, baseline de référence, baseline ou état actuel à comparer) : partagé par `baselines.diff` et `baselines.decomposition`.
+ * Résout une demande d'écart à une baseline (périmètre, baseline de référence, baseline ou état actuel à comparer) : partagé par `baselines.diff` et `baselines.plan`.
  * Renvoie `{ empty }` quand il n'y a pas de baseline de référence.
  */
 function resolveDiff_(p, ctx) {
@@ -580,22 +584,24 @@ defineAction('baselines.diff', function (p, ctx) {
 });
 
 /**
- * La décomposition du budget d'une baseline (0.19.2), à la demande : budget autorisé, enveloppe et coût prévu de chaque workpackage, lignes de coût ajoutées, retirées ou modifiées, par rapport à
- * la baseline de référence (ou à une autre baseline : `compareTo`, pour suivre son évolution d'une baseline à l'autre). Mêmes paramètres que `baselines.diff` ; réservée à ceux qui voient le budget.
+ * Le plan budgétaire d'une baseline (0.21.0), à la demande : coût prévu de chaque workpackage, cellules du plan et dotations ajoutées, retirées ou modifiées, par rapport à la baseline de référence
+ * (ou à une autre baseline : `compareTo`, pour suivre son évolution d'une baseline à l'autre). Mêmes paramètres que `baselines.diff` ; réservée à ceux qui voient le budget.
  * Une action à part : la page Suivi n'en paie le coût (lecture des équipes) que lorsqu'on déplie la section.
  */
-defineAction('baselines.decomposition', function (p, ctx) {
+defineAction('baselines.plan', function (p, ctx) {
   var r = resolveDiff_(p, ctx);
-  if (r.empty) return { baseline: null, decomposition: null, see_budget: false };
-  if (!r.seeBudget) throw new PpmError('FORBIDDEN', 'La décomposition du budget est réservée aux responsables de budget.');
-  var anyExercise = repoList('Exercise', function (x) { return !isTrue(x.deleted); }).length > 0;
-  if (!anyExercise && isBlank(p.exerciseId)) return { baseline: baselineView_(r.base, {}), compareTo: r.other ? baselineView_(r.other, {}) : null, scope: r.scopeInfo, decomposition: null, see_budget: true, no_exercise: true, exercise: null, exercises: [] };
-  var ex = envelopeExercise_(p), exOfNow = {};
+  if (r.empty) return { baseline: null, plan: null, see_budget: false };
+  if (!r.seeBudget) throw new PpmError('FORBIDDEN', 'Le plan budgétaire est réservé aux responsables de budget.');
+  var exList = repoList('Exercise', function (x) { return !isTrue(x.deleted); });
+  if (!exList.length && isBlank(p.exerciseId)) return { baseline: baselineView_(r.base, {}), compareTo: r.other ? baselineView_(r.other, {}) : null, scope: r.scopeInfo, plan: null, see_budget: true, no_exercise: true, exercise: null, exercises: [] };
+  var ex = planExercise_(p), exOfNow = {};
   repoList('PlanItem', function (i) { return i.project_id === r.project.id && i.item_type === 'Livrable'; }).forEach(function (i) { exOfNow[i.id] = i.exercise_id || ''; });
-  var d = diffDecomposition_(r.baseSnap, r.cur, { id: ex.id, key: envKey_(ex) }, exOfNow);
+  var d = diffPlan_(r.baseSnap, r.cur, { id: ex.id }, exOfNow);
   var teamNames = {}; repoList('HierarchicalTeam', null, { includeDeleted: true }).forEach(function (t) { teamNames[t.id] = t.name; });
   d.lines.forEach(function (l) { l.target = l.kind === 'team' ? (teamNames[l.team_id] || '(équipe)') : (r.names[l.resource_id] || '(ressource)'); l.wp_name = r.wpNames[l.wp_id] || ''; });
-  return { baseline: baselineView_(r.base, {}), compareTo: r.other ? baselineView_(r.other, {}) : null, scope: r.scopeInfo, decomposition: d, see_budget: true, exercise: { id: ex.id, year: Number(ex.year), status: ex.status }, exercises: repoList('Exercise', function (x) { return !isTrue(x.deleted); }).sort(function (a, b) { return b.year - a.year; }).map(function (x) { return { id: x.id, year: Number(x.year), status: x.status }; }) };
+  d.dotations.forEach(function (x) { x.team = teamNames[x.team_id] || '(équipe)'; });
+  return { baseline: baselineView_(r.base, {}), compareTo: r.other ? baselineView_(r.other, {}) : null, scope: r.scopeInfo, plan: d, see_budget: true, exercise: { id: ex.id, year: Number(ex.year), status: ex.status },
+    exercises: exList.sort(function (a, b) { return b.year - a.year; }).map(function (x) { return { id: x.id, year: Number(x.year), status: x.status }; }) };
 });
 
 /**

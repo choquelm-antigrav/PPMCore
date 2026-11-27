@@ -169,15 +169,6 @@ function demoPlan_(d, codes) {
   });
 }
 
-/** Enveloppe du projet : 8 % au-dessus du coût prévu, répartie 10 % au-dessus du coût de chaque workpackage de premier niveau, sauf un (15 % en dessous) pour montrer un dépassement. */
-function demoEnvelope_(d) {
-  var p1 = d.project('NAC-1'), v = d.call('budget.envelope.get', { projectId: p1.id });
-  var top = v.rows.filter(function (r) { return r.depth === 0 && r.cost > 0; });
-  var allocations = top.map(function (r, i) { return { wpId: r.wp_id, amount: Math.round(r.cost * (i === 1 ? 0.85 : 1.1)) }; });
-  var spread = allocations.reduce(function (s, a) { return s + a.amount; }, 0);
-  d.call('budget.envelope.set', { projectId: p1.id, authorized: Math.max(Math.round(v.totals.cost * 1.08), spread), allocations: allocations });
-}
-
 /** Une tranche de la migration des rôles (A9_MIGRER_ROLES) sur la démo ; sans effet une fois la migration faite. */
 function demoLevels_(d) {
   rolesMigrate_(d.a, false);
@@ -288,8 +279,8 @@ function demoExercises_() {
 }
 
 /**
- * Budget par équipe de NAC-1. Exercice en exécution : attendu et accordé d'après les parts existantes (l'équipe ESS est accordée en dessous de ses parts : un clash). Exercice en préparation :
- * cinq livrables de l'année suivante avec leurs parts par équipe, et un budget attendu par équipe (une équipe a de l'argent non réparti, une autre est en dépassement).
+ * Budget par équipe de NAC-1. Exercice en exécution : une dotation d'après les parts existantes (l'équipe ESS est dotée en dessous de ses parts : un clash). Exercice en préparation :
+ * cinq livrables de l'année suivante avec leurs parts par équipe, et une dotation par équipe (une équipe a de l'argent non réparti, une autre est en dépassement).
  */
 function demoExercise_(d) {
   var ex = demoExercises_(), project = d.project('NAC-1');
@@ -301,7 +292,7 @@ function demoExercise_(d) {
   Object.keys(parts).forEach(function (tid) {
     var t = repoGet('HierarchicalTeam', tid), p = parts[tid];
     repoInsert('TeamBudget', { exercise_id: ex.exec.id, project_id: project.id, team_id: tid,
-      expected: Math.round(p * 1.12 / 1000) * 1000, granted: Math.round(p * (t.name === 'ESS' ? 0.82 : 1.04) / 1000) * 1000 }, d.a);
+      amount: Math.round(p * (t.name === 'ESS' ? 0.82 : 1.04) / 1000) * 1000 }, d.a);
   });
   var wp = repoList('WorkPackage', function (w) { return w.project_id === project.id && isBlank(w.parent_wp_id); })[0];
   // dates indicatives, dans la fenêtre du planning existant : des livrables datés de l'an prochain déplaceraient le chemin critique du projet (et ses constats)
@@ -313,7 +304,7 @@ function demoExercise_(d) {
     n[1].forEach(function (s) { d.call('budget.line.save', { values: { deliverable_id: item.id, team_id: demoTeam_(s[0]).id, planned_amount: s[1] }, exerciseId: ex.prep.id }); });
   });
   DEMO_EXPECTED.forEach(function (e) {
-    repoInsert('TeamBudget', { exercise_id: ex.prep.id, project_id: project.id, team_id: demoTeam_(e[0]).id, expected: e[1] }, d.a);
+    repoInsert('TeamBudget', { exercise_id: ex.prep.id, project_id: project.id, team_id: demoTeam_(e[0]).id, amount: e[1] }, d.a);
   });
 }
 
@@ -360,7 +351,6 @@ var DEMO_STEPS = [
   { name: 'Budget de NAC-1 (1/2)', run: function (d) { demoBudget_(d, 0, 20); } },
   { name: 'Budget de NAC-1 (2/2)', run: function (d) { demoBudget_(d, 20, 60); } },
   { name: 'Budget par équipe : exercices en exécution et en préparation', run: function (d) { demoExercise_(d); } },
-  { name: 'Enveloppe budgétaire de NAC-1', run: function (d) { demoEnvelope_(d); } },
   { name: 'Commandes d’achat', run: function (d) { demoOrders_(d); } },
   { name: 'Actualités de NAC-1 : réunions', run: function (d) { demoNewsMeetings_(d); } },
   { name: 'Actualités : actions, synthèse du jour, réunions à trier', run: function (d) { demoNewsActions_(d); } },

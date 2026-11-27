@@ -16,7 +16,7 @@
  *
  * SÉCURITÉ. Tout est analysé avant d'écrire : une seule erreur, et rien n'est écrit, pour aucun projet. Avant le premier lot, une COPIE de sécurité des projets existants est enregistrée dans
  * Drive (même format) ; si elle échoue, l'import est annulé. Tout passe par les actions ordinaires (programs.create, projects.create, resources.create, wbs.create, wbs.update, roles.assign,
- * dependencies.create, budget.line.save, budget.envelope.set) : mêmes droits, mêmes règles, même journal ; les changements restent « à valider » par le niveau du dessus.
+ * dependencies.create, budget.line.save) : mêmes droits, mêmes règles, même journal ; les changements restent « à valider » par le niveau du dessus.
  *
  * RÔLES. La colonne « Leader » ou « Owner » pose le responsable principal (Workpackage leader, Sub-workpackage leader ou Deliverable owner selon l'objet) ; « Contributors » pose des
  * Contributors. Les personnes se désignent par leur adresse e-mail (à défaut, par leur nom exact) ; celles de l'onglet Personnes qui n'existent pas encore sont créées d'abord.
@@ -24,9 +24,9 @@
 
 var IMPORT_TABS = [
   { name: 'Programmes', cols: ['Code', 'Nom', 'Statut', 'Description'], text: [0], optional: true },
-  { name: 'Projets', cols: ['Code', 'Nom', 'Programme (code)', 'Statut', 'Pays des jours fériés', 'Chef de projet (e-mail)', 'Budget autorisé (€)'], text: [0, 2] },
+  { name: 'Projets', cols: ['Code', 'Nom', 'Programme (code)', 'Statut', 'Pays des jours fériés', 'Chef de projet (e-mail)'], text: [0, 2] },
   { name: 'Personnes', cols: ['Nom', 'E-mail', 'Type (Interne ou Externe)', 'Fonction', 'Organisation', 'Pays', 'Fournisseur', 'Équipe'], text: [], optional: true },
-  { name: 'Workpackages', cols: ['Projet', 'Code WBS', 'Parent (code WBS)', 'Nom', 'Leader (e-mail)', 'Imputation', 'Enveloppe (€)'], text: [0, 1, 2, 5] },
+  { name: 'Workpackages', cols: ['Projet', 'Code WBS', 'Parent (code WBS)', 'Nom', 'Leader (e-mail)', 'Imputation'], text: [0, 1, 2, 5] },
   { name: 'Livrables', cols: ['Projet', 'Code WBS du workpackage', 'Nom', 'Début', 'Fin', 'Owner (e-mail)', 'Contributors (e-mails séparés par « ; »)'], text: [0, 1] },
   { name: 'Jalons', cols: ['Projet', 'Code WBS du workpackage', 'Nom', 'Date', 'Catégorie', 'Owner (e-mail)', 'Contributors (e-mails séparés par « ; »)'], text: [0, 1] },
   { name: 'Dépendances', cols: ['Projet', 'Prédécesseur (WP)', 'Prédécesseur (nom)', 'Successeur (WP)', 'Successeur (nom)', 'Type (FS, SS, FF ou SF)', 'Décalage (jours)'], text: [0, 1, 3], optional: true },
@@ -114,11 +114,7 @@ function importAnalyze_(parsed, existing) {
   // ---- projet
   var pr = parsed.Projet || [];
   if (pr.length > 1) warn('Projet', pr[1]._row, 'Une seule ligne est lue : les suivantes sont ignorées.');
-  if (pr.length) {
-    var a = importAmount_(pr[0]._raw['Budget autorisé (€)']);
-    if (a !== a) err('Projet', pr[0]._row, 'Budget autorisé : un montant en euros, positif ou nul.');
-    else plan.project = { authorized: a };
-  }
+  if (pr.length) plan.project = {};
 
   // ---- workpackages
   var wpRows = parsed.Workpackages || [], seen = {};
@@ -146,11 +142,9 @@ function importAnalyze_(parsed, existing) {
     if (parent && parent === code) { err('Workpackages', row, 'Un workpackage ne peut pas être son propre parent.'); bad = true; }
     if (!r['Nom']) { err('Workpackages', row, 'Nom obligatoire.'); bad = true; }
     var leader = person('Workpackages', row, r['Leader (e-mail)'], 'Leader', false);
-    var env = importAmount_(r._raw['Enveloppe (€)']);
-    if (env !== env) { err('Workpackages', row, 'Enveloppe : un montant en euros, positif ou nul (ou vide : pas de plafond).'); bad = true; }
     if (bad) return;
     var ex = byCode[code] || null;
-    plan.wps.push({ code: code, parent: parent || '', name: r['Nom'], leader: leader, charge: r['Imputation'], envelope: env, row: row, existing: ex });
+    plan.wps.push({ code: code, parent: parent || '', name: r['Nom'], leader: leader, charge: r['Imputation'], row: row, existing: ex });
   });
   var planCodes = {}; plan.wps.forEach(function (w) { planCodes[w.code] = w; });
   plan.wps.forEach(function (w) {
@@ -243,7 +237,7 @@ function importAnalyze_(parsed, existing) {
   });
 
   // ---- ce qui change, ce qui reste
-  var counts = { wps: { create: 0, update: 0, same: 0 }, items: { create: 0, update: 0, same: 0 }, contributors: 0, lines: { create: 0, update: 0, same: 0 }, envelope: 0 };
+  var counts = { wps: { create: 0, update: 0, same: 0 }, items: { create: 0, update: 0, same: 0 }, contributors: 0, lines: { create: 0, update: 0, same: 0 } };
   plan.wps.forEach(function (w) {
     var ex = w.existing;
     if (!ex) { w.action = 'create'; }
@@ -252,8 +246,6 @@ function importAnalyze_(parsed, existing) {
       w.action = diff ? 'update' : 'same';
     }
     counts.wps[w.action]++;
-    var envEx = importEnvExercise_();
-    if (envEx && w.envelope !== '' && (!ex || envAmount_(ex, envKey_(envEx)) !== w.envelope)) counts.envelope++;
   });
   plan.items.forEach(function (i) {
     var ex = i.existing;
@@ -277,8 +269,6 @@ function importAnalyze_(parsed, existing) {
     }
     counts.lines[l.action]++;
   });
-  var envEx0 = importEnvExercise_();
-  if (envEx0 && plan.project && plan.project.authorized !== '' && envAmount_(existing.project, envKey_(envEx0)) !== plan.project.authorized) counts.envelope++;
   // pas dans le classeur
   var inSheetWps = {}; plan.wps.forEach(function (w) { inSheetWps[w.code] = true; });
   var missing = existing.wps.filter(function (w) { return parsed.Workpackages && parsed.Workpackages.length && !inSheetWps[String(w.wbs_code)]; }).map(function (w) { return String(w.wbs_code); });
@@ -367,8 +357,7 @@ function importCan_(ctx, project) {
  * Un chef de projet (ou au-dessus) exporte et importe SON projet depuis la page WBS, avec `projectId`.
  */
 /**
- * Les enveloppes (colonnes « Budget autorisé » et « Enveloppe ») d'un classeur de projets sont celles de l'exercice EN EXÉCUTION, à défaut de celui en préparation (0.19.3 : elles sont par exercice).
- * Sans exercice, elles sont ignorées.
+ * L'exercice de l'import (0.21.0) : celui EN EXÉCUTION, à défaut celui en préparation. Un livrable sans exercice reçoit celui-là avec sa première ligne de budget. Sans exercice : aucun rattachement.
  */
 function importEnvExercise_() {
   var all = repoList('Exercise', function (x) { return !isTrue(x.deleted); });
@@ -533,8 +522,6 @@ function importAnalyzeAll_(book, ctx, opts) {
       manager = lookup(r['Chef de projet (e-mail)']);
       if (!manager) { err('Projets', row, 'Chef de projet : « ' + r['Chef de projet (e-mail)'] + ' » n’est pas dans Ressources ni dans l’onglet Personnes.'); bad = true; }
     }
-    var budget = importAmount_(r._raw['Budget autorisé (€)']);
-    if (budget !== budget) { err('Projets', row, 'Budget autorisé : un montant en euros, positif ou nul.'); bad = true; }
     if (single && code !== single.code) { err('Projets', row, 'Ce classeur contient le projet « ' + code + ' », pas « ' + single.code + ' » : importez-le depuis la page Administration, ou retirez les autres projets.'); bad = true; }
     if (bad) return;
     var ex = projectsByCode[code] || null, action;
@@ -548,7 +535,7 @@ function importAnalyzeAll_(book, ctx, opts) {
       if (!ctx.isAdmin && !can(ctx, 'project.create', scope)) { err('Projets', row, 'Créer le projet « ' + code + ' » est réservé au DPL du programme (ou au-dessus).'); return; }
       action = 'create';
     }
-    bookProjects.push({ code: code, name: r['Nom'], programCode: programCode, status: status, holiday: holiday, manager: manager, authorized: budget, row: row, existing: ex, action: action, raw: r });
+    bookProjects.push({ code: code, name: r['Nom'], programCode: programCode, status: status, holiday: holiday, manager: manager, row: row, existing: ex, action: action, raw: r });
   });
   if (!projectRows.length && !book.problems.length) err('Projets', 1, 'Aucun projet dans l’onglet Projets.');
   if (single && !bookProjects.some(function (x) { return x.code === single.code; }) && projectRows.length) err('Projets', 1, 'Le projet « ' + single.code + ' » n’est pas dans l’onglet Projets.');
@@ -563,17 +550,17 @@ function importAnalyzeAll_(book, ctx, opts) {
   // ---- chaque projet : l'analyse d'un seul projet (inchangée), plus ses dépendances
   var multi = bookProjects.length > 1;
   var totals = { programs: { create: 0, same: 0 }, projects: { create: 0, update: 0, same: 0 }, people: { create: 0, same: 0 }, wps: { create: 0, update: 0, same: 0 }, items: { create: 0, update: 0, same: 0 },
-    contributors: 0, lines: { create: 0, update: 0, same: 0 }, envelope: 0, deps: { create: 0, same: 0 } };
+    contributors: 0, lines: { create: 0, update: 0, same: 0 }, deps: { create: 0, same: 0 } };
   out.programs.forEach(function (g) { totals.programs[g.action]++; });
   out.people.forEach(function (x) { totals.people[x.action]++; });
   bookProjects.forEach(function (bp) {
     totals.projects[bp.action]++;
     var rowsOf = function (tab) { return (P[tab] || []).filter(function (r) { return r['Projet'] === bp.code; }); };
     var old = {
-      Projet: [{ _row: bp.row, _raw: { 'Budget autorisé (€)': bp.raw._raw['Budget autorisé (€)'] }, 'Budget autorisé (€)': bp.raw['Budget autorisé (€)'] }],
+      Projet: [{ _row: bp.row, _raw: {} }],
       Workpackages: rowsOf('Workpackages'), Livrables: rowsOf('Livrables'), Jalons: rowsOf('Jalons'), Budget: rowsOf('Budget')
     };
-    var stub = bp.existing || { id: 'new:' + bp.code, code: bp.code, name: bp.name, budget_authorized: '', holiday_country: bp.holiday };
+    var stub = bp.existing || { id: 'new:' + bp.code, code: bp.code, name: bp.name, holiday_country: bp.holiday };
     var existing = bp.existing ? importExisting_(bp.existing) : importExistingNew_(stub);
     existing.people = maps.people; existing.peopleByName = maps.peopleByName;
     var res = importAnalyze_(old, existing);
@@ -584,7 +571,7 @@ function importAnalyzeAll_(book, ctx, opts) {
     bp.plan = res.plan; bp.counts = res.counts; bp.deps = deps.deps;
     bp.counts.deps = { create: 0, same: 0 }; deps.deps.forEach(function (d) { bp.counts.deps[d.action]++; });
     ['wps', 'items', 'lines'].forEach(function (k) { ['create', 'update', 'same'].forEach(function (a) { totals[k][a] += bp.counts[k][a]; }); });
-    totals.contributors += bp.counts.contributors; totals.envelope += bp.counts.envelope;
+    totals.contributors += bp.counts.contributors;
     totals.deps.create += bp.counts.deps.create; totals.deps.same += bp.counts.deps.same;
     out.projects.push(bp);
   });
@@ -594,7 +581,7 @@ function importAnalyzeAll_(book, ctx, opts) {
 
 /** Le nombre d'opérations qui restent à faire (zéro : le classeur et l'outil sont d'accord). */
 function importRemaining_(c) {
-  return c.programs.create + c.projects.create + c.projects.update + c.people.create + c.wps.create + c.wps.update + c.items.create + c.items.update + c.contributors + c.lines.create + c.lines.update + c.envelope + c.deps.create;
+  return c.programs.create + c.projects.create + c.projects.update + c.people.create + c.wps.create + c.wps.update + c.items.create + c.items.update + c.contributors + c.lines.create + c.lines.update + c.deps.create;
 }
 
 function importReport_(book, all, single) {
@@ -643,9 +630,9 @@ function importWorkbookRows_(ctx, projects) {
     var wpCode = function (id) { return id && byId[id] ? String(byId[id].wbs_code) : ''; };
     var program = project.program_id ? programsById[project.program_id] : null;
     if (program) usedPrograms[program.id] = true;
-    out.Projets.push([project.code, project.name, program ? program.code : '', project.status || '', project.holiday_country || '', use(project.manager_resource_id), (function () { var e0 = importEnvExercise_(), v0 = e0 ? envAmount_(project, envKey_(e0)) : null; return v0 === null ? '' : v0; })()]);
+    out.Projets.push([project.code, project.name, program ? program.code : '', project.status || '', project.holiday_country || '', use(project.manager_resource_id)]);
     ex.wps.slice().sort(order).forEach(function (w) {
-      out.Workpackages.push([project.code, String(w.wbs_code), wpCode(w.parent_wp_id), w.name, use(w.owner_resource_id), w.charge_code || '', (function () { var e0 = importEnvExercise_(), v0 = e0 ? envAmount_(w, envKey_(e0)) : null; return v0 === null ? '' : v0; })()]);
+      out.Workpackages.push([project.code, String(w.wbs_code), wpCode(w.parent_wp_id), w.name, use(w.owner_resource_id), w.charge_code || '']);
     });
     var contrib = {};
     ex.roles.forEach(function (a) { if (a.scope_type === 'planitem' && a.role_code === 'CONTRIB') (contrib[a.scope_id] = contrib[a.scope_id] || []).push(use(a.resource_id)); });
@@ -858,21 +845,6 @@ function importApplyProject_(ctx, project, bp, io) {
       applied.lines++;
     });
   });
-  // 5. enveloppes (état final : tout en une fois)
-  step(function () {
-    var cur = mustGet('Project', project.id), params = { projectId: project.id }, wanted = 0;
-    var envEx1 = importEnvExercise_();
-    if (envEx1) params.exerciseId = envEx1.id;
-    if (envEx1 && plan.project && plan.project.authorized !== '' && envAmount_(cur, envKey_(envEx1)) !== plan.project.authorized) { params.authorized = plan.project.authorized; wanted++; }
-    var allocations = [];
-    plan.wps.forEach(function (w) {
-      if (w.envelope === '') return;
-      var wp = repoList('WorkPackage', function (x) { return x.project_id === project.id && String(x.wbs_code) === w.code; })[0];
-      if (envEx1 && wp && envAmount_(wp, envKey_(envEx1)) !== w.envelope) allocations.push({ wpId: wp.id, amount: w.envelope });
-    });
-    if (allocations.length) { params.allocations = allocations; wanted += allocations.length; }
-    if (wanted) { run('budget.envelope.set', params); applied.envelope += wanted; }
-  });
 }
 
 /**
@@ -889,7 +861,7 @@ defineAction('import.run', function (p, ctx) {
   if (all.errors.length) throw new PpmError('VALIDATION', 'Le classeur a ' + all.errors.length + ' erreur(s) : lancez « Analyser » et corrigez-les avant d’importer.', { rule: 'IMPORT_ERRORS', errors: all.errors.slice(0, 20) });
   var backup = p.resume ? null : importBackup_(ctx, all);
   var started = nowMs(), ops = 0, maxOps = p.maxOps ? Number(p.maxOps) : 0;
-  var applied = { programs: 0, projects: 0, people: 0, wps: 0, items: 0, contributors: 0, lines: 0, envelope: 0, deps: 0 };
+  var applied = { programs: 0, projects: 0, people: 0, wps: 0, items: 0, contributors: 0, lines: 0, deps: 0 };
   var full = function () { return (maxOps && ops >= maxOps) || nowMs() - started > IMPORT_BUDGET_MS; };
   var run = function (name, params) { ops++; return API_ACTIONS[name](params, ctx); };
   var stopped = false;

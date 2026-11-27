@@ -2,7 +2,7 @@ const { test, eq, ok } = require('./harness');
 const { lot2World } = require('./fixtures_lot2');
 
 module.exports = function () {
-  console.log('\nExercice budgétaire : budget attendu et accordé par équipe, parts des livrables, écarts, clash (0.17.1)');
+  console.log('\nExercice budgétaire : dotation par équipe, parts des livrables, écarts, clash (0.21.0)');
   const CP = 'carla@entreprise.com', WPL = 'remi@entreprise.com', MEMBER = 'mia@entreprise.com', DPL = 'dora@entreprise.com', ADMIN = 'admin@entreprise.com';
 
   /** Équipes : 1vm (3) ⊃ 1vmd (4) ; 2ae (3, Allemagne) ; « Direction » (hors règle) ; zzzz (4 sans parente à 3). Exercices : 2026 en exécution, 2027 en préparation. Coût d'un ETP : France 2027. */
@@ -44,58 +44,54 @@ module.exports = function () {
     eq(w.call(MEMBER, 'exercise.list', {}).exercises.map((e) => e.year + ' ' + e.status), ['2027 Exécution', '2026 Clos'], 'tout le monde lit la liste, la plus récente d’abord');
   });
 
-  test('Saisie du budget attendu et accordé : chef de projet et au-dessus ; règle des 3 et 4 caractères ; l’attendu se fige à l’exécution', () => {
+  test('Saisie de la dotation : chef de projet et au-dessus ; règle des 3 et 4 caractères ; elle se révise tant que l’exercice n’est pas clos', () => {
     const w = world();
-    eq([w.set(WPL, { teamId: w.vm.id, expected: 1000 }).error.code, w.set(MEMBER, { teamId: w.vm.id, expected: 1000 }).error.code], ['FORBIDDEN', 'FORBIDDEN'], 'ni le Workpackage leader, ni un membre ne saisissent');
-    ok(w.set(CP, { teamId: w.vm.id, expected: 100000 }).ok, 'le chef de projet : l’attendu d’une équipe à 3 caractères');
-    ok(w.set(DPL, { teamId: w.ae.id, expected: 50000 }).ok, 'le DPL aussi (niveau du dessus)');
-    ok(/3 ou 4 caractères \(« Direction » en a 9\)/.test(w.set(CP, { teamId: w.dir.id, expected: 1 }).error.message), 'une équipe dont le nom n’a pas 3 ou 4 caractères ne porte pas de budget');
-    ok(/doit être rattachée à une équipe de 3 caractères/.test(w.set(CP, { teamId: w.zz.id, expected: 1 }).error.message), 'une équipe à 4 caractères sans parente à 3 : refusée');
-    ok(w.set(CP, { teamId: w.vmd.id, expected: 30000 }).ok, 'une équipe à 4 caractères rattachée à une équipe à 3 : le détail');
-    [-1, 'x', 1e11].forEach((v) => eq(w.set(CP, { teamId: w.vm.id, expected: v }).error.code, 'VALIDATION', 'attendu ' + v));
+    eq([w.set(WPL, { teamId: w.vm.id, amount: 1000 }).error.code, w.set(MEMBER, { teamId: w.vm.id, amount: 1000 }).error.code], ['FORBIDDEN', 'FORBIDDEN'], 'ni le Workpackage leader, ni un membre ne saisissent');
+    ok(w.set(CP, { teamId: w.vm.id, amount: 100000 }).ok, 'le chef de projet : la dotation d’une équipe à 3 caractères');
+    ok(w.set(DPL, { teamId: w.ae.id, amount: 50000 }).ok, 'le DPL aussi (niveau du dessus)');
+    ok(/3 ou 4 caractères \(« Direction » en a 9\)/.test(w.set(CP, { teamId: w.dir.id, amount: 1 }).error.message), 'une équipe dont le nom n’a pas 3 ou 4 caractères ne porte pas de dotation');
+    ok(/doit être rattachée à une équipe de 3 caractères/.test(w.set(CP, { teamId: w.zz.id, amount: 1 }).error.message), 'une équipe à 4 caractères sans parente à 3 : refusée');
+    ok(w.set(CP, { teamId: w.vmd.id, amount: 30000 }).ok, 'une équipe à 4 caractères rattachée à une équipe à 3 : le détail');
+    [-1, 'x', 1e11].forEach((v) => eq(w.set(CP, { teamId: w.vm.id, amount: v }).error.code, 'VALIDATION', 'dotation ' + v));
     eq(w.set(CP, { teamId: w.vm.id }).error.code, 'VALIDATION', 'rien à enregistrer');
-    eq(w.set(CP, { teamId: 'inconnue', expected: 1 }).error.code, 'NOT_FOUND');
-    eq(w.raw(CP, 'exercise.set', { projectId: w.p2.id, exerciseId: w.prep.id, teamId: w.vm.id, expected: 1 }).error.code, 'FORBIDDEN', 'pas sur le projet d’un autre');
+    eq(w.set(CP, { teamId: 'inconnue', amount: 1 }).error.code, 'NOT_FOUND');
+    eq(w.raw(CP, 'exercise.set', { projectId: w.p2.id, exerciseId: w.prep.id, teamId: w.vm.id, amount: 1 }).error.code, 'FORBIDDEN', 'pas sur le projet d’un autre');
     eq(w.c.repoList('TeamBudget').length, 3, 'trois lignes : 1vm, 2ae et 1vmd');
-    ok(w.set(CP, { teamId: w.vm.id, expected: '1 234,5' }).error, 'un nombre mal écrit est refusé');
-    w.set(CP, { teamId: w.vm.id, granted: 90000 });
-    eq(w.row(w.get().data, '1vm').granted, 90000, 'l’accordé se saisit aussi pendant la préparation');
-    w.set(CP, { teamId: w.vm.id, granted: '' });
-    w.set(CP, { teamId: w.vm.id, expected: '' });
-    ok(!w.c.repoList('TeamBudget').some((b) => b.team_id === w.vm.id && !w.c.isTrue(b.deleted)), 'une ligne sans attendu ni accordé disparaît');
-    eq(w.set(CP, { teamId: w.vm.id, granted: '' }).data, { saved: false }, 'effacer ce qui n’existe pas ne crée rien');
-    // l'exercice 2026 est en exécution : l'attendu est figé, l'accordé se révise (février, avril)
+    ok(w.set(CP, { teamId: w.vm.id, amount: '1 234,5' }).error, 'un nombre mal écrit est refusé');
+    ok(w.set(CP, { teamId: w.vm.id, amount: '90000,5' }).ok, 'la virgule décimale est comprise');
+    eq(w.row(w.get().data, '1vm').own.dotation, 90000.5, 'une seule dotation par équipe : la nouvelle remplace l’ancienne');
+    w.set(CP, { teamId: w.vm.id, amount: '' });
+    ok(!w.c.repoList('TeamBudget').some((b) => b.team_id === w.vm.id && !w.c.isTrue(b.deleted)), 'une dotation vide disparaît');
+    eq(w.set(CP, { teamId: w.vm.id, amount: '' }).data, { saved: false }, 'effacer ce qui n’existe pas ne crée rien');
+    // l'exercice 2026 est en exécution : la dotation se révise (février, avril)
     const inExec = (p) => w.raw(CP, 'exercise.set', Object.assign({ projectId: w.p1.id, exerciseId: w.exec.id, teamId: w.ae.id }, p));
-    ok(/attendu est figé/.test(inExec({ expected: 10 }).error.message), 'exécution : le budget attendu est figé');
-    ok(inExec({ granted: 80000 }).ok && inExec({ granted: 70000 }).ok, 'exécution : l’accordé se révise');
-    ok(w.get(CP, w.p1.id, w.exec.id).data.can_edit_granted && !w.get(CP, w.p1.id, w.exec.id).data.can_edit_expected, 'la page est prévenue de ce qui est modifiable');
+    ok(inExec({ amount: 80000 }).ok && inExec({ amount: 70000 }).ok, 'exécution : la dotation se révise');
+    ok(w.get(CP, w.p1.id, w.exec.id).data.can_edit, 'la page est prévenue de ce qui est modifiable');
     w.call(ADMIN, 'exercise.setStatus', { id: w.exec.id, status: 'Clos' });
-    ok(/est clos/.test(inExec({ granted: 1 }).error.message), 'clos : plus rien ne change');
+    ok(/est clos/.test(inExec({ amount: 1 }).error.message), 'clos : plus rien ne change');
     eq(w.get(CP, w.p1.id, w.exec.id).data.can_edit, false);
   });
 
-  test('Le tableau par équipe : attendu, accordé, parts des livrables, écarts, clash, détail des équipes à 4 caractères, jours équivalents', () => {
+  test('Le tableau par équipe : dotation, parts des livrables, écart, clash, détail des équipes à 4 caractères, jours équivalents', () => {
     const w = world();
-    w.set(CP, { teamId: w.vm.id, expected: 100000 }); w.set(CP, { teamId: w.vmd.id, expected: 30000 }); w.set(CP, { teamId: w.ae.id, expected: 50000 });
+    w.set(CP, { teamId: w.vm.id, amount: 100000 }); w.set(CP, { teamId: w.vmd.id, amount: 30000 }); w.set(CP, { teamId: w.ae.id, amount: 50000 });
     ok(w.part(CP, w.a, w.vm, 40000).ok && w.part(CP, w.a, w.vmd, 20000).ok && w.part(CP, w.b, w.vm, 30000).ok && w.part(CP, w.b, w.ae, 60000).ok, 'des livrables avec leurs parts par équipe');
     const d = w.get().data, vm = w.row(d, '1vm'), ae = w.row(d, '2ae');
-    eq([vm.expected, vm.parts, vm.gap_expected, vm.own.expected, vm.own.parts], [130000, 90000, 40000, 100000, 70000], '1vm : l’équipe et son détail 1vmd additionnés ; ce qui reste à répartir');
-    eq(vm.children.map((c) => [c.name, c.expected, c.parts]), [['1vmd', 30000, 20000]], 'le détail à 4 caractères');
-    eq([ae.expected, ae.parts, ae.gap_expected], [50000, 60000, -10000], '2ae : les parts dépassent l’attendu, écart négatif (affiché, jamais bloquant)');
-    eq([d.totals.expected, d.totals.parts, d.totals.gap_expected, d.totals.granted, d.totals.clash], [180000, 150000, 30000, null, false], 'totaux ; pas encore d’accordé : pas de clash');
-    ok(vm.parts_days > 0 && vm.parts_days === w.c.daysFromAmount_(90000, 'FR', 2027) && vm.expected_days === w.c.daysFromAmount_(130000, 'FR', 2027), 'équivalent en jours : coût d’un ETP de la France en 2027 (' + vm.parts_days + ' j)');
+    eq([vm.dotation, vm.parts, vm.gap, vm.own.dotation, vm.own.parts], [130000, 90000, 40000, 100000, 70000], '1vm : l’équipe et son détail 1vmd additionnés ; ce qui reste à répartir');
+    eq(vm.children.map((c) => [c.name, c.dotation, c.parts]), [['1vmd', 30000, 20000]], 'le détail à 4 caractères');
+    eq([ae.dotation, ae.parts, ae.gap, ae.clash], [50000, 60000, -10000, true], '2ae : les parts dépassent la dotation, écart négatif et clash (affichés, jamais bloquants)');
+    eq([d.totals.dotation, d.totals.parts, d.totals.gap, d.totals.clash], [180000, 150000, 30000, false], 'totaux : le clash est par équipe, pas masqué ni créé par le total');
+    ok(vm.parts_days > 0 && vm.parts_days === w.c.daysFromAmount_(90000, 'FR', 2027) && vm.dotation_days === w.c.daysFromAmount_(130000, 'FR', 2027), 'équivalent en jours : coût d’un ETP de la France en 2027 (' + vm.parts_days + ' j)');
     eq([ae.parts_days, d.etp_missing], [null, ['DE']], 'l’Allemagne n’a pas de coût d’ETP en 2027 : pas d’équivalent en jours, et la page le dit');
-    // l'accordé : décembre, avec un clash sur 1vm
-    w.set(CP, { teamId: w.vm.id, granted: 80000 }); w.set(CP, { teamId: w.ae.id, granted: 70000 });
-    const g = w.get().data, vm2 = w.row(g, '1vm'), ae2 = w.row(g, '2ae');
-    eq([vm2.granted, vm2.gap_granted, vm2.clash, ae2.gap_granted, ae2.clash], [80000, -10000, true, 10000, false], 'accordé 80 000 contre 90 000 de parts : clash ; 2ae : dans l’accordé');
-    eq([g.totals.granted, g.totals.gap_granted, g.totals.clash], [150000, 0, false], 'au total, rien ne dépasse : le clash est par équipe, pas masqué par le total');
+    // une équipe sans dotation : pas de clash possible
+    w.part(CP, w.cc, w.vmd, 1000);
+    eq(w.row(w.get().data, '1vm').children.map((c) => c.parts), [21000]);
     // équipes qui ne s'additionnent nulle part
     w.part(CP, w.cc, w.zz, 5000); w.part(CP, w.cc, w.dir, 7000);
     const o = w.get().data;
     eq([o.orphans.map((x) => x.name + ':' + x.parts), o.unruled.map((x) => x.name + ':' + x.parts)], [['zzzz:5000'], ['Direction:7000']], 'une équipe à 4 caractères sans parente à 3, une équipe hors règle : à part, signalées, comptées dans les parts totales');
-    eq(o.totals.parts, 162000, 'les parts hors tableau comptent dans le total des livrables');
-    ok(o.teams.some((t) => t.name === '1vm' && t.level === 3) && o.teams.some((t) => t.name === '1vmd' && t.level === 4 && !t.orphan) && o.teams.some((t) => t.name === 'zzzz' && t.orphan) && !o.teams.some((t) => t.name === 'Direction'), 'les équipes qu’on peut ajouter au tableau : 3 et 4 caractères, avec les orphelines marquées');
+    eq(o.totals.parts, 163000, 'les parts hors tableau comptent dans le total des livrables');
+    ok(o.teams.some((t) => t.name === '1vm' && t.level === 3) && o.teams.some((t) => t.name === '1vmd' && t.level === 4 && !t.orphan) && o.teams.some((t) => t.name === 'zzzz' && t.orphan) && !o.teams.some((t) => t.name === 'Direction'), 'les équipes qu’on peut ajouter au tableau : 3 et 4 caractères, pas les autres');
     // droits de lecture : Workpackage leader et au-dessus, au global ; en dessous rien
     eq([w.get(WPL).ok, w.get(DPL).ok, w.get(MEMBER).error.code], [true, true, 'FORBIDDEN'], 'le Workpackage leader voit l’exercice du projet, pas un membre');
     eq(w.get(WPL).data.can_edit, false, 'en lecture seule pour lui');
@@ -118,11 +114,13 @@ module.exports = function () {
     eq(assign(MEMBER, w.b, w.exec.id).error.code, 'FORBIDDEN', 'droit : celui du budget du livrable');
     eq(assign(CP, w.j, w.exec.id).error.code, 'VALIDATION', 'un jalon n’a pas d’exercice');
     // la lecture du budget par exercice
-    const all = w.call(CP, 'budget.get', { projectId: w.p1.id }), ex = w.call(CP, 'budget.get', { projectId: w.p1.id, exerciseId: w.prep.id }), none = w.call(CP, 'budget.get', { projectId: w.p1.id, exerciseId: '__none' }), other = w.call(CP, 'budget.get', { projectId: w.p1.id, exerciseId: w.exec.id });
-    eq([all.lines.length, ex.lines.length, none.lines.length, other.lines.length], [4, 3, 0, 1], 'le budget d’un exercice : ses livrables seulement')
-    ok(all.unassigned.some((d) => d.id === w.cc.id) && !all.unassigned.some((d) => d.id === w.a.id || d.id === w.b.id), 'les livrables sans exercice sont listés (pour être rattachés), pas ceux qui en ont un');
-    eq(all.exercises.map((e) => e.year), [2027, 2026], 'et la page reçoit la liste des exercices');
-    ok(ex.deliverables.find((d) => d.id === w.a.id).exercise_year === 2027, 'chaque livrable dit son exercice');
+    const view = (exerciseId) => w.call(CP, 'budget.plan.get', { projectId: w.p1.id, exerciseId });
+    const dels = (v) => v.rows.filter((r) => r.kind === 'deliverable');
+    const ex = view(w.prep.id), other = view(w.exec.id);
+    eq([dels(ex).map((r) => r.id), dels(other).map((r) => r.id)], [[w.a.id], [w.b.id]], 'le plan d’un exercice : ses livrables seulement');
+    ok(ex.unassigned.some((d) => d.id === w.cc.id) && !ex.unassigned.some((d) => d.id === w.a.id || d.id === w.b.id), 'les livrables sans exercice sont listés (pour être rattachés), pas ceux qui en ont un');
+    eq(ex.exercises.map((e) => e.year), [2027, 2026], 'et la page reçoit la liste des exercices');
+    eq(dels(other).map((r) => r.id), [w.b.id], 'le livrable rattaché à 2026 est dans le plan de 2026');
     // un exercice clos : plus de part, plus de suppression, plus de rattachement
     w.call(ADMIN, 'exercise.setStatus', { id: w.exec.id, status: 'Clos' });
     ok(/est clos/.test(assign(CP, w.cc, w.exec.id).error.message), 'on ne rattache pas à un exercice clos');
@@ -134,14 +132,14 @@ module.exports = function () {
 
   test('Vue programme : un total par projet (ceux que l’on peut lire) et un tableau par équipe tous projets confondus', () => {
     const w = world();
-    w.set(CP, { teamId: w.vm.id, expected: 100000 });
-    w.raw(ADMIN, 'exercise.set', { projectId: w.p2.id, exerciseId: w.prep.id, teamId: w.vm.id, expected: 40000 });
-    w.raw(ADMIN, 'exercise.set', { projectId: w.p2.id, exerciseId: w.prep.id, teamId: w.ae.id, expected: 10000 });
+    w.set(CP, { teamId: w.vm.id, amount: 100000 });
+    w.raw(ADMIN, 'exercise.set', { projectId: w.p2.id, exerciseId: w.prep.id, teamId: w.vm.id, amount: 40000 });
+    w.raw(ADMIN, 'exercise.set', { projectId: w.p2.id, exerciseId: w.prep.id, teamId: w.ae.id, amount: 10000 });
     w.part(CP, w.a, w.vm, 60000);
     const prog = (who) => w.raw(who, 'exercise.program', { programId: w.prog.id, exerciseId: w.prep.id });
     const d = prog(DPL).data;
-    eq(d.projects.map((p) => p.code + ':' + p.expected + ':' + p.parts), ['P1:100000:60000', 'P2:50000:0'], 'le DPL voit les deux projets de son programme');
-    eq([w.row(d, '1vm').expected, w.row(d, '1vm').parts, w.row(d, '2ae').expected, d.totals.expected], [140000, 60000, 10000, 150000], 'le tableau par équipe additionne les projets');
+    eq(d.projects.map((p) => p.code + ':' + p.dotation + ':' + p.parts), ['P1:100000:60000', 'P2:50000:0'], 'le DPL voit les deux projets de son programme');
+    eq([w.row(d, '1vm').dotation, w.row(d, '1vm').parts, w.row(d, '2ae').dotation, d.totals.dotation], [140000, 60000, 10000, 150000], 'le tableau par équipe additionne les projets');
     eq(prog(CP).data.projects.map((p) => p.code), ['P1'], 'un chef de projet ne voit que son projet dans le programme');
     eq(prog(MEMBER).error.code, 'FORBIDDEN', 'un membre ne voit rien de l’exercice');
     ok(prog(ADMIN).ok, 'l’administrateur voit tout');
