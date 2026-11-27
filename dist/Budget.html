@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.21.0">
+<meta name="ppm-version" content="0.21.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -1285,6 +1285,7 @@ var BOOT = <?!= boot ?>;
       set(sameMoney(i.value, server) ? undefined : i.value);
       i.classList.toggle('changed', !sameMoney(i.value, server));
       if (planBar) planBar.sync(planDirty());
+      liveTotals();
     });
     return i;
   }
@@ -1295,6 +1296,40 @@ var BOOT = <?!= boot ?>;
     s.rows.forEach(function (r) { m[r.team_id] = r.own.dotation; r.children.forEach(function (c) { m[c.team_id] = c.dotation; }); });
     s.orphans.concat(s.unruled).forEach(function (r) { m[r.team_id] = r.dotation; });
     return m;
+  }
+  /** Les totaux du tableau (livrables, workpackages, équipes, projet) suivent la saisie : recalculés ici sans appel au serveur, à partir des lignes reçues et du brouillon. */
+  function liveTotals() {
+    var v = state.plan, d = state.planDraft, panel = $('panel-plan');
+    if (!v || !d || !panel) return;
+    if (state.dotRedraw && v.summary && $('dotations-host')) state.dotRedraw();
+    var r2 = function (n) { return Math.round(n * 100) / 100; };
+    var money = function (n) { return n ? eur(n) : ''; };
+    var cell = function (r, t) { var k = r.id + '|' + t, dr = d.cells[k]; if (dr) return Number(dr.value) || 0; return Number(r.cells[t]) || 0; };
+    var teams = {};
+    v.rows.forEach(function (r) { if (r.kind === 'deliverable') Object.keys(r.cells).forEach(function (t) { teams[t] = true; }); });
+    Object.keys(d.cells).forEach(function (k) { teams[d.cells[k].team] = true; });
+    Object.keys(state.extraCols || {}).forEach(function (t) { teams[t] = true; });
+    var acc = {}, put = function (key, t, n) { acc[key] = acc[key] || { tot: 0, ext: 0, cells: {} }; if (t === 'ext') { acc[key].ext = r2(acc[key].ext + n); acc[key].tot = r2(acc[key].tot + n); } else { acc[key].cells[t] = r2((acc[key].cells[t] || 0) + n); acc[key].tot = r2(acc[key].tot + n); } };
+    var base = {};
+    v.rows.forEach(function (r, i) {
+      if (r.kind !== 'deliverable') return;
+      var owners = ['total'];
+      for (var j = i - 1, depth = r.depth; j >= 0; j--) { var w = v.rows[j]; if (w.kind === 'wp' && w.depth < depth) { owners.push('wp:' + w.wp_id); depth = w.depth; } }
+      Object.keys(teams).forEach(function (t) { var n = cell(r, t); if (n) { put(r.id, t, n); owners.forEach(function (o) { put(o, t, n); }); } });
+      if (r.external) { put(r.id, 'ext', r.external); owners.forEach(function (o) { put(o, 'ext', r.external); }); }
+      base[r.id] = r;
+    });
+    panel.querySelectorAll('[data-sum]').forEach(function (n) {
+      var parts = n.getAttribute('data-sum').split('|'), a = acc[parts[0]] || { tot: 0, ext: 0, cells: {} };
+      var val = parts[1] === 'tot' ? a.tot : parts[1] === 'ext' ? a.ext : (a.cells[parts[1]] || 0);
+      n.textContent = parts[1] === 'tot' && parts[0] !== 'total' && parts[0].indexOf('wp:') !== 0 ? money(val) : (parts[1] === 'tot' ? eur(val) : money(val));
+    });
+    panel.querySelectorAll('[data-delta]').forEach(function (n) {
+      var key = n.getAttribute('data-delta'), a = acc[key] || { tot: 0 }, ref = key === 'total' ? (v.totals.base_known ? v.totals.base_total : null) : (base[key] && base[key].base && !base[key].base.new ? base[key].base.total : null);
+      if (ref === null || ref === undefined) return;
+      var dd = r2(a.tot - ref); clear(n); n.className = dd ? 'late' : '';
+      n.appendChild(dd ? el('small', { text: signed(dd) }) : (key === 'total' ? el('small', { text: '=' }) : el('span', { class: 'muted', text: '=' })));
+    });
   }
   function loadPlan() {
     var panel = $('panel-plan'), epoch = state.epoch, ex = currentExercise();
@@ -1366,11 +1401,12 @@ var BOOT = <?!= boot ?>;
       trs.push(el('tr', { 'data-row': 'dotation', class: 'dot-row' }, dcells));
     }
     var money = function (n) { return n ? eur(n) : ''; };
+    var sumTd = function (key, col, text, cls) { return el('td', { class: 'num' + (cls ? ' ' + cls : ''), 'data-sum': key + '|' + col, text: text }); };
     v.rows.forEach(function (r) {
       if (r.kind === 'wp') {
         var wc = [el('td', {}, [el('span', { class: 'env-indent', style: 'padding-left:' + (r.depth * 18) + 'px', text: (r.code ? r.code + ' ' : '') + r.name }), r.cpn ? el('small', { text: 'CPN ' + r.cpn }) : null])];
-        cols.forEach(function (c) { wc.push(el('td', { class: 'num', text: money(r.cells[c.team_id]) })); });
-        wc.push(el('td', { class: 'num', text: money(r.external) }), el('td', { class: 'num', text: eur(r.total) }));
+        cols.forEach(function (c) { wc.push(sumTd('wp:' + r.wp_id, c.team_id, money(r.cells[c.team_id]))); });
+        wc.push(sumTd('wp:' + r.wp_id, 'ext', money(r.external)), sumTd('wp:' + r.wp_id, 'tot', eur(r.total)));
         if (baseline) wc.push(el('td'));
         trs.push(el('tr', { 'data-wp': r.wp_id, class: 'wp-row' }, wc));
         return;
@@ -1384,26 +1420,26 @@ var BOOT = <?!= boot ?>;
           dc.push(el('td', { class: 'num' }, [draftInput('cell-' + r.id + '-' + c.team_id, r.cells[c.team_id], 'Montant de ' + c.name + ' sur ' + r.name,
             function () { return draft.cells[key] ? draft.cells[key].value : undefined; },
             function (val) { if (val === undefined) delete draft.cells[key]; else draft.cells[key] = { deliv: r.id, team: c.team_id, value: val }; }, false)]));
-        } else dc.push(el('td', { class: 'num', text: money(r.cells[c.team_id]) }));
+        } else dc.push(sumTd(r.id, c.team_id, money(r.cells[c.team_id])));
       });
-      var ext = el('td', { class: 'num' }, [el('span', { class: 'ext-btn-wrap' }, [el('span', { text: r.external ? eur(r.external) : '' }),
+      var ext = el('td', { class: 'num' }, [el('span', { class: 'ext-btn-wrap' }, [el('span', { 'data-sum': r.id + '|ext', text: r.external ? eur(r.external) : '' }),
         can ? el('button', { type: 'button', class: 'cost-btn', 'data-item': r.id, title: 'Forfaits du livrable', 'aria-label': 'Forfaits du livrable « ' + r.name + ' »', text: '€', onclick: function () { openExt(r.id); } }) : (r.forfaits.length ? el('small', { text: plural(r.forfaits.length, 'forfait', 'forfaits') }) : null)])]);
-      dc.push(ext, el('td', { class: 'num', text: r.total ? eur(r.total) : '' }));
+      dc.push(ext, sumTd(r.id, 'tot', r.total ? eur(r.total) : ''));
       if (baseline) {
         var b = r.base;
         if (!b) dc.push(el('td'));
         else if (b.new) dc.push(el('td', {}, [badge('Nouveau', 'warn')]));
-        else { var dd = Math.round((r.total - b.total) * 100) / 100; dc.push(el('td', { class: dd ? 'late' : '' }, [dd ? el('small', { text: signed(dd) }) : el('span', { class: 'muted', text: '=' })])); }
+        else { var dd = Math.round((r.total - b.total) * 100) / 100; dc.push(el('td', { class: dd ? 'late' : '', 'data-delta': r.id }, [dd ? el('small', { text: signed(dd) }) : el('span', { class: 'muted', text: '=' })])); }
       }
       trs.push(el('tr', { 'data-item': r.id, class: 'item-row is-deliverable' }, dc));
     });
     var tc = [el('td', { text: 'Total des livrables' })];
-    cols.forEach(function (c) { tc.push(el('td', { class: 'num', text: money(tot.cells[c.team_id]) })); });
-    tc.push(el('td', { class: 'num', text: money(tot.external) }), el('td', { class: 'num', text: eur(tot.total) }));
-    if (baseline) tc.push(el('td', { class: tot.base_known && Math.abs(tot.total - tot.base_total) > 0.004 ? 'late' : '' }, [tot.base_known ? el('small', { text: Math.abs(tot.total - tot.base_total) > 0.004 ? signed(tot.total - tot.base_total) : '=' }) : null]));
+    cols.forEach(function (c) { tc.push(sumTd('total', c.team_id, money(tot.cells[c.team_id]))); });
+    tc.push(sumTd('total', 'ext', money(tot.external)), sumTd('total', 'tot', eur(tot.total)));
+    if (baseline) tc.push(el('td', { 'data-delta': 'total', class: tot.base_known && Math.abs(tot.total - tot.base_total) > 0.004 ? 'late' : '' }, [tot.base_known ? el('small', { text: Math.abs(tot.total - tot.base_total) > 0.004 ? signed(tot.total - tot.base_total) : '=' }) : null]));
     trs.push(el('tr', { class: 'total', 'data-row': 'total' }, tc));
     panel.appendChild(plainTable('plan-table', head, trs));
-    panel.appendChild(el('p', { class: 'note', id: 'plan-note', text: 'Une ligne par livrable, une colonne par équipe : le montant est la part de l’équipe dans le livrable. La dotation (première ligne) est ce qui est donné à l’équipe pour l’exercice ; le plan dépasse la dotation = clash. Les totaux se recalculent à la validation. Les forfaits externes se saisissent avec le bouton €.' + (baseline ? ' La dernière colonne montre l’évolution depuis la baseline ' + baseline.label + '.' : '') }));
+    panel.appendChild(el('p', { class: 'note', id: 'plan-note', text: 'Une ligne par livrable, une colonne par équipe : le montant est la part de l’équipe dans le livrable. La dotation (première ligne) est ce qui est donné à l’équipe pour l’exercice ; le plan dépasse la dotation = clash. Les totaux et le clash de dotation se recalculent au fil de la saisie. Les forfaits externes se saisissent avec le bouton €.' + (baseline ? ' La dernière colonne montre l’évolution depuis la baseline ' + baseline.label + '.' : '') }));
     panel.appendChild(el('p', { class: 'ed-error', id: 'plan-error', role: 'alert', hidden: 'hidden' }));
     planBar = null;
     if (editable) {
@@ -1420,7 +1456,29 @@ var BOOT = <?!= boot ?>;
   }
   /** Dotation, plan et écart par équipe (l'équipe à 4 caractères s'additionne dans sa parente à 3) : les chiffres du moteur de règles et du suivi. */
   function renderDotations(panel, v, baseline) {
-    var sm = v.summary, rows = [];
+    var sm = v.summary, host = el('div', { id: 'dotations-host' });
+    panel.appendChild(el('h2', { class: 'sec', id: 'dotations-title', text: 'Dotation et plan par équipe' }));
+    panel.appendChild(host);
+    state.dotRedraw = function () { clear(host); drawDotTable(host, v, baseline); };
+    state.dotRedraw();
+    if (sm.orphans.length) panel.appendChild(el('p', { class: 'note late', id: 'exercise-orphans', text: 'Équipes à 4 caractères sans équipe parente à 3 caractères (non additionnées) : ' + sm.orphans.map(function (o) { return o.name + ' (dotation ' + (o.dotation === null ? '—' : eur(o.dotation)) + ', parts ' + eur(o.parts) + ')'; }).join(' ; ') + '.' }));
+    if (sm.unruled.length) panel.appendChild(el('p', { class: 'note late', id: 'exercise-unruled', text: 'Parts ou dotation sur des équipes dont le nom n’a pas 3 ou 4 caractères (hors règle, non comptées ci-dessus) : ' + sm.unruled.map(function (o) { return o.name + ' ' + eur(o.parts); }).join(' ; ') + '.' }));
+  }
+  /** Le tableau des dotations, avec la saisie en cours : la dotation et les parts d'une équipe tiennent compte du brouillon, donc le clash apparaît (ou disparaît) avant « Valider ». */
+  function drawDotTable(panel, v, baseline) {
+    var sm = v.summary, rows = [], d = state.planDraft || { cells: {}, dot: {} }, dotOf = dotationMap(v);
+    var savedCell = {}; v.rows.forEach(function (r) { if (r.kind === 'deliverable') Object.keys(r.cells).forEach(function (t) { savedCell[r.id + '|' + t] = Number(r.cells[t]) || 0; }); });
+    var partsDelta = {}; Object.keys(d.cells).forEach(function (k) { var c = d.cells[k]; partsDelta[c.team] = round((partsDelta[c.team] || 0) + ((Number(c.value) || 0) - (savedCell[k] || 0))); });
+    var inRows = {}; sm.rows.forEach(function (r) { inRows[r.team_id] = true; r.children.forEach(function (c) { inRows[c.team_id] = true; }); });
+    var pd = function (t) { return partsDelta[t] || 0; };
+    var dEdited = function (t) { return d.dot[t] !== undefined; };
+    var dNew = function (t) { return d.dot[t] === undefined ? dotOf[t] : (d.dot[t] === '' ? null : Number(d.dot[t]) || 0); };
+    var dDelta = function (t) { return dEdited(t) ? round((dNew(t) || 0) - (dotOf[t] || 0)) : 0; };
+    var withDelta = function (base, ids) { var any = base !== null && base !== undefined, sum = base || 0; ids.forEach(function (t) { if (dEdited(t)) { any = any || dNew(t) !== null; sum += dDelta(t); } }); return any ? round(sum) : null; };
+    var totDot = 0, totParts = 0, anyDot = sm.totals.dotation !== null;
+    sm.rows.forEach(function (r) { var ids = [r.team_id].concat(r.children.map(function (c) { return c.team_id; })); ids.forEach(function (t) { totDot += dDelta(t); totParts += pd(t); anyDot = anyDot || (dEdited(t) && dNew(t) !== null); }); });
+    totDot = round((sm.totals.dotation || 0) + totDot); totParts = round(sm.totals.parts + totParts);
+
     var days = function (n) { return n === null || n === undefined ? null : el('small', { text: n + ' j' }); };
     var line = function (r, label, indent, opts) {
       opts = opts || {};
@@ -1437,19 +1495,17 @@ var BOOT = <?!= boot ?>;
       rows.push(el('tr', { 'data-team': opts.id || r.team_id, class: opts.total ? 'total' : '' }, cells));
     };
     sm.rows.forEach(function (r) {
-      if (!r.children.length) { line(r, r.name, 0, { sub: r.country, days: true }); return; }
-      line(r, r.name + ' (total avec le détail)', 0, { sub: r.country, days: true, total: true, id: r.team_id + '-total' });
-      line(r, r.name + ' (équipe seule)', 16, { dot: r.own.dotation, parts: r.own.parts, base: null });
-      r.children.forEach(function (c) { line(c, c.name, 16, { base: null }); });
+      var ids = [r.team_id].concat(r.children.map(function (c) { return c.team_id; }));
+      if (!r.children.length) { line(r, r.name, 0, { sub: r.country, days: true, dot: withDelta(r.dotation, ids), parts: round(r.parts + pd(r.team_id)) }); return; }
+      line(r, r.name + ' (total avec le détail)', 0, { sub: r.country, days: true, total: true, id: r.team_id + '-total', dot: withDelta(r.dotation, ids), parts: round(r.parts + ids.reduce(function (a, t) { return a + pd(t); }, 0)) });
+      line(r, r.name + ' (équipe seule)', 16, { dot: withDelta(r.own.dotation, [r.team_id]), parts: round(r.own.parts + pd(r.team_id)), base: null });
+      r.children.forEach(function (c) { line(c, c.name, 16, { base: null, dot: withDelta(c.dotation, [c.team_id]), parts: round(c.parts + pd(c.team_id)) }); });
     });
-    panel.appendChild(el('h2', { class: 'sec', id: 'dotations-title', text: 'Dotation et plan par équipe' }));
     if (rows.length) {
-      var st = sm.totals;
-      rows.push(el('tr', { class: 'total', 'data-team': 'total' }, [el('td', { text: 'Total' }), el('td', { class: 'num', text: st.dotation === null ? '—' : eur(st.dotation) }), el('td', { class: 'num', text: eur(st.parts) }), el('td', { class: 'num' + (st.clash ? ' late' : ''), text: st.gap === null ? '—' : signed(st.gap) + (st.clash ? ' · clash' : '') })].concat(baseline ? [el('td')] : [])));
+      var tdot = anyDot ? totDot : null, tgap = tdot === null ? null : round(tdot - totParts), tclash = tdot !== null && totParts > tdot;
+      rows.push(el('tr', { class: 'total', 'data-team': 'total' }, [el('td', { text: 'Total' }), el('td', { class: 'num', text: tdot === null ? '—' : eur(tdot) }), el('td', { class: 'num', text: eur(totParts) }), el('td', { class: 'num' + (tclash ? ' late' : ''), text: tgap === null ? '—' : signed(tgap) + (tclash ? ' · clash' : '') })].concat(baseline ? [el('td')] : [])));
       panel.appendChild(table('exercise-table', ['Équipe', { t: 'Dotation' }, { t: 'Plan (parts des livrables)' }, { t: 'Écart' }].concat(baseline ? [{ t: 'Dotation à la ' + baseline.label }] : []), rows));
     } else panel.appendChild(el('div', { class: 'empty' }, [el('strong', { text: 'Aucune dotation, aucune part.' }), el('span', { text: v.can_set_dotation ? 'Saisissez la dotation de chaque équipe dans la première ligne du tableau.' : '' })]));
-    if (sm.orphans.length) panel.appendChild(el('p', { class: 'note late', id: 'exercise-orphans', text: 'Équipes à 4 caractères sans équipe parente à 3 caractères (non additionnées) : ' + sm.orphans.map(function (o) { return o.name + ' (dotation ' + (o.dotation === null ? '—' : eur(o.dotation)) + ', parts ' + eur(o.parts) + ')'; }).join(' ; ') + '.' }));
-    if (sm.unruled.length) panel.appendChild(el('p', { class: 'note late', id: 'exercise-unruled', text: 'Parts ou dotation sur des équipes dont le nom n’a pas 3 ou 4 caractères (hors règle, non comptées ci-dessus) : ' + sm.unruled.map(function (o) { return o.name + ' ' + eur(o.parts); }).join(' ; ') + '.' }));
   }
   function round(n) { return Math.round(n * 100) / 100; }
   /** Valider : une écriture par cellule ou dotation modifiée, l'une après l'autre ; une écriture refusée laisse sa modification en brouillon, avec le message. */

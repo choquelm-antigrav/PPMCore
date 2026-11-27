@@ -159,6 +159,12 @@ function openPage(user, startTab) {
   p.set(cellId(w.a, w.team), '2080'); p.input(p.$(cellId(w.a, w.team)));
   p.set('dot-' + w.team.id, '4000'); p.input(p.$('dot-' + w.team.id));
   check(!p.$('plan-validate').disabled && p.$('plan-validate').classList.contains('primary') && p.$(cellId(w.a, w.team)).classList.contains('changed') && c.repoList('BudgetLine').length === 2 && c.repoList('TeamBudget').length === 0, 'brouillon : « Valider » devient bleu, les champs modifiés sont marqués, rien n’est enregistré');
+  check(/2 080 €/.test(flat(itemRow(w.a).textContent)) && /7 280 €/.test(flat(p.doc.querySelector('#plan-table tr.total').textContent)) && c.repoList('BudgetLine').length === 2, 'totaux en direct : le total du livrable et le total des livrables suivent la saisie, avant « Valider »');
+  const dotLive = p.doc.querySelector('#exercise-table tr[data-team="' + w.team.id + '"]');
+  check(!!dotLive && /4 000 €/.test(flat(dotLive.textContent)) && /7 280 €/.test(flat(dotLive.textContent)) && /clash/.test(flat(dotLive.textContent)) && c.repoList('TeamBudget').length === 0, 'clash en direct : dotation 4 000 € saisie, plan 7 280 € : le tableau des dotations signale le clash avant « Valider »');
+  p.set('dot-' + w.team.id, '9000'); p.input(p.$('dot-' + w.team.id));
+  check(!/clash/.test(flat(p.doc.querySelector('#exercise-table tr[data-team="' + w.team.id + '"]').textContent)), 'dotation relevée à 9 000 € : le clash disparaît en direct');
+  p.set('dot-' + w.team.id, '4000'); p.input(p.$('dot-' + w.team.id));
   p.click(p.$('plan-validate'));
   await p.until(() => c.repoList('BudgetLine').some((l) => l.deliverable_id === w.a.id && Number(l.planned_amount) === 2080) && c.repoList('TeamBudget').length === 1);
   const tb0 = c.repoList('TeamBudget')[0];
@@ -402,11 +408,7 @@ function openPage(user, startTab) {
   setDot(ex9, 6500, exec);
   const bl = openPage(CP);
   await bl.until(() => bl.$('plan-table') && bl.$('version-bar'));
-  check([...bl.doc.querySelectorAll('#plan-table th')].some((h) => /Depuis P1_0/.test(h.textContent)), 'avec une baseline active : colonne « Depuis P1_0 »');
-  const rowE1 = bl.doc.querySelector('#plan-table tr[data-item="' + e1.id + '"]'), rowE2 = bl.doc.querySelector('#plan-table tr[data-item="' + e2.id + '"]');
-  check(/\+500 €/.test(flat(rowE1.cells[rowE1.cells.length - 1].textContent)) && /=/.test(rowE2.cells[rowE2.cells.length - 1].textContent), 'un livrable dont la part a augmenté de 500 € : « +500 € » ; un inchangé : « = »');
-  const rowD9 = bl.doc.querySelector('#exercise-table tr[data-team="' + ex9.id + '"]');
-  check(/6 000 €/.test(flat(rowD9.cells[rowD9.cells.length - 1].textContent)) && /\+500 €/.test(flat(rowD9.cells[rowD9.cells.length - 1].textContent)), 'la dotation à la baseline (6 000 €) et son évolution (+500 €) : ' + flat(rowD9.cells[rowD9.cells.length - 1].textContent));
+  check(![...bl.doc.querySelectorAll('#plan-table th')].some((h) => /Depuis/.test(h.textContent)), 'baseline figée mais pas encore validée : pas de comparaison (le suivi lit la version de référence, il n’y en a pas encore)');
 
   // ---------------------------------------------------------------- les versions du plan (suivi)
   const DPL = 'dora@entreprise.com';
@@ -419,6 +421,19 @@ function openPage(user, startTab) {
   // le DPL valide P1_0 ; la saisie change ensuite ; le suivi lit toujours P1_0
   const ackIds = w.call(DPL, 'changes.feed', { projectId: w.p1.id }).items.filter((x) => x.table === 'Baseline' && x.entity_id === p0.id).map((x) => x.id);
   w.call(DPL, 'changes.ack', { ids: ackIds });
+  const bl2 = openPage(CP);
+  await bl2.until(() => bl2.$('plan-table') && bl2.$('version-bar'));
+  await bl2.until(() => bl2.$('vt-live'));
+  bl2.click(bl2.$('vt-live'));
+  await bl2.until(() => [...bl2.doc.querySelectorAll('#plan-table th')].some((h) => /Depuis P1_0/.test(h.textContent)));
+  check(true, 'baseline validée : la version en cours se compare à elle, colonne « Depuis P1_0 »');
+  const rowE1 = bl2.doc.querySelector('#plan-table tr[data-item="' + e1.id + '"]'), rowE2 = bl2.doc.querySelector('#plan-table tr[data-item="' + e2.id + '"]');
+  check(/\+500 €/.test(flat(rowE1.cells[rowE1.cells.length - 1].textContent)) && /=/.test(rowE2.cells[rowE2.cells.length - 1].textContent), 'un livrable dont la part a augmenté de 500 € : « +500 € » ; un inchangé : « = »');
+  const rowD9 = bl2.doc.querySelector('#exercise-table tr[data-team="' + ex9.id + '"]');
+  check(/6 000 €/.test(flat(rowD9.cells[rowD9.cells.length - 1].textContent)) && /\+500 €/.test(flat(rowD9.cells[rowD9.cells.length - 1].textContent)), 'la dotation à la baseline (6 000 €) et son évolution (+500 €) : ' + flat(rowD9.cells[rowD9.cells.length - 1].textContent));
+  // totaux en direct vs baseline : un brouillon change le delta avant « Valider »
+  bl2.set('cell-' + e2.id + '-' + ex9.id, '1234'); bl2.input(bl2.$('cell-' + e2.id + '-' + ex9.id));
+  check(/\+/.test(flat(rowE2.cells[rowE2.cells.length - 1].textContent)) || /−/.test(flat(rowE2.cells[rowE2.cells.length - 1].textContent)), 'l’écart à la baseline suit la saisie en direct');
   const planRef = serverTracking().totals.plan;
   w.call(CP, 'budget.cell.set', { deliverableId: e2.id, teamId: ex9.id, amount: 9999, exerciseId: exec.id });
   const vq = openPage(CP);

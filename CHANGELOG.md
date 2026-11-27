@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 0.21.1 — le plan se compare à la baseline de référence ; totaux en direct
+
+- **Une seule référence** : la colonne « Depuis P1_0 » (et la dotation à la baseline) se compare à la baseline de RÉFÉRENCE, celle que lit le suivi (dernière baseline validée), et non plus à la baseline active. Tant qu'aucune baseline n'est validée, il n'y a pas de comparaison. Dans les onglets d'exploitation (préparation, archive), qui ne lisent pas la liste des versions, la baseline active sert encore de repli.
+- **Totaux en direct** : dans la matrice, les totaux du livrable, du workpackage, de l'équipe et du projet, ainsi que l'écart à la baseline, suivent la saisie sans attendre « Valider » (calcul dans la page, aucun appel au serveur). Le tableau des dotations (dotation, plan, écart, **clash**) suit aussi la saisie : le clash apparaît ou disparaît avant « Valider ». Une équipe qui n'avait encore aucune part ni dotation n'y apparaît qu'après la validation.
+
 ## 0.21.0 — refonte du budget : un seul tableau, tout le reste en découle
 
 - **Plan budgétaire** : UN tableau par exercice — une ligne par livrable (sous leur workpackage, qui fait la somme), une colonne par équipe et une colonne **Externe** (forfaits). La première ligne est la **dotation** de chaque équipe (un seul montant annuel qui remplace « attendu » et « accordé »). Aucune dimension de temps : ce sont des valeurs annuelles.
