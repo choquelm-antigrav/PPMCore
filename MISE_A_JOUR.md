@@ -113,3 +113,12 @@ Pour un usage avec une vraie équipe, **déployez depuis le compte Workspace de 
 1. Remplacer les fichiers, relancer **`A1_INSTALLER_PPM`** : la table `ActualLine` passe dans le classeur **Données** (nouvelle feuille, protégée) ; l'ancienne feuille du classeur Historique n'est plus utilisée (elle était vide).
 2. **Chaque mois** : page **Administration › Réalisé comptable** : coller le lien du nouveau classeur de la finance (onglet « CUC Total Cost »), **Analyser**, lire les avertissements (CPN ou équipes inconnus), **Importer**. Partager le classeur en lecture avec le compte qui exécute l'outil. Les CPN doivent exister dans l'outil (projet ou workpackage) ; les équipes se retrouvent par leur nom ou leur centre de coût.
 3. **Assistant** (facultatif) : pour que Gemini analyse le budget, définir la propriété du script **`PPM_AI_BUDGET`** à **`on`** (mode API de l'assistant, accès Gemini de l'entreprise).
+
+## Passer à la 0.21.0 (refonte du budget : un seul tableau)
+
+1. Remplacer les fichiers, relancer **`A1_INSTALLER_PPM`** : la table `TeamBudget` passe à une colonne `amount` (la dotation). Les anciens « attendu » et « accordé », les enveloppes et les échéanciers ne servent plus ; les anciennes colonnes peuvent être supprimées à la main. **Les données budgétaires existantes sont jetables** (décision prise) : ressaisir le plan dans la page Budget.
+2. **Plan** : page Budget, une cellule par livrable et par équipe ; la dotation de chaque équipe dans la première ligne ; les forfaits externes avec le bouton **€**. Rattacher les livrables sans exercice à l'exercice (bouton en haut du tableau).
+3. **Réalisé** : plus d'import mensuel. Le chef de projet saisit à la main, chaque mois, ce que chaque équipe a consommé par CPN (zone « Réalisé comptable » du suivi budgétaire). L'atterrissage n'est calculé qu'une fois le réalisé saisi.
+4. **Versions** : figer une baseline pour conserver une version du plan (matrice et dotations). Les baselines antérieures n'ont pas les dotations : l'écart le dit.
+5. L'import et l'export de l'exercice par Google Sheet et l'import du réalisé sont retirés ; l'import de projets (page Administration) ne porte plus d'enveloppes.
+

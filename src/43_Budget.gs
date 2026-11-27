@@ -1,13 +1,13 @@
 /**
- * PPM Core — 0.9.0 : budget, CPN (lot 3, première partie) ; 0.17.1 : plus de taux journalier, parts par équipe.
+ * PPM Core — 0.9.0 : budget, CPN (lot 3, première partie) ; 0.17.1 : parts par équipe ; 0.21.0 : plan budgétaire sans dimension de temps.
  *
  *  - CPN : code financier d'un projet, avec sa désignation. Un workpackage de premier niveau (le « sous-projet »)
  *    peut porter le sien. Un CPN ne couvre qu'un seul projet, au maximum. Les analyses budgétaires se font par CPN.
  *  - Lignes de budget par livrable : une PART PAR ÉQUIPE, en montant libre (la conversion en jours est un calcul à la demande, à partir du coût d'un ETP du pays de l'équipe : 60_Exercise.gs),
- *    ou un FORFAIT auprès d'une ressource externe. Il n'y a plus aucun taux journalier. Étalement automatique (équipe : au prorata des jours ouvrés de chaque mois ; forfait : en totalité
- *    le mois de la livraison), modifiable à la main. Un livrable appartient à un seul exercice budgétaire (voir exerciseForLine_).
+ *    ou un FORFAIT (colonne « Externe ») auprès d'une ressource externe. Aucun taux journalier ni étalement par mois : un montant est une valeur annuelle. Un livrable appartient à un seul
+ *    exercice budgétaire (voir exerciseForLine_).
  *  - Bilan par CPN : budget (interne, externe) face aux commandes d'achat engagées (44_Orders.gs).
- * Fonctions de calcul pures : phasingFor_, computeBalance_.
+ * Fonction de calcul pure : computeBalance_.
  */
 
 var CPN_RE = /^[A-Z0-9][A-Z0-9 ._\/-]{0,29}$/;
@@ -100,78 +100,30 @@ function applyWpCpn_(ctx, wp, values, out) {
   out.cpn_label = label;
 }
 
-// ---------------------------------------------------------------- grille de taux
+// ---------------------------------------------------------------- le plan budgétaire : une cellule livrable × équipe
 
-// ---------------------------------------------------------------- étalement (fonction pure)
+/**
+ * LE PLAN BUDGÉTAIRE (0.21.0). Le budget d'un projet est UN tableau annuel : une ligne par livrable, une colonne par équipe (plus la colonne « Externe »), un montant libre par cellule. Il n'y a plus
+ * de dimension de temps (ni étalement par mois, ni enveloppe saisie) : une cellule est une part d'équipe sur un livrable (BudgetLine « Équipe »), un forfait externe est une ligne « Forfait ».
+ * Les totaux par workpackage, par équipe et par projet sont des SOMMES du plan ; la seule autre saisie est la dotation de l'équipe (60_Exercise.gs).
+ */
 
 function monthOf_(d) { return String(d).slice(0, 7); }
 
-/** Étalement d'une ligne : [{ month, amount }], somme = montant planifié. hol : jours fériés du calendrier du projet. */
-function phasingFor_(line, deliverable, hol) {
-  var amount = round2(Number(line.planned_amount) || 0);
-  var start = deliverable.planned_start || '', finish = deliverable.planned_finish || '';
-  if (!amount || (!start && !finish)) return [];
-  if (line.cost_type === 'Forfait' || !start || !finish) return [{ month: monthOf_(finish || start), amount: amount }];
-  var counts = {}, total = 0, months = [];
-  for (var d = start; d <= finish; d = addCalendarDays(d, 1)) {
-    if (!isWorkingDay(d, hol)) continue;
-    var m = monthOf_(d);
-    if (!counts[m]) { counts[m] = 0; months.push(m); }
-    counts[m]++; total++;
-  }
-  if (!total) return [{ month: monthOf_(finish), amount: amount }];
-  var out = [], acc = 0;
-  months.forEach(function (m, i) {
-    var a = i === months.length - 1 ? round2(amount - acc) : round2(amount * counts[m] / total);
-    acc = round2(acc + a);
-    out.push({ month: m, amount: a });
-  });
-  return out;
-}
-
-function holidaysOfProject_(projectId) {
-  var project = repoGet('Project', projectId);
-  return loadHolidayMap((project && project.holiday_country) || 'FR');
-}
-
-/** Remplace l'étalement d'une ligne (mode auto : recalculé depuis les dates du livrable). */
-function writePhasing_(line, months, actx) {
-  repoList('BudgetPhasing', function (x) { return x.budget_line_id === line.id; }).forEach(function (x) { repoSoftDelete('BudgetPhasing', x.id, null, actx); });
-  months.forEach(function (m) { repoInsert('BudgetPhasing', { budget_line_id: line.id, month: m.month, amount: m.amount }, actx); });
-}
-
-function rephaseLine_(line, deliverable, actx) {
-  writePhasing_(line, phasingFor_(line, deliverable, holidaysOfProject_(deliverable.project_id)), actx);
-}
-
-/** Les dates d'un livrable changent : les lignes en étalement automatique suivent. Ne bloque jamais la saisie. */
-function hookRephase(before, rec) {
-  try {
-    if (rec.item_type !== 'Livrable' || !before) return;
-    if (String(before.planned_start || '') === String(rec.planned_start || '') && String(before.planned_finish || '') === String(rec.planned_finish || '')) return;
-    var actx = { actor: 'ppm-core', source: 'core' };
-    repoList('BudgetLine', function (l) { return l.deliverable_id === rec.id && l.phasing_mode !== 'manuel'; }).forEach(function (l) { rephaseLine_(l, rec, actx); });
-  } catch (err) {
-    console.error('Étalement : ' + (err && err.message ? err.message : err));
-  }
-}
-
-// ---------------------------------------------------------------- lignes de budget
-
-/** Une ligne est « externe » si sa ressource l'est (jours × taux ou forfait) ; les anciennes lignes au forfait le sont par nature. */
+/** Une ligne est « externe » si c'est un forfait auprès d'une ressource externe (colonne Externe du plan). */
 function lineIsExternal_(l) { return isTrue(l.is_external) || l.cost_type === 'Forfait'; }
 
 function budgetNumber_(v, label, max) {
-  var n = Number(v);
+  var n = Number(String(v === null || v === undefined ? '' : v).replace(',', '.'));
   if (isBlank(v) || isNaN(n) || n < 0 || n > (max || 1e9)) throw new PpmError('VALIDATION', label + ' : un nombre positif ou nul.');
   return n;
 }
 
 /**
- * La vue d'une ligne de budget. `lookups` : { resById, teamById }. Une part d'équipe dit son équivalent en jours (montant ÷ coût journalier de l'ETP du pays de l'équipe, pour l'année de l'exercice
+ * La vue d'une ligne de budget. `lookups` : { resById, teamById, exById }. Une part d'équipe dit son équivalent en jours (montant ÷ coût journalier de l'ETP du pays de l'équipe, pour l'année de l'exercice
  * du livrable, à défaut celle de ses dates) ; `days_equivalent` est null tant que le coût d'un ETP du pays et de l'année n'est pas paramétré : on n'invente jamais un chiffre.
  */
-function lineView_(l, ctx, phasing, lookups, deliverable) {
+function lineView_(l, ctx, lookups, deliverable) {
   var res = lookups.resById[l.resource_id], team = lookups.teamById[l.team_id];
   var isTeam = l.cost_type === 'Équipe';
   var ex = deliverable && !isBlank(deliverable.exercise_id) && lookups.exById ? lookups.exById[deliverable.exercise_id] : null;
@@ -184,10 +136,12 @@ function lineView_(l, ctx, phasing, lookups, deliverable) {
     team: isTeam ? { id: l.team_id || '', name: team ? team.name : '', country: country } : null,
     external: lineIsExternal_(l), cost_type: l.cost_type,
     fixed_amount: isBlank(l.fixed_amount) ? null : Number(l.fixed_amount), planned_amount: Number(l.planned_amount) || 0,
-    days_equivalent: isTeam && team ? daysFromAmount_(Number(l.planned_amount) || 0, country, year) : null,
-    phasing_mode: l.phasing_mode === 'manuel' ? 'manuel' : 'auto',
-    phasing: (phasing || []).map(function (x) { return { month: x.month, amount: Number(x.amount) || 0 }; }).sort(function (a, b) { return a.month < b.month ? -1 : 1; })
+    days_equivalent: isTeam && team ? daysFromAmount_(Number(l.planned_amount) || 0, country, year) : null
   };
+}
+
+function budgetViewLookups_(extraRes) {
+  return { resById: indexBy_(extraRes || repoList('Resource')), teamById: indexBy_(repoList('HierarchicalTeam')), exById: indexBy_(repoList('Exercise')) };
 }
 
 defineAction('budget.line.save', function (p, ctx) {
@@ -203,7 +157,7 @@ defineAction('budget.line.save', function (p, ctx) {
     // une part d'équipe (team_id + montant libre) ou un forfait auprès d'une ressource externe (resource_id + forfait) ; le type d'une ligne existante ne change pas
     var isTeam = line ? line.cost_type === 'Équipe' : !isBlank(v.team_id);
     if (line && (isTeam ? !isBlank(v.resource_id) : !isBlank(v.team_id))) throw new PpmError('VALIDATION', 'Le type d’une ligne ne change pas : supprimez-la puis créez-en une autre.');
-    var out, who;
+    var out;
     if (isTeam) {
       var teamId = 'team_id' in v && !isBlank(v.team_id) ? v.team_id : (line ? line.team_id : requireParam(v, 'team_id'));
       var team = repoGet('HierarchicalTeam', teamId);
@@ -223,17 +177,38 @@ defineAction('budget.line.save', function (p, ctx) {
       }
       var fixed = budgetNumber_('fixed_amount' in v ? v.fixed_amount : (line ? line.fixed_amount : ''), 'Forfait');
       out = { resource_id: resId, team_id: '', cost_type: 'Forfait', fixed_amount: round2(fixed), planned_amount: round2(fixed), is_external: true };
-      who = res;
     }
-    var amountChanged = !line || Number(line.planned_amount) !== out.planned_amount;
-    if (!line || amountChanged || line.phasing_mode !== 'manuel') out.phasing_mode = 'auto';
     var rec = line ? repoUpdate('BudgetLine', line.id, out, p.version, ctx.actx)
       : repoInsert('BudgetLine', Object.assign({ deliverable_id: deliverable.id }, out), ctx.actx);
     if (ex && isBlank(deliverable.exercise_id)) deliverable = repoUpdate('PlanItem', deliverable.id, { exercise_id: ex.id }, null, ctx.actx);   // un livrable n'a qu'un exercice : celui de sa première part
-    if (out.phasing_mode === 'auto') rephaseLine_(rec, deliverable, ctx.actx);
-    var phasing = repoList('BudgetPhasing', function (x) { return x.budget_line_id === rec.id; });
-    var teamById = indexBy_(repoList('HierarchicalTeam')), resById = who ? indexBy_([who]) : {};
-    return lineView_(rec, ctx, phasing, { resById: resById, teamById: teamById, exById: indexBy_(repoList('Exercise')) }, deliverable);
+    return lineView_(rec, ctx, budgetViewLookups_(), deliverable);
+  });
+});
+
+/**
+ * Une CELLULE du plan : le montant d'une équipe sur un livrable. Un montant vide (ou nul) retire la part ; sinon elle est créée ou remplacée. C'est la saisie du tableau livrable × équipe.
+ * Mêmes droits et mêmes règles que `budget.line.save` : qui peut modifier le budget du livrable, jamais dans un exercice clos, un livrable n'a qu'un exercice.
+ */
+defineAction('budget.cell.set', function (p, ctx) {
+  etpReset_();
+  var deliverable = mustGet('PlanItem', requireParam(p, 'deliverableId'));
+  if (deliverable.item_type !== 'Livrable') throw new PpmError('VALIDATION', 'Le budget se rattache à un livrable, pas à un jalon.');
+  requireCan(ctx, 'budget.edit', { type: 'planitem', id: deliverable.id });
+  var team = mustGet('HierarchicalTeam', requireParam(p, 'teamId'));
+  if (isTrue(team.deleted)) throw new PpmError('VALIDATION', 'Équipe introuvable.');
+  var clear = isBlank(p.amount) || Number(String(p.amount).replace(',', '.')) === 0;
+  var amount = clear ? 0 : round2(budgetNumber_(p.amount, 'Montant'));
+  return withLock(function () {
+    var ex = exerciseForLine_(deliverable, p.exerciseId);
+    var line = repoList('BudgetLine', function (l) { return l.deliverable_id === deliverable.id && l.team_id === team.id; })[0] || null;
+    if (clear) {
+      if (line) repoSoftDelete('BudgetLine', line.id, null, ctx.actx);
+      return { cleared: true, deliverable_id: deliverable.id, team_id: team.id };
+    }
+    var vals = { team_id: team.id, resource_id: '', cost_type: 'Équipe', planned_amount: amount, fixed_amount: '', is_external: false };
+    var rec = line ? repoUpdate('BudgetLine', line.id, vals, null, ctx.actx) : repoInsert('BudgetLine', Object.assign({ deliverable_id: deliverable.id }, vals), ctx.actx);
+    if (ex && isBlank(deliverable.exercise_id)) deliverable = repoUpdate('PlanItem', deliverable.id, { exercise_id: ex.id }, null, ctx.actx);
+    return lineView_(rec, ctx, budgetViewLookups_(), deliverable);
   });
 });
 
@@ -242,41 +217,8 @@ defineAction('budget.line.delete', function (p, ctx) {
   requireCan(ctx, 'budget.edit', { type: 'planitem', id: line.deliverable_id });
   return withLock(function () {
     exerciseForLine_(mustGet('PlanItem', line.deliverable_id), '');   // rien ne se retire d'un exercice clos
-    repoList('BudgetPhasing', function (x) { return x.budget_line_id === line.id; }).forEach(function (x) { repoSoftDelete('BudgetPhasing', x.id, null, ctx.actx); });
     repoSoftDelete('BudgetLine', line.id, p.version, ctx.actx);
     return { deleted: true };
-  });
-});
-
-/** Étalement à la main : la somme doit égaler le montant planifié de la ligne. mode = 'auto' revient au calcul. */
-defineAction('budget.phasing.set', function (p, ctx) {
-  var line = mustGet('BudgetLine', requireParam(p, 'lineId'));
-  var deliverable = mustGet('PlanItem', line.deliverable_id);
-  requireCan(ctx, 'budget.edit', { type: 'planitem', id: deliverable.id });
-  return withLock(function () {
-    if (p.mode === 'auto') {
-      var rec0 = repoUpdate('BudgetLine', line.id, { phasing_mode: 'auto' }, null, ctx.actx);
-      rephaseLine_(rec0, deliverable, ctx.actx);
-      return { mode: 'auto', months: repoList('BudgetPhasing', function (x) { return x.budget_line_id === line.id; }).map(function (x) { return { month: x.month, amount: Number(x.amount) }; }) };
-    }
-    var seen = {}, months = [], sum = 0;
-    (Array.isArray(p.months) ? p.months : []).forEach(function (m) {
-      var month = String(m && m.month || '').trim();
-      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new PpmError('VALIDATION', 'Mois invalide : « ' + month + ' » (format AAAA-MM).');
-      if (seen[month]) throw new PpmError('VALIDATION', 'Le mois ' + month + ' est indiqué deux fois.');
-      seen[month] = true;
-      var a = budgetNumber_(m.amount, 'Montant de ' + month);
-      months.push({ month: month, amount: round2(a) });
-      sum = round2(sum + a);
-    });
-    if (!months.length) throw new PpmError('VALIDATION', 'Indiquez au moins un mois.');
-    if (Math.abs(sum - Number(line.planned_amount)) > 0.005) {
-      throw new PpmError('VALIDATION', 'La somme des mois (' + sum + ') doit égaler le montant de la ligne (' + Number(line.planned_amount) + ').');
-    }
-    months.sort(function (a, b) { return a.month < b.month ? -1 : 1; });
-    repoUpdate('BudgetLine', line.id, { phasing_mode: 'manuel' }, null, ctx.actx);
-    writePhasing_(line, months, ctx.actx);
-    return { mode: 'manuel', months: months };
   });
 });
 
@@ -297,67 +239,6 @@ defineAction('budget.access', function (p, ctx) {
   var project = mustGet('Project', requireParam(p, 'projectId'));
   var a = budgetAccess_(ctx, project.id);
   return Object.assign({ project: { id: project.id, code: project.code, name: project.name, cpn: project.cpn || '', cpn_label: project.cpn_label || '', version: project.version } }, a);
-});
-
-/** Lignes de budget d'un projet, par livrable, avec étalement ; les lignes hors périmètre de l'utilisateur sont masquées. */
-defineAction('budget.get', function (p, ctx) {
-  etpReset_();
-  var project = mustGet('Project', requireParam(p, 'projectId'));
-  var access = budgetAccess_(ctx, project.id);
-  if (!access.budget) throw new PpmError('FORBIDDEN', 'Le budget est réservé aux responsables de budget du projet.');
-  var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; });
-  var wpById = indexBy_(wps);
-  var exercises = repoList('Exercise'), exById = indexBy_(exercises), exFilter = String(p.exerciseId || '');
-  // exerciseId : un exercice (ses livrables), « __none » (les livrables sans exercice) ou vide (tous)
-  var allItems = repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable'; });
-  var onlyId = String(p.deliverableId || '');   // un seul livrable (la fenêtre « Coût du livrable » : toutes ses lignes, quel que soit l'exercice)
-  var items = allItems.filter(function (i) { return onlyId ? i.id === onlyId : (!exFilter || (exFilter === '__none' ? isBlank(i.exercise_id) : i.exercise_id === exFilter)); });
-  var editable = {};
-  items.forEach(function (i) { if (access.all || can(ctx, 'budget.edit', { type: 'planitem', id: i.id })) editable[i.id] = true; });
-  var lines = repoList('BudgetLine', function (l) { return editable[l.deliverable_id]; });
-  var lineIds = {}; lines.forEach(function (l) { lineIds[l.id] = true; });
-  var phasing = {};
-  repoList('BudgetPhasing', function (x) { return lineIds[x.budget_line_id]; }).forEach(function (x) { (phasing[x.budget_line_id] = phasing[x.budget_line_id] || []).push(x); });
-  var resById = indexBy_(repoList('Resource')), teamList = repoList('HierarchicalTeam'), lookups = { resById: resById, teamById: indexBy_(teamList), exById: exById };
-  var itemsById = indexBy_(items);
-  var views = lines.map(function (l) { return lineView_(l, ctx, phasing[l.id], lookups, itemsById[l.deliverable_id]); });
-  var topWp = function (item) {
-    var w = item.wp_id ? wpById[item.wp_id] : null, guard = 0;
-    while (w && w.parent_wp_id && wpById[w.parent_wp_id] && guard++ < 5) w = wpById[w.parent_wp_id];
-    return w;
-  };
-  var byId = indexBy_(items);
-  var months = {}, byWp = {};
-  views.forEach(function (l) {
-    l.phasing.forEach(function (m) { months[m.month] = round2((months[m.month] || 0) + m.amount); });
-    var it = byId[l.deliverable_id], w = it ? topWp(it) : null, key = w ? w.id : '';
-    var g = byWp[key] = byWp[key] || { wp_id: key, code: w ? w.wbs_code || '' : '', name: w ? w.name : 'Sans workpackage', internal: 0, external: 0, total: 0 };
-    if (l.external) g.external = round2(g.external + l.planned_amount); else g.internal = round2(g.internal + l.planned_amount);
-    g.total = round2(g.internal + g.external);
-  });
-  var withBudget = {}; lines.forEach(function (l) { withBudget[l.deliverable_id] = true; });
-  var cpnOf = function (item) {
-    var w = item.wp_id ? wpById[item.wp_id] : null, guard = 0;
-    while (w && guard++ < 5) { if (!isBlank(w.cpn)) return normCpn_(w.cpn); w = w.parent_wp_id ? wpById[w.parent_wp_id] : null; }
-    return normCpn_(project.cpn);
-  };
-  var wpLabel = function (item) { var w = item.wp_id ? wpById[item.wp_id] : null; return w ? (w.wbs_code ? w.wbs_code + ' ' : '') + w.name : ''; };
-  var unassigned = allItems.filter(function (i) { return isBlank(i.exercise_id) && (access.all || can(ctx, 'budget.edit', { type: 'planitem', id: i.id })); })
-    .map(function (i) { return { id: i.id, name: i.name, wp: wpLabel(i) }; }).sort(function (a, b) { return String(a.wp).localeCompare(String(b.wp), 'fr', { numeric: true }) || String(a.name).localeCompare(String(b.name), 'fr'); });
-  var deliverables = items.filter(function (i) { return editable[i.id]; }).map(function (i) {
-    return { id: i.id, name: i.name, wp: wpLabel(i), cpn: cpnOf(i), start: i.planned_start || null, finish: i.planned_finish || null, has_budget: !!withBudget[i.id],
-      exercise_id: i.exercise_id || '', exercise_year: i.exercise_id && exById[i.exercise_id] ? Number(exById[i.exercise_id].year) : null };
-  }).sort(function (a, b) { return String(a.wp).localeCompare(String(b.wp), 'fr', { numeric: true }) || String(a.name).localeCompare(String(b.name), 'fr'); });
-  var total = 0, ext = 0;
-  views.forEach(function (l) { total = round2(total + l.planned_amount); if (l.external) ext = round2(ext + l.planned_amount); });
-  return {
-    project: { id: project.id, code: project.code, name: project.name }, partial: !access.all,
-    lines: views, deliverables: deliverables, unassigned: unassigned, exercises: exercises.map(exerciseView_).sort(function (a, b) { return b.year - a.year; }),
-    teams: teamList.map(function (t) { return { id: t.id, name: t.name, country: t.country || 'FR', level: teamLevel_(t) }; }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); }),
-    totals: { total: total, external: ext, internal: round2(total - ext), by_wp: Object.keys(byWp).map(function (k) { return byWp[k]; }).sort(function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); }) },
-    months: Object.keys(months).sort().map(function (m) { return { month: m, planned: months[m] }; }),
-    missing: { deliverables_without_budget: deliverables.filter(function (d) { return !d.has_budget; }).length, undated_lines: views.filter(function (l) { return !l.phasing.length; }).length }
-  };
 });
 
 // ---------------------------------------------------------------- bilan par CPN (fonction pure)
@@ -415,28 +296,17 @@ function computeBalance_(d) {
   return { cpns: cpns, totals: Object.assign(tot, { remaining_external: round2(tot.budget.external - tot.po.committed), overrun: tot.po.committed > tot.budget.external + 0.005 }) };
 }
 
-/** Engagements par mois : chaque PO engagée compte en totalité le mois de son lancement. */
-function committedByMonth_(pos) {
-  var out = {};
-  pos.forEach(function (po) {
-    if (PO_COMMITTED.indexOf(po.status) < 0 || isBlank(po.launched_on)) return;
-    var m = monthOf_(po.launched_on);
-    out[m] = round2((out[m] || 0) + (Number(po.amount) || 0));
-  });
-  return out;
-}
-
 defineAction('budget.balance', function (p, ctx) {
   var project = mustGet('Project', requireParam(p, 'projectId'));
   var access = budgetAccess_(ctx, project.id);
   if (!access.all) throw new PpmError('FORBIDDEN', 'Le bilan du projet est réservé à ses responsables de budget.');
   var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; });
-  // un exercice demandé : les livrables de son exercice et les commandes de son année seulement (étanchéité, 0.19.3)
+  // un exercice demandé : les livrables de son exercice et les commandes de son année seulement (étanchéité)
   var exB = isBlank(p.exerciseId) ? null : mustGet('Exercise', p.exerciseId);
   var items = repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable' && (!exB || i.exercise_id === exB.id); });
   var ids = {}; items.forEach(function (i) { ids[i.id] = true; });
   var lines = repoList('BudgetLine', function (l) { return ids[l.deliverable_id]; });
-  // une version de la décomposition (0.20.0) : le suivi lit la version de référence, pas le brouillon
+  // une version du plan (une baseline) : le suivi lit la version de référence, pas le brouillon
   var rvB = exB && !isBlank(p.version) ? resolveDecompVersion_(project, p.version) : null;
   if (rvB && rvB.version) {
     var Dv = decompDataset_(project, exB, rvB.version);
@@ -447,12 +317,5 @@ defineAction('budget.balance', function (p, ctx) {
   var pos = projectOrders_(project.id, wps);
   if (exB) pos = pos.filter(function (o) { return poYear_(o) === Number(exB.year); });
   var bal = computeBalance_({ project: project, wps: wps, items: items, lines: lines, pos: pos });
-  var planned = {};
-  repoList('BudgetPhasing', function (x) { return lines.some(function (l) { return l.id === x.budget_line_id; }); }).forEach(function (x) { planned[x.month] = round2((planned[x.month] || 0) + Number(x.amount)); });
-  var committed = committedByMonth_(pos), months = {};
-  Object.keys(planned).concat(Object.keys(committed)).forEach(function (m) { months[m] = true; });
-  return Object.assign({
-    project: { id: project.id, code: project.code, name: project.name, cpn: project.cpn || '', cpn_label: project.cpn_label || '' },
-    months: Object.keys(months).sort().map(function (m) { return { month: m, planned: planned[m] || 0, committed: committed[m] || 0 }; })
-  }, bal);
+  return Object.assign({ project: { id: project.id, code: project.code, name: project.name, cpn: project.cpn || '', cpn_label: project.cpn_label || '' } }, bal);
 });

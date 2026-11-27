@@ -204,7 +204,7 @@ defineAction('projects.list', function (p) {
 defineAction('projects.get', function (p) { return mustGet('Project', requireParam(p, 'id')); });
 
 defineAction('projects.create', function (p, ctx) {
-  var v = stripEnvelope_(p.values);
+  var v = Object.assign({}, p.values || {});
   requireCan(ctx, 'project.create', isBlank(v.program_id) ? { type: 'global' } : { type: 'program', id: v.program_id });
   if (!isBlank(v.program_id)) mustGet('Program', v.program_id);
   var projRec = repoInsert('Project', v, ctx.actx);
@@ -218,7 +218,7 @@ defineAction('projects.update', function (p, ctx) {
   mustGet('Project', id);
   var projBefore = mustGet('Project', id);
   requireCan(ctx, 'wbs.edit', { type: 'project', id: id });
-  var projPatch = stripEnvelope_(p.patch);
+  var projPatch = Object.assign({}, p.patch || {});
   if ('manager_resource_id' in projPatch) assertCanSetPrincipal_(ctx, 'project', { type: 'project', id: id }, projBefore.manager_resource_id, projPatch.manager_resource_id);
   var projAfter = repoUpdate('Project', id, projPatch, p.version, ctx.actx);
   if ('manager_resource_id' in projPatch) applyPrincipal_(ctx.actx, 'project', id, projBefore.manager_resource_id, projAfter.manager_resource_id);
@@ -231,7 +231,7 @@ defineAction('workpackages.list', function (p) {
 });
 
 defineAction('workpackages.create', function (p, ctx) {
-  var v = stripEnvelope_(p.values);
+  var v = Object.assign({}, p.values || {});
   mustGet('Project', requireParam(v, 'project_id'));
   if (!isBlank(v.parent_wp_id)) {
     var parent = mustGet('WorkPackage', v.parent_wp_id);
@@ -248,7 +248,7 @@ defineAction('workpackages.update', function (p, ctx) {
   var id = requireParam(p, 'id');
   var wpBefore = mustGet('WorkPackage', id);
   requireCan(ctx, 'wbs.edit', { type: 'workpackage', id: id });
-  var patch = stripEnvelope_(p.patch);
+  var patch = Object.assign({}, p.patch || {});
   delete patch.project_id;
   var wpKind = isBlank(wpBefore.parent_wp_id) ? 'workpackage' : 'subworkpackage';
   if ('owner_resource_id' in patch) assertCanSetPrincipal_(ctx, wpKind, { type: 'workpackage', id: id }, wpBefore.owner_resource_id, patch.owner_resource_id);

@@ -202,8 +202,7 @@ module.exports = function () {
     ins('Dependency', { predecessor_id: l1.id, successor_id: l2.id, dep_type: 'FS', lag_days: 0 });
     ins('MilestoneRequirement', { milestone_id: j1.id, deliverable_id: l2.id });
     // ajouts faits en essayant les versions suivantes : budget, étalement, baseline, commande d'achat
-    const line = ins('BudgetLine', { deliverable_id: l1.id, resource_id: camille.id, cost_type: 'Forfait', fixed_amount: 3000, planned_amount: 3000, phasing_mode: 'auto', is_external: false });
-    ins('BudgetPhasing', { budget_line_id: line.id, month: '2026-11', amount: 3000 });
+    const line = ins('BudgetLine', { deliverable_id: l1.id, resource_id: camille.id, cost_type: 'Forfait', fixed_amount: 3000, planned_amount: 3000, is_external: false });
     ins('Baseline', { project_id: proj.id, number: 0, label: 'B0', justification: 'Planning validé', status: 'Active' });
     const po = ins('PurchaseOrder', { po_number: 'CB-PILOTE', cpn: 'CPN-0001', resource_id: sam.id, amount: 1000, status: 'À faire', gr_due_date: w.todayStr() });
     ins('PurchaseOrderLink', { po_id: po.id, deliverable_id: l1.id, amount: 1000 });
@@ -216,7 +215,7 @@ module.exports = function () {
     return { w, me, prog, proj, camille, sam, alice, realProj, realWp, autreCamille, line, po };
   }
   const live = (w, t) => w.repoList(t);
-  const liveCount = (w) => ['Program', 'Project', 'WorkPackage', 'PlanItem', 'Dependency', 'MilestoneRequirement', 'BudgetLine', 'BudgetPhasing', 'Baseline', 'PurchaseOrder', 'PurchaseOrderLink', 'RoleAssignment', 'Resource']
+  const liveCount = (w) => ['Program', 'Project', 'WorkPackage', 'PlanItem', 'Dependency', 'MilestoneRequirement', 'BudgetLine', 'Baseline', 'PurchaseOrder', 'PurchaseOrderLink', 'RoleAssignment', 'Resource']
     .map((t) => t + ':' + live(w, t).length).join(' ');
 
   test('Ancienne démo : le premier lancement montre ce qui serait supprimé et ne touche à rien', () => {
@@ -235,7 +234,7 @@ module.exports = function () {
     const m = w.A6_EFFACER_DEMO();
     ok(/^Démo supprimée/.test(m) && /Lancez maintenant A2_SEED_DEMO/.test(m), m);
     eq([live(w, 'Program').map((p) => p.code), live(w, 'Project').map((p) => p.code)], [['REEL'], ['R-1']], 'seuls le programme et le projet réels restent');
-    eq([live(w, 'WorkPackage').length, live(w, 'PlanItem').length, live(w, 'Dependency').length, live(w, 'MilestoneRequirement').length, live(w, 'BudgetLine').length, live(w, 'BudgetPhasing').length, live(w, 'Baseline').length, live(w, 'PurchaseOrder').length, live(w, 'PurchaseOrderLink').length], [1, 0, 0, 0, 0, 0, 0, 0, 0], 'découpage, planning, budget, baseline et achats de l’ancienne démo supprimés ; le lot réel reste');
+    eq([live(w, 'WorkPackage').length, live(w, 'PlanItem').length, live(w, 'Dependency').length, live(w, 'MilestoneRequirement').length, live(w, 'BudgetLine').length, live(w, 'Baseline').length, live(w, 'PurchaseOrder').length, live(w, 'PurchaseOrderLink').length], [1, 0, 0, 0, 0, 0, 0, 0], 'découpage, planning, budget, baseline et achats de l’ancienne démo supprimés ; le lot réel reste');
     eq(live(w, 'RoleAssignment').length, 0, 'ses rôles sont supprimés');
     eq(live(w, 'Resource').map((r) => r.name + '|' + (r.job_function || '')).sort(), ['Admin|', 'Alice Réelle|', 'Camille Durand|Ingénieure méthodes'], 'les deux personnes fictives partent ; l’administrateur, la personne réelle et une homonyme d’une autre fonction restent');
     ok(realBefore.length === 2 && w.repoList('Project', null, { includeDeleted: true }).some((p) => p.code === 'PILOTE' && w.isTrue(p.deleted)), 'suppression douce : la ligne reste dans la feuille, marquée supprimée (réversible)');

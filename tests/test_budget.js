@@ -15,9 +15,11 @@ module.exports = function () {
     at(w, '2026-10-14T08:00:00Z');
     w.t1 = w.call(CP, 'teams.create', { values: { name: 'T1A', country: 'FR' } });   // l'équipe qui porte les parts de budget (3 caractères)
     w.call(ADMIN, 'etp.set', { values: { country: 'FR', year: 2026, annual_cost: 130000 } });
+    w.ex = w.call(ADMIN, 'exercise.create', { year: 2026 });
+    w.call(ADMIN, 'exercise.setStatus', { id: w.ex.id, status: 'Exécution' });
     w.call(CP, 'cpn.set', { projectId: w.p1.id, cpn: 'cpn-100', cpn_label: 'Nacelle moteur' });
     w.call(CP, 'wbs.update', { kind: 'wp', id: w.w2.id, patch: { cpn: 'CPN-200', cpn_label: 'Essais en vol' } });
-    const line = (who, v) => w.raw(who || CP, 'budget.line.save', { values: v });
+    const line = (who, v) => w.raw(who || CP, 'budget.line.save', { values: v, exerciseId: w.ex.id });
     const po = (who, v, links) => w.raw(who || CP, 'po.save', { values: Object.assign({ po_number: 'CB-1001', cpn: 'CPN-200', resource_id: w.xavier.id, amount: 5000, status: 'À faire', gr_due_date: '2026-11-20' }, v || {}), links });
     return Object.assign(w, { line, po });
   }
@@ -74,12 +76,12 @@ module.exports = function () {
     const w = world();
     const b = w.line(CP, { deliverable_id: w.b.id, team_id: w.t1.id, planned_amount: 5200 });
     ok(b.ok, JSON.stringify(b.error));
-    eq([b.data.cost_type, b.data.kind, b.data.team.name, b.data.planned_amount, b.data.phasing_mode, b.data.phasing], ['Équipe', 'team', 'T1A', 5200, 'auto', [{ month: '2026-10', amount: 5200 }]]);
+    eq([b.data.cost_type, b.data.kind, b.data.team.name, b.data.planned_amount], ['Équipe', 'team', 'T1A', 5200]);
+    ok(!('phasing' in b.data) && !('phasing_mode' in b.data), 'plus d’étalement : un montant est annuel');
     ok(b.data.days_equivalent > 0 && b.data.days_equivalent === w.c.daysFromAmount_(5200, 'FR', 2026), 'la part dit son équivalent en jours (coût de l’ETP de la France en 2026) : ' + b.data.days_equivalent);
     const c = w.line(CP, { deliverable_id: w.cc.id, team_id: w.t1.id, planned_amount: 5200 });
-    eq(c.data.phasing, [{ month: '2026-10', amount: 2600 }, { month: '2026-11', amount: 2600 }], 'étalé au prorata des jours ouvrés de chaque mois');
     const x = w.line(CP, { deliverable_id: w.cc.id, resource_id: w.xavier.id, fixed_amount: 8000 });
-    eq([x.data.cost_type, x.data.kind, x.data.planned_amount, x.data.phasing, x.data.days_equivalent], ['Forfait', 'forfait', 8000, [{ month: '2026-11', amount: 8000 }], null], 'forfait : en totalité le mois de livraison, pas d’équivalent en jours');
+    eq([x.data.cost_type, x.data.kind, x.data.planned_amount, x.data.days_equivalent], ['Forfait', 'forfait', 8000, null], 'forfait : pas d’équivalent en jours');
     ok(/ressource externe : le budget interne se saisit par équipe/.test(w.line(CP, { deliverable_id: w.a.id, resource_id: w.mia.id, fixed_amount: 300 }).error.message), 'un forfait ne se passe qu’avec une ressource externe : le budget interne se saisit par équipe');
     eq(w.line(CP, { deliverable_id: w.a.id, team_id: 'inconnue', planned_amount: 100 }).error.message, 'Équipe introuvable.');
     ok(/déjà une part/.test(w.line(CP, { deliverable_id: w.b.id, team_id: w.t1.id, planned_amount: 100 }).error.message), 'une seule part par équipe et par livrable');
@@ -92,43 +94,44 @@ module.exports = function () {
     eq(w.line(RWP, { deliverable_id: w.a.id, team_id: w.t1.id, planned_amount: 1040 }).data.planned_amount, 1040, 'mais sur son WP oui');
     ok(/ne change pas/.test(w.raw(CP, 'budget.line.save', { id: b.data.id, values: { resource_id: w.xavier.id, fixed_amount: 10 } }).error.message), 'le type d’une ligne ne change pas');
     const up = w.call(CP, 'budget.line.save', { id: b.data.id, values: { planned_amount: 7200 } });
-    eq([up.planned_amount, up.phasing], [7200, [{ month: '2026-10', amount: 7200 }]], 'un nouveau montant : l’échéancier automatique le suit');
-    const cp = w.call(CP, 'budget.get', { projectId: w.p1.id });
-    eq([cp.partial, cp.lines.length, cp.lines.find((l) => l.id === b.data.id).planned_amount], [false, 4, 7200]);
-    eq(cp.totals.total, 7200 + 5200 + 8000 + 1040, 'total du projet');
-    eq([cp.totals.external, cp.totals.internal], [8000, 13440], 'forfaits externes / parts d’équipe');
+    eq(up.planned_amount, 7200, 'un nouveau montant remplace l’ancien');
+    const cp = w.call(CP, 'budget.plan.get', { projectId: w.p1.id, exerciseId: w.ex.id });
+    const row = (v, id) => v.rows.find((r) => r.kind === 'deliverable' && r.id === id);
+    eq([cp.partial, cp.totals.total, cp.totals.external], [false, 7200 + 5200 + 8000 + 1040, 8000], 'total du projet : somme des cellules, forfait compris');
+    eq([row(cp, w.b.id).cells[w.t1.id], row(cp, w.cc.id).cells[w.t1.id], row(cp, w.a.id).cells[w.t1.id], row(cp, w.cc.id).external], [7200, 5200, 1040, 8000], 'une cellule par équipe, la colonne Externe à part');
+    eq(cp.columns.map((x) => x.name), ['T1A'], 'une colonne par équipe qui a une part');
     ok(!JSON.stringify(cp).match(/frozen_rate|daily_rate|planned_days/), 'plus aucun taux dans ce que la page reçoit');
-    const rwp = w.call(RWP, 'budget.get', { projectId: w.p1.id });
-    eq([rwp.partial, rwp.lines.map((l) => l.deliverable_id).sort()], [true, [w.a.id, w.b.id].sort()], 'Rémi (Workpackage leader) : son WP seulement');
-    eq(w.raw(MEMBER, 'budget.get', { projectId: w.p1.id }).error.code, 'FORBIDDEN');
+    const rwp = w.call(RWP, 'budget.plan.get', { projectId: w.p1.id, exerciseId: w.ex.id });
+    eq([rwp.partial, rwp.rows.filter((r) => r.kind === 'deliverable').map((r) => r.id).sort()], [true, [w.a.id, w.b.id].sort()], 'Rémi (Workpackage leader) : son WP seulement');
+    eq(w.raw(MEMBER, 'budget.plan.get', { projectId: w.p1.id, exerciseId: w.ex.id }).error.code, 'FORBIDDEN');
     eq(w.raw(RWP, 'budget.balance', { projectId: w.p1.id }).error.code, 'FORBIDDEN', 'le bilan du projet n’est pas pour un responsable de WP');
-    eq(cp.deliverables.find((d) => d.id === w.cc.id).cpn, 'CPN-200', 'le livrable relève du CPN de son sous-projet');
-    eq(cp.deliverables.find((d) => d.id === w.b.id).cpn, 'CPN-100', 'à défaut, du CPN du projet');
+    eq(row(cp, w.cc.id).cpn, 'CPN-200', 'le livrable relève du CPN de son sous-projet');
+    eq(row(cp, w.b.id).cpn, 'CPN-100', 'à défaut, du CPN du projet');
     ok(cp.teams.some((t) => t.name === 'T1A' && t.level === 3 && t.country === 'FR'), 'la liste des équipes que la page propose, avec leur niveau budgétaire');
+    eq(w.raw(CP, 'budget.get', { projectId: w.p1.id }).error.code, 'NOT_FOUND', 'l’ancienne vue par lignes n’existe plus (le tableau livrable × équipe la remplace)');
   });
 
-  test('Étalement : à la main (somme exacte), remis en automatique, suit les dates du livrable', () => {
+  test('Une cellule du plan : saisir, remplacer, vider ; mêmes droits que la ligne ; un exercice clos ne bouge plus', () => {
     const w = world();
-    const c = w.line(CP, { deliverable_id: w.cc.id, team_id: w.t1.id, planned_amount: 5200 }).data;
-    const set = (months) => w.raw(CP, 'budget.phasing.set', { lineId: c.id, months });
-    ok(/doit égaler/.test(set([{ month: '2026-10', amount: 1000 }]).error.message));
-    eq(set([{ month: '2026-13', amount: 5200 }]).error.code, 'VALIDATION');
-    eq(set([{ month: '2026-10', amount: 100 }, { month: '2026-10', amount: 5100 }]).error.code, 'VALIDATION');
-    const m = set([{ month: '2026-11', amount: 4200 }, { month: '2026-10', amount: 1000 }]);
-    eq([m.data.mode, m.data.months.map((x) => x.month)], ['manuel', ['2026-10', '2026-11']]);
-    // les dates d'un livrable changent : la ligne manuelle ne bouge pas, les lignes automatiques suivent
-    const b = w.line(CP, { deliverable_id: w.b.id, team_id: w.t1.id, planned_amount: 5200 }).data;
-    w.call(CP, 'wbs.update', { kind: 'item', id: w.b.id, patch: { planned_start: '2026-10-28', planned_finish: '2026-11-06' } });
-    w.call(CP, 'wbs.update', { kind: 'item', id: w.cc.id, patch: { planned_start: '2026-11-02', planned_finish: '2026-11-13' } });
-    const view = w.call(CP, 'budget.get', { projectId: w.p1.id }).lines;
-    eq(view.find((l) => l.id === b.id).phasing, [{ month: '2026-10', amount: 1950 }, { month: '2026-11', amount: 3250 }], 'automatique : 3 jours en octobre, 5 en novembre');
-    eq([view.find((l) => l.id === c.id).phasing_mode, view.find((l) => l.id === c.id).phasing.map((x) => x.amount)], ['manuel', [1000, 4200]], 'manuel : conservé');
-    const back = w.call(CP, 'budget.phasing.set', { lineId: c.id, mode: 'auto' });
-    eq([back.mode, back.months], ['auto', [{ month: '2026-11', amount: 5200 }]], 'retour à l’automatique : tout en novembre après le déplacement');
-    // changer le montant d'une ligne manuelle la remet en automatique
-    set([{ month: '2026-11', amount: 5200 }]);
-    eq(w.call(CP, 'budget.line.save', { id: c.id, values: { planned_amount: 2600 } }).phasing_mode, 'auto');
-    eq(w.raw(MEMBER, 'budget.phasing.set', { lineId: c.id, mode: 'auto' }).error.code, 'FORBIDDEN');
+    const cell = (who, v) => w.raw(who || CP, 'budget.cell.set', Object.assign({ exerciseId: w.ex.id }, v));
+    const r1 = cell(CP, { deliverableId: w.b.id, teamId: w.t1.id, amount: 3000 });
+    ok(r1.ok && r1.data.planned_amount === 3000, JSON.stringify(r1.error));
+    ok(cell(CP, { deliverableId: w.b.id, teamId: w.t1.id, amount: '4 000,5'.replace(' ', '') }).ok, 'une virgule décimale est comprise');
+    eq(w.c.repoList('BudgetLine').filter((l) => l.deliverable_id === w.b.id).length, 1, 'remplacer ne crée pas de seconde part');
+    eq(w.c.repoList('BudgetLine')[0].planned_amount, 4000.5);
+    eq(w.c.repoGet('PlanItem', w.b.id).exercise_id, w.ex.id, 'le livrable prend l’exercice de sa première cellule');
+    ok(cell(CP, { deliverableId: w.b.id, teamId: w.t1.id, amount: '' }).data.cleared, 'un montant vide retire la part');
+    eq(w.c.repoList('BudgetLine').length, 0);
+    ok(cell(CP, { deliverableId: w.b.id, teamId: w.t1.id, amount: 0 }).data.cleared, 'zéro aussi (rien à retirer : sans effet)');
+    eq(cell(CP, { deliverableId: w.b.id, teamId: w.t1.id, amount: -5 }).error.code, 'VALIDATION');
+    eq(cell(CP, { deliverableId: w.b.id, teamId: w.t1.id, amount: 'x' }).error.code, 'VALIDATION');
+    eq(cell(CP, { deliverableId: w.j.id, teamId: w.t1.id, amount: 5 }).error.code, 'VALIDATION', 'pas sur un jalon');
+    eq(cell(CP, { deliverableId: w.b.id, teamId: 'inconnue', amount: 5 }).error.code, 'NOT_FOUND');
+    eq(cell(MEMBER, { deliverableId: w.a.id, teamId: w.t1.id, amount: 5 }).error.code, 'FORBIDDEN');
+    eq(cell(RWP, { deliverableId: w.cc.id, teamId: w.t1.id, amount: 5 }).error.code, 'FORBIDDEN', 'Rémi n’agit pas sur le WP 2');
+    ok(cell(RWP, { deliverableId: w.a.id, teamId: w.t1.id, amount: 5 }).ok, 'mais sur son WP oui');
+    w.call(ADMIN, 'exercise.setStatus', { id: w.ex.id, status: 'Clos' });
+    ok(/clos/.test(cell(CP, { deliverableId: w.a.id, teamId: w.t1.id, amount: 9 }).error.message), 'un exercice clos ne bouge plus');
   });
 
   test('Supprimer un livrable retire ses lignes de budget et sa part de PO ; supprimer une ligne aussi', () => {
@@ -137,7 +140,7 @@ module.exports = function () {
     const o = w.po(CP, {}, [{ deliverable_id: w.cc.id, amount: 5000 }]);
     ok(o.ok, JSON.stringify(o.error));
     w.call(CP, 'wbs.delete', { kind: 'item', id: w.cc.id });
-    eq([w.c.repoList('BudgetLine').length, w.c.repoList('BudgetPhasing').length, w.c.repoList('PurchaseOrderLink').length], [0, 0, 0]);
+    eq([w.c.repoList('BudgetLine').length, w.c.repoList('PurchaseOrderLink').length], [0, 0]);
     const po = w.call(CP, 'po.list', { projectId: w.p1.id }).orders[0];
     eq([po.amount, po.unallocated, po.links.length], [5000, 5000, 0], 'la PO reste, son montant redevient non affecté');
     const l2 = w.line(CP, { deliverable_id: w.a.id, resource_id: w.xavier.id, fixed_amount: 100 }).data;
@@ -193,7 +196,7 @@ module.exports = function () {
     eq([st('Lancée').launched_on, st('Lancée').gr_on], ['2026-10-14', '']);
     bal = w.call(CP, 'budget.balance', { projectId: w.p1.id });
     eq([g200().po.committed, g200().po.received, g200().remaining_external], [5000, 0, 3000], 'lancée : engagée en totalité, en une fois');
-    eq(bal.months.find((m) => m.month === '2026-10').committed, 5000, 'engagement le mois du lancement, sans étalement');
+    ok(!('months' in bal), 'le bilan ne porte plus de courbe mensuelle');
     eq([st('GR').gr_on, st('GR').closed_on], ['2026-10-14', '']);
     eq([w.call(CP, 'budget.balance', { projectId: w.p1.id }).cpns.find((g) => g.cpn === 'CPN-200').po.received], [5000]);
     eq(st('Terminée').closed_on, '2026-10-14');
@@ -266,7 +269,7 @@ module.exports = function () {
     const w = world();
     const keys = Object.keys(w.c.preloadFor_('budget', { project: '', program: '', tab: 'bilan', mode: '', isAdmin: false }, CP));
     const pj = '{"projectId":"' + w.p1.id + '"}';
-    eq(keys, ['planning.catalog|{}', 'budget.access|' + pj, 'budget.balance|' + pj, 'po.list|' + pj, 'po.list|{"scope":"outside"}', 'budget.get|' + pj], 'plus d’onglets : toutes les zones autorisées sont préparées avec la page');
+    eq(keys, ['planning.catalog|{}', 'budget.access|' + pj, 'budget.balance|' + pj, 'po.list|' + pj, 'po.list|{"scope":"outside"}', 'budget.plan.get|' + pj], 'plus d’onglets : toutes les zones autorisées sont préparées avec la page');
     eq([w.c.PAGES.budget, w.c.PAGE_TABS.budget], ['Budget', ['']], 'plus d’onglets : bilan, achats et budget en zones');
   });
 };

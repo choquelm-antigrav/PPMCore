@@ -53,7 +53,7 @@ function preloadFor_(view, boot, email) {
       if (acc.ok) { // plus d'onglets : toutes les zones auxquelles on a droit se chargent avec la page
         if (acc.data.all) put('budget.balance', { projectId: bfirst });
         if (acc.data.po) { put('po.list', { projectId: bfirst }); put('po.list', { scope: 'outside' }); }
-        if (acc.data.budget) put('budget.get', { projectId: bfirst });
+        if (acc.data.budget) put('budget.plan.get', { projectId: bfirst });
       }
     }
     return pre;
@@ -106,13 +106,13 @@ function cleanId_(v) {
  * chaque liste est exactement l'ensemble des tables lues à l'ouverture ; la même liste sert au déclencheur qui garde le cache plein.
  */
 var PAGE_TABLES = {
-  overview: ['Baseline', 'BaselineItem', 'BudgetLine', 'Dependency', 'HolidaySet', 'Insight', 'Meeting', 'NewsAction', 'NewsDigest', 'PlanItem', 'Program', 'Project', 'PurchaseOrder', 'PurchaseOrderLink', 'Resource', 'RiskOpportunity', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  overview: ['Baseline', 'BaselineItem', 'BudgetLine', 'Dependency', 'Exercise', 'HierarchicalTeam', 'HolidaySet', 'Insight', 'Meeting', 'NewsAction', 'NewsDigest', 'PlanItem', 'Program', 'Project', 'PurchaseOrder', 'PurchaseOrderLink', 'Resource', 'RiskOpportunity', 'RoleAssignment', 'TeamBudget', 'UserSetting', 'WorkPackage'],
   gantt: ['Baseline', 'BaselineItem', 'BudgetLine', 'Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   structure: ['Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   ressources: ['HierarchicalTeam', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
-  suivi: ['Baseline', 'BaselineItem', 'BudgetLine', 'BudgetPhasing', 'ChangeEvent', 'Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  suivi: ['Baseline', 'BaselineItem', 'BudgetLine', 'ChangeEvent', 'Dependency', 'HierarchicalTeam', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'TeamBudget', 'UserSetting', 'WorkPackage'],
   actualites: ['Meeting', 'NewsAction', 'NewsDigest', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
-  budget: ['BudgetLine', 'BudgetPhasing', 'EtpCost', 'Exercise', 'HierarchicalTeam', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'PurchaseOrder', 'PurchaseOrderLink', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  budget: ['Baseline', 'BaselineItem', 'BudgetLine', 'EtpCost', 'Exercise', 'HierarchicalTeam', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'PurchaseOrder', 'PurchaseOrderLink', 'Resource', 'RoleAssignment', 'TeamBudget', 'UserSetting', 'WorkPackage'],
   compte: ['HierarchicalTeam', 'Meeting', 'NewsAction', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   admin: ['AiLog', 'BudgetLine', 'ChangeEvent', 'Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   copilote: ['AiLog', 'Baseline', 'BaselineItem', 'ChangeEvent', 'Dependency', 'HolidaySet', 'Insight', 'MilestoneRequirement', 'PlanItem', 'Program', 'ProgressUpdate', 'Project', 'Resource', 'RiskOpportunity', 'RoleAssignment', 'UserSetting', 'WorkPackage']

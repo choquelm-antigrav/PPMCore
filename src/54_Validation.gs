@@ -12,11 +12,11 @@
  * QUI VALIDE. Toute personne dont le meilleur rang sur l'objet est strictement inférieur à celui de l'auteur ; le validateur « nominal » affiché est le niveau présent juste
  * au-dessus dans la chaîne (un Deliverable owner est validé par son Sub-workpackage leader, ou son Workpackage leader s'il n'y en a pas, etc.).
  *
- * QU'EST-CE QUI SE VALIDE. Les données figées par les baselines (BASELINE_FIELDS : dates, responsables, noms, dépendances, lignes de budget, créations et suppressions)
+ * QU'EST-CE QUI SE VALIDE. Les données figées par les baselines (BASELINE_FIELDS : dates, responsables, noms, dépendances, cellules du plan budgétaire, dotations, créations et suppressions)
  * et l'avancement déclaré d'un livrable (`PlanItem.progress_pct`).
  */
 
-var VALIDATION_EXTRA_FIELDS = { PlanItem: ['progress_pct'], Project: ['envelopes_json', 'budget_authorized'], WorkPackage: ['envelopes_json', 'budget_allocated'], Baseline: ['baseline_frozen'] };
+var VALIDATION_EXTRA_FIELDS = { PlanItem: ['progress_pct'], Baseline: ['baseline_frozen'] };
 var VALIDATION_WINDOW_DAYS = 60;   // sans baseline active, le fil remonte aux 60 derniers jours
 
 /** L'événement porte-t-il sur une donnée à valider ? */
@@ -39,6 +39,7 @@ function changeScope_(table, rec) {
     case 'PlanItem': return { type: 'planitem', id: rec.id };
     case 'Dependency': return rec.successor_id ? { type: 'planitem', id: rec.successor_id } : null;
     case 'BudgetLine': return rec.deliverable_id ? { type: 'planitem', id: rec.deliverable_id } : null;
+    case 'TeamBudget': return rec.project_id ? { type: 'project', id: rec.project_id } : null;
     case 'Baseline': return rec.scope_type === 'workpackage' && rec.scope_id ? { type: 'workpackage', id: rec.scope_id } : { type: 'project', id: rec.project_id };
     default: return null;
   }

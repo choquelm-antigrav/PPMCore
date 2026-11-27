@@ -25,7 +25,7 @@ function projectIdOf(table, rec) {
   try {
     switch (table) {
       case 'Project': return rec.id;
-      case 'WorkPackage': case 'PlanItem': case 'RiskOpportunity': case 'Baseline': case 'Insight':
+      case 'WorkPackage': case 'PlanItem': case 'RiskOpportunity': case 'Baseline': case 'Insight': case 'TeamBudget':
         return rec.project_id || '';
       case 'Dependency': {
         var s = repoGet('PlanItem', rec.successor_id);
@@ -176,7 +176,7 @@ function runHooks(table, before, rec, actx) {
   if (table === 'Baseline' && !before && rec.status === 'Demandée') hookBaselineRequested(rec, actx);
   if (table === 'RoleAssignment' && actx.source === 'appsheet') hookRoleAssignmentGuard(before, rec, actx);
   if (table === 'Resource' && actx.source === 'appsheet') hookResourceGuard(before, rec, actx);
-  if (table === 'PlanItem') { hookCalendarItem(before, rec); hookRephase(before, rec); }
+  if (table === 'PlanItem') { hookCalendarItem(before, rec); }
 }
 
 /**

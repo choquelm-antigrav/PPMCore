@@ -102,23 +102,23 @@ function openPage(file, user, boot, extraScript) {
   check(cards.some((x) => /^Éléments glissés1jusqu’à 3 jours ouvrés/.test(x)), 'carte des glissements : ' + cards.join(' / '));
   check(cards.some((x) => /^Budget prévu1\s200\s€\+200\s€ par rapport à la référence/.test(x)), 'budget et écart visibles pour le chef de projet : ' + cards.join(' / '));
   check(rows.some((r) => r[0].startsWith('Essais') && /\+200/.test(r[5])), 'écart de budget sur la ligne du livrable');
-  // la décomposition du budget figée avec la baseline (0.19.2) : section dépliable, lue à la demande
+  // le plan budgétaire figé avec la baseline (0.21.0) : section dépliable, lue à la demande
   await p.until(() => p.doc.getElementById('decomp-toggle'));
-  const callsBefore = p.calls.filter((x) => x === 'baselines.decomposition').length;
-  check(p.doc.getElementById('decomp-toggle').getAttribute('aria-expanded') === 'false' && p.doc.getElementById('decomp-body').hidden && callsBefore === 0, 'écarts de baseline : la section « Décomposition du budget » est repliée et rien n’est chargé tant qu’on ne la déplie pas');
+  const callsBefore = p.calls.filter((x) => x === 'baselines.plan').length;
+  check(p.doc.getElementById('decomp-toggle').getAttribute('aria-expanded') === 'false' && p.doc.getElementById('decomp-body').hidden && callsBefore === 0, 'écarts de baseline : la section « Plan budgétaire » est repliée et rien n’est chargé tant qu’on ne la déplie pas');
   p.doc.getElementById('decomp-toggle').dispatchEvent(new p.win.Event('click', { bubbles: true }));
   await p.until(() => p.doc.querySelector('#decomp-body tr[data-line]'));
-  check(p.calls.filter((x) => x === 'baselines.decomposition').length === 1 && !p.doc.getElementById('decomp-body').hidden, 'dépliée : l’action baselines.decomposition est appelée une seule fois');
-  check(/Essais/.test(p.text('decomp-body')) && /Modifié/.test(p.text('decomp-body')) && /1\s?000/.test(p.text('decomp-body')) && /1\s?200/.test(p.text('decomp-body')), 'la ligne de coût modifiée : 1 000 € → 1 200 € : ' + p.text('decomp-body').slice(0, 140));
-  check(/1 ligne de coût modifiée/.test(p.text('decomp-sum')) && /\+/.test(p.text('decomp-sum')), 'le titre résume : ' + p.text('decomp-sum'));
+  check(p.calls.filter((x) => x === 'baselines.plan').length === 1 && !p.doc.getElementById('decomp-body').hidden, 'dépliée : l’action baselines.plan est appelée une seule fois');
+  check(/Essais/.test(p.text('decomp-body')) && /Modifié/.test(p.text('decomp-body')) && /1\s?000/.test(p.text('decomp-body')) && /1\s?200/.test(p.text('decomp-body')), 'la cellule modifiée : 1 000 € → 1 200 € : ' + p.text('decomp-body').slice(0, 140));
+  check(/1 cellule modifiée/.test(p.text('decomp-sum')) && /\+/.test(p.text('decomp-sum')), 'le titre résume : ' + p.text('decomp-sum'));
   p.doc.getElementById('decomp-toggle').dispatchEvent(new p.win.Event('click', { bubbles: true }));
   p.doc.getElementById('decomp-toggle').dispatchEvent(new p.win.Event('click', { bubbles: true }));
-  check(p.calls.filter((x) => x === 'baselines.decomposition').length === 1, 'replier puis déplier : pas de nouvel appel');
+  check(p.calls.filter((x) => x === 'baselines.plan').length === 1, 'replier puis déplier : pas de nouvel appel');
   const pm = openPage('Suivi.html', MEMBER);
   await pm.until(() => pm.doc.querySelector('#panel-ecarts .cards'));
   check(![...pm.doc.querySelectorAll('#panel-ecarts .card')].some((x) => /Budget/.test(x.textContent)) && ![...pm.doc.querySelectorAll('#panel-ecarts th')].some((x) => x.textContent === 'Budget'),
     'aucun montant pour un simple membre');
-  check(!pm.doc.getElementById('decomp-toggle'), 'et pas de section « Décomposition du budget » : réservée à ceux qui voient le budget');
+  check(!pm.doc.getElementById('decomp-toggle'), 'et pas de section « Plan budgétaire » : réservée à ceux qui voient le budget');
   const only = p.doc.getElementById('only-changes');
   only.checked = false; only.dispatchEvent(new p.win.Event('change'));
   check(p.doc.querySelectorAll('#panel-ecarts tbody tr[data-item]').length === 5, 'tous les éléments, y compris identiques');

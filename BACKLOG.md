@@ -4,6 +4,7 @@
 
 ## Fait récemment
 
+- **0.21.0 : refonte du budget** : un seul tableau (livrable × équipe + Externe, dotation par équipe), tout le reste dérivé ; réalisé saisi à la main ; plus d'enveloppes, d'échéancier mensuel ni d'import Google Sheet. À essayer dans un vrai Apps Script.
 - **0.20.1 : réalisé comptable** par projet, équipe et mois (import mensuel du classeur « CUC Total Cost »), projection sur le réalisé, courbe du réalisé, outil budgétaire de l'assistant Gemini entreprise.
 - **0.20.0 : versions de la décomposition du budget** : onglets V0, V1… (une version par baseline), version de référence du suivi = dernière baseline validée, bouton « Figer une nouvelle version ».
 - **0.19.3 : étanchéité par exercice, projection, graphique, baselines** : enveloppes et coûts propres à chaque exercice, projection de fin d'année à l'avancement, graphique par workpackage, versions du budget portées par les baselines (nom automatique, carte, validateurs en nom complet). Les « versions figées de l'exercice » sont retirées.

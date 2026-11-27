@@ -35,7 +35,7 @@ module.exports = function () {
     eq(w.shared, [[t.id, CP]], 'partagé avec la personne qui l’a demandé');
     eq(w.rowsOf(t, 'Projets')[1].slice(0, 6), ['P1', 'Projet 1', 'PG', 'Actif', 'FR', 'carla@entreprise.com'], 'le projet, son programme et son chef de projet');
     const wp = w.rowsOf(t, 'Workpackages');
-    eq(wp[0], ['Projet', 'Code WBS', 'Parent (code WBS)', 'Nom', 'Leader (e-mail)', 'Imputation', 'Enveloppe (€)']);
+    eq(wp[0], ['Projet', 'Code WBS', 'Parent (code WBS)', 'Nom', 'Leader (e-mail)', 'Imputation']);
     eq(wp.slice(1).map((r) => [r[0], String(r[1]), String(r[2]), r[3]]), [['P1', '1', '', 'Conception'], ['P1', '1.1', '1', 'Calcul'], ['P1', '2', '', 'Essais']], 'codes et parents tels que dans l’outil');
     eq(w.rowsOf(t, 'Dépendances').slice(1).map((r) => r[2] + '→' + r[4]), ['Spécification→Calcul', 'Calcul→Essais', 'Essais→Revue'], 'les dépendances, par les noms de leurs deux bouts');
     ok(t.url.indexOf(t.id) > 0 && w.template(CP).id !== t.id, 'un lien, et un nouveau classeur à chaque demande');
@@ -69,12 +69,12 @@ module.exports = function () {
   test('Analyse : chaque erreur dit son onglet et sa ligne, rien n’est écrit', () => {
     const w = world(), t = w.template();
     w.add(t, 'Workpackages', [
-      ['P1', '3', '', 'Industrialisation', 'inconnu@entreprise.com', '', ''],       // l.5 : personne inconnue
-      ['P1', '2', '', 'Doublon de code', '', '', ''],                               // l.6 : code déjà pris
-      ['P1', '9.1', '9', 'Orphelin', '', '', ''],                                   // l.7 : parent introuvable
-      ['P1', 'x'.repeat(21), '', 'Code trop long', '', '', ''],                    // l.8
-      ['P1', '5', '', '', '', '', 'beaucoup'],                                      // l.9 : nom manquant, montant illisible
-      ['P1', '4.1', '2', 'Code libre', '', '', ''],                                 // l.10 : le code ne commence pas par celui du parent : accepté (le code est une étiquette)
+      ['P1', '3', '', 'Industrialisation', 'inconnu@entreprise.com', ''],       // l.5 : personne inconnue
+      ['P1', '2', '', 'Doublon de code', '', ''],                               // l.6 : code déjà pris
+      ['P1', '9.1', '9', 'Orphelin', '', ''],                                   // l.7 : parent introuvable
+      ['P1', 'x'.repeat(21), '', 'Code trop long', '', ''],                    // l.8
+      ['P1', '5', '', '', ''],                                                  // l.9 : nom manquant
+      ['P1', '4.1', '2', 'Code libre', '', ''],                                 // l.10 : le code ne commence pas par celui du parent : accepté (le code est une étiquette)
       ['P9', '6', '', 'Projet inconnu', '', '', ''],                                // l.11 : projet absent de l'onglet Projets
       ['', '7', '', 'Sans projet', '', '', '']                                      // l.12 : projet manquant
     ]);
@@ -105,7 +105,7 @@ module.exports = function () {
     ok(/Workpackages l\.6 : Le code « 2 » est déjà à la ligne 4/.test(m), 'doublon de code, avec la ligne de l’autre');
     ok(/Workpackages l\.7 : Parent « 9 » : ce workpackage n’existe ni/.test(m), 'parent introuvable');
     ok(/Workpackages l\.8 : Code WBS « x{21} » : 20 caractères au plus/.test(m), 'code trop long (la règle de la page WBS : 20 caractères)');
-    ok(/Workpackages l\.9 : Nom obligatoire/.test(m) && /Workpackages l\.9 : Enveloppe : un montant/.test(m), 'nom manquant et montant illisible, sur la même ligne');
+    ok(/Workpackages l\.9 : Nom obligatoire/.test(m), 'nom manquant');
     ok(!/Workpackages l\.10/.test(m), 'un code qui ne commence pas par celui de son parent est accepté : la hiérarchie vient de la colonne Parent, pas du code');
     ok(/Workpackages l\.11 : Projet « P9 » : absent de l’onglet Projets/.test(m) && /Workpackages l\.12 : Projet obligatoire/.test(m), 'projet inconnu ou manquant');
     ok(/Livrables l\.5 : La fin \(2026-12-01\) précède le début/.test(m), 'fin avant début');
@@ -143,7 +143,7 @@ module.exports = function () {
     const rows = w.rowsOf(t, 'Workpackages').slice(1).map((r) => r[1] + '>' + r[2]);
     ok(rows.includes('wp1.2>wp1') && rows.includes('wp1.3>') && rows.includes('WP-A>'), 'l’export écrit le parent de chacun : ' + rows.join(' | '));
     // un nouveau workpackage « X.n » se range sous « X » s'il existe, sinon il est au premier niveau
-    w.add(t, 'Workpackages', [['P1', 'wp1.9', '', 'Carénage', '', '', ''], ['P1', 'zz.4', '', 'Orphelin', '', '', '']]);
+    w.add(t, 'Workpackages', [['P1', 'wp1.9', '', 'Carénage', '', ''], ['P1', 'zz.4', '', 'Orphelin', '', '']]);
     const rep2 = w.analyze(t).data;
     ok(rep2.ok, JSON.stringify(msgs(rep2)));
     ok(w.run(t).ok, 'importé');
@@ -151,7 +151,7 @@ module.exports = function () {
     eq([wp('wp1.9').parent_wp_id === wp('wp1').id, wp('zz.4').parent_wp_id || ''], [true, ''], 'wp1.9 sous wp1 (qui existe) ; zz.4 au premier niveau (zz n’existe pas)');
     // les vraies erreurs restent : code trop long, parent inconnu, sous-niveau de sous-niveau, son propre parent
     const t2 = w.template();
-    w.add(t2, 'Workpackages', [['P1', 'x'.repeat(21), '', 'Trop long', '', '', ''], ['P1', 'n1', 'inconnu', 'Parent inconnu', '', '', ''], ['P1', 'n2', 'wp1.2', 'Niveau trois', '', '', ''], ['P1', 'n3', 'n3', 'Son propre parent', '', '', '']]);
+    w.add(t2, 'Workpackages', [['P1', 'x'.repeat(21), '', 'Trop long', '', ''], ['P1', 'n1', 'inconnu', 'Parent inconnu', '', ''], ['P1', 'n2', 'wp1.2', 'Niveau trois', '', ''], ['P1', 'n3', 'n3', 'Son propre parent', '', '']]);
     const m = msgs(w.analyze(t2).data).join('\n');
     ok(/20 caractères au plus/.test(m) && /ce workpackage n’existe ni dans le classeur ni dans le projet/.test(m) && /est lui-même un sous-workpackage : l’outil n’a que deux niveaux/.test(m) && /ne peut pas être son propre parent/.test(m), 'les vraies erreurs sont dites clairement\n' + m);
     // les absents du classeur sont nommés
@@ -180,11 +180,10 @@ module.exports = function () {
   /** Un classeur qui ajoute une personne, un workpackage et son sous-workpackage, des livrables, un jalon, des dépendances, des contributors, du budget et des enveloppes. */
   function filled(w) {
     const t = w.template();
-    w.setCell(t, 'Projets', 2, 7, 20000);
     w.add(t, 'Personnes', [['Nina Roux', 'nina@entreprise.com', 'Interne', 'Ingénieure outillage', 'Bureau d’études', 'FR', '', 'T1A']]);
     w.add(t, 'Workpackages', [
-      ['P1', '3', '', 'Industrialisation', 'dora@entreprise.com', 'IMP-3', 9000],
-      ['P1', '3.1', '', 'Outillage', 'nina@entreprise.com', '', 4000]
+      ['P1', '3', '', 'Industrialisation', 'dora@entreprise.com', 'IMP-3'],
+      ['P1', '3.1', '', 'Outillage', 'nina@entreprise.com', '']
     ]);
     w.add(t, 'Livrables', [
       ['P1', '3', 'Gammes', '2026-11-09', '2026-11-20', 'remi@entreprise.com', 'mia@entreprise.com; carla@entreprise.com'],
@@ -211,11 +210,11 @@ module.exports = function () {
     eq(c.people, { create: 1, same: 3 }, 'une personne à créer ; les trois autres du classeur existent déjà');
     eq(c.wps, { create: 2, update: 1, same: 2 }, 'deux workpackages à créer, un à renommer');
     eq([c.items.create, c.items.update, c.contributors], [3, 1, 2], 'trois livrables ou jalons à créer, une date à changer, deux contributors à poser');
-    eq([c.lines.create, c.envelope, c.deps.create, c.deps.same], [3, 3, 2, 3], 'trois lignes de budget, trois enveloppes, deux dépendances à créer (trois déjà là)');
+    eq([c.lines.create, c.deps.create, c.deps.same], [3, 2, 3], 'trois lignes de budget, deux dépendances à créer (trois déjà là)');
     eq(rep.data.nothing_to_do, false);
   });
 
-  test('Import : tout est créé par les actions ordinaires (droits, rôles, budget, dépendances, enveloppes, personne), puis relancé il ne change plus rien', () => {
+  test('Import : tout est créé par les actions ordinaires (droits, rôles, budget, dépendances, personne), puis relancé il ne change plus rien', () => {
     const w = world(), t = filled(w);
     const r = w.run(t);
     ok(r.ok, JSON.stringify(r.error));
@@ -240,8 +239,6 @@ module.exports = function () {
     eq([!!dep, dep && dep.dep_type, dep && Number(dep.lag_days)], [true, 'FS', 2], 'dépendance créée, avec son décalage');
     eq(w.c.repoList('BudgetLine').filter((l) => l.deliverable_id === gammes.id).map((l) => l.cost_type + ':' + l.planned_amount).sort(), ['Forfait:1500', 'Équipe:3000'], 'budget de Gammes : la part de l’équipe et un forfait externe');
     eq(w.c.repoList('BudgetLine').filter((l) => l.deliverable_id === item('Gabarits').id).map((l) => l.planned_amount), [1600], 'et la part de l’équipe sur Gabarits');
-    const envOf = (rec) => w.c.envAmount_(rec, w.c.envKey_(w.exec));
-    eq([envOf(w.c.repoGet('Project', w.p1.id)), envOf(w.c.repoGet('WorkPackage', wp3.id)), envOf(w.c.repoGet('WorkPackage', wp31.id))], [20000, 9000, 4000], 'enveloppes posées (celles de l’exercice en exécution)');
     // idempotence
     const events = w.c.repoList('ChangeEvent').length, rows = ['WorkPackage', 'PlanItem', 'BudgetLine', 'RoleAssignment', 'Dependency', 'Resource'].map((x) => w.c.repoList(x).length);
     const again = w.run(t, CP, { resume: true });
@@ -260,7 +257,7 @@ module.exports = function () {
     const t = w.template();
     eq(w.rowsOf(t, 'Workpackages').find((r) => String(r[1]) === '2')[4], 'Ana Sans-Adresse', 'l’export écrit le nom de qui n’a pas d’adresse');
     ok(w.analyze(t).data.nothing_to_do, 'et le classeur exporté se ré-importe sans erreur ni changement');
-    w.add(t, 'Workpackages', [['P1', '3', '', 'Test', 'ana   sans-adresse', '', ''], ['P1', '4', '', 'Ambigu', 'Jean Dupont', '', ''], ['P1', '5', '', 'Inconnu', 'Personne Inconnue', '', '']]);
+    w.add(t, 'Workpackages', [['P1', '3', '', 'Test', 'ana   sans-adresse', ''], ['P1', '4', '', 'Ambigu', 'Jean Dupont', ''], ['P1', '5', '', 'Inconnu', 'Personne Inconnue', '']]);
     const m = msgs(w.analyze(t).data).join('\n');
     ok(!/l\.5/.test(m), 'le nom est reconnu sans tenir compte de la casse ni des espaces en trop');
     ok(/Workpackages l\.6 : Leader : plusieurs personnes s’appellent « Jean Dupont » : désignez-la par son adresse e-mail/.test(m), 'deux personnes du même nom : refusé, avec la marche à suivre\n' + m);
@@ -312,8 +309,8 @@ module.exports = function () {
   test('Programme de plusieurs projets créé par un classeur, puis relancé : rien de plus', () => {
     const w = world(), t = w.template(ADMIN, { projectId: '', programId: w.prog.id });
     w.add(t, 'Programmes', [['NEW', 'Nouveau programme', 'Actif', '']]);
-    w.add(t, 'Projets', [['N1', 'Projet nouveau 1', 'NEW', 'Actif', 'FR', 'carla@entreprise.com', 5000], ['N2', 'Projet nouveau 2', 'NEW', 'Préparation', 'DE', '', '']]);
-    w.add(t, 'Workpackages', [['N1', '1', '', 'Étude', 'remi@entreprise.com', '', 3000]]);
+    w.add(t, 'Projets', [['N1', 'Projet nouveau 1', 'NEW', 'Actif', 'FR', 'carla@entreprise.com'], ['N2', 'Projet nouveau 2', 'NEW', 'Préparation', 'DE', '']]);
+    w.add(t, 'Workpackages', [['N1', '1', '', 'Étude', 'remi@entreprise.com', '']]);
     w.add(t, 'Livrables', [['N1', '1', 'Dossier', '2026-11-02', '2026-11-13', 'remi@entreprise.com', '']]);
     w.add(t, 'Jalons', [['N1', '1', 'Fin étude', '2026-11-13', '', '']]);
     w.add(t, 'Dépendances', [['N1', '1', 'Dossier', '1', 'Fin étude', 'FS', 0]]);
@@ -323,7 +320,7 @@ module.exports = function () {
     const prog = w.c.repoList('Program').find((g) => g.code === 'NEW');
     const n1 = w.c.repoList('Project').find((x) => x.code === 'N1'), n2 = w.c.repoList('Project').find((x) => x.code === 'N2');
     ok(prog && prog.name === 'Nouveau programme', 'le programme est créé');
-    eq([n1.program_id, n2.program_id, n1.manager_resource_id, n1.status, n2.status, n2.holiday_country, w.c.envAmount_(n1, w.c.envKey_(w.exec))], [prog.id, prog.id, w.carla.id, 'Actif', 'Préparation', 'DE', 5000], 'deux projets dans le nouveau programme, avec leur chef de projet, statut, pays et budget autorisé');
+    eq([n1.program_id, n2.program_id, n1.manager_resource_id, n1.status, n2.status, n2.holiday_country], [prog.id, prog.id, w.carla.id, 'Actif', 'Préparation', 'DE'], 'deux projets dans le nouveau programme, avec leur chef de projet, statut et pays');
     eq(w.c.repoList('WorkPackage').filter((x) => x.project_id === n1.id).map((x) => x.name + ':' + x.owner_resource_id), ['Étude:' + w.remi.id], 'le découpage du premier projet');
     eq(w.c.repoList('Dependency').filter((d) => w.c.repoGet('PlanItem', d.successor_id).project_id === n1.id).length, 1, 'et sa dépendance');
     eq(w.c.repoList('Program').map((g) => g.code).sort(), ['NEW', 'PG'], 'deux programmes dans l’outil');
@@ -344,8 +341,6 @@ module.exports = function () {
     w.call(ADMIN, 'dependencies.create', { values: { predecessor_id: items2.find((i) => i.name === 'Plan de qualification').id, successor_id: items2.find((i) => i.name === 'Essai final').id, dep_type: 'SS', lag_days: 3 } });
     w.call(ADMIN, 'budget.line.save', { values: { deliverable_id: items2.find((i) => i.name === 'Essai final').id, team_id: w.team.id, planned_amount: 4000 } });
     w.call(ADMIN, 'budget.line.save', { values: { deliverable_id: items2.find((i) => i.name === 'Plan de qualification').id, resource_id: w.xavier.id, cost_type: 'Forfait', fixed_amount: 2500 } });
-    w.call(ADMIN, 'budget.envelope.set', { projectId: w.p2.id, authorized: 10000, allocations: [{ wpId: wpId, amount: 7000 }] });
-    w.call(CP, 'budget.envelope.set', { projectId: w.p1.id, authorized: 30000 });
     const book = w.template(ADMIN, { projectId: '', all: true });
     // installation neuve : même faux Sheets, aucune donnée
     const d = freshCore();
@@ -371,8 +366,8 @@ module.exports = function () {
       const lines = [], used = {};
       const who = (id) => { if (id) used[id] = true; return email(id); };
       c.repoList('Program').forEach((g) => lines.push('G|' + g.code + '|' + g.name + '|' + (g.status || 'Actif')));
-      c.repoList('Project').forEach((p) => lines.push('P|' + p.code + '|' + p.name + '|' + (p.program_id ? c.repoGet('Program', p.program_id).code : '') + '|' + p.status + '|' + p.holiday_country + '|' + who(p.manager_resource_id) + '|' + Number(c.envAmount_(p, c.envKey_(c.repoList('Exercise').find((e) => e.status === 'Exécution'))) || 0)));
-      c.repoList('WorkPackage').forEach((x) => lines.push('W|' + c.repoGet('Project', x.project_id).code + '|' + x.wbs_code + '|' + wpName(x.parent_wp_id) + '|' + x.name + '|' + who(x.owner_resource_id) + '|' + (x.charge_code || '') + '|' + Number(c.envAmount_(x, c.envKey_(c.repoList('Exercise').find((e) => e.status === 'Exécution'))) || 0)));
+      c.repoList('Project').forEach((p) => lines.push('P|' + p.code + '|' + p.name + '|' + (p.program_id ? c.repoGet('Program', p.program_id).code : '') + '|' + p.status + '|' + p.holiday_country + '|' + who(p.manager_resource_id) ));
+      c.repoList('WorkPackage').forEach((x) => lines.push('W|' + c.repoGet('Project', x.project_id).code + '|' + x.wbs_code + '|' + wpName(x.parent_wp_id) + '|' + x.name + '|' + who(x.owner_resource_id) + '|' + (x.charge_code || '') ));
       c.repoList('PlanItem').forEach((i) => lines.push('I|' + c.repoGet('Project', i.project_id).code + '|' + wpName(i.wp_id) + '|' + i.name + '|' + i.item_type + '|' + i.planned_start + '|' + i.planned_finish + '|' + who(i.owner_resource_id) + '|' + (i.milestone_category || '')));
       c.repoList('Dependency').forEach((x) => lines.push('D|' + c.repoGet('PlanItem', x.predecessor_id).name + '|' + c.repoGet('PlanItem', x.successor_id).name + '|' + x.dep_type + '|' + Number(x.lag_days || 0)));
       c.repoList('BudgetLine').forEach((l) => lines.push('B|' + c.repoGet('PlanItem', l.deliverable_id).name + '|' + (l.cost_type === 'Équipe' ? 'T:' + c.repoGet('HierarchicalTeam', l.team_id).name : who(l.resource_id)) + '|' + l.cost_type + '|' + Number(l.fixed_amount || 0) + '|' + Number(l.planned_amount || 0)));
@@ -423,7 +418,7 @@ module.exports = function () {
     ok(r.ok && r.data.stopped && !r.data.done && r.data.remaining > 0 && r.data.operations === 3, 'premier lancement : trois opérations, il dit qu’il reste à faire (' + (r.data && r.data.remaining) + ')');
     while (!r.data.done && runs < 40) { r = w.run(t, CP, { maxOps: 3, resume: true }); runs++; }
     ok(r.data.done && runs > 3, 'terminé en ' + runs + ' lancements');
-    const sig = (x) => ['WorkPackage', 'PlanItem', 'BudgetLine', 'Dependency'].map((tb) => x.c.repoList(tb).map((o) => [o.wbs_code, o.name, o.planned_start, o.planned_finish, o.planned_amount, tb === 'WorkPackage' ? x.c.envAmount_(o, x.c.envKey_(x.exec)) : '', o.dep_type, o.lag_days].join('|')).sort().join(';')).join('#');
+    const sig = (x) => ['WorkPackage', 'PlanItem', 'BudgetLine', 'Dependency'].map((tb) => x.c.repoList(tb).map((o) => [o.wbs_code, o.name, o.planned_start, o.planned_finish, o.planned_amount, '', o.dep_type, o.lag_days].join('|')).sort().join(';')).join('#');
     eq(sig(w), sig(ref), 'mêmes données qu’un import en un seul lancement');
     const roles = (x) => x.c.repoList('RoleAssignment').filter((a) => !a.end_date).map((a) => a.role_code).sort().join();
     eq(roles(w), roles(ref), 'mêmes rôles');

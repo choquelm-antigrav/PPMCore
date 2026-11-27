@@ -1,7 +1,7 @@
 /**
- * PPM Core 0.20.1 — fichier unique à installer (fabriqué par tools/build.js, empreinte 75aa666d794f).
+ * PPM Core 0.21.0 — fichier unique à installer (fabriqué par tools/build.js, empreinte 5693e034496f).
  * NE PAS MODIFIER ICI : modifier les sources (dossier src/), puis refabriquer.
- * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs, 53_Roles.gs, 54_Validation.gs, 55_Envelope.gs, 56_Import.gs, 57_Rights.gs, 58_ScopeBaselines.gs, 59_TeamImport.gs, 60_Exercise.gs, 61_ExerciseImport.gs, 63_ExerciseRules.gs, 64_ExerciseTracking.gs, 65_Actuals.gs.
+ * Contient, dans cet ordre : 000_Menu.gs, 00_Config.gs, 00_Pages.gs, 01_Schema.gs, 02_Util.gs, 03_Calendar.gs, 04_Graph.gs, 05_Rbac.gs, 06_Rules.gs, 07_Schedule.gs, 10_Repository.gs, 11_ChangeLog.gs, 20_Setup.gs, 21_LiveTest.gs, 30_Api.gs, 31_Pages.gs, 32_Views.gs, 33_Structure.gs, 34_Baselines.gs, 35_Workspace.gs, 36_Digest.gs, 37_Simulation.gs, 38_Copilot.gs, 38_CopilotKey.gs, 39_Account.gs, 40_Jobs.gs, 41_Edit.gs, 42_Org.gs, 43_Budget.gs, 44_Orders.gs, 45_Overview.gs, 46_Resources.gs, 47_Demo.gs, 47_DemoClean.gs, 47_DemoData.gs, 48_News.gs, 48_NewsText.gs, 49_NewsCollect.gs, 49_Program.gs, 50_SheetAccess.gs, 51_SheetProtect.gs, 53_Roles.gs, 54_Validation.gs, 55_Plan.gs, 56_Import.gs, 57_Rights.gs, 58_ScopeBaselines.gs, 59_TeamImport.gs, 60_Exercise.gs, 63_ExerciseRules.gs, 64_ExerciseTracking.gs, 65_Actuals.gs.
  */
 
 // ======================================================================
@@ -47,7 +47,7 @@ function A9_MIGRER_ROLES_SIMULATION() { return migrerRoles_(true); }
  * et les secrets vont dans les propriétés du script (voir PROP), jamais dans le code.
  */
 
-var PPM_VERSION = '0.20.1';
+var PPM_VERSION = '0.21.0';
 var PPM_API_VERSION = '1.0';
 
 /** Colonnes techniques ajoutées à toute table « vivante » (hors historique). */
@@ -119,12 +119,11 @@ var PERMISSION_LEVEL = {
   'baseline.request': 'CONTRIB',
   'budget.edit':      'WPL',
   'import.run':      'CP',            // importer le WBS par classeur (56_Import.gs)
-  'budget.authorize': 'CP',            // fixer l'enveloppe autorisée du projet et la répartir entre les workpackages (un sous-workpackage : par son Workpackage leader)
   'cpn.edit':         'CP',
   'po.edit':          'CONTRIB',
   'exercise.read':    'WPL',     // voir l'exercice budgétaire (60_Exercise.gs), en entier, au global
-  'exercise.edit':    'CP',      // saisir le budget attendu et accordé par équipe d'un projet
-  'actuals.manage':   'CP',
+  'exercise.edit':    'CP',      // saisir la dotation de chaque équipe d'un projet
+  'actuals.manage':   'CP',      // saisir à la main le réalisé comptable (par CPN, équipe et mois)
   'roles.assign':     'DO',      // poser un rôle : le niveau exact dépend du rôle posé (voir roleAssignError_ dans 05_Rbac.gs)
   'resource.edit':    'CP',      // créer et modifier les personnes (page Ressources)
   'risk.create':      'CONTRIB',
@@ -331,13 +330,13 @@ var SCHEMA = {
     book: 'data',
     cols: ['id', 'code', 'name', 'program_id', 'manager_resource_id', 'status', 'holiday_country',
       'start_date', 'end_date', 'active_baseline_id', 'drive_folder_id', 'calendar_id', 'cpn', 'cpn_label',
-      'news_on', 'news_keywords', 'news_journal_id', 'budget_authorized', 'envelopes_json'],   // enveloppe autorisée PAR EXERCICE : envelopes_json { exercice: montant } (55_Envelope.gs, 0.19.3) ; budget_authorized n'est plus utilisé
+      'news_on', 'news_keywords', 'news_journal_id'],
     required: ['code', 'name'],
     enums: { status: ['Préparation', 'Actif', 'En pause', 'Clos'], holiday_country: COUNTRIES }
   },
   WorkPackage: {
     book: 'data',
-    cols: ['id', 'project_id', 'parent_wp_id', 'wbs_code', 'name', 'owner_resource_id', 'charge_code', 'cpn', 'cpn_label', 'budget_allocated', 'active_baseline_id', 'envelopes_json'],   // part de l'enveloppe PAR EXERCICE : envelopes_json { exercice: montant } (0.19.3) ; budget_allocated n'est plus utilisé
+    cols: ['id', 'project_id', 'parent_wp_id', 'wbs_code', 'name', 'owner_resource_id', 'charge_code', 'cpn', 'cpn_label', 'active_baseline_id'],
     required: ['project_id', 'name']
   },
   PlanItem: {
@@ -436,16 +435,16 @@ var SCHEMA = {
     required: ['year', 'status'],
     enums: { status: ['Préparation', 'Exécution', 'Clos'] }
   },
-  /** Le budget d'une équipe sur un projet pour un exercice : ce qui est ATTENDU (avant l'été) et ce qui est ACCORDÉ (décembre, révisions de février et d'avril). */
+  /** La DOTATION d'une équipe sur un projet pour un exercice : un seul montant annuel, saisi (et révisé : chaque révision se garde dans une baseline). */
   TeamBudget: {
     book: 'data',
-    cols: ['id', 'exercise_id', 'project_id', 'team_id', 'expected', 'granted'],
+    cols: ['id', 'exercise_id', 'project_id', 'team_id', 'amount'],
     required: ['exercise_id', 'project_id', 'team_id']
   },
   BudgetLine: {
     book: 'data',
-    // « Équipe » : la part d'une équipe sur un livrable, un montant libre (team_id) ; « Forfait » : un forfait auprès d'une ressource externe (resource_id)
-    cols: ['id', 'deliverable_id', 'resource_id', 'team_id', 'cost_type', 'fixed_amount', 'planned_amount', 'phasing_mode', 'is_external'],
+    // Le PLAN BUDGÉTAIRE : une cellule livrable × équipe. « Équipe » : la part d'une équipe sur un livrable, un montant annuel libre (team_id) ; « Forfait » : la colonne Externe, un forfait auprès d'une ressource externe (resource_id)
+    cols: ['id', 'deliverable_id', 'resource_id', 'team_id', 'cost_type', 'fixed_amount', 'planned_amount', 'is_external'],
     required: ['deliverable_id', 'cost_type'],
     enums: { cost_type: ['Équipe', 'Forfait'] }
   },
@@ -462,20 +461,10 @@ var SCHEMA = {
     cols: ['id', 'po_id', 'deliverable_id', 'amount'],
     required: ['po_id', 'deliverable_id', 'amount']
   },
-  BudgetPhasing: {
-    book: 'data',
-    cols: ['id', 'budget_line_id', 'month', 'amount'],
-    required: ['budget_line_id', 'month']
-  },
   ProgressUpdate: {
     book: 'data',
     cols: ['id', 'deliverable_id', 'resource_id', 'declared_at', 'progress_pct', 'comment'],
     required: ['deliverable_id', 'progress_pct']
-  },
-  ActualImport: {
-    book: 'data',
-    cols: ['id', 'period', 'source_file_id', 'mapping_json', 'status', 'imported_by'],
-    enums: { status: ['Brouillon', 'Contrôlé', 'Publié', 'Remplacé'] }
   },
 
   // ---------- Classeur Données : risques, baselines, IA ----------
@@ -540,13 +529,13 @@ var SCHEMA = {
     cols: ['id', 'baseline_id', 'entity_type', 'entity_id', 'snapshot_json']
   },
   /**
-   * Le RÉALISÉ comptable (0.20.1), par PROJET, ÉQUIPE et MOIS : une ligne par (CPN, équipe, année-mois), cumul des lignes du fichier d'actuals. Pas de réalisé au livrable. Modifiable : un nouveau fichier
-   * mensuel REMPLACE le montant d'une ligne existante (même CPN, équipe, mois), ne supprime jamais rien.
+   * Le RÉALISÉ comptable (0.21.0), SAISI À LA MAIN par projet, CPN, équipe et mois : une ligne par (CPN, équipe, année-mois), dont le montant se remplace. L'historique mensuel est gardé.
+   * Pas de réalisé au livrable.
    */
   ActualLine: {
     book: 'data',
-    cols: ['id', 'import_id', 'month', 'charge_code', 'cost_center', 'amount', 'project_id', 'wp_id', 'team_id', 'match_status', 'source_rows'],
-    required: ['month', 'charge_code', 'amount']
+    cols: ['id', 'project_id', 'charge_code', 'team_id', 'month', 'amount'],
+    required: ['project_id', 'team_id', 'month', 'amount']
   },
 
   EvmSnapshot: {
@@ -576,7 +565,7 @@ var REF_TARGETS = {
   resource_id: 'Resource', team_id: 'HierarchicalTeam', parent_team_id: 'HierarchicalTeam', exercise_id: 'Exercise',
   milestone_id: 'PlanItem', deliverable_id: 'PlanItem', predecessor_id: 'PlanItem',
   successor_id: 'PlanItem', linked_item_id: 'PlanItem', budget_line_id: 'BudgetLine',
-  active_baseline_id: 'Baseline', baseline_id: 'Baseline', addon_id: 'Addon', import_id: 'ActualImport'
+  active_baseline_id: 'Baseline', baseline_id: 'Baseline', addon_id: 'Addon'
 };
 
 var DATE_COLS = ['start_date', 'end_date', 'planned_start', 'planned_finish', 'actual_finish',
@@ -591,8 +580,6 @@ var NUMBER_RULES = {
   impact: { min: 1, max: 5, integer: true },
   lag_days: { integer: true },
   annual_cost: { min: 0 },
-  expected: { min: 0 },
-  granted: { min: 0 },
   capacity_days_month: { min: 0 },
   fixed_amount: { min: 0 },
   financial_value: {}
@@ -1457,7 +1444,7 @@ function evaluateRules(data, today, holFor) {
     if (activeProject[f.projectId]) push(f.projectId, f.rule, f.severity, f.targetType, f.targetId, f.message, f.suggestion);
   });
 
-  // Exercice budgétaire et enveloppes : clash, dépassements, équipes sans budget, versions à valider (calculés par exerciseFindings_, sans montant).
+  // Exercice budgétaire : clash (plan > dotation), équipes sans dotation, équipes hors règle (calculés par exerciseFindings_, sans montant).
   (data.exerciseFindings || []).forEach(function (f) {
     if (activeProject[f.projectId]) push(f.projectId, f.rule, f.severity, f.targetType, f.targetId, f.message, f.suggestion);
   });
@@ -1962,9 +1949,9 @@ function openBook_(book) {
  * colonne de texte (cellule écrite avant cette protection) redevient du texte.
  */
 var SHEET_PARSED_COLS = {};
-['ac', 'amount', 'annual_cost', 'author_level', 'bac', 'capacity_days_month', 'cpi', 'days', 'eac', 'ev', 'expected', 'financial_value', 'fixed_amount', 'granted', 'total_expected', 'total_granted', 'total_parts', 'impact', 'lag_days', 'number',
+['ac', 'amount', 'annual_cost', 'author_level', 'bac', 'capacity_days_month', 'cpi', 'days', 'eac', 'ev', 'financial_value', 'fixed_amount', 'impact', 'lag_days', 'number',
   'planned_amount', 'probability', 'progress_pct', 'pv', 'reminder_days', 'score', 'spi', 'version', 'year', 'deleted', 'acknowledged', 'enabled',
-  'is_external', 'news_on', 'reminder_off', 'unverified', 'status_date', 'at', 'budget_authorized', 'budget_allocated'].concat(DATE_COLS).forEach(function (c) { SHEET_PARSED_COLS[c] = true; });
+  'is_external', 'news_on', 'reminder_off', 'unverified', 'status_date', 'at'].concat(DATE_COLS).forEach(function (c) { SHEET_PARSED_COLS[c] = true; });
 
 function sheetParsedCol_(h) { return !!SHEET_PARSED_COLS[h] || /_at$/.test(h) || /_on$/.test(h); }
 
@@ -2192,7 +2179,7 @@ function projectIdOf(table, rec) {
   try {
     switch (table) {
       case 'Project': return rec.id;
-      case 'WorkPackage': case 'PlanItem': case 'RiskOpportunity': case 'Baseline': case 'Insight':
+      case 'WorkPackage': case 'PlanItem': case 'RiskOpportunity': case 'Baseline': case 'Insight': case 'TeamBudget':
         return rec.project_id || '';
       case 'Dependency': {
         var s = repoGet('PlanItem', rec.successor_id);
@@ -2343,7 +2330,7 @@ function runHooks(table, before, rec, actx) {
   if (table === 'Baseline' && !before && rec.status === 'Demandée') hookBaselineRequested(rec, actx);
   if (table === 'RoleAssignment' && actx.source === 'appsheet') hookRoleAssignmentGuard(before, rec, actx);
   if (table === 'Resource' && actx.source === 'appsheet') hookResourceGuard(before, rec, actx);
-  if (table === 'PlanItem') { hookCalendarItem(before, rec); hookRephase(before, rec); }
+  if (table === 'PlanItem') { hookCalendarItem(before, rec); }
 }
 
 /**
@@ -3203,7 +3190,7 @@ defineAction('projects.list', function (p) {
 defineAction('projects.get', function (p) { return mustGet('Project', requireParam(p, 'id')); });
 
 defineAction('projects.create', function (p, ctx) {
-  var v = stripEnvelope_(p.values);
+  var v = Object.assign({}, p.values || {});
   requireCan(ctx, 'project.create', isBlank(v.program_id) ? { type: 'global' } : { type: 'program', id: v.program_id });
   if (!isBlank(v.program_id)) mustGet('Program', v.program_id);
   var projRec = repoInsert('Project', v, ctx.actx);
@@ -3217,7 +3204,7 @@ defineAction('projects.update', function (p, ctx) {
   mustGet('Project', id);
   var projBefore = mustGet('Project', id);
   requireCan(ctx, 'wbs.edit', { type: 'project', id: id });
-  var projPatch = stripEnvelope_(p.patch);
+  var projPatch = Object.assign({}, p.patch || {});
   if ('manager_resource_id' in projPatch) assertCanSetPrincipal_(ctx, 'project', { type: 'project', id: id }, projBefore.manager_resource_id, projPatch.manager_resource_id);
   var projAfter = repoUpdate('Project', id, projPatch, p.version, ctx.actx);
   if ('manager_resource_id' in projPatch) applyPrincipal_(ctx.actx, 'project', id, projBefore.manager_resource_id, projAfter.manager_resource_id);
@@ -3230,7 +3217,7 @@ defineAction('workpackages.list', function (p) {
 });
 
 defineAction('workpackages.create', function (p, ctx) {
-  var v = stripEnvelope_(p.values);
+  var v = Object.assign({}, p.values || {});
   mustGet('Project', requireParam(v, 'project_id'));
   if (!isBlank(v.parent_wp_id)) {
     var parent = mustGet('WorkPackage', v.parent_wp_id);
@@ -3247,7 +3234,7 @@ defineAction('workpackages.update', function (p, ctx) {
   var id = requireParam(p, 'id');
   var wpBefore = mustGet('WorkPackage', id);
   requireCan(ctx, 'wbs.edit', { type: 'workpackage', id: id });
-  var patch = stripEnvelope_(p.patch);
+  var patch = Object.assign({}, p.patch || {});
   delete patch.project_id;
   var wpKind = isBlank(wpBefore.parent_wp_id) ? 'workpackage' : 'subworkpackage';
   if ('owner_resource_id' in patch) assertCanSetPrincipal_(ctx, wpKind, { type: 'workpackage', id: id }, wpBefore.owner_resource_id, patch.owner_resource_id);
@@ -3444,7 +3431,7 @@ function preloadFor_(view, boot, email) {
       if (acc.ok) { // plus d'onglets : toutes les zones auxquelles on a droit se chargent avec la page
         if (acc.data.all) put('budget.balance', { projectId: bfirst });
         if (acc.data.po) { put('po.list', { projectId: bfirst }); put('po.list', { scope: 'outside' }); }
-        if (acc.data.budget) put('budget.get', { projectId: bfirst });
+        if (acc.data.budget) put('budget.plan.get', { projectId: bfirst });
       }
     }
     return pre;
@@ -3497,13 +3484,13 @@ function cleanId_(v) {
  * chaque liste est exactement l'ensemble des tables lues à l'ouverture ; la même liste sert au déclencheur qui garde le cache plein.
  */
 var PAGE_TABLES = {
-  overview: ['Baseline', 'BaselineItem', 'BudgetLine', 'Dependency', 'HolidaySet', 'Insight', 'Meeting', 'NewsAction', 'NewsDigest', 'PlanItem', 'Program', 'Project', 'PurchaseOrder', 'PurchaseOrderLink', 'Resource', 'RiskOpportunity', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  overview: ['Baseline', 'BaselineItem', 'BudgetLine', 'Dependency', 'Exercise', 'HierarchicalTeam', 'HolidaySet', 'Insight', 'Meeting', 'NewsAction', 'NewsDigest', 'PlanItem', 'Program', 'Project', 'PurchaseOrder', 'PurchaseOrderLink', 'Resource', 'RiskOpportunity', 'RoleAssignment', 'TeamBudget', 'UserSetting', 'WorkPackage'],
   gantt: ['Baseline', 'BaselineItem', 'BudgetLine', 'Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   structure: ['Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   ressources: ['HierarchicalTeam', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
-  suivi: ['Baseline', 'BaselineItem', 'BudgetLine', 'BudgetPhasing', 'ChangeEvent', 'Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  suivi: ['Baseline', 'BaselineItem', 'BudgetLine', 'ChangeEvent', 'Dependency', 'HierarchicalTeam', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'TeamBudget', 'UserSetting', 'WorkPackage'],
   actualites: ['Meeting', 'NewsAction', 'NewsDigest', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
-  budget: ['BudgetLine', 'BudgetPhasing', 'EtpCost', 'Exercise', 'HierarchicalTeam', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'PurchaseOrder', 'PurchaseOrderLink', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  budget: ['Baseline', 'BaselineItem', 'BudgetLine', 'EtpCost', 'Exercise', 'HierarchicalTeam', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'PurchaseOrder', 'PurchaseOrderLink', 'Resource', 'RoleAssignment', 'TeamBudget', 'UserSetting', 'WorkPackage'],
   compte: ['HierarchicalTeam', 'Meeting', 'NewsAction', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   admin: ['AiLog', 'BudgetLine', 'ChangeEvent', 'Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   copilote: ['AiLog', 'Baseline', 'BaselineItem', 'ChangeEvent', 'Dependency', 'HolidaySet', 'Insight', 'MilestoneRequirement', 'PlanItem', 'Program', 'ProgressUpdate', 'Project', 'Resource', 'RiskOpportunity', 'RoleAssignment', 'UserSetting', 'WorkPackage']
@@ -4430,14 +4417,14 @@ function hookResourceGuard(before, rec, actx) {
 
 /** Champs figés par table. La même liste définit ce qui entre dans le fil des changements. */
 var BASELINE_FIELDS = {
-  // 0.19.2 : la DÉCOMPOSITION DU BUDGET est figée avec le planning : budget autorisé du projet, enveloppe de chaque workpackage, exercice de chaque livrable, et (ci-dessous) les lignes de coût.
-  // Une baseline figée avant la 0.19.2 ne les a pas : l'écart dit alors « non figé à l'époque » au lieu d'inventer une valeur.
-  // (0.19.3) l'enveloppe est PAR EXERCICE : `envelopes_json` { exercice : montant } ; les anciens champs budget_authorized et budget_allocated ne sont plus figés.
-  Project: ['start_date', 'end_date', 'holiday_country', 'envelopes_json'],
-  WorkPackage: ['name', 'wbs_code', 'parent_wp_id', 'owner_resource_id', 'charge_code', 'envelopes_json'],
+  // 0.21.0 : le PLAN BUDGÉTAIRE est figé avec le planning : exercice de chaque livrable, cellules livrable × équipe (BudgetLine) et dotation de chaque équipe (TeamBudget).
+  // Une baseline figée avant la 0.21.0 n'a pas les dotations : l'écart dit alors « non figé à l'époque » au lieu d'inventer une valeur.
+  Project: ['start_date', 'end_date', 'holiday_country'],
+  WorkPackage: ['name', 'wbs_code', 'parent_wp_id', 'owner_resource_id', 'charge_code'],
   PlanItem: ['name', 'item_type', 'wp_id', 'owner_resource_id', 'planned_start', 'planned_finish', 'milestone_category', 'exercise_id'],
   Dependency: ['predecessor_id', 'successor_id', 'dep_type', 'lag_days'],
-  BudgetLine: ['deliverable_id', 'resource_id', 'team_id', 'cost_type', 'fixed_amount', 'planned_amount']
+  BudgetLine: ['deliverable_id', 'resource_id', 'team_id', 'cost_type', 'fixed_amount', 'planned_amount'],
+  TeamBudget: ['exercise_id', 'team_id', 'amount']
 };
 
 var FIELD_LABELS = {
@@ -4447,14 +4434,14 @@ var FIELD_LABELS = {
   milestone_category: 'catégorie de jalon', predecessor_id: 'prédécesseur', successor_id: 'successeur',
   dep_type: 'type de lien', lag_days: 'décalage', deliverable_id: 'livrable', resource_id: 'ressource',
   cost_type: 'type de coût', team_id: 'équipe', exercise_id: 'exercice', fixed_amount: 'forfait',
-  planned_amount: 'montant prévu', progress_pct: 'avancement', baseline_frozen: 'baseline figée', envelopes_json: 'enveloppes budgétaires', budget_authorized: 'budget autorisé', budget_allocated: 'enveloppe budgétaire', deleted: 'suppression', '*': 'création ou suppression'
+  planned_amount: 'montant prévu', amount: 'dotation', progress_pct: 'avancement', baseline_frozen: 'baseline figée', deleted: 'suppression', '*': 'création ou suppression'
 };
 
 // ---------------------------------------------------------------- instantanés
 
-/** data : { projects, workpackages, planitems, dependencies, budgetLines, phasing } (lignes vivantes). */
+/** data : { projects, workpackages, planitems, dependencies, budgetLines, teamBudgets } (lignes vivantes). */
 function projectSnapshot_(data, projectId, scope) {
-  var snap = { Project: {}, WorkPackage: {}, PlanItem: {}, Dependency: {}, BudgetLine: {} };
+  var snap = { Project: {}, WorkPackage: {}, PlanItem: {}, Dependency: {}, BudgetLine: {}, TeamBudget: {} };
   var project = indexBy_(data.projects)[projectId];
   if (project) snap.Project[project.id] = pickFields(project, BASELINE_FIELDS.Project);
   data.workpackages.forEach(function (w) {
@@ -4466,15 +4453,12 @@ function projectSnapshot_(data, projectId, scope) {
   data.dependencies.forEach(function (d) {
     if (snap.PlanItem[d.successor_id]) snap.Dependency[d.id] = pickFields(d, BASELINE_FIELDS.Dependency);
   });
-  var phasing = {};
-  (data.phasing || []).forEach(function (ph) {
-    (phasing[ph.budget_line_id] = phasing[ph.budget_line_id] || []).push({ month: ph.month, amount: Number(ph.amount) || 0 });
-  });
   (data.budgetLines || []).forEach(function (b) {
     if (!snap.PlanItem[b.deliverable_id]) return;
-    var rec = pickFields(b, BASELINE_FIELDS.BudgetLine);
-    rec.phasing = (phasing[b.id] || []).sort(function (x, y) { return String(x.month) < String(y.month) ? -1 : 1; });
-    snap.BudgetLine[b.id] = rec;
+    snap.BudgetLine[b.id] = pickFields(b, BASELINE_FIELDS.BudgetLine);
+  });
+  (data.teamBudgets || []).forEach(function (t) {
+    if (t.project_id === projectId) snap.TeamBudget[t.id] = pickFields(t, BASELINE_FIELDS.TeamBudget);
   });
   if (scope && scope.type === 'workpackage') {
     return restrictSnapshotToWps_(snap, wpSubtreeIds_(data.workpackages.filter(function (w) { return w.project_id === projectId; }), scope.id));
@@ -4493,7 +4477,7 @@ function snapshotToRows_(baselineId, snap) {
 }
 
 function rowsToSnapshot_(rows) {
-  var snap = { Project: {}, WorkPackage: {}, PlanItem: {}, Dependency: {}, BudgetLine: {} };
+  var snap = { Project: {}, WorkPackage: {}, PlanItem: {}, Dependency: {}, BudgetLine: {}, TeamBudget: {} };
   rows.forEach(function (r) {
     if (!snap[r.entity_type]) snap[r.entity_type] = {};
     snap[r.entity_type][r.entity_id] = parseJsonSafe(r.snapshot_json, {});
@@ -4504,7 +4488,7 @@ function rowsToSnapshot_(rows) {
 function loadSnapshotData_() {
   return {
     projects: repoList('Project'), workpackages: repoList('WorkPackage'), planitems: repoList('PlanItem'),
-    dependencies: repoList('Dependency'), budgetLines: repoList('BudgetLine'), phasing: repoList('BudgetPhasing')
+    dependencies: repoList('Dependency'), budgetLines: repoList('BudgetLine'), teamBudgets: repoList('TeamBudget')
   };
 }
 
@@ -4554,23 +4538,19 @@ function costByWpSnap_(snap, include) {
 }
 
 /**
- * La décomposition du budget entre deux instantanés (0.19.2) : budget autorisé du projet, enveloppe et coût prévu de chaque workpackage, et les lignes de coût ajoutées, retirées ou modifiées.
- * `known` est faux quand l'instantané de référence ne contenait pas le champ (baseline antérieure à la 0.19.2) : l'écart n'est alors pas calculé.
+ * Le PLAN BUDGÉTAIRE entre deux instantanés (0.21.0) : coût prévu de chaque workpackage (somme des cellules de ses livrables), cellules livrable × équipe (et forfaits) ajoutées, retirées
+ * ou modifiées, et dotations d'équipe qui ont changé, pour un exercice.
  */
-function diffDecomposition_(base, cur, exercise, exOfNow) {
-  var num = function (v) { return v === undefined || isBlank(v) ? null : Number(v); };
+function diffPlan_(base, cur, exercise, exOfNow) {
   var inEx = function (it, id) { return ('exercise_id' in it ? it.exercise_id : (exOfNow || {})[id]) === exercise.id; };
   var bc = costByWpSnap_(base, inEx), cc = costByWpSnap_(cur, inEx);
-  var bProj = Object.keys(base.Project || {}).map(function (k) { return base.Project[k]; })[0] || {}, cProj = Object.keys(cur.Project || {}).map(function (k) { return cur.Project[k]; })[0] || {};
   var ids = {}; Object.keys(base.WorkPackage || {}).concat(Object.keys(cur.WorkPackage || {})).forEach(function (id) { ids[id] = true; });
   var wps = Object.keys(ids).map(function (id) {
     var b = (base.WorkPackage || {})[id] || null, c = (cur.WorkPackage || {})[id] || null, ref = c || b;
-    var known = !!b && ('envelopes_json' in b), ba = known ? envAmount_(b, exercise.key) : null, ca = c ? envAmount_(c, exercise.key) : null;
     var baseCost = b ? (bc.byWp[id] || 0) : null, cost = c ? (cc.byWp[id] || 0) : null;
-    var row = { wp_id: id, code: ref.wbs_code || '', name: ref.name, parent_id: ref.parent_wp_id || '', known: known, base_allocated: ba, allocated: ca, base_cost: baseCost, cost: cost,
-      cost_delta: baseCost === null || cost === null ? null : round2(cost - baseCost), allocated_changed: !!b && !!c && known && ba !== ca,
-      over: ca !== null && cost !== null && cost > ca, state: !b ? 'added' : !c ? 'removed' : 'same' };
-    if (row.state === 'same' && (row.allocated_changed || (row.cost_delta !== null && row.cost_delta !== 0))) row.state = 'changed';
+    var row = { wp_id: id, code: ref.wbs_code || '', name: ref.name, parent_id: ref.parent_wp_id || '', base_cost: baseCost, cost: cost,
+      cost_delta: baseCost === null || cost === null ? null : round2(cost - baseCost), state: !b ? 'added' : !c ? 'removed' : 'same' };
+    if (row.state === 'same' && row.cost_delta !== null && row.cost_delta !== 0) row.state = 'changed';
     return row;
   }).sort(function (x, y) { return String(x.code).localeCompare(String(y.code), 'fr', { numeric: true }) || String(x.name).localeCompare(String(y.name), 'fr'); });
   var lineIds = {}; Object.keys(base.BudgetLine || {}).concat(Object.keys(cur.BudgetLine || {})).forEach(function (id) { lineIds[id] = true; });
@@ -4584,16 +4564,19 @@ function diffDecomposition_(base, cur, exercise, exOfNow) {
     return { line_id: id, deliverable_id: ref.deliverable_id, deliverable: item.name || '(livrable)', wp_id: item.wp_id || '', kind: ref.cost_type === 'Forfait' ? 'forfait' : 'team', team_id: ref.team_id || '', resource_id: ref.resource_id || '',
       base_amount: ba, amount: ca, state: !b ? 'added' : !c ? 'removed' : (ba !== ca ? 'changed' : 'same') };
   }).filter(function (l) { return l.state !== 'same'; }).sort(function (x, y) { return String(x.deliverable).localeCompare(String(y.deliverable), 'fr') || String(x.state).localeCompare(String(y.state)); });
-  var sum = function (m) { return round2(Object.keys(m.byWp).filter(function (k) { return true; }).reduce(function (t, k) { return t; }, 0)); };
   var totalBase = 0, totalCur = 0;
   var addTotal = function (snap, which) { Object.keys(snap.BudgetLine || {}).forEach(function (id) { var bl1 = snap.BudgetLine[id], it1 = (snap.PlanItem || {})[bl1.deliverable_id]; if (it1 && inEx(it1, bl1.deliverable_id)) { if (which === 'b') totalBase = round2(totalBase + (Number(bl1.planned_amount) || 0)); else totalCur = round2(totalCur + (Number(bl1.planned_amount) || 0)); } }); };
   addTotal(base, 'b'); addTotal(cur, 'c');
-  var pKnown = ('envelopes_json' in bProj), bAuth = pKnown ? envAmount_(bProj, exercise.key) : null, cAuth = envAmount_(cProj, exercise.key);
+  // les dotations d'équipe de l'exercice
+  var dot = function (snap) { var m = {}; Object.keys(snap.TeamBudget || {}).forEach(function (id) { var t = snap.TeamBudget[id]; if (t.exercise_id === exercise.id && !isBlank(t.amount)) m[t.team_id] = round2((m[t.team_id] || 0) + Number(t.amount)); }); return m; };
+  var bd = dot(base), cd = dot(cur), tids = {}; Object.keys(bd).concat(Object.keys(cd)).forEach(function (id) { tids[id] = true; });
+  var dotations = Object.keys(tids).map(function (id) {
+    var b = bd[id] === undefined ? null : bd[id], c = cd[id] === undefined ? null : cd[id];
+    return { team_id: id, base_amount: b, amount: c, state: b === null ? 'added' : c === null ? 'removed' : (b !== c ? 'changed' : 'same') };
+  }).filter(function (d) { return d.state !== 'same'; });
   return {
-    project: { known: pKnown, base_authorized: bAuth, authorized: cAuth, changed: pKnown && bAuth !== cAuth },
-    wps: wps, lines: lines,
-    totals: { envelope_changes: wps.filter(function (w) { return w.allocated_changed; }).length + (pKnown && bAuth !== cAuth ? 1 : 0), line_changes: lines.length,
-      cost_base: totalBase, cost: totalCur, cost_delta: round2(totalCur - totalBase), over: wps.filter(function (w) { return w.over; }).length }
+    wps: wps, lines: lines, dotations: dotations,
+    totals: { line_changes: lines.length, dotation_changes: dotations.length, cost_base: totalBase, cost: totalCur, cost_delta: round2(totalCur - totalBase) }
   };
 }
 
@@ -4680,6 +4663,7 @@ function buildChangeFeed(events, projectId, since, names, opts) {
     if (table === 'Project') return 'Projet';
     if (table === 'Dependency') return names.dep[id] || 'Dépendance';
     if (table === 'BudgetLine') return names.budget[id] ? 'Budget de ' + names.budget[id] : 'Ligne budgétaire';
+    if (table === 'TeamBudget') { var tn = teamBudgetName_(names, id); return tn ? 'Dotation de ' + tn : 'Dotation'; }
     if (table === 'Baseline') return names.baseline[id] || 'Baseline';
     return table;
   };
@@ -4689,9 +4673,6 @@ function buildChangeFeed(events, projectId, since, names, opts) {
     if (field === 'wp_id' || field === 'parent_wp_id') return names.wp[v] || v;
     if (field === 'predecessor_id' || field === 'successor_id' || field === 'deliverable_id') return names.item[v] || v;
     if (field === 'deleted') return isTrue(v) ? 'supprimé' : 'actif';
-    if (field === 'envelopes_json') {
-      var o = parseJsonSafe(v, {}); return Object.keys(o).map(function (k) { return 'exercice ' + String(k).split(':')[0] + ' : ' + o[k] + ' €'; }).join(' ; ');
-    }
     return String(v);
   };
   var rows = events.filter(function (e) {
@@ -4715,8 +4696,18 @@ function buildChangeFeed(events, projectId, since, names, opts) {
 }
 
 /** Noms lisibles pour le fil et les journaux. Les noms de baselines (qui lisent trois tables de plus) ne sont chargés que si on les demande : le fil de validation, pas les journaux de l'administration. */
+/** Le nom de l'équipe d'une dotation, lu à la demande (deux tables que la plupart des pages n'ont pas besoin de charger pour nommer un changement). */
+function teamBudgetName_(names, id) {
+  if (!names.teambudgetLoaded) {
+    var teamNm = {}; repoList('HierarchicalTeam', null, { includeDeleted: true }).forEach(function (t) { teamNm[t.id] = t.name; });
+    repoList('TeamBudget', null, { includeDeleted: true }).forEach(function (b) { names.teambudget[b.id] = teamNm[b.team_id] || ''; });
+    names.teambudgetLoaded = true;
+  }
+  return names.teambudget[id] || '';
+}
+
 function feedNames_(withBaselines) {
-  var names = { resource: {}, item: {}, wp: {}, dep: {}, budget: {}, byEmail: {}, baseline: {} };
+  var names = { resource: {}, item: {}, wp: {}, dep: {}, budget: {}, teambudget: {}, byEmail: {}, baseline: {} };
   repoList('Resource', null, { includeDeleted: true }).forEach(function (r) {
     names.resource[r.id] = r.name;
     if (!isBlank(r.email)) names.byEmail[String(r.email).toLowerCase()] = r.name;
@@ -4934,7 +4925,7 @@ defineAction('baselines.refuse', function (p, ctx) {
  * Les montants ne sont renvoyés qu'à ceux qui ont le droit de modifier le budget du projet.
  */
 /**
- * Résout une demande d'écart à une baseline (périmètre, baseline de référence, baseline ou état actuel à comparer) : partagé par `baselines.diff` et `baselines.decomposition`.
+ * Résout une demande d'écart à une baseline (périmètre, baseline de référence, baseline ou état actuel à comparer) : partagé par `baselines.diff` et `baselines.plan`.
  * Renvoie `{ empty }` quand il n'y a pas de baseline de référence.
  */
 function resolveDiff_(p, ctx) {
@@ -4996,22 +4987,24 @@ defineAction('baselines.diff', function (p, ctx) {
 });
 
 /**
- * La décomposition du budget d'une baseline (0.19.2), à la demande : budget autorisé, enveloppe et coût prévu de chaque workpackage, lignes de coût ajoutées, retirées ou modifiées, par rapport à
- * la baseline de référence (ou à une autre baseline : `compareTo`, pour suivre son évolution d'une baseline à l'autre). Mêmes paramètres que `baselines.diff` ; réservée à ceux qui voient le budget.
+ * Le plan budgétaire d'une baseline (0.21.0), à la demande : coût prévu de chaque workpackage, cellules du plan et dotations ajoutées, retirées ou modifiées, par rapport à la baseline de référence
+ * (ou à une autre baseline : `compareTo`, pour suivre son évolution d'une baseline à l'autre). Mêmes paramètres que `baselines.diff` ; réservée à ceux qui voient le budget.
  * Une action à part : la page Suivi n'en paie le coût (lecture des équipes) que lorsqu'on déplie la section.
  */
-defineAction('baselines.decomposition', function (p, ctx) {
+defineAction('baselines.plan', function (p, ctx) {
   var r = resolveDiff_(p, ctx);
-  if (r.empty) return { baseline: null, decomposition: null, see_budget: false };
-  if (!r.seeBudget) throw new PpmError('FORBIDDEN', 'La décomposition du budget est réservée aux responsables de budget.');
-  var anyExercise = repoList('Exercise', function (x) { return !isTrue(x.deleted); }).length > 0;
-  if (!anyExercise && isBlank(p.exerciseId)) return { baseline: baselineView_(r.base, {}), compareTo: r.other ? baselineView_(r.other, {}) : null, scope: r.scopeInfo, decomposition: null, see_budget: true, no_exercise: true, exercise: null, exercises: [] };
-  var ex = envelopeExercise_(p), exOfNow = {};
+  if (r.empty) return { baseline: null, plan: null, see_budget: false };
+  if (!r.seeBudget) throw new PpmError('FORBIDDEN', 'Le plan budgétaire est réservé aux responsables de budget.');
+  var exList = repoList('Exercise', function (x) { return !isTrue(x.deleted); });
+  if (!exList.length && isBlank(p.exerciseId)) return { baseline: baselineView_(r.base, {}), compareTo: r.other ? baselineView_(r.other, {}) : null, scope: r.scopeInfo, plan: null, see_budget: true, no_exercise: true, exercise: null, exercises: [] };
+  var ex = planExercise_(p), exOfNow = {};
   repoList('PlanItem', function (i) { return i.project_id === r.project.id && i.item_type === 'Livrable'; }).forEach(function (i) { exOfNow[i.id] = i.exercise_id || ''; });
-  var d = diffDecomposition_(r.baseSnap, r.cur, { id: ex.id, key: envKey_(ex) }, exOfNow);
+  var d = diffPlan_(r.baseSnap, r.cur, { id: ex.id }, exOfNow);
   var teamNames = {}; repoList('HierarchicalTeam', null, { includeDeleted: true }).forEach(function (t) { teamNames[t.id] = t.name; });
   d.lines.forEach(function (l) { l.target = l.kind === 'team' ? (teamNames[l.team_id] || '(équipe)') : (r.names[l.resource_id] || '(ressource)'); l.wp_name = r.wpNames[l.wp_id] || ''; });
-  return { baseline: baselineView_(r.base, {}), compareTo: r.other ? baselineView_(r.other, {}) : null, scope: r.scopeInfo, decomposition: d, see_budget: true, exercise: { id: ex.id, year: Number(ex.year), status: ex.status }, exercises: repoList('Exercise', function (x) { return !isTrue(x.deleted); }).sort(function (a, b) { return b.year - a.year; }).map(function (x) { return { id: x.id, year: Number(x.year), status: x.status }; }) };
+  d.dotations.forEach(function (x) { x.team = teamNames[x.team_id] || '(équipe)'; });
+  return { baseline: baselineView_(r.base, {}), compareTo: r.other ? baselineView_(r.other, {}) : null, scope: r.scopeInfo, plan: d, see_budget: true, exercise: { id: ex.id, year: Number(ex.year), status: ex.status },
+    exercises: exList.sort(function (a, b) { return b.year - a.year; }).map(function (x) { return { id: x.id, year: Number(x.year), status: x.status }; }) };
 });
 
 /**
@@ -6576,17 +6569,18 @@ function copilotBudgetAllowed_(ctx, projectId) {
 }
 function copilotBudgetTool_(ctx, projectId) {
   return {
-    declaration: { name: 'get_budget', description: 'Budget de l’exercice en exécution du projet : budget autorisé, prévu, valeur acquise, projection de fin d’année (à l’avancement et sur le réalisé comptable), réalisé par équipe et par mois, par workpackage. Montants agrégés. Le réalisé n’est pas suivi au livrable.', parameters: { type: 'object', properties: {} } },
+    declaration: { name: 'get_budget', description: 'Budget de l’exercice en exécution du projet : dotation, plan (total des parts de livrables), valeur acquise, réalisé à ce jour (saisi à la main), atterrissage de fin d’année, par équipe, et le budget externe face aux commandes d’achat engagées. Montants agrégés. Le réalisé n’est pas suivi au livrable.', parameters: { type: 'object', properties: {} } },
     handler: function () {
       var ex = repoList('Exercise', function (x) { return !isTrue(x.deleted) && x.status === 'Exécution'; })[0];
       if (!ex) return { error: 'Aucun exercice en exécution : pas de budget à analyser.' };
-      var project = mustGet('Project', projectId), rv = resolveDecompVersion_(project, 'ref'), v = envelopeView_(ctx, project, ex, rv.version), pj = v.projection, act = v.actuals && v.actuals.available ? v.actuals : null;
-      return { exercice: Number(ex.year), version_lue_par_le_suivi: rv.version ? rv.version.label : 'version en cours (aucune version validée)', budget_autorise: pj.budget, prevu_annee: pj.plan_year, prevu_a_ce_jour: pj.pv, valeur_acquise: pj.ev,
-        projection_a_l_avancement: pj.projected, ecart_au_budget: pj.gap, realise_a_ce_jour: act ? pj.actual_to_date : null, projection_sur_le_realise: act ? pj.projected_actual : null, ecart_projection_realise: act ? pj.gap_actual : null,
-        realise_par_mois: act ? act.months.map(function (m, i) { return { mois: m, realise: act.monthly[i] }; }).filter(function (x) { return x.realise !== 0; }) : [],
-        realise_par_equipe: act ? act.teams.map(function (t) { return { equipe: t.name, realise_a_ce_jour: t.to_date, realise_annee: t.total }; }) : [], realise_non_rattache_a_une_equipe: act ? act.unattached : null,
-        par_workpackage: pj.by_wp.map(function (w) { return { workpackage: (w.code ? w.code + ' ' : '') + w.name, enveloppe: w.allocated, prevu_annee: w.plan, valeur_acquise: w.ev, projection: w.projected, ecart: w.gap }; }),
-        precisions: 'Le réalisé comptable vient de l’import mensuel (CPN, équipe, mois) : il n’est pas suivi au livrable. Sans réalisé importé, les champs réalisé valent null.' };
+      var project = mustGet('Project', projectId), rv = resolveDecompVersion_(project, 'ref');
+      var v = API_ACTIONS['exercise.tracking']({ projectId: projectId, exerciseId: ex.id, version: 'ref' }, ctx), t = v.totals;
+      return { exercice: Number(ex.year), version_lue_par_le_suivi: rv.version ? rv.version.label : 'version en cours (aucune version validée)', dotation: t.dotation, plan: t.plan, valeur_acquise: t.ev, avancement_pct: t.progress_pct,
+        realise_a_ce_jour: t.actual_to_date, consomme_pct_du_plan: t.consumed_pct, atterrissage: t.landing, reste_sur_dotation: t.remaining, clash: t.clash,
+        par_equipe: v.teams.map(function (x) { return { equipe: x.name, dotation: x.dotation, plan: x.plan, valeur_acquise: x.ev, realise_a_ce_jour: x.actual_to_date, atterrissage: x.landing, reste_sur_dotation: x.remaining }; }),
+        budget_externe: t.external,
+        realise_par_mois: v.actuals.available ? v.actuals.months.map(function (m, i) { return { mois: m, realise: v.actuals.monthly[i] }; }).filter(function (x) { return x.realise !== 0; }) : [],
+        precisions: 'Le plan est annuel (tableau livrable × équipe), sans étalement par mois. Le réalisé comptable est saisi à la main (CPN, équipe, mois) : il n’est pas suivi au livrable. Sans réalisé saisi, les champs réalisé et atterrissage valent null.' };
     }
   };
 }
@@ -7812,9 +7806,8 @@ function detachItem_(itemId, actx) {
   deps.forEach(function (d) { repoSoftDelete('Dependency', d.id, null, actx); });
   var reqs = repoList('MilestoneRequirement', function (r) { return r.milestone_id === itemId || r.deliverable_id === itemId; });
   reqs.forEach(function (r) { repoSoftDelete('MilestoneRequirement', r.id, null, actx); });
-  // Budget et répartition des PO du livrable : la ligne de budget et ses mois, le lien de PO (le montant de la PO reste, « non affecté »).
+  // Budget et répartition des PO du livrable : la ligne de budget, le lien de PO (le montant de la PO reste, « non affecté »).
   repoList('BudgetLine', function (l) { return l.deliverable_id === itemId; }).forEach(function (l) {
-    repoList('BudgetPhasing', function (x) { return x.budget_line_id === l.id; }).forEach(function (x) { repoSoftDelete('BudgetPhasing', x.id, null, actx); });
     repoSoftDelete('BudgetLine', l.id, null, actx);
   });
   repoList('PurchaseOrderLink', function (l) { return l.deliverable_id === itemId; }).forEach(function (l) { repoSoftDelete('PurchaseOrderLink', l.id, null, actx); });
@@ -8139,15 +8132,15 @@ defineAction('teams.delete', function (p, ctx) {
 // ======================================================================
 
 /**
- * PPM Core — 0.9.0 : budget, CPN (lot 3, première partie) ; 0.17.1 : plus de taux journalier, parts par équipe.
+ * PPM Core — 0.9.0 : budget, CPN (lot 3, première partie) ; 0.17.1 : parts par équipe ; 0.21.0 : plan budgétaire sans dimension de temps.
  *
  *  - CPN : code financier d'un projet, avec sa désignation. Un workpackage de premier niveau (le « sous-projet »)
  *    peut porter le sien. Un CPN ne couvre qu'un seul projet, au maximum. Les analyses budgétaires se font par CPN.
  *  - Lignes de budget par livrable : une PART PAR ÉQUIPE, en montant libre (la conversion en jours est un calcul à la demande, à partir du coût d'un ETP du pays de l'équipe : 60_Exercise.gs),
- *    ou un FORFAIT auprès d'une ressource externe. Il n'y a plus aucun taux journalier. Étalement automatique (équipe : au prorata des jours ouvrés de chaque mois ; forfait : en totalité
- *    le mois de la livraison), modifiable à la main. Un livrable appartient à un seul exercice budgétaire (voir exerciseForLine_).
+ *    ou un FORFAIT (colonne « Externe ») auprès d'une ressource externe. Aucun taux journalier ni étalement par mois : un montant est une valeur annuelle. Un livrable appartient à un seul
+ *    exercice budgétaire (voir exerciseForLine_).
  *  - Bilan par CPN : budget (interne, externe) face aux commandes d'achat engagées (44_Orders.gs).
- * Fonctions de calcul pures : phasingFor_, computeBalance_.
+ * Fonction de calcul pure : computeBalance_.
  */
 
 var CPN_RE = /^[A-Z0-9][A-Z0-9 ._\/-]{0,29}$/;
@@ -8240,78 +8233,30 @@ function applyWpCpn_(ctx, wp, values, out) {
   out.cpn_label = label;
 }
 
-// ---------------------------------------------------------------- grille de taux
+// ---------------------------------------------------------------- le plan budgétaire : une cellule livrable × équipe
 
-// ---------------------------------------------------------------- étalement (fonction pure)
+/**
+ * LE PLAN BUDGÉTAIRE (0.21.0). Le budget d'un projet est UN tableau annuel : une ligne par livrable, une colonne par équipe (plus la colonne « Externe »), un montant libre par cellule. Il n'y a plus
+ * de dimension de temps (ni étalement par mois, ni enveloppe saisie) : une cellule est une part d'équipe sur un livrable (BudgetLine « Équipe »), un forfait externe est une ligne « Forfait ».
+ * Les totaux par workpackage, par équipe et par projet sont des SOMMES du plan ; la seule autre saisie est la dotation de l'équipe (60_Exercise.gs).
+ */
 
 function monthOf_(d) { return String(d).slice(0, 7); }
 
-/** Étalement d'une ligne : [{ month, amount }], somme = montant planifié. hol : jours fériés du calendrier du projet. */
-function phasingFor_(line, deliverable, hol) {
-  var amount = round2(Number(line.planned_amount) || 0);
-  var start = deliverable.planned_start || '', finish = deliverable.planned_finish || '';
-  if (!amount || (!start && !finish)) return [];
-  if (line.cost_type === 'Forfait' || !start || !finish) return [{ month: monthOf_(finish || start), amount: amount }];
-  var counts = {}, total = 0, months = [];
-  for (var d = start; d <= finish; d = addCalendarDays(d, 1)) {
-    if (!isWorkingDay(d, hol)) continue;
-    var m = monthOf_(d);
-    if (!counts[m]) { counts[m] = 0; months.push(m); }
-    counts[m]++; total++;
-  }
-  if (!total) return [{ month: monthOf_(finish), amount: amount }];
-  var out = [], acc = 0;
-  months.forEach(function (m, i) {
-    var a = i === months.length - 1 ? round2(amount - acc) : round2(amount * counts[m] / total);
-    acc = round2(acc + a);
-    out.push({ month: m, amount: a });
-  });
-  return out;
-}
-
-function holidaysOfProject_(projectId) {
-  var project = repoGet('Project', projectId);
-  return loadHolidayMap((project && project.holiday_country) || 'FR');
-}
-
-/** Remplace l'étalement d'une ligne (mode auto : recalculé depuis les dates du livrable). */
-function writePhasing_(line, months, actx) {
-  repoList('BudgetPhasing', function (x) { return x.budget_line_id === line.id; }).forEach(function (x) { repoSoftDelete('BudgetPhasing', x.id, null, actx); });
-  months.forEach(function (m) { repoInsert('BudgetPhasing', { budget_line_id: line.id, month: m.month, amount: m.amount }, actx); });
-}
-
-function rephaseLine_(line, deliverable, actx) {
-  writePhasing_(line, phasingFor_(line, deliverable, holidaysOfProject_(deliverable.project_id)), actx);
-}
-
-/** Les dates d'un livrable changent : les lignes en étalement automatique suivent. Ne bloque jamais la saisie. */
-function hookRephase(before, rec) {
-  try {
-    if (rec.item_type !== 'Livrable' || !before) return;
-    if (String(before.planned_start || '') === String(rec.planned_start || '') && String(before.planned_finish || '') === String(rec.planned_finish || '')) return;
-    var actx = { actor: 'ppm-core', source: 'core' };
-    repoList('BudgetLine', function (l) { return l.deliverable_id === rec.id && l.phasing_mode !== 'manuel'; }).forEach(function (l) { rephaseLine_(l, rec, actx); });
-  } catch (err) {
-    console.error('Étalement : ' + (err && err.message ? err.message : err));
-  }
-}
-
-// ---------------------------------------------------------------- lignes de budget
-
-/** Une ligne est « externe » si sa ressource l'est (jours × taux ou forfait) ; les anciennes lignes au forfait le sont par nature. */
+/** Une ligne est « externe » si c'est un forfait auprès d'une ressource externe (colonne Externe du plan). */
 function lineIsExternal_(l) { return isTrue(l.is_external) || l.cost_type === 'Forfait'; }
 
 function budgetNumber_(v, label, max) {
-  var n = Number(v);
+  var n = Number(String(v === null || v === undefined ? '' : v).replace(',', '.'));
   if (isBlank(v) || isNaN(n) || n < 0 || n > (max || 1e9)) throw new PpmError('VALIDATION', label + ' : un nombre positif ou nul.');
   return n;
 }
 
 /**
- * La vue d'une ligne de budget. `lookups` : { resById, teamById }. Une part d'équipe dit son équivalent en jours (montant ÷ coût journalier de l'ETP du pays de l'équipe, pour l'année de l'exercice
+ * La vue d'une ligne de budget. `lookups` : { resById, teamById, exById }. Une part d'équipe dit son équivalent en jours (montant ÷ coût journalier de l'ETP du pays de l'équipe, pour l'année de l'exercice
  * du livrable, à défaut celle de ses dates) ; `days_equivalent` est null tant que le coût d'un ETP du pays et de l'année n'est pas paramétré : on n'invente jamais un chiffre.
  */
-function lineView_(l, ctx, phasing, lookups, deliverable) {
+function lineView_(l, ctx, lookups, deliverable) {
   var res = lookups.resById[l.resource_id], team = lookups.teamById[l.team_id];
   var isTeam = l.cost_type === 'Équipe';
   var ex = deliverable && !isBlank(deliverable.exercise_id) && lookups.exById ? lookups.exById[deliverable.exercise_id] : null;
@@ -8324,10 +8269,12 @@ function lineView_(l, ctx, phasing, lookups, deliverable) {
     team: isTeam ? { id: l.team_id || '', name: team ? team.name : '', country: country } : null,
     external: lineIsExternal_(l), cost_type: l.cost_type,
     fixed_amount: isBlank(l.fixed_amount) ? null : Number(l.fixed_amount), planned_amount: Number(l.planned_amount) || 0,
-    days_equivalent: isTeam && team ? daysFromAmount_(Number(l.planned_amount) || 0, country, year) : null,
-    phasing_mode: l.phasing_mode === 'manuel' ? 'manuel' : 'auto',
-    phasing: (phasing || []).map(function (x) { return { month: x.month, amount: Number(x.amount) || 0 }; }).sort(function (a, b) { return a.month < b.month ? -1 : 1; })
+    days_equivalent: isTeam && team ? daysFromAmount_(Number(l.planned_amount) || 0, country, year) : null
   };
+}
+
+function budgetViewLookups_(extraRes) {
+  return { resById: indexBy_(extraRes || repoList('Resource')), teamById: indexBy_(repoList('HierarchicalTeam')), exById: indexBy_(repoList('Exercise')) };
 }
 
 defineAction('budget.line.save', function (p, ctx) {
@@ -8343,7 +8290,7 @@ defineAction('budget.line.save', function (p, ctx) {
     // une part d'équipe (team_id + montant libre) ou un forfait auprès d'une ressource externe (resource_id + forfait) ; le type d'une ligne existante ne change pas
     var isTeam = line ? line.cost_type === 'Équipe' : !isBlank(v.team_id);
     if (line && (isTeam ? !isBlank(v.resource_id) : !isBlank(v.team_id))) throw new PpmError('VALIDATION', 'Le type d’une ligne ne change pas : supprimez-la puis créez-en une autre.');
-    var out, who;
+    var out;
     if (isTeam) {
       var teamId = 'team_id' in v && !isBlank(v.team_id) ? v.team_id : (line ? line.team_id : requireParam(v, 'team_id'));
       var team = repoGet('HierarchicalTeam', teamId);
@@ -8363,17 +8310,38 @@ defineAction('budget.line.save', function (p, ctx) {
       }
       var fixed = budgetNumber_('fixed_amount' in v ? v.fixed_amount : (line ? line.fixed_amount : ''), 'Forfait');
       out = { resource_id: resId, team_id: '', cost_type: 'Forfait', fixed_amount: round2(fixed), planned_amount: round2(fixed), is_external: true };
-      who = res;
     }
-    var amountChanged = !line || Number(line.planned_amount) !== out.planned_amount;
-    if (!line || amountChanged || line.phasing_mode !== 'manuel') out.phasing_mode = 'auto';
     var rec = line ? repoUpdate('BudgetLine', line.id, out, p.version, ctx.actx)
       : repoInsert('BudgetLine', Object.assign({ deliverable_id: deliverable.id }, out), ctx.actx);
     if (ex && isBlank(deliverable.exercise_id)) deliverable = repoUpdate('PlanItem', deliverable.id, { exercise_id: ex.id }, null, ctx.actx);   // un livrable n'a qu'un exercice : celui de sa première part
-    if (out.phasing_mode === 'auto') rephaseLine_(rec, deliverable, ctx.actx);
-    var phasing = repoList('BudgetPhasing', function (x) { return x.budget_line_id === rec.id; });
-    var teamById = indexBy_(repoList('HierarchicalTeam')), resById = who ? indexBy_([who]) : {};
-    return lineView_(rec, ctx, phasing, { resById: resById, teamById: teamById, exById: indexBy_(repoList('Exercise')) }, deliverable);
+    return lineView_(rec, ctx, budgetViewLookups_(), deliverable);
+  });
+});
+
+/**
+ * Une CELLULE du plan : le montant d'une équipe sur un livrable. Un montant vide (ou nul) retire la part ; sinon elle est créée ou remplacée. C'est la saisie du tableau livrable × équipe.
+ * Mêmes droits et mêmes règles que `budget.line.save` : qui peut modifier le budget du livrable, jamais dans un exercice clos, un livrable n'a qu'un exercice.
+ */
+defineAction('budget.cell.set', function (p, ctx) {
+  etpReset_();
+  var deliverable = mustGet('PlanItem', requireParam(p, 'deliverableId'));
+  if (deliverable.item_type !== 'Livrable') throw new PpmError('VALIDATION', 'Le budget se rattache à un livrable, pas à un jalon.');
+  requireCan(ctx, 'budget.edit', { type: 'planitem', id: deliverable.id });
+  var team = mustGet('HierarchicalTeam', requireParam(p, 'teamId'));
+  if (isTrue(team.deleted)) throw new PpmError('VALIDATION', 'Équipe introuvable.');
+  var clear = isBlank(p.amount) || Number(String(p.amount).replace(',', '.')) === 0;
+  var amount = clear ? 0 : round2(budgetNumber_(p.amount, 'Montant'));
+  return withLock(function () {
+    var ex = exerciseForLine_(deliverable, p.exerciseId);
+    var line = repoList('BudgetLine', function (l) { return l.deliverable_id === deliverable.id && l.team_id === team.id; })[0] || null;
+    if (clear) {
+      if (line) repoSoftDelete('BudgetLine', line.id, null, ctx.actx);
+      return { cleared: true, deliverable_id: deliverable.id, team_id: team.id };
+    }
+    var vals = { team_id: team.id, resource_id: '', cost_type: 'Équipe', planned_amount: amount, fixed_amount: '', is_external: false };
+    var rec = line ? repoUpdate('BudgetLine', line.id, vals, null, ctx.actx) : repoInsert('BudgetLine', Object.assign({ deliverable_id: deliverable.id }, vals), ctx.actx);
+    if (ex && isBlank(deliverable.exercise_id)) deliverable = repoUpdate('PlanItem', deliverable.id, { exercise_id: ex.id }, null, ctx.actx);
+    return lineView_(rec, ctx, budgetViewLookups_(), deliverable);
   });
 });
 
@@ -8382,41 +8350,8 @@ defineAction('budget.line.delete', function (p, ctx) {
   requireCan(ctx, 'budget.edit', { type: 'planitem', id: line.deliverable_id });
   return withLock(function () {
     exerciseForLine_(mustGet('PlanItem', line.deliverable_id), '');   // rien ne se retire d'un exercice clos
-    repoList('BudgetPhasing', function (x) { return x.budget_line_id === line.id; }).forEach(function (x) { repoSoftDelete('BudgetPhasing', x.id, null, ctx.actx); });
     repoSoftDelete('BudgetLine', line.id, p.version, ctx.actx);
     return { deleted: true };
-  });
-});
-
-/** Étalement à la main : la somme doit égaler le montant planifié de la ligne. mode = 'auto' revient au calcul. */
-defineAction('budget.phasing.set', function (p, ctx) {
-  var line = mustGet('BudgetLine', requireParam(p, 'lineId'));
-  var deliverable = mustGet('PlanItem', line.deliverable_id);
-  requireCan(ctx, 'budget.edit', { type: 'planitem', id: deliverable.id });
-  return withLock(function () {
-    if (p.mode === 'auto') {
-      var rec0 = repoUpdate('BudgetLine', line.id, { phasing_mode: 'auto' }, null, ctx.actx);
-      rephaseLine_(rec0, deliverable, ctx.actx);
-      return { mode: 'auto', months: repoList('BudgetPhasing', function (x) { return x.budget_line_id === line.id; }).map(function (x) { return { month: x.month, amount: Number(x.amount) }; }) };
-    }
-    var seen = {}, months = [], sum = 0;
-    (Array.isArray(p.months) ? p.months : []).forEach(function (m) {
-      var month = String(m && m.month || '').trim();
-      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new PpmError('VALIDATION', 'Mois invalide : « ' + month + ' » (format AAAA-MM).');
-      if (seen[month]) throw new PpmError('VALIDATION', 'Le mois ' + month + ' est indiqué deux fois.');
-      seen[month] = true;
-      var a = budgetNumber_(m.amount, 'Montant de ' + month);
-      months.push({ month: month, amount: round2(a) });
-      sum = round2(sum + a);
-    });
-    if (!months.length) throw new PpmError('VALIDATION', 'Indiquez au moins un mois.');
-    if (Math.abs(sum - Number(line.planned_amount)) > 0.005) {
-      throw new PpmError('VALIDATION', 'La somme des mois (' + sum + ') doit égaler le montant de la ligne (' + Number(line.planned_amount) + ').');
-    }
-    months.sort(function (a, b) { return a.month < b.month ? -1 : 1; });
-    repoUpdate('BudgetLine', line.id, { phasing_mode: 'manuel' }, null, ctx.actx);
-    writePhasing_(line, months, ctx.actx);
-    return { mode: 'manuel', months: months };
   });
 });
 
@@ -8437,67 +8372,6 @@ defineAction('budget.access', function (p, ctx) {
   var project = mustGet('Project', requireParam(p, 'projectId'));
   var a = budgetAccess_(ctx, project.id);
   return Object.assign({ project: { id: project.id, code: project.code, name: project.name, cpn: project.cpn || '', cpn_label: project.cpn_label || '', version: project.version } }, a);
-});
-
-/** Lignes de budget d'un projet, par livrable, avec étalement ; les lignes hors périmètre de l'utilisateur sont masquées. */
-defineAction('budget.get', function (p, ctx) {
-  etpReset_();
-  var project = mustGet('Project', requireParam(p, 'projectId'));
-  var access = budgetAccess_(ctx, project.id);
-  if (!access.budget) throw new PpmError('FORBIDDEN', 'Le budget est réservé aux responsables de budget du projet.');
-  var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; });
-  var wpById = indexBy_(wps);
-  var exercises = repoList('Exercise'), exById = indexBy_(exercises), exFilter = String(p.exerciseId || '');
-  // exerciseId : un exercice (ses livrables), « __none » (les livrables sans exercice) ou vide (tous)
-  var allItems = repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable'; });
-  var onlyId = String(p.deliverableId || '');   // un seul livrable (la fenêtre « Coût du livrable » : toutes ses lignes, quel que soit l'exercice)
-  var items = allItems.filter(function (i) { return onlyId ? i.id === onlyId : (!exFilter || (exFilter === '__none' ? isBlank(i.exercise_id) : i.exercise_id === exFilter)); });
-  var editable = {};
-  items.forEach(function (i) { if (access.all || can(ctx, 'budget.edit', { type: 'planitem', id: i.id })) editable[i.id] = true; });
-  var lines = repoList('BudgetLine', function (l) { return editable[l.deliverable_id]; });
-  var lineIds = {}; lines.forEach(function (l) { lineIds[l.id] = true; });
-  var phasing = {};
-  repoList('BudgetPhasing', function (x) { return lineIds[x.budget_line_id]; }).forEach(function (x) { (phasing[x.budget_line_id] = phasing[x.budget_line_id] || []).push(x); });
-  var resById = indexBy_(repoList('Resource')), teamList = repoList('HierarchicalTeam'), lookups = { resById: resById, teamById: indexBy_(teamList), exById: exById };
-  var itemsById = indexBy_(items);
-  var views = lines.map(function (l) { return lineView_(l, ctx, phasing[l.id], lookups, itemsById[l.deliverable_id]); });
-  var topWp = function (item) {
-    var w = item.wp_id ? wpById[item.wp_id] : null, guard = 0;
-    while (w && w.parent_wp_id && wpById[w.parent_wp_id] && guard++ < 5) w = wpById[w.parent_wp_id];
-    return w;
-  };
-  var byId = indexBy_(items);
-  var months = {}, byWp = {};
-  views.forEach(function (l) {
-    l.phasing.forEach(function (m) { months[m.month] = round2((months[m.month] || 0) + m.amount); });
-    var it = byId[l.deliverable_id], w = it ? topWp(it) : null, key = w ? w.id : '';
-    var g = byWp[key] = byWp[key] || { wp_id: key, code: w ? w.wbs_code || '' : '', name: w ? w.name : 'Sans workpackage', internal: 0, external: 0, total: 0 };
-    if (l.external) g.external = round2(g.external + l.planned_amount); else g.internal = round2(g.internal + l.planned_amount);
-    g.total = round2(g.internal + g.external);
-  });
-  var withBudget = {}; lines.forEach(function (l) { withBudget[l.deliverable_id] = true; });
-  var cpnOf = function (item) {
-    var w = item.wp_id ? wpById[item.wp_id] : null, guard = 0;
-    while (w && guard++ < 5) { if (!isBlank(w.cpn)) return normCpn_(w.cpn); w = w.parent_wp_id ? wpById[w.parent_wp_id] : null; }
-    return normCpn_(project.cpn);
-  };
-  var wpLabel = function (item) { var w = item.wp_id ? wpById[item.wp_id] : null; return w ? (w.wbs_code ? w.wbs_code + ' ' : '') + w.name : ''; };
-  var unassigned = allItems.filter(function (i) { return isBlank(i.exercise_id) && (access.all || can(ctx, 'budget.edit', { type: 'planitem', id: i.id })); })
-    .map(function (i) { return { id: i.id, name: i.name, wp: wpLabel(i) }; }).sort(function (a, b) { return String(a.wp).localeCompare(String(b.wp), 'fr', { numeric: true }) || String(a.name).localeCompare(String(b.name), 'fr'); });
-  var deliverables = items.filter(function (i) { return editable[i.id]; }).map(function (i) {
-    return { id: i.id, name: i.name, wp: wpLabel(i), cpn: cpnOf(i), start: i.planned_start || null, finish: i.planned_finish || null, has_budget: !!withBudget[i.id],
-      exercise_id: i.exercise_id || '', exercise_year: i.exercise_id && exById[i.exercise_id] ? Number(exById[i.exercise_id].year) : null };
-  }).sort(function (a, b) { return String(a.wp).localeCompare(String(b.wp), 'fr', { numeric: true }) || String(a.name).localeCompare(String(b.name), 'fr'); });
-  var total = 0, ext = 0;
-  views.forEach(function (l) { total = round2(total + l.planned_amount); if (l.external) ext = round2(ext + l.planned_amount); });
-  return {
-    project: { id: project.id, code: project.code, name: project.name }, partial: !access.all,
-    lines: views, deliverables: deliverables, unassigned: unassigned, exercises: exercises.map(exerciseView_).sort(function (a, b) { return b.year - a.year; }),
-    teams: teamList.map(function (t) { return { id: t.id, name: t.name, country: t.country || 'FR', level: teamLevel_(t) }; }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); }),
-    totals: { total: total, external: ext, internal: round2(total - ext), by_wp: Object.keys(byWp).map(function (k) { return byWp[k]; }).sort(function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); }) },
-    months: Object.keys(months).sort().map(function (m) { return { month: m, planned: months[m] }; }),
-    missing: { deliverables_without_budget: deliverables.filter(function (d) { return !d.has_budget; }).length, undated_lines: views.filter(function (l) { return !l.phasing.length; }).length }
-  };
 });
 
 // ---------------------------------------------------------------- bilan par CPN (fonction pure)
@@ -8555,28 +8429,17 @@ function computeBalance_(d) {
   return { cpns: cpns, totals: Object.assign(tot, { remaining_external: round2(tot.budget.external - tot.po.committed), overrun: tot.po.committed > tot.budget.external + 0.005 }) };
 }
 
-/** Engagements par mois : chaque PO engagée compte en totalité le mois de son lancement. */
-function committedByMonth_(pos) {
-  var out = {};
-  pos.forEach(function (po) {
-    if (PO_COMMITTED.indexOf(po.status) < 0 || isBlank(po.launched_on)) return;
-    var m = monthOf_(po.launched_on);
-    out[m] = round2((out[m] || 0) + (Number(po.amount) || 0));
-  });
-  return out;
-}
-
 defineAction('budget.balance', function (p, ctx) {
   var project = mustGet('Project', requireParam(p, 'projectId'));
   var access = budgetAccess_(ctx, project.id);
   if (!access.all) throw new PpmError('FORBIDDEN', 'Le bilan du projet est réservé à ses responsables de budget.');
   var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; });
-  // un exercice demandé : les livrables de son exercice et les commandes de son année seulement (étanchéité, 0.19.3)
+  // un exercice demandé : les livrables de son exercice et les commandes de son année seulement (étanchéité)
   var exB = isBlank(p.exerciseId) ? null : mustGet('Exercise', p.exerciseId);
   var items = repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable' && (!exB || i.exercise_id === exB.id); });
   var ids = {}; items.forEach(function (i) { ids[i.id] = true; });
   var lines = repoList('BudgetLine', function (l) { return ids[l.deliverable_id]; });
-  // une version de la décomposition (0.20.0) : le suivi lit la version de référence, pas le brouillon
+  // une version du plan (une baseline) : le suivi lit la version de référence, pas le brouillon
   var rvB = exB && !isBlank(p.version) ? resolveDecompVersion_(project, p.version) : null;
   if (rvB && rvB.version) {
     var Dv = decompDataset_(project, exB, rvB.version);
@@ -8587,14 +8450,7 @@ defineAction('budget.balance', function (p, ctx) {
   var pos = projectOrders_(project.id, wps);
   if (exB) pos = pos.filter(function (o) { return poYear_(o) === Number(exB.year); });
   var bal = computeBalance_({ project: project, wps: wps, items: items, lines: lines, pos: pos });
-  var planned = {};
-  repoList('BudgetPhasing', function (x) { return lines.some(function (l) { return l.id === x.budget_line_id; }); }).forEach(function (x) { planned[x.month] = round2((planned[x.month] || 0) + Number(x.amount)); });
-  var committed = committedByMonth_(pos), months = {};
-  Object.keys(planned).concat(Object.keys(committed)).forEach(function (m) { months[m] = true; });
-  return Object.assign({
-    project: { id: project.id, code: project.code, name: project.name, cpn: project.cpn || '', cpn_label: project.cpn_label || '' },
-    months: Object.keys(months).sort().map(function (m) { return { month: m, planned: planned[m] || 0, committed: committed[m] || 0 }; })
-  }, bal);
+  return Object.assign({ project: { id: project.id, code: project.code, name: project.name, cpn: project.cpn || '', cpn_label: project.cpn_label || '' } }, bal);
 });
 
 // ======================================================================
@@ -9098,24 +8954,26 @@ function qualityKpi_(d) {
 
 /** COÛT : data = { balance (bilan par CPN ou null), lateGr, withoutBudget, showAmounts }. Aucun montant si showAmounts est faux. */
 function costKpi_(d) {
-  var b = d.balance;
-  if (!b || (!b.totals.budget.total && !b.totals.po.count)) {
+  var b = d.balance, clashes = Number(d.clashes) || 0;
+  if (!clashes && (!b || (!b.totals.budget.total && !b.totals.po.count))) {
     return { level: 'none', label: KPI_LABELS.none, headline: 'Budget non renseigné', facts: [], metrics: { engaged_pct: null } };
   }
+  b = b || { totals: { budget: { total: 0, external: 0, internal: 0 }, po: { count: 0, committed: 0, planned: 0 }, overrun: false }, cpns: [] };
   var ext = b.totals.budget.external, committed = b.totals.po.committed;
   var pct = ext > 0 ? Math.round(100 * committed / ext) : null;
   var cpnOverrun = b.cpns.some(function (g) { return g.overrun && g.budget && g.budget.external > 0; }); // les analyses se font par CPN : un seul dépassement compte
   var overrun = b.totals.overrun || cpnOverrun || (ext === 0 && committed > 0);
   var level = 'ok';
   if ((pct !== null && pct >= 85) || d.lateGr > 0) level = 'warn';
-  if (overrun) level = 'alert';
+  if (overrun || clashes) level = 'alert';
   var facts = [];
+  if (clashes) facts.push(pl_(clashes, 'équipe dont le plan dépasse la dotation (clash)', 'équipes dont le plan dépasse la dotation (clash)'));
   if (pct !== null) facts.push('Engagé : ' + pct + ' % du budget externe' + (d.showAmounts ? ' (' + eurAmount_(committed) + ' sur ' + eurAmount_(ext) + ')' : ''));
   if (ext === 0 && committed > 0) facts.push('Des PO sont engagées sans budget externe');
   b.cpns.filter(function (g) { return g.overrun && g.cpn; }).forEach(function (g) { facts.push('CPN ' + g.cpn + ' : budget externe dépassé'); });
   if (d.lateGr) facts.push(pl_(d.lateGr, 'GR en retard', 'GR en retard'));
   if (d.withoutBudget) facts.push(pl_(d.withoutBudget, 'livrable sans budget', 'livrables sans budget'));
-  var headline = level === 'ok' ? 'Budget externe maîtrisé' : overrun ? (cpnOverrun && !b.totals.overrun ? 'Budget externe dépassé sur un CPN' : 'Budget externe dépassé') : d.lateGr ? 'GR en retard' : 'Budget externe bientôt consommé';
+  var headline = clashes && !overrun ? 'Plan au-delà de la dotation' : level === 'ok' ? 'Budget externe maîtrisé' : overrun ? (cpnOverrun && !b.totals.overrun ? 'Budget externe dépassé sur un CPN' : 'Budget externe dépassé') : d.lateGr ? 'GR en retard' : 'Budget externe bientôt consommé';
   return { level: level, label: KPI_LABELS[level], headline: headline, facts: facts, metrics: { engaged_pct: pct, late_gr: d.lateGr, without_budget: d.withoutBudget } };
 }
 
@@ -9163,8 +9021,19 @@ function projectKpis_(data, project, today, ctx) {
   var showAmounts = !!ctx && (ctx.isAdmin || can(ctx, 'budget.edit', { type: 'project', id: project.id })); // les montants du projet : chef de projet et au-dessus ; un Workpackage leader ne voit que le budget de son workpackage (page Budget)
   var time = timeKpi_({ project: project, items: items, deps: deps, baselineEnd: baselineEndOf_(project), today: today, holFor: data.holFor });
   var quality = qualityKpi_({ project: project, risks: data.risks.filter(function (r) { return r.project_id === project.id; }), insights: data.insights.filter(function (x) { return x.project_id === project.id; }), items: items, today: today });
-  var cost = costKpi_({ balance: balance, lateGr: lateGr, withoutBudget: lines.length ? deliverables.filter(function (i) { return !hasLine[i.id]; }).length : 0, showAmounts: showAmounts });
+  var cost = costKpi_({ balance: balance, clashes: clashCount_(project, ctx), lateGr: lateGr, withoutBudget: lines.length ? deliverables.filter(function (i) { return !hasLine[i.id]; }).length : 0, showAmounts: showAmounts });
   return { time: time, quality: quality, cost: cost, overall: overallLevel_([time.level, quality.level, cost.level]) };
+}
+
+/** Le nombre d'équipes en clash (plan > dotation) du projet sur ses exercices non clos, pour qui lit l'exercice ; 0 sinon. Même calcul que la page Budget (exerciseTable_). */
+function clashCount_(project, ctx) {
+  if (!ctx || !(ctx.isAdmin || can(ctx, 'exercise.read', { type: 'project', id: project.id }))) return 0;
+  var n = 0;
+  repoList('Exercise', function (e) { return !isTrue(e.deleted) && e.status !== 'Clos'; }).forEach(function (ex) {
+    var t = exerciseTable_(ex, exerciseData_(ex, [project.id]), project.id);
+    t.rows.concat(t.orphans, t.unruled).forEach(function (r) { if (r.clash) n++; });
+  });
+  return n;
 }
 
 /** PO d'un projet à partir d'une liste déjà chargée (même règle que projectOrders_ : par CPN du projet et de ses sous-projets). */
@@ -9591,15 +9460,6 @@ function demoPlan_(d, codes) {
   });
 }
 
-/** Enveloppe du projet : 8 % au-dessus du coût prévu, répartie 10 % au-dessus du coût de chaque workpackage de premier niveau, sauf un (15 % en dessous) pour montrer un dépassement. */
-function demoEnvelope_(d) {
-  var p1 = d.project('NAC-1'), v = d.call('budget.envelope.get', { projectId: p1.id });
-  var top = v.rows.filter(function (r) { return r.depth === 0 && r.cost > 0; });
-  var allocations = top.map(function (r, i) { return { wpId: r.wp_id, amount: Math.round(r.cost * (i === 1 ? 0.85 : 1.1)) }; });
-  var spread = allocations.reduce(function (s, a) { return s + a.amount; }, 0);
-  d.call('budget.envelope.set', { projectId: p1.id, authorized: Math.max(Math.round(v.totals.cost * 1.08), spread), allocations: allocations });
-}
-
 /** Une tranche de la migration des rôles (A9_MIGRER_ROLES) sur la démo ; sans effet une fois la migration faite. */
 function demoLevels_(d) {
   rolesMigrate_(d.a, false);
@@ -9710,8 +9570,8 @@ function demoExercises_() {
 }
 
 /**
- * Budget par équipe de NAC-1. Exercice en exécution : attendu et accordé d'après les parts existantes (l'équipe ESS est accordée en dessous de ses parts : un clash). Exercice en préparation :
- * cinq livrables de l'année suivante avec leurs parts par équipe, et un budget attendu par équipe (une équipe a de l'argent non réparti, une autre est en dépassement).
+ * Budget par équipe de NAC-1. Exercice en exécution : une dotation d'après les parts existantes (l'équipe ESS est dotée en dessous de ses parts : un clash). Exercice en préparation :
+ * cinq livrables de l'année suivante avec leurs parts par équipe, et une dotation par équipe (une équipe a de l'argent non réparti, une autre est en dépassement).
  */
 function demoExercise_(d) {
   var ex = demoExercises_(), project = d.project('NAC-1');
@@ -9723,7 +9583,7 @@ function demoExercise_(d) {
   Object.keys(parts).forEach(function (tid) {
     var t = repoGet('HierarchicalTeam', tid), p = parts[tid];
     repoInsert('TeamBudget', { exercise_id: ex.exec.id, project_id: project.id, team_id: tid,
-      expected: Math.round(p * 1.12 / 1000) * 1000, granted: Math.round(p * (t.name === 'ESS' ? 0.82 : 1.04) / 1000) * 1000 }, d.a);
+      amount: Math.round(p * (t.name === 'ESS' ? 0.82 : 1.04) / 1000) * 1000 }, d.a);
   });
   var wp = repoList('WorkPackage', function (w) { return w.project_id === project.id && isBlank(w.parent_wp_id); })[0];
   // dates indicatives, dans la fenêtre du planning existant : des livrables datés de l'an prochain déplaceraient le chemin critique du projet (et ses constats)
@@ -9735,7 +9595,7 @@ function demoExercise_(d) {
     n[1].forEach(function (s) { d.call('budget.line.save', { values: { deliverable_id: item.id, team_id: demoTeam_(s[0]).id, planned_amount: s[1] }, exerciseId: ex.prep.id }); });
   });
   DEMO_EXPECTED.forEach(function (e) {
-    repoInsert('TeamBudget', { exercise_id: ex.prep.id, project_id: project.id, team_id: demoTeam_(e[0]).id, expected: e[1] }, d.a);
+    repoInsert('TeamBudget', { exercise_id: ex.prep.id, project_id: project.id, team_id: demoTeam_(e[0]).id, amount: e[1] }, d.a);
   });
 }
 
@@ -9782,7 +9642,6 @@ var DEMO_STEPS = [
   { name: 'Budget de NAC-1 (1/2)', run: function (d) { demoBudget_(d, 0, 20); } },
   { name: 'Budget de NAC-1 (2/2)', run: function (d) { demoBudget_(d, 20, 60); } },
   { name: 'Budget par équipe : exercices en exécution et en préparation', run: function (d) { demoExercise_(d); } },
-  { name: 'Enveloppe budgétaire de NAC-1', run: function (d) { demoEnvelope_(d); } },
   { name: 'Commandes d’achat', run: function (d) { demoOrders_(d); } },
   { name: 'Actualités de NAC-1 : réunions', run: function (d) { demoNewsMeetings_(d); } },
   { name: 'Actualités : actions, synthèse du jour, réunions à trier', run: function (d) { demoNewsActions_(d); } },
@@ -9970,7 +9829,6 @@ function demoInventory_() {
   del.MilestoneRequirement = repoList('MilestoneRequirement', function (x) { return itemIds[x.milestone_id] || itemIds[x.deliverable_id]; });
   del.BudgetLine = repoList('BudgetLine', function (x) { return itemIds[x.deliverable_id]; });
   var lineIds = idsOf(del.BudgetLine);
-  del.BudgetPhasing = repoList('BudgetPhasing', function (x) { return lineIds[x.budget_line_id]; });
   del.ProgressUpdate = repoList('ProgressUpdate', function (x) { return itemIds[x.deliverable_id]; });
   var linkRows = repoList('PurchaseOrderLink'), mine = linkRows.filter(function (x) { return itemIds[x.deliverable_id]; });
   del.PurchaseOrderLink = mine;
@@ -10033,7 +9891,7 @@ function demoInventory_() {
   del.HierarchicalTeam = teams.filter(function (t) { return teamNames[t.name] && !keepTeam[t.id]; });
   var teamGone = idsOf(del.HierarchicalTeam);
   detach = detach.filter(function (r) { return teamGone[r.team_id]; });
-  var order = ['NewsAction', 'NewsDigest', 'Meeting', 'Dependency', 'MilestoneRequirement', 'BudgetPhasing', 'BudgetLine', 'TeamBudget', 'PurchaseOrderLink', 'PurchaseOrder', 'ProgressUpdate', 'RiskOpportunity', 'Insight',
+  var order = ['NewsAction', 'NewsDigest', 'Meeting', 'Dependency', 'MilestoneRequirement', 'BudgetLine', 'TeamBudget', 'PurchaseOrderLink', 'PurchaseOrder', 'ProgressUpdate', 'RiskOpportunity', 'Insight',
     'Baseline', 'RoleAssignment', 'PlanItem', 'WorkPackage', 'Project', 'Program', 'HierarchicalTeam', 'Resource'];
   var total = 0; order.forEach(function (t) { total += del[t].length; });
   if (!total && detach.length) total = detach.length;
@@ -10043,7 +9901,7 @@ function demoInventory_() {
 var OLD_DEMO_LABELS = { // [au singulier, au pluriel]
   Program: ['programme', 'programmes'], Project: ['projet', 'projets'], WorkPackage: ['workpackage', 'workpackages'], PlanItem: ['livrable ou jalon', 'livrables ou jalons'],
   Dependency: ['dépendance', 'dépendances'], MilestoneRequirement: ['exigence de jalon', 'exigences de jalon'], BudgetLine: ['ligne de budget', 'lignes de budget'], TeamBudget: ['budget d’équipe', 'budgets d’équipe'],
-  BudgetPhasing: ['étalement', 'étalements'], PurchaseOrder: ['commande d’achat', 'commandes d’achat'], PurchaseOrderLink: ['lien de commande', 'liens de commande'],
+  PurchaseOrder: ['commande d’achat', 'commandes d’achat'], PurchaseOrderLink: ['lien de commande', 'liens de commande'],
   ProgressUpdate: ['mise à jour d’avancement', 'mises à jour d’avancement'], RiskOpportunity: ['risque ou opportunité', 'risques ou opportunités'], Insight: ['constat', 'constats'],
   Baseline: ['baseline', 'baselines'], RoleAssignment: ['rôle', 'rôles'], Resource: ['personne fictive', 'personnes fictives'], HierarchicalTeam: ['équipe', 'équipes'],
   Meeting: ['réunion', 'réunions'], NewsAction: ['action de réunion', 'actions de réunion'], NewsDigest: ['synthèse du matin', 'synthèses du matin']
@@ -10425,7 +10283,7 @@ var DEMO_NEXT_YEAR = [
   ['Dossier de certification v2', [['MAT', 35000], ['ESSV', 25000]], 20, 45]
 ];
 
-/** Le budget attendu de l'exercice en préparation : [équipe, montant]. STR a du budget non réparti, AER est en dépassement, CON n'a encore aucun livrable. */
+/** La dotation de l'exercice en préparation : [équipe, montant]. STR a du budget non réparti, AER est en dépassement, CON n'a encore aucun livrable. */
 var DEMO_EXPECTED = [['STR', 100000], ['AER', 20000], ['ESS', 80000], ['ESSB', 30000], ['IND', 45000], ['SYS', 80000], ['MAT', 40000], ['CON', 30000]];
 
 // ======================================================================
@@ -11532,7 +11390,7 @@ defineAction('admin.sheet.sync', function (p, ctx) {
  * Deux groupes de feuilles sont verrouillés en ÉDITION (la lecture reste ouverte à qui ouvre le classeur : voir la note en fin de fichier) :
  *   - « Rôles et personnes » (RoleAssignment, Role, Resource) : modifiables par les Program Leader, Domain Program Leader et administrateurs.
  *     Resource en fait partie : une personne est reconnue par l'adresse de sa fiche, la modifier reviendrait à prendre le rôle d'une autre.
- *   - « Budget et achats » (BudgetLine, BudgetPhasing, PurchaseOrder, PurchaseOrderLink, EtpCost, Exercise, TeamBudget, ActualImport, ActualLine) : en plus, les chefs de projet.
+ *   - « Budget et achats » (BudgetLine, PurchaseOrder, PurchaseOrderLink, EtpCost, Exercise, TeamBudget, ActualLine) : en plus, les chefs de projet.
  *
  * Personne ne gère ces accès à la main : la liste de ceux qui peuvent modifier chaque groupe se DÉDUIT des rôles actifs (droits `sheet.roles` et `sheet.budget` de
  * la table PERMISSIONS, 00_Config.gs) et des administrateurs, et se recalcule seule quand un rôle ou une fiche change (hook de invalidateTable_), la nuit, et à la demande.
@@ -11547,8 +11405,8 @@ var _protectDirty = false;
 var SHEET_PROTECT_GROUPS = [
   { key: 'roles', label: 'Rôles et personnes', perm: 'sheet.roles', tables: ['RoleAssignment', 'Role', 'Resource'],
     why: 'qui a quel rôle, et à quelle adresse correspond chaque personne (donc qui est qui)' },
-  { key: 'budget', label: 'Budget et achats', perm: 'sheet.budget', tables: ['BudgetLine', 'BudgetPhasing', 'PurchaseOrder', 'PurchaseOrderLink', 'EtpCost', 'Exercise', 'TeamBudget', 'ActualImport', 'ActualLine'],
-    why: 'lignes de budget, étalement, commandes d’achat et grilles de taux' }
+  { key: 'budget', label: 'Budget et achats', perm: 'sheet.budget', tables: ['BudgetLine', 'PurchaseOrder', 'PurchaseOrderLink', 'EtpCost', 'Exercise', 'TeamBudget', 'ActualLine'],
+    why: 'plan budgétaire, dotations, réalisé, commandes d’achat et coût d’un ETP' }
 ];
 
 function sheetProtectOn_() { return getProp(PROP.SHEET_PROTECT, 'oui') !== 'non'; }
@@ -11963,11 +11821,11 @@ defineAction('roles.of', function (p, ctx) {
  * QUI VALIDE. Toute personne dont le meilleur rang sur l'objet est strictement inférieur à celui de l'auteur ; le validateur « nominal » affiché est le niveau présent juste
  * au-dessus dans la chaîne (un Deliverable owner est validé par son Sub-workpackage leader, ou son Workpackage leader s'il n'y en a pas, etc.).
  *
- * QU'EST-CE QUI SE VALIDE. Les données figées par les baselines (BASELINE_FIELDS : dates, responsables, noms, dépendances, lignes de budget, créations et suppressions)
+ * QU'EST-CE QUI SE VALIDE. Les données figées par les baselines (BASELINE_FIELDS : dates, responsables, noms, dépendances, cellules du plan budgétaire, dotations, créations et suppressions)
  * et l'avancement déclaré d'un livrable (`PlanItem.progress_pct`).
  */
 
-var VALIDATION_EXTRA_FIELDS = { PlanItem: ['progress_pct'], Project: ['envelopes_json', 'budget_authorized'], WorkPackage: ['envelopes_json', 'budget_allocated'], Baseline: ['baseline_frozen'] };
+var VALIDATION_EXTRA_FIELDS = { PlanItem: ['progress_pct'], Baseline: ['baseline_frozen'] };
 var VALIDATION_WINDOW_DAYS = 60;   // sans baseline active, le fil remonte aux 60 derniers jours
 
 /** L'événement porte-t-il sur une donnée à valider ? */
@@ -11990,6 +11848,7 @@ function changeScope_(table, rec) {
     case 'PlanItem': return { type: 'planitem', id: rec.id };
     case 'Dependency': return rec.successor_id ? { type: 'planitem', id: rec.successor_id } : null;
     case 'BudgetLine': return rec.deliverable_id ? { type: 'planitem', id: rec.deliverable_id } : null;
+    case 'TeamBudget': return rec.project_id ? { type: 'project', id: rec.project_id } : null;
     case 'Baseline': return rec.scope_type === 'workpackage' && rec.scope_id ? { type: 'workpackage', id: rec.scope_id } : { type: 'project', id: rec.project_id };
     default: return null;
   }
@@ -12109,84 +11968,24 @@ function pendingChangesFor_(ctx, data, project) {
 }
 
 // ======================================================================
-// 55_Envelope.gs
+// 55_Plan.gs
 // ======================================================================
 
 /**
- * PPM Core — 0.15.3 : budget par workpackage, de haut en bas.
+ * PPM Core — 0.21.0 : le PLAN BUDGÉTAIRE, vu comme UN tableau.
  *
- * Le chef de projet fixe l'ENVELOPPE AUTORISÉE du projet (`Project.budget_authorized`) et la répartit entre les workpackages (`WorkPackage.budget_allocated`) ; le Workpackage
- * leader répartit à son tour la sienne entre ses sous-workpackages. Les lignes de budget des livrables (page Budget, « Budget par livrable ») restent la mesure du coût prévu :
- * la page les met en regard de l'enveloppe, workpackage par workpackage.
+ * Une ligne par livrable, une colonne par équipe (plus la colonne « Externe »), le montant annuel d'une cellule est la part d'une équipe sur un livrable (BudgetLine). Tout le reste se déduit :
+ *   - le total d'un workpackage, d'un sous-workpackage, d'une équipe et du projet : les SOMMES du plan (il n'y a plus d'enveloppe saisie) ;
+ *   - la dotation de chaque équipe (saisie, 60_Exercise.gs) et l'écart : plan contre dotation (le « clash » quand le plan la dépasse) ;
+ *   - le suivi, l'atterrissage et l'indicateur de coût (64_ExerciseTracking.gs, 45_Overview.gs) lisent le même plan.
+ * Il n'y a pas de dimension de temps : un montant est annuel, et un livrable n'appartient qu'à un exercice.
  *
- * RÈGLES. (0.19.2) On peut écrire des enveloppes qui DÉPASSENT la somme autorisée : celles des sous-workpackages au-delà de leur workpackage, celles des workpackages au-delà du budget du projet, le coût
- * des livrables au-delà d'une enveloppe. Rien n'est bloqué : c'est signalé par l'état « En dépassement » (en rouge), parce que ces montants sont une information vraie qu'on ne refuse pas de saisir.
- * Une seule règle reste : un sous-workpackage ne reçoit rien tant que son parent n'a pas d'enveloppe. Une enveloppe non fixée (vide) veut dire « pas de plafond », pas zéro.
- * La page Budget affiche la DÉCOMPOSITION DU BUDGET : workpackages, sous-workpackages, puis leurs livrables et jalons, dans un seul tableau (`items` de budget.envelope.get).
- *
- * QUI. Fixer l'enveloppe du projet et celles des workpackages de premier niveau : `budget.authorize` (chef de projet et au-dessus). Celle d'un sous-workpackage : un niveau strictement
- * supérieur au sien sur le workpackage parent (son Workpackage leader, et au-dessus). Chacun ne voit que ce qui relève de son budget : un Workpackage leader, son workpackage seulement.
- * Toute modification est un changement à valider par le niveau du dessus (54_Validation.gs).
+ * QUI. Une cellule se saisit avec le droit « budget.edit » sur le livrable (le responsable du livrable, du sous-workpackage, du workpackage, le chef de projet). Chacun ne voit que ses livrables ;
+ * le chef de projet voit tout. Toute modification est un changement à valider par le niveau du dessus (54_Validation.gs).
  */
 
-/** Les enveloppes ne s'écrivent que par budget.envelope.set : on les retire de ce que les écritures génériques reçoivent. */
-function stripEnvelope_(obj) {
-  var out = Object.assign({}, obj || {});
-  delete out.budget_authorized; delete out.budget_allocated; delete out.envelopes_json;
-  return out;
-}
-
 /**
- * ENVELOPES PAR EXERCICE (0.19.3). Un exercice est une année, avec ses propres livrables : l'enveloppe du projet et celle de chaque workpackage sont donc propres à un exercice, et rien d'un exercice
- * ne se mêle à l'autre (le suivi de l'année en cours et l'opération de planification de la suivante sont étanches). Stockage : `envelopes_json` { identifiant d'exercice : montant } sur le projet et sur
- * le workpackage ; les anciens champs budget_authorized et budget_allocated ne sont plus lus.
- */
-/** La clé d'un exercice dans envelopes_json : « année:identifiant » (l'année se lit sans aller chercher l'exercice : le fil des changements la montre telle quelle). */
-function envKey_(ex) { return String(ex.year) + ':' + ex.id; }
-function envJson_(rec) { var o = parseJsonSafe(rec.envelopes_json, {}); return o && typeof o === 'object' ? o : {}; }
-function envAmount_(rec, exerciseId) { var j = envJson_(rec); return Object.prototype.hasOwnProperty.call(j, exerciseId) && !isBlank(j[exerciseId]) ? Number(j[exerciseId]) : null; }
-function envPatch_(rec, exerciseId, amount) {
-  var j = envJson_(rec);
-  if (amount === '' || amount === null || amount === undefined) delete j[exerciseId]; else j[exerciseId] = amount;
-  return { envelopes_json: Object.keys(j).length ? JSON.stringify(j) : '' };
-}
-/** L'exercice demandé, à défaut celui en exécution, à défaut celui en préparation. */
-function envelopeExercise_(p) {
-  if (!isBlank(p.exerciseId)) return mustGet('Exercise', p.exerciseId);
-  var all = repoList('Exercise', function (x) { return !isTrue(x.deleted); });
-  var ex = all.filter(function (x) { return x.status === 'Exécution'; })[0] || all.filter(function (x) { return x.status === 'Préparation'; })[0] || null;
-  if (!ex) throw new PpmError('NOT_FOUND', 'Aucun exercice : l’administrateur crée l’exercice de l’année (page Administration) avant que le budget se répartisse.');
-  return ex;
-}
-
-function envNumber_(v, label) {
-  if (v === '' || v === null || v === undefined) return '';
-  var n = Number(String(v).replace(',', '.'));
-  if (!isFinite(n) || n < 0) throw new PpmError('VALIDATION', label + ' : un montant en euros, positif ou nul (ou vide pour « pas de plafond »).');
-  return round2(n);
-}
-
-/** Peut-on fixer l'enveloppe de ce workpackage ? Un niveau strictement supérieur au sien, sur son parent (le projet pour un workpackage de premier niveau). */
-function canAllocateWp_(ctx, wp) {
-  if (ctx.isAdmin) return true;
-  if (isBlank(wp.parent_wp_id)) return can(ctx, 'budget.authorize', { type: 'project', id: wp.project_id });
-  return bestRankOn_(ctx, { type: 'workpackage', id: wp.parent_wp_id }) < ROLE_RANK.SWPL;
-}
-
-/** Coût prévu par workpackage (lui et tout ce qu'il contient) et hors workpackage, à partir des lignes de budget des livrables du projet. */
-function envelopeCosts_(projectId, wpById, exerciseId) {
-  var cost = {}, none = 0;
-  var items = indexBy_(repoList('PlanItem', function (i) { return i.project_id === projectId && i.item_type === 'Livrable' && (isBlank(exerciseId) || i.exercise_id === exerciseId); }));
-  repoList('BudgetLine', function (l) { return !!items[l.deliverable_id]; }).forEach(function (l) {
-    var amount = Number(l.planned_amount) || 0, w = items[l.deliverable_id].wp_id ? wpById[items[l.deliverable_id].wp_id] : null, guard = 0;
-    if (!w) { none = round2(none + amount); return; }
-    while (w && guard++ < 5) { cost[w.id] = round2((cost[w.id] || 0) + amount); w = w.parent_wp_id ? wpById[w.parent_wp_id] : null; }
-  });
-  return { byWp: cost, none: none };
-}
-
-/**
- * LES VERSIONS DE LA DÉCOMPOSITION (0.20.0). La décomposition qu'on édite est la « version en cours » (brouillon). Chaque baseline du projet la FIGE : elle devient une version (V0, V1…, nommée comme la
+ * LES VERSIONS DU PLAN BUDGÉTAIRE (0.20.0, reprises en 0.21.0). Le plan qu'on édite est la « version en cours » (brouillon). Chaque baseline du projet le FIGE (cellules livrable × équipe et dotations) : elle devient une version (V0, V1…, nommée comme la
  * baseline). Le SUIVI ne lit pas le brouillon : il lit la version de RÉFÉRENCE, c'est-à-dire la dernière baseline VALIDÉE (ou qui n'avait pas à l'être : figée au niveau le plus haut). Tant qu'une
  * nouvelle version n'est pas validée, elle n'est pas prise en compte dans le suivi. Un projet sans aucune baseline validée suit la version en cours, et la page le dit.
  */
@@ -12211,245 +12010,175 @@ function resolveDecompVersion_(project, wanted) {
   else if (w !== 'live') { picked = vs.list.filter(function (v) { return v.id === w; })[0]; if (!picked) throw new PpmError('NOT_FOUND', 'Version introuvable.'); }
   return { version: picked, list: vs.list, reference: vs.reference, fallback: fallback };
 }
-/** Les données d'une décomposition : la version en cours (le dépôt) ou une version figée (l'instantané d'une baseline ; l'avancement et le statut des livrables restent ceux d'aujourd'hui). */
+/** Les données d'un plan : la version en cours (le dépôt) ou une version figée (l'instantané d'une baseline ; l'avancement et le statut des livrables restent ceux d'aujourd'hui). */
 function decompDataset_(project, ex, version) {
   var pid = project.id, liveItems = repoList('PlanItem', function (i) { return i.project_id === pid; });
   if (version && version.snapshot) {
-    var snap = loadBaselineSnapshot_(version.id), liveById = indexBy_(liveItems), lines = [], phasing = [];
+    var snap = loadBaselineSnapshot_(version.id), liveById = indexBy_(liveItems), lines = [];
     var wps = Object.keys(snap.WorkPackage || {}).map(function (id) { return Object.assign({ id: id, project_id: pid, version: '' }, snap.WorkPackage[id]); });
     var items = Object.keys(snap.PlanItem || {}).map(function (id) { var l = liveById[id] || {}; return Object.assign({ id: id, project_id: pid, version: '', status: l.status || '', progress_pct: l.progress_pct || 0 }, snap.PlanItem[id]); });
     Object.keys(snap.BudgetLine || {}).forEach(function (id) {
       var b = snap.BudgetLine[id];
       lines.push({ id: id, deliverable_id: b.deliverable_id, team_id: b.team_id || '', resource_id: b.resource_id || '', cost_type: b.cost_type, planned_amount: b.planned_amount, fixed_amount: b.fixed_amount });
-      (b.phasing || []).forEach(function (m) { phasing.push({ budget_line_id: id, month: m.month, amount: m.amount }); });
     });
-    return { snapshot: true, versionInfo: version, wps: wps, items: items, lines: lines, phasing: phasing, projectRec: Object.keys(snap.Project || {}).map(function (k) { return snap.Project[k]; })[0] || {} };
+    var budgets = Object.keys(snap.TeamBudget || {}).map(function (id) { return Object.assign({ id: id, project_id: pid }, snap.TeamBudget[id]); });
+    return { snapshot: true, versionInfo: version, wps: wps, items: items, lines: lines, teamBudgets: budgets, projectRec: Object.keys(snap.Project || {}).map(function (k) { return snap.Project[k]; })[0] || {} };
   }
   var ids = {}; liveItems.forEach(function (i) { ids[i.id] = true; });
-  var liveLines = repoList('BudgetLine', function (l) { return !!ids[l.deliverable_id]; }), lineIds = {}; liveLines.forEach(function (l) { lineIds[l.id] = true; });
-  return { snapshot: false, versionInfo: null, wps: repoList('WorkPackage', function (w) { return w.project_id === pid; }), items: liveItems, lines: liveLines,
-    phasing: repoList('BudgetPhasing', function (x) { return !!lineIds[x.budget_line_id]; }), projectRec: project };
-}
-/** Coût prévu par workpackage (et hors workpackage) pour un jeu de données et un exercice. */
-function envelopeCostsD_(D, wpById, exerciseId) {
-  var cost = {}, none = 0, items = indexBy_(D.items.filter(function (i) { return i.item_type === 'Livrable' && (isBlank(exerciseId) || i.exercise_id === exerciseId); }));
-  D.lines.forEach(function (l) {
-    var it = items[l.deliverable_id]; if (!it) return;
-    var amount = Number(l.planned_amount) || 0, wid = it.wp_id || '', guard = 0;
-    if (!wid || !wpById[wid]) { none = round2(none + amount); return; }
-    while (wid && wpById[wid] && guard++ < 5) { cost[wid] = round2((cost[wid] || 0) + amount); wid = wpById[wid].parent_wp_id || ''; }
-  });
-  return { byWp: cost, none: none };
+  return { snapshot: false, versionInfo: null, wps: repoList('WorkPackage', function (w) { return w.project_id === pid; }), items: liveItems,
+    lines: repoList('BudgetLine', function (l) { return !!ids[l.deliverable_id]; }), teamBudgets: repoList('TeamBudget', function (b) { return b.project_id === pid; }), projectRec: project };
 }
 
-function envelopeView_(ctx, project, ex, version) {
+/** Les données d'un exercice dans la forme de `exerciseData_` (60_Exercise.gs), lues dans la version en cours ou dans une version figée. */
+function planData_(D, ex, project) {
+  var teams = repoList('HierarchicalTeam');
+  var items = D.items.filter(function (i) { return i.item_type === 'Livrable' && i.exercise_id === ex.id; }), itemById = indexBy_(items);
+  return { teams: teams, teamById: indexBy_(teams), items: items, itemById: itemById,
+    budgets: D.teamBudgets.filter(function (b) { return b.exercise_id === ex.id && b.project_id === project.id; }),
+    lines: D.lines.filter(function (l) { return l.cost_type === 'Équipe' && itemById[l.deliverable_id]; }) };
+}
+
+/** L'exercice demandé, à défaut celui en exécution, à défaut celui en préparation. */
+function planExercise_(p) {
+  if (!isBlank(p.exerciseId)) return mustGet('Exercise', p.exerciseId);
+  var all = repoList('Exercise', function (x) { return !isTrue(x.deleted); });
+  var ex = all.filter(function (x) { return x.status === 'Exécution'; })[0] || all.filter(function (x) { return x.status === 'Préparation'; })[0] || null;
+  if (!ex) throw new PpmError('NOT_FOUND', 'Aucun exercice : l’administrateur crée l’exercice de l’année (page Administration) avant que le budget se répartisse.');
+  return ex;
+}
+
+/**
+ * Le plan budgétaire d'un projet pour un exercice. `rows` : les workpackages (totaux = sommes) et leurs livrables, dans l'ordre du découpage, chacun avec ses cellules par équipe (`cells`), son
+ * forfait externe, son total. `columns` : les équipes qui ont une part. `summary` : dotation · plan · écart par équipe (qui lit l'exercice). Les livrables hors de la vue de la personne sont absents.
+ */
+function planView_(ctx, project, ex, version) {
+  etpReset_();
   var access = budgetAccess_(ctx, project.id);
   if (!access.budget) throw new PpmError('FORBIDDEN', 'Le budget est réservé aux responsables de budget du projet.');
-  var D = decompDataset_(project, ex, version), wps = D.wps;
-  var wpById = indexBy_(wps), costs = envelopeCostsD_(D, wpById, ex.id);
-  var visible = function (w) { return access.all || can(ctx, 'budget.edit', { type: 'workpackage', id: w.id }); };
-  var num = function (v) { return isBlank(v) ? null : Number(v); };
-  var kids = {}; wps.forEach(function (w) { if (w.parent_wp_id) (kids[w.parent_wp_id] = kids[w.parent_wp_id] || []).push(w); });
-  var rows = [];
-  var order = function (a, b) { return String(a.wbs_code).localeCompare(String(b.wbs_code), 'fr', { numeric: true }); };
-  var walk = function (w, depth) {
-    if (visible(w)) {
-      var alloc = envAmount_(w, envKey_(ex)), cost = costs.byWp[w.id] || 0;
-      var childSum = round2((kids[w.id] || []).reduce(function (s, k) { return s + (envAmount_(k, envKey_(ex)) || 0); }, 0));
-      rows.push({
-        wp_id: w.id, version: w.version, code: w.wbs_code || '', name: w.name, parent_id: w.parent_wp_id && visible(wpById[w.parent_wp_id] || {}) ? w.parent_wp_id : '', depth: depth,
-        allocated: alloc, cost: cost, remaining: alloc === null ? null : round2(alloc - cost), over: alloc !== null && (cost > alloc || childSum > alloc),
-        over_cost: alloc !== null && cost > alloc, over_alloc: alloc !== null && (kids[w.id] || []).length > 0 && childSum > alloc,
-        over_by: alloc === null ? 0 : round2(Math.max(0, cost - alloc, (kids[w.id] || []).length ? childSum - alloc : 0)),
-        children_allocated: childSum, unallocated: alloc === null || !(kids[w.id] || []).length ? null : round2(alloc - childSum), canSet: !D.snapshot && canAllocateWp_(ctx, w)
-      });
-    }
-    (kids[w.id] || []).sort(order).forEach(function (k) { walk(k, depth + 1); });
+  var D = decompDataset_(project, ex, version), data = planData_(D, ex, project), wps = D.wps, wpById = indexBy_(wps);
+  var canEditItem = function (i) { return access.all || can(ctx, 'budget.edit', { type: 'planitem', id: i.id }); };
+  var shown = data.items.filter(canEditItem), shownById = indexBy_(shown);
+  var resById = indexBy_(repoList('Resource')), teamById = data.teamById;
+  var partsBy = {}, forfaitsBy = {};
+  D.lines.forEach(function (l) {
+    if (!shownById[l.deliverable_id]) return;
+    if (l.cost_type === 'Forfait') (forfaitsBy[l.deliverable_id] = forfaitsBy[l.deliverable_id] || []).push(l);
+    else (partsBy[l.deliverable_id] = partsBy[l.deliverable_id] || []).push(l);
+  });
+  var colIds = {};
+  Object.keys(partsBy).forEach(function (id) { partsBy[id].forEach(function (l) { if (l.team_id) colIds[l.team_id] = true; }); });
+  if (access.exercise) data.budgets.forEach(function (b) { if (!isBlank(b.amount)) colIds[b.team_id] = true; });
+  var columns = Object.keys(colIds).map(function (id) {
+    var t = teamById[id], par = t && !isBlank(t.parent_team_id) ? teamById[t.parent_team_id] : null, lvl = t ? teamLevel_(t) : 0;
+    var root = lvl === 4 && par && teamLevel_(par) === 3 ? par : t;
+    return { team_id: id, name: t ? t.name : '(équipe supprimée)', level: lvl, country: t ? (t.country || 'FR') : '', root_id: root ? root.id : id, root_name: root ? root.name : '' };
+  }).sort(function (a, b) { return String(a.root_name).localeCompare(String(b.root_name), 'fr') || a.level - b.level || String(a.name).localeCompare(String(b.name), 'fr'); });
+  // le CPN d'un livrable : celui du workpackage le plus proche qui en porte un, à défaut celui du projet
+  var cpnOfWp = function (wid) { var guard = 0, w = wid ? wpById[wid] : null; while (w && guard++ < 50) { if (!isBlank(w.cpn)) return normCpn_(w.cpn); w = w.parent_wp_id ? wpById[w.parent_wp_id] : null; } return normCpn_(project.cpn); };
+  var delivRow = function (i) {
+    var cells = {}, total = 0, ext = 0;
+    (partsBy[i.id] || []).forEach(function (l) { var a = Number(l.planned_amount) || 0; cells[l.team_id] = round2((cells[l.team_id] || 0) + a); total = round2(total + a); });
+    var forfaits = (forfaitsBy[i.id] || []).map(function (l) { var a = Number(l.planned_amount) || 0, r = resById[l.resource_id]; ext = round2(ext + a); return { line_id: l.id, version: l.version, resource_id: l.resource_id || '', resource: r ? r.name : '', amount: a }; });
+    var owner = resById[i.owner_resource_id];
+    return { kind: 'deliverable', id: i.id, version: i.version, wp_id: i.wp_id || '', cpn: cpnOfWp(i.wp_id), name: i.name, owner: owner ? owner.name : '', start: i.planned_start || null, finish: i.planned_finish || null,
+      status: i.status || '', progress: Number(i.progress_pct) || 0, cells: cells, external: ext, forfaits: forfaits, total: round2(total + ext),
+      can_edit: ex.status !== 'Clos' && !D.snapshot && canEditItem(i) };
   };
-  wps.filter(function (w) { return isBlank(w.parent_wp_id) || !wpById[w.parent_wp_id]; }).sort(order).forEach(function (w) { walk(w, 0); });
-  var top = wps.filter(function (w) { return isBlank(w.parent_wp_id); });
-  var authorized = envAmount_(D.projectRec, envKey_(ex)), allocated = round2(top.reduce(function (s, w) { return s + (envAmount_(w, envKey_(ex)) || 0); }, 0));
-  var total = 0; Object.keys(costs.byWp).forEach(function (k) { if (!wpById[k].parent_wp_id) total = round2(total + costs.byWp[k]); });
-  total = round2(total + costs.none);
-  var out = { exercise: { id: ex.id, year: Number(ex.year), status: ex.status }, can_edit: ex.status !== 'Clos' && !D.snapshot, version: D.versionInfo, project: { id: project.id, code: project.code, name: project.name, version: project.version }, rows: rows, partial: !access.all, canSetProject: ctx.isAdmin || can(ctx, 'budget.authorize', { type: 'project', id: project.id }) };
-  if (access.all) {
-    out.totals = { authorized: authorized, allocated: allocated, reserve: authorized === null ? null : round2(authorized - allocated), cost: total, cost_without_wp: costs.none,
-      remaining: authorized === null ? null : round2(authorized - total), over: authorized !== null && (total > authorized || allocated > authorized),
-      over_cost: authorized !== null && total > authorized, over_alloc: authorized !== null && allocated > authorized,
-      over_by: authorized === null ? 0 : round2(Math.max(0, total - authorized, allocated - authorized)) };
+  var delivByWp = {}, noWp = [];
+  shown.forEach(function (i) { var r = delivRow(i); if (i.wp_id && wpById[i.wp_id]) (delivByWp[i.wp_id] = delivByWp[i.wp_id] || []).push(r); else noWp.push(r); });
+  var byStart = function (a, b) { return String(a.start || '9999').localeCompare(String(b.start || '9999')) || String(a.name).localeCompare(String(b.name), 'fr'); };
+  var kids = {}; wps.forEach(function (w) { if (w.parent_wp_id && wpById[w.parent_wp_id]) (kids[w.parent_wp_id] = kids[w.parent_wp_id] || []).push(w); });
+  var codeOrder = function (a, b) { return String(a.wbs_code).localeCompare(String(b.wbs_code), 'fr', { numeric: true }); };
+  var wpVisible = function (w) { return access.all || can(ctx, 'budget.edit', { type: 'workpackage', id: w.id }); };
+  var rows = [], sums = {};
+  var addSum = function (acc, r) { Object.keys(r.cells).forEach(function (t) { acc.cells[t] = round2((acc.cells[t] || 0) + r.cells[t]); }); acc.external = round2(acc.external + r.external); acc.total = round2(acc.total + r.total); };
+  var walk = function (w, depth) {
+    var mine = (delivByWp[w.id] || []).sort(byStart), acc = { cells: {}, external: 0, total: 0 }, sub = [];
+    mine.forEach(function (r) { addSum(acc, r); });
+    var start = rows.length;
+    rows.push(null);   // la place du workpackage : ses totaux ne sont connus qu'après ses sous-workpackages
+    mine.forEach(function (r) { r.depth = depth + 1; rows.push(r); });
+    (kids[w.id] || []).sort(codeOrder).forEach(function (k) { var s = walk(k, depth + 1); if (s) addSum(acc, s); });
+    var any = mine.length || rows.length > start + 1 + mine.length;
+    if (!any && !wpVisible(w)) { rows.splice(start, 1); return null; }
+    rows[start] = { kind: 'wp', wp_id: w.id, version: w.version, code: w.wbs_code || '', name: w.name, depth: depth, parent_id: w.parent_wp_id || '', cells: acc.cells, external: acc.external, total: acc.total, cpn: w.cpn || '' };
+    sums[w.id] = acc;
+    return acc;
+  };
+  wps.filter(function (w) { return isBlank(w.parent_wp_id) || !wpById[w.parent_wp_id]; }).sort(codeOrder).forEach(function (w) { walk(w, 0); });
+  if (noWp.length && access.all) {
+    var accN = { cells: {}, external: 0, total: 0 };
+    noWp.sort(byStart).forEach(function (r) { addSum(accN, r); });
+    rows.push({ kind: 'wp', wp_id: '', version: '', code: '', name: 'Sans workpackage', depth: 0, parent_id: '', cells: accN.cells, external: accN.external, total: accN.total, cpn: '' });
+    noWp.forEach(function (r) { r.depth = 1; rows.push(r); });
   }
-  // les « valeurs d'avant » (0.19.3) : les anciennes enveloppes, qui n'étaient pas par exercice. Elles ne comptent dans aucun calcul ; la page les reprend en brouillon (rien à ressaisir) et affiche
-  // l'écart de ce qu'on saisit avec elles. Seulement là où l'exercice n'a pas encore de valeur à lui.
-  var oldNum = function (v) { return isBlank(v) ? null : Number(v); };
-  if (D.snapshot) out.legacy = { authorized: null, by_wp: {} }; else out.legacy = { authorized: access.all && envAmount_(project, envKey_(ex)) === null ? oldNum(project.budget_authorized) : null, by_wp: {} };
-  if (!D.snapshot) rows.forEach(function (r) { var w0 = wpById[r.wp_id]; if (w0 && envAmount_(w0, envKey_(ex)) === null && oldNum(w0.budget_allocated) !== null) out.legacy.by_wp[r.wp_id] = oldNum(w0.budget_allocated); });
-
-  // les livrables et jalons, sous leur workpackage : la décomposition du budget. ÉTANCHE (0.19.3) : seuls les livrables DE CET EXERCICE (et les jalons de son année) y figurent ; les livrables d'un autre
-  // exercice, ou sans exercice, n'y sont pas et leur coût n'est pas compté. Un livrable porte le coût de ses lignes ; un jalon n'a pas de coût.
-  var wpVisible = {}; rows.forEach(function (r) { wpVisible[r.wp_id] = true; });
-  var year = Number(ex.year);
-  var itemList = D.items.filter(function (i) {
-    if (i.project_id !== project.id) return false;
-    if (i.item_type === 'Livrable') return i.exercise_id === ex.id;
-    return i.item_type === 'Jalon' && (isBlank(i.planned_finish) || String(i.planned_finish).slice(0, 4) === String(year));
-  }).filter(function (i) { return i.wp_id ? !!wpVisible[i.wp_id] : access.all; });
-  var inList = indexBy_(itemList), lineCount = {}, lineCost = {};
-  var lines = D.lines.filter(function (l) { return !!inList[l.deliverable_id]; });
-  lines.forEach(function (l) { lineCount[l.deliverable_id] = (lineCount[l.deliverable_id] || 0) + 1; lineCost[l.deliverable_id] = round2((lineCost[l.deliverable_id] || 0) + (Number(l.planned_amount) || 0)); });
-  var exById = indexBy_(repoList('Exercise')), resNames = indexBy_(repoList('Resource')), ownerName = function (id) { return isBlank(id) || !resNames[id] ? '' : resNames[id].name; };
-  out.items = itemList.map(function (i) {
-    var f = i.planned_finish || '';
-    return { id: i.id, version: i.version, wp_id: i.wp_id || '', name: i.name, type: i.item_type, owner: ownerName(i.owner_resource_id), start: i.planned_start || null, finish: f || null,
-      status: i.status || '', progress: Number(i.progress_pct) || 0, cost: i.item_type === 'Livrable' ? (lineCost[i.id] || 0) : null, lines: i.item_type === 'Livrable' ? (lineCount[i.id] || 0) : null,
-      exercise_year: i.exercise_id && exById[i.exercise_id] ? Number(exById[i.exercise_id].year) : null,
-      canEdit: ex.status !== 'Clos' && !D.snapshot && i.item_type === 'Livrable' && (access.all || can(ctx, 'budget.edit', { type: 'planitem', id: i.id })) };
-  }).sort(function (a, b) { return String(a.start || '9999').localeCompare(String(b.start || '9999')) || String(a.name).localeCompare(String(b.name), 'fr'); });
+  var totals = { cells: {}, external: 0, total: 0 };
+  rows.forEach(function (r) { if (r.kind === 'deliverable') addSum(totals, r); });
+  var out = {
+    exercise: { id: ex.id, year: Number(ex.year), status: ex.status }, version: D.versionInfo, can_edit: ex.status !== 'Clos' && !D.snapshot,
+    project: { id: project.id, code: project.code, name: project.name, version: project.version }, partial: !access.all,
+    columns: columns, rows: rows, totals: totals, teams: exerciseTeamChoices_(data.teams), deliverables: shown.length
+  };
+  if (access.exercise) {
+    out.summary = exerciseTable_(ex, data, project.id);
+    var countries = {}; out.summary.rows.concat(out.summary.orphans, out.summary.unruled).forEach(function (r) { countries[r.country] = true; });
+    out.etp_missing = Object.keys(countries).filter(function (c) { return etpCostOf_(c, Number(ex.year)) === null; }).sort();
+    out.can_set_dotation = !D.snapshot && ex.status !== 'Clos' && (ctx.isAdmin || can(ctx, 'exercise.edit', { type: 'project', id: project.id }));
+  }
   // les livrables sans exercice : à rattacher (bouton de la page) ; ils ne comptent dans aucun exercice
-  out.unassigned = D.snapshot ? [] : repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable' && isBlank(i.exercise_id) && (access.all || can(ctx, 'budget.edit', { type: 'planitem', id: i.id })); })
+  out.unassigned = D.snapshot ? [] : repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable' && isBlank(i.exercise_id) && canEditItem(i); })
     .map(function (i) { return { id: i.id, name: i.name, wp: i.wp_id && wpById[i.wp_id] ? wpById[i.wp_id].name : '' }; });
 
-  // ---- le prévisionnel par mois et par workpackage, et la projection de fin d'année
-  var months = []; for (var mi = 1; mi <= 12; mi++) months.push(year + '-' + (mi < 10 ? '0' : '') + mi);
-  var monthIdx = {}; months.forEach(function (mm, i) { monthIdx[mm] = i; });
-  var today = todayStr(), tYear = Number(today.slice(0, 4)), curIdx = year < tYear ? 12 : (year > tYear ? 0 : Number(today.slice(5, 7)));
-  var topOf = function (wpId) { var w = wpById[wpId], g = 0; while (w && w.parent_wp_id && wpById[w.parent_wp_id] && g++ < 5) w = wpById[w.parent_wp_id]; return w || null; };
-  var delivs = itemList.filter(function (i) { return i.item_type === 'Livrable'; }), delivById = indexBy_(delivs);
-  var lineById = indexBy_(lines.filter(function (l) { return !!delivById[l.deliverable_id]; }));
-  var phasing = D.phasing.filter(function (x) { return !!lineById[x.budget_line_id]; });
-  var seriesMap = {}, planY = {}, pvY = {};
-  var serie = function (d) {
-    var t = d.wp_id ? topOf(d.wp_id) : null, key = t ? t.id : '';
-    return seriesMap[key] = seriesMap[key] || { wp_id: key, code: t ? t.wbs_code || '' : '', name: t ? t.name : 'Hors workpackage', values: months.map(function () { return 0; }), outside: 0 };
-  };
-  phasing.forEach(function (x) {
-    var l = lineById[x.budget_line_id], d = delivById[l.deliverable_id], sr = serie(d), amount = Number(x.amount) || 0, i = monthIdx[x.month];
-    if (i === undefined) { sr.outside = round2(sr.outside + amount); return; }
-    sr.values[i] = round2(sr.values[i] + amount);
-    planY[d.id] = round2((planY[d.id] || 0) + amount);
-    if (i + 1 <= curIdx) pvY[d.id] = round2((pvY[d.id] || 0) + amount);
-  });
-  var yearEnd = year + '-12-31', yearStart = year + '-01-01', dayN = function (a, b) { return Math.max(0, Math.round((parseYmd(b) - parseYmd(a)) / DAY_MS)); };
-  var perWp = {}, tot = { plan: 0, pv: 0, ev: 0, projected: 0 };
-  delivs.forEach(function (d) {
-    var parts = lineCost[d.id] || 0, progress = Math.max(0, Math.min(100, Number(d.progress_pct) || 0)), ev = round2(parts * progress / 100), plan = planY[d.id] || 0, pv = pvY[d.id] || 0, projected;
-    if (curIdx === 0) projected = plan;                                        // l'année n'a pas commencé : le prévu
-    else if (curIdx === 12 && year < tYear) projected = ev;                    // l'année est finie : ce qui a été acquis
-    else {
-      var remaining = round2(parts - ev), share = 1, fin = d.planned_finish || '';
-      if (progress >= 100) share = 0;
-      else if (fin && fin > yearEnd) share = Math.max(0, Math.min(1, dayN(today, yearEnd) / Math.max(1, dayN(today, fin))));
-      projected = round2(ev + remaining * share);
-    }
-    var key = serie(d).wp_id, g = perWp[key] = perWp[key] || { plan: 0, pv: 0, ev: 0, projected: 0 };
-    g.plan = round2(g.plan + plan); g.pv = round2(g.pv + pv); g.ev = round2(g.ev + ev); g.projected = round2(g.projected + projected);
-    tot.plan = round2(tot.plan + plan); tot.pv = round2(tot.pv + pv); tot.ev = round2(tot.ev + ev); tot.projected = round2(tot.projected + projected);
-  });
-  var seriesList = Object.keys(seriesMap).map(function (k) { return seriesMap[k]; }).sort(function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }) || String(a.name).localeCompare(String(b.name), 'fr'); });
-  var totalMonthly = months.map(function (_, i) { return round2(seriesList.reduce(function (t, sr) { return t + sr.values[i]; }, 0)); });
-  var run = 0, cumulative = totalMonthly.map(function (v) { run = round2(run + v); return run; });
-  var committed = null;
-  if (access.all) { var cm = committedByMonth_(projectOrders_(project.id, wps)); committed = months.map(function (mm) { return round2(cm[mm] || 0); }); }
-  var envTop = {}; rows.forEach(function (r) { if (!r.parent_id) envTop[r.wp_id] = r.allocated; });
-  var refBudget = out.totals ? (out.totals.authorized !== null ? out.totals.authorized : (out.totals.allocated > 0 ? out.totals.allocated : null)) : null;
-  out.monthly = { year: year, months: months, current_month: curIdx, series: seriesList.map(function (sr) { return { wp_id: sr.wp_id, code: sr.code, name: sr.name, values: sr.values, total: round2(sr.values.reduce(function (t, v) { return t + v; }, 0)), outside: sr.outside }; }),
-    total: totalMonthly, cumulative: cumulative, committed: committed, budget: refBudget };
-  out.projection = {
-    year: year, current_month: curIdx, plan_year: tot.plan, pv: tot.pv, ev: tot.ev, projected: tot.projected, budget: refBudget, gap: refBudget === null ? null : round2(refBudget - tot.projected), over: refBudget !== null && tot.projected > refBudget,
-    committed_to_date: committed ? round2(committed.reduce(function (t, v, i) { return i + 1 <= curIdx ? t + v : t; }, 0)) : null,
-    method: 'À l’avancement : valeur acquise à ce jour (parts × avancement) + reste à faire de chaque livrable, étalé jusqu’à sa date de fin, au plus jusqu’à la fin de l’année. Le réalisé comptable n’est pas importé.',
-    by_wp: seriesList.map(function (sr) {
-      var g = perWp[sr.wp_id] || { plan: 0, pv: 0, ev: 0, projected: 0 }, al = sr.wp_id && envTop[sr.wp_id] !== undefined ? envTop[sr.wp_id] : null;
-      return { wp_id: sr.wp_id, code: sr.code, name: sr.name, plan: g.plan, pv: g.pv, ev: g.ev, projected: g.projected, allocated: al, gap: al === null ? null : round2(al - g.projected), over: al !== null && g.projected > al };
-    })
-  };
-
-  // le RÉALISÉ comptable (0.20.1) : par mois et par équipe, depuis l'import mensuel ; la projection se lit aussi sur lui (réalisé à ce jour + reste à faire de l'année)
-  if (access.all) {
-    out.actuals = actualsView_(project, ex, today);
-    if (out.actuals.available) {
-      var restYear = round2(Math.max(0, tot.projected - tot.ev));
-      out.projection.actual_to_date = out.actuals.to_date; out.projection.actual_gap = round2(out.actuals.to_date - tot.pv);
-      out.projection.projected_actual = round2(out.actuals.to_date + restYear);
-      out.projection.gap_actual = refBudget === null ? null : round2(refBudget - out.projection.projected_actual);
-      out.projection.over_actual = refBudget !== null && out.projection.projected_actual > refBudget;
-    }
-  }
-
-  // l'évolution depuis la baseline active du projet : ce que la décomposition valait quand on l'a figée, pour CET exercice (0.19.2 ; par exercice en 0.19.3)
+  // l'évolution depuis la baseline active : ce que le plan valait quand on l'a figée, pour CET exercice
   var bl = isBlank(project.active_baseline_id) ? null : repoGet('Baseline', project.active_baseline_id);
   if (!D.snapshot && bl && bl.status === 'Active' && isBlank(bl.scope_type)) {
     var snap = loadBaselineSnapshot_(bl.id), exOfNow = {};
     repoList('PlanItem', function (i) { return i.project_id === project.id && i.item_type === 'Livrable'; }).forEach(function (i) { exOfNow[i.id] = i.exercise_id || ''; });
     var inEx = function (it, id) { return ('exercise_id' in it ? it.exercise_id : exOfNow[id]) === ex.id; };
-    var bcost = costByWpSnap_(snap, inEx), bitem = budgetByItem_(snap), bwp = snap.WorkPackage || {};
+    var bitem = budgetByItem_(snap), baseTotal = 0;
+    Object.keys(snap.BudgetLine || {}).forEach(function (id) { var bline = snap.BudgetLine[id], it = (snap.PlanItem || {})[bline.deliverable_id]; if (it && inEx(it, bline.deliverable_id)) baseTotal = round2(baseTotal + (Number(bline.planned_amount) || 0)); });
     out.baseline = { id: bl.id, label: bl.label || ('B' + bl.number), number: Number(bl.number) || 0, decided_at: bl.decided_at || '' };
-    out.rows.forEach(function (r) {
-      var b = bwp[r.wp_id];
-      r.base = b ? { known: 'envelopes_json' in b, allocated: 'envelopes_json' in b ? envAmount_(b, envKey_(ex)) : null, cost: bcost.byWp[r.wp_id] || 0 } : { new: true };
-    });
-    out.items.forEach(function (x) { if (x.type === 'Livrable') x.base = (snap.PlanItem || {})[x.id] ? { cost: bitem[x.id] || 0 } : { new: true }; });
-    if (out.totals) {
-      var bp = Object.keys(snap.Project || {}).map(function (k) { return snap.Project[k]; })[0] || {}, costNow = 0;
-      Object.keys(snap.BudgetLine || {}).forEach(function (id) { var bline = snap.BudgetLine[id], it = (snap.PlanItem || {})[bline.deliverable_id]; if (it && inEx(it, bline.deliverable_id)) costNow = round2(costNow + (Number(bline.planned_amount) || 0)); });
-      out.totals.base = { known: 'envelopes_json' in bp, authorized: 'envelopes_json' in bp ? envAmount_(bp, envKey_(ex)) : null, cost: costNow };
+    rows.forEach(function (r) { if (r.kind === 'deliverable') r.base = (snap.PlanItem || {})[r.id] ? { total: bitem[r.id] || 0 } : { new: true }; });
+    out.totals.base_total = baseTotal; out.totals.base_known = true;
+    if (out.summary) {
+      var baseDot = {}, hasBase = 'TeamBudget' in snap;
+      Object.keys(snap.TeamBudget || {}).forEach(function (id) { var b = snap.TeamBudget[id]; if (b.exercise_id === ex.id && !isBlank(b.amount)) baseDot[b.team_id] = round2((baseDot[b.team_id] || 0) + Number(b.amount)); });
+      out.summary.base_known = hasBase;
+      out.summary.rows.concat(out.summary.orphans, out.summary.unruled).forEach(function (r) {
+        var s = baseDot[r.team_id] || 0, any = r.team_id in baseDot; r.children.forEach(function (c) { if (c.team_id in baseDot) { any = true; s += baseDot[c.team_id]; } });
+        r.base_dotation = hasBase && any ? round2(s) : null;
+      });
     }
   }
   return out;
 }
 
-defineAction('budget.envelope.get', function (p, ctx) {
-  var project = mustGet('Project', requireParam(p, 'projectId')), ex = envelopeExercise_(p), rv = resolveDecompVersion_(project, p.version);
-  var view = envelopeView_(ctx, project, ex, rv.version);
-  // les versions de la décomposition, et laquelle le suivi lit (la dernière validée ; à défaut la version en cours)
-  view.versions = rv.list.map(function (v) { return { id: v.id, label: v.label, number: v.number, status: v.status, validation: v.validation, validators: v.validators, decided_at: v.decided_at, decided_by: v.decided_by, is_reference: v.is_reference }; });
-  view.reference_id = rv.reference ? rv.reference.id : '';
-  view.fallback_live = rv.fallback;
-  view.can_version = ctx.isAdmin || can(ctx, 'baseline.manage', { type: 'project', id: project.id });   // figer une nouvelle version = figer une baseline du projet
+/** Les versions du plan (baselines du projet) et celle que le suivi lit : à la demande, car elles lisent le journal des changements (volumineux) — le tableau, lui, s'ouvre sans. */
+function planVersionsView_(ctx, project, rv) {
+  var out = {};
+  out.versions = rv.list.map(function (v) { return { id: v.id, label: v.label, number: v.number, status: v.status, validation: v.validation, validators: v.validators, decided_at: v.decided_at, decided_by: v.decided_by, is_reference: v.is_reference }; });
+  out.reference_id = rv.reference ? rv.reference.id : '';
+  out.fallback_live = rv.fallback;
+  out.can_version = !!(ctx.isAdmin || can(ctx, 'baseline.manage', { type: 'project', id: project.id }));   // figer une nouvelle version = figer une baseline du projet
   var pend = rv.list.filter(function (v) { return v.validation === 'pending'; });
-  view.pending_version = pend.length ? { id: pend[pend.length - 1].id, label: pend[pend.length - 1].label, validators: pend[pend.length - 1].validators } : null;
+  out.pending_version = pend.length ? { id: pend[pend.length - 1].id, label: pend[pend.length - 1].label, validators: pend[pend.length - 1].validators } : null;
+  return out;
+}
+
+defineAction('budget.plan.get', function (p, ctx) {
+  var project = mustGet('Project', requireParam(p, 'projectId')), ex = planExercise_(p);
+  // sans version demandée : le brouillon, sans lire baselines ni journal (la page s'ouvre en peu d'appels) ; `version` ou `withVersions` : la version, et la liste des versions
+  var rv = (isBlank(p.version) && !isTrue(p.withVersions)) ? null : resolveDecompVersion_(project, p.version);
+  var view = planView_(ctx, project, ex, rv ? rv.version : null);
+  if (rv) Object.assign(view, planVersionsView_(ctx, project, rv));
+  view.exercises = repoList('Exercise', function (x) { return !isTrue(x.deleted); }).map(exerciseView_).sort(function (a, b) { return b.year - a.year; });
   return view;
 });
 
-/**
- * Fixe l'enveloppe du projet (`authorized`, vide = pas de plafond) et/ou celles de workpackages (`allocations` : [{ wpId, amount }], vide = pas de plafond). Tout ou rien :
- * les droits et les règles de somme se vérifient sur l'état final avant la moindre écriture.
- */
-defineAction('budget.envelope.set', function (p, ctx) {
+defineAction('budget.plan.versions', function (p, ctx) {
   var project = mustGet('Project', requireParam(p, 'projectId'));
-  var ex = envelopeExercise_(p);
-  if (ex.status === 'Clos') throw new PpmError('VALIDATION', 'L’exercice ' + ex.year + ' est clos : on n’y change plus le budget.');
-  var allocations = Array.isArray(p.allocations) ? p.allocations : [];
-  if (!('authorized' in p) && !allocations.length) throw new PpmError('VALIDATION', 'Rien à enregistrer.');
-  return withLock(function () {
-    var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; }), wpById = indexBy_(wps);
-    var next = {}; wps.forEach(function (w) { var v0 = envAmount_(w, envKey_(ex)); next[w.id] = v0 === null ? '' : v0; });
-    var changes = [];
-    var authorized0 = envAmount_(project, envKey_(ex)), authorized = authorized0 === null ? '' : authorized0;
-    if ('authorized' in p) {
-      if (!ctx.isAdmin && !can(ctx, 'budget.authorize', { type: 'project', id: project.id })) throw new PpmError('FORBIDDEN', 'Seul le chef de projet (ou un niveau au-dessus) fixe l’enveloppe du projet.');
-      var a = envNumber_(p.authorized, 'Budget autorisé');
-      if (a !== authorized) { authorized = a; changes.push({ table: 'Project', id: project.id, patch: envPatch_(project, envKey_(ex), a), version: project.version }); }
-    }
-    allocations.forEach(function (x) {
-      var w = wpById[String(x.wpId)];
-      if (!w) throw new PpmError('NOT_FOUND', 'Workpackage introuvable dans ce projet : ' + x.wpId);
-      if (!canAllocateWp_(ctx, w)) throw new PpmError('FORBIDDEN', 'L’enveloppe de « ' + w.name + ' » est fixée par ' + (isBlank(w.parent_wp_id) ? 'le chef de projet (ou au-dessus)' : 'son Workpackage leader (ou au-dessus)') + '.');
-      var v = envNumber_(x.amount, 'Enveloppe de « ' + w.name + ' »');
-      if (v !== next[w.id]) { next[w.id] = v; changes.push({ table: 'WorkPackage', id: w.id, patch: envPatch_(w, envKey_(ex), v), version: w.version }); }
-    });
-    // seule règle : un sous-workpackage ne reçoit rien tant que son parent n'a pas d'enveloppe (les dépassements de somme sont permis, voir l'en-tête)
-    wps.filter(function (w) { return isBlank(w.parent_wp_id); }).forEach(function (w) {
-      var kids = wps.filter(function (k) { return k.parent_wp_id === w.id; });
-      var s = round2(kids.reduce(function (t, k) { return t + (next[k.id] === '' ? 0 : next[k.id]); }, 0));
-      if (!kids.length || s === 0) return;
-      if (next[w.id] === '') throw new PpmError('VALIDATION', 'Fixez d’abord l’enveloppe de « ' + w.name + ' » : ses sous-workpackages ne peuvent pas en recevoir tant qu’elle est vide.', { rule: 'ENVELOPE_PARENT_EMPTY', wp: w.id });
-    });
-    changes.forEach(function (c) { repoUpdate(c.table, c.id, c.patch, null, ctx.actx); });
-    var fresh = mustGet('Project', project.id);
-    var view = envelopeView_(ctx, fresh, ex);
-    view.changed = changes.length;
-    return view;
-  });
+  if (!budgetAccess_(ctx, project.id).budget) throw new PpmError('FORBIDDEN', 'Le budget de ce projet n’est pas pour vous.');
+  return planVersionsView_(ctx, project, resolveDecompVersion_(project, p.version));
 });
 
 // ======================================================================
@@ -12474,7 +12203,7 @@ defineAction('budget.envelope.set', function (p, ctx) {
  *
  * SÉCURITÉ. Tout est analysé avant d'écrire : une seule erreur, et rien n'est écrit, pour aucun projet. Avant le premier lot, une COPIE de sécurité des projets existants est enregistrée dans
  * Drive (même format) ; si elle échoue, l'import est annulé. Tout passe par les actions ordinaires (programs.create, projects.create, resources.create, wbs.create, wbs.update, roles.assign,
- * dependencies.create, budget.line.save, budget.envelope.set) : mêmes droits, mêmes règles, même journal ; les changements restent « à valider » par le niveau du dessus.
+ * dependencies.create, budget.line.save) : mêmes droits, mêmes règles, même journal ; les changements restent « à valider » par le niveau du dessus.
  *
  * RÔLES. La colonne « Leader » ou « Owner » pose le responsable principal (Workpackage leader, Sub-workpackage leader ou Deliverable owner selon l'objet) ; « Contributors » pose des
  * Contributors. Les personnes se désignent par leur adresse e-mail (à défaut, par leur nom exact) ; celles de l'onglet Personnes qui n'existent pas encore sont créées d'abord.
@@ -12482,9 +12211,9 @@ defineAction('budget.envelope.set', function (p, ctx) {
 
 var IMPORT_TABS = [
   { name: 'Programmes', cols: ['Code', 'Nom', 'Statut', 'Description'], text: [0], optional: true },
-  { name: 'Projets', cols: ['Code', 'Nom', 'Programme (code)', 'Statut', 'Pays des jours fériés', 'Chef de projet (e-mail)', 'Budget autorisé (€)'], text: [0, 2] },
+  { name: 'Projets', cols: ['Code', 'Nom', 'Programme (code)', 'Statut', 'Pays des jours fériés', 'Chef de projet (e-mail)'], text: [0, 2] },
   { name: 'Personnes', cols: ['Nom', 'E-mail', 'Type (Interne ou Externe)', 'Fonction', 'Organisation', 'Pays', 'Fournisseur', 'Équipe'], text: [], optional: true },
-  { name: 'Workpackages', cols: ['Projet', 'Code WBS', 'Parent (code WBS)', 'Nom', 'Leader (e-mail)', 'Imputation', 'Enveloppe (€)'], text: [0, 1, 2, 5] },
+  { name: 'Workpackages', cols: ['Projet', 'Code WBS', 'Parent (code WBS)', 'Nom', 'Leader (e-mail)', 'Imputation'], text: [0, 1, 2, 5] },
   { name: 'Livrables', cols: ['Projet', 'Code WBS du workpackage', 'Nom', 'Début', 'Fin', 'Owner (e-mail)', 'Contributors (e-mails séparés par « ; »)'], text: [0, 1] },
   { name: 'Jalons', cols: ['Projet', 'Code WBS du workpackage', 'Nom', 'Date', 'Catégorie', 'Owner (e-mail)', 'Contributors (e-mails séparés par « ; »)'], text: [0, 1] },
   { name: 'Dépendances', cols: ['Projet', 'Prédécesseur (WP)', 'Prédécesseur (nom)', 'Successeur (WP)', 'Successeur (nom)', 'Type (FS, SS, FF ou SF)', 'Décalage (jours)'], text: [0, 1, 3], optional: true },
@@ -12572,11 +12301,7 @@ function importAnalyze_(parsed, existing) {
   // ---- projet
   var pr = parsed.Projet || [];
   if (pr.length > 1) warn('Projet', pr[1]._row, 'Une seule ligne est lue : les suivantes sont ignorées.');
-  if (pr.length) {
-    var a = importAmount_(pr[0]._raw['Budget autorisé (€)']);
-    if (a !== a) err('Projet', pr[0]._row, 'Budget autorisé : un montant en euros, positif ou nul.');
-    else plan.project = { authorized: a };
-  }
+  if (pr.length) plan.project = {};
 
   // ---- workpackages
   var wpRows = parsed.Workpackages || [], seen = {};
@@ -12604,11 +12329,9 @@ function importAnalyze_(parsed, existing) {
     if (parent && parent === code) { err('Workpackages', row, 'Un workpackage ne peut pas être son propre parent.'); bad = true; }
     if (!r['Nom']) { err('Workpackages', row, 'Nom obligatoire.'); bad = true; }
     var leader = person('Workpackages', row, r['Leader (e-mail)'], 'Leader', false);
-    var env = importAmount_(r._raw['Enveloppe (€)']);
-    if (env !== env) { err('Workpackages', row, 'Enveloppe : un montant en euros, positif ou nul (ou vide : pas de plafond).'); bad = true; }
     if (bad) return;
     var ex = byCode[code] || null;
-    plan.wps.push({ code: code, parent: parent || '', name: r['Nom'], leader: leader, charge: r['Imputation'], envelope: env, row: row, existing: ex });
+    plan.wps.push({ code: code, parent: parent || '', name: r['Nom'], leader: leader, charge: r['Imputation'], row: row, existing: ex });
   });
   var planCodes = {}; plan.wps.forEach(function (w) { planCodes[w.code] = w; });
   plan.wps.forEach(function (w) {
@@ -12701,7 +12424,7 @@ function importAnalyze_(parsed, existing) {
   });
 
   // ---- ce qui change, ce qui reste
-  var counts = { wps: { create: 0, update: 0, same: 0 }, items: { create: 0, update: 0, same: 0 }, contributors: 0, lines: { create: 0, update: 0, same: 0 }, envelope: 0 };
+  var counts = { wps: { create: 0, update: 0, same: 0 }, items: { create: 0, update: 0, same: 0 }, contributors: 0, lines: { create: 0, update: 0, same: 0 } };
   plan.wps.forEach(function (w) {
     var ex = w.existing;
     if (!ex) { w.action = 'create'; }
@@ -12710,8 +12433,6 @@ function importAnalyze_(parsed, existing) {
       w.action = diff ? 'update' : 'same';
     }
     counts.wps[w.action]++;
-    var envEx = importEnvExercise_();
-    if (envEx && w.envelope !== '' && (!ex || envAmount_(ex, envKey_(envEx)) !== w.envelope)) counts.envelope++;
   });
   plan.items.forEach(function (i) {
     var ex = i.existing;
@@ -12735,8 +12456,6 @@ function importAnalyze_(parsed, existing) {
     }
     counts.lines[l.action]++;
   });
-  var envEx0 = importEnvExercise_();
-  if (envEx0 && plan.project && plan.project.authorized !== '' && envAmount_(existing.project, envKey_(envEx0)) !== plan.project.authorized) counts.envelope++;
   // pas dans le classeur
   var inSheetWps = {}; plan.wps.forEach(function (w) { inSheetWps[w.code] = true; });
   var missing = existing.wps.filter(function (w) { return parsed.Workpackages && parsed.Workpackages.length && !inSheetWps[String(w.wbs_code)]; }).map(function (w) { return String(w.wbs_code); });
@@ -12825,8 +12544,7 @@ function importCan_(ctx, project) {
  * Un chef de projet (ou au-dessus) exporte et importe SON projet depuis la page WBS, avec `projectId`.
  */
 /**
- * Les enveloppes (colonnes « Budget autorisé » et « Enveloppe ») d'un classeur de projets sont celles de l'exercice EN EXÉCUTION, à défaut de celui en préparation (0.19.3 : elles sont par exercice).
- * Sans exercice, elles sont ignorées.
+ * L'exercice de l'import (0.21.0) : celui EN EXÉCUTION, à défaut celui en préparation. Un livrable sans exercice reçoit celui-là avec sa première ligne de budget. Sans exercice : aucun rattachement.
  */
 function importEnvExercise_() {
   var all = repoList('Exercise', function (x) { return !isTrue(x.deleted); });
@@ -12991,8 +12709,6 @@ function importAnalyzeAll_(book, ctx, opts) {
       manager = lookup(r['Chef de projet (e-mail)']);
       if (!manager) { err('Projets', row, 'Chef de projet : « ' + r['Chef de projet (e-mail)'] + ' » n’est pas dans Ressources ni dans l’onglet Personnes.'); bad = true; }
     }
-    var budget = importAmount_(r._raw['Budget autorisé (€)']);
-    if (budget !== budget) { err('Projets', row, 'Budget autorisé : un montant en euros, positif ou nul.'); bad = true; }
     if (single && code !== single.code) { err('Projets', row, 'Ce classeur contient le projet « ' + code + ' », pas « ' + single.code + ' » : importez-le depuis la page Administration, ou retirez les autres projets.'); bad = true; }
     if (bad) return;
     var ex = projectsByCode[code] || null, action;
@@ -13006,7 +12722,7 @@ function importAnalyzeAll_(book, ctx, opts) {
       if (!ctx.isAdmin && !can(ctx, 'project.create', scope)) { err('Projets', row, 'Créer le projet « ' + code + ' » est réservé au DPL du programme (ou au-dessus).'); return; }
       action = 'create';
     }
-    bookProjects.push({ code: code, name: r['Nom'], programCode: programCode, status: status, holiday: holiday, manager: manager, authorized: budget, row: row, existing: ex, action: action, raw: r });
+    bookProjects.push({ code: code, name: r['Nom'], programCode: programCode, status: status, holiday: holiday, manager: manager, row: row, existing: ex, action: action, raw: r });
   });
   if (!projectRows.length && !book.problems.length) err('Projets', 1, 'Aucun projet dans l’onglet Projets.');
   if (single && !bookProjects.some(function (x) { return x.code === single.code; }) && projectRows.length) err('Projets', 1, 'Le projet « ' + single.code + ' » n’est pas dans l’onglet Projets.');
@@ -13021,17 +12737,17 @@ function importAnalyzeAll_(book, ctx, opts) {
   // ---- chaque projet : l'analyse d'un seul projet (inchangée), plus ses dépendances
   var multi = bookProjects.length > 1;
   var totals = { programs: { create: 0, same: 0 }, projects: { create: 0, update: 0, same: 0 }, people: { create: 0, same: 0 }, wps: { create: 0, update: 0, same: 0 }, items: { create: 0, update: 0, same: 0 },
-    contributors: 0, lines: { create: 0, update: 0, same: 0 }, envelope: 0, deps: { create: 0, same: 0 } };
+    contributors: 0, lines: { create: 0, update: 0, same: 0 }, deps: { create: 0, same: 0 } };
   out.programs.forEach(function (g) { totals.programs[g.action]++; });
   out.people.forEach(function (x) { totals.people[x.action]++; });
   bookProjects.forEach(function (bp) {
     totals.projects[bp.action]++;
     var rowsOf = function (tab) { return (P[tab] || []).filter(function (r) { return r['Projet'] === bp.code; }); };
     var old = {
-      Projet: [{ _row: bp.row, _raw: { 'Budget autorisé (€)': bp.raw._raw['Budget autorisé (€)'] }, 'Budget autorisé (€)': bp.raw['Budget autorisé (€)'] }],
+      Projet: [{ _row: bp.row, _raw: {} }],
       Workpackages: rowsOf('Workpackages'), Livrables: rowsOf('Livrables'), Jalons: rowsOf('Jalons'), Budget: rowsOf('Budget')
     };
-    var stub = bp.existing || { id: 'new:' + bp.code, code: bp.code, name: bp.name, budget_authorized: '', holiday_country: bp.holiday };
+    var stub = bp.existing || { id: 'new:' + bp.code, code: bp.code, name: bp.name, holiday_country: bp.holiday };
     var existing = bp.existing ? importExisting_(bp.existing) : importExistingNew_(stub);
     existing.people = maps.people; existing.peopleByName = maps.peopleByName;
     var res = importAnalyze_(old, existing);
@@ -13042,7 +12758,7 @@ function importAnalyzeAll_(book, ctx, opts) {
     bp.plan = res.plan; bp.counts = res.counts; bp.deps = deps.deps;
     bp.counts.deps = { create: 0, same: 0 }; deps.deps.forEach(function (d) { bp.counts.deps[d.action]++; });
     ['wps', 'items', 'lines'].forEach(function (k) { ['create', 'update', 'same'].forEach(function (a) { totals[k][a] += bp.counts[k][a]; }); });
-    totals.contributors += bp.counts.contributors; totals.envelope += bp.counts.envelope;
+    totals.contributors += bp.counts.contributors;
     totals.deps.create += bp.counts.deps.create; totals.deps.same += bp.counts.deps.same;
     out.projects.push(bp);
   });
@@ -13052,7 +12768,7 @@ function importAnalyzeAll_(book, ctx, opts) {
 
 /** Le nombre d'opérations qui restent à faire (zéro : le classeur et l'outil sont d'accord). */
 function importRemaining_(c) {
-  return c.programs.create + c.projects.create + c.projects.update + c.people.create + c.wps.create + c.wps.update + c.items.create + c.items.update + c.contributors + c.lines.create + c.lines.update + c.envelope + c.deps.create;
+  return c.programs.create + c.projects.create + c.projects.update + c.people.create + c.wps.create + c.wps.update + c.items.create + c.items.update + c.contributors + c.lines.create + c.lines.update + c.deps.create;
 }
 
 function importReport_(book, all, single) {
@@ -13101,9 +12817,9 @@ function importWorkbookRows_(ctx, projects) {
     var wpCode = function (id) { return id && byId[id] ? String(byId[id].wbs_code) : ''; };
     var program = project.program_id ? programsById[project.program_id] : null;
     if (program) usedPrograms[program.id] = true;
-    out.Projets.push([project.code, project.name, program ? program.code : '', project.status || '', project.holiday_country || '', use(project.manager_resource_id), (function () { var e0 = importEnvExercise_(), v0 = e0 ? envAmount_(project, envKey_(e0)) : null; return v0 === null ? '' : v0; })()]);
+    out.Projets.push([project.code, project.name, program ? program.code : '', project.status || '', project.holiday_country || '', use(project.manager_resource_id)]);
     ex.wps.slice().sort(order).forEach(function (w) {
-      out.Workpackages.push([project.code, String(w.wbs_code), wpCode(w.parent_wp_id), w.name, use(w.owner_resource_id), w.charge_code || '', (function () { var e0 = importEnvExercise_(), v0 = e0 ? envAmount_(w, envKey_(e0)) : null; return v0 === null ? '' : v0; })()]);
+      out.Workpackages.push([project.code, String(w.wbs_code), wpCode(w.parent_wp_id), w.name, use(w.owner_resource_id), w.charge_code || '']);
     });
     var contrib = {};
     ex.roles.forEach(function (a) { if (a.scope_type === 'planitem' && a.role_code === 'CONTRIB') (contrib[a.scope_id] = contrib[a.scope_id] || []).push(use(a.resource_id)); });
@@ -13316,21 +13032,6 @@ function importApplyProject_(ctx, project, bp, io) {
       applied.lines++;
     });
   });
-  // 5. enveloppes (état final : tout en une fois)
-  step(function () {
-    var cur = mustGet('Project', project.id), params = { projectId: project.id }, wanted = 0;
-    var envEx1 = importEnvExercise_();
-    if (envEx1) params.exerciseId = envEx1.id;
-    if (envEx1 && plan.project && plan.project.authorized !== '' && envAmount_(cur, envKey_(envEx1)) !== plan.project.authorized) { params.authorized = plan.project.authorized; wanted++; }
-    var allocations = [];
-    plan.wps.forEach(function (w) {
-      if (w.envelope === '') return;
-      var wp = repoList('WorkPackage', function (x) { return x.project_id === project.id && String(x.wbs_code) === w.code; })[0];
-      if (envEx1 && wp && envAmount_(wp, envKey_(envEx1)) !== w.envelope) allocations.push({ wpId: wp.id, amount: w.envelope });
-    });
-    if (allocations.length) { params.allocations = allocations; wanted += allocations.length; }
-    if (wanted) { run('budget.envelope.set', params); applied.envelope += wanted; }
-  });
 }
 
 /**
@@ -13347,7 +13048,7 @@ defineAction('import.run', function (p, ctx) {
   if (all.errors.length) throw new PpmError('VALIDATION', 'Le classeur a ' + all.errors.length + ' erreur(s) : lancez « Analyser » et corrigez-les avant d’importer.', { rule: 'IMPORT_ERRORS', errors: all.errors.slice(0, 20) });
   var backup = p.resume ? null : importBackup_(ctx, all);
   var started = nowMs(), ops = 0, maxOps = p.maxOps ? Number(p.maxOps) : 0;
-  var applied = { programs: 0, projects: 0, people: 0, wps: 0, items: 0, contributors: 0, lines: 0, envelope: 0, deps: 0 };
+  var applied = { programs: 0, projects: 0, people: 0, wps: 0, items: 0, contributors: 0, lines: 0, deps: 0 };
   var full = function () { return (maxOps && ops >= maxOps) || nowMs() - started > IMPORT_BUDGET_MS; };
   var run = function (name, params) { ops++; return API_ACTIONS[name](params, ctx); };
   var stopped = false;
@@ -13437,19 +13138,18 @@ var WBS_EDIT_NOTES = {
 var RIGHTS_ROWS = [
   { group: 'Lire', all: true, label: 'Lire le WBS, le planning, l’avancement, les risques, les actualités', where: 'tout le monde, y compris sans rôle (Reader)' },
   { group: 'Lire', perm: 'sensitive.read', label: 'Lire les comptes rendus de réunion' },
-  { group: 'Lire', perm: 'budget.edit', label: 'Lire et saisir le budget (lignes par livrable)', where: 'sur son périmètre : un Workpackage leader ne voit que son workpackage' },
+  { group: 'Lire', perm: 'budget.edit', label: 'Lire et saisir le budget (cellules livrable × équipe, forfaits)', where: 'sur son périmètre : un Workpackage leader ne voit que son workpackage' },
   { group: 'Lire', perm: 'program.view', label: 'Vues consolidées d’un programme (Actualités, Suivi, Budget)' },
   { group: 'Planning et avancement', perm: 'progress.declare', label: 'Déclarer l’avancement d’un livrable' },
   { group: 'Planning et avancement', perm: 'milestone.pass', label: 'Marquer un jalon passé (ou le rouvrir)', where: 'le responsable du jalon (Deliverable owner) et les niveaux au-dessus' },
   { group: 'Planning et avancement', perm: 'baseline.request', label: 'Demander une baseline' },
   { group: 'Planning et avancement', perm: 'baseline.manage', label: 'Réactiver une baseline du projet, refuser une demande de baseline du projet' },
   { group: 'Planning et avancement', perm: 'import.run', label: 'Exporter et importer son projet par classeur Google Sheet (page WBS)', where: 'chef de projet et au-dessus, projet par projet ; plusieurs projets, programmes et personnes (page Administration) : l’administrateur seul' },
-  { group: 'Budget et achats', perm: 'budget.authorize', label: 'Fixer l’enveloppe budgétaire du projet et des workpackages', where: 'celle d’un sous-workpackage : son Workpackage leader et au-dessus' },
-  { group: 'Budget et achats', perm: 'exercise.read', label: 'Voir l’exercice budgétaire (attendu, accordé, parts par équipe)', where: 'en entier, au global du projet' },
-  { group: 'Budget et achats', perm: 'exercise.edit', label: 'Saisir le budget attendu et accordé par équipe d’un projet (à la main ou par import d’un classeur Google Sheet)' },
+  { group: 'Budget et achats', perm: 'exercise.read', label: 'Voir l’exercice budgétaire (dotation et plan par équipe)', where: 'en entier, au global du projet' },
+  { group: 'Budget et achats', perm: 'exercise.edit', label: 'Saisir la dotation de chaque équipe d’un projet' },
   { group: 'Budget et achats', perm: 'cpn.edit', label: 'Définir le CPN du projet et des sous-projets' },
   { group: 'Budget et achats', perm: 'po.edit', label: 'Saisir les commandes d’achat (PO)' },
-  { group: 'Budget et achats', perm: 'actuals.manage', label: 'Importer le réalisé comptable (classeur mensuel « CUC Total Cost »)', where: 'l’administrateur seul ; le réalisé se lit avec le budget du projet' },
+  { group: 'Budget et achats', perm: 'actuals.manage', label: 'Saisir à la main le réalisé comptable (par CPN, équipe et mois)', where: 'chef de projet et au-dessus ; le réalisé se lit avec le budget du projet' },
   { group: 'Personnes', perm: 'resource.edit', label: 'Créer et modifier les personnes et les équipes, importer la structure des équipes (page Ressources)', where: 'chacun peut modifier sa propre fonction et son organisation' },
   { group: 'Projets et programmes', perm: 'program.create', label: 'Créer un programme' },
   { group: 'Projets et programmes', perm: 'project.create', label: 'Créer un projet' },
@@ -14029,18 +13729,18 @@ defineAction('teams.import.run', function (p, ctx) {
 /**
  * PPM Core — 0.17.1 : l'EXERCICE BUDGÉTAIRE annuel.
  *
- * Chaque année, on passe d'un budget attendu PAR ÉQUIPE à une liste de livrables chiffrés par équipe qui tient dans ce budget, puis on suit l'exécution.
- *   - Avant l'été : le budget ATTENDU par équipe à 3 caractères (ex. « 1vm »), par projet. Une équipe à 4 caractères (« 1vmd », rattachée à « 1vm ») est un détail facultatif qui s'additionne
+ * Chaque année, une DOTATION par équipe (un seul montant annuel, saisi et révisé) face au PLAN BUDGÉTAIRE : le tableau livrable × équipe (43_Budget.gs, 55_Plan.gs).
+ *   - La dotation d'une équipe à 3 caractères (ex. « 1vm ») est saisie par projet. Une équipe à 4 caractères (« 1vmd », rattachée à « 1vm ») est un détail facultatif qui s'additionne
  *     dans sa parente. Le niveau se lit au NOMBRE DE CARACTÈRES du nom de l'équipe.
- *   - Septembre : les livrables, chacun avec une PART PAR ÉQUIPE en montant libre (43_Budget.gs). Pour chaque équipe : attendu · total des parts · écart.
- *   - Décembre : le budget ACCORDÉ, qui peut être réduit : l'écart avec les parts est le CLASH, résorbé en redéfinissant les livrables. Février et avril : l'accordé peut être revu.
+ *   - Pour chaque équipe : dotation · plan (total de ses parts de livrables) · écart. Quand la dotation est réduite sous le plan, c'est le CLASH, résorbé en redéfinissant les livrables.
+ *   - Les révisions successives de la dotation et du plan se gardent par les versions (les baselines du projet).
  * On AFFICHE les écarts, on ne bloque jamais. Un exercice est en Préparation (l'année qui vient), en Exécution (l'année en cours) ou Clos ; au plus un de chaque état ; un livrable n'a
  * qu'un exercice.
  *
  * COÛT D'UN ETP. Il n'y a plus aucun taux journalier : seulement le coût annuel d'un ETP par pays et par année (administrateur). Un montant se convertit en jours par :
  *   jours = montant ÷ (coût annuel de l'ETP du pays ÷ jours ouvrés de l'année dans le pays) ; le pays est celui de l'équipe ; sans coût paramétré : null (« à paramétrer »), jamais un faux chiffre.
  *
- * Droits : exercise.read (Workpackage leader et au-dessus, en profondeur) ; exercise.edit (chef de projet et au-dessus) saisit l'attendu et l'accordé de son projet ; exercices et coût d'un ETP :
+ * Droits : exercise.read (Workpackage leader et au-dessus, en profondeur) ; exercise.edit (chef de projet et au-dessus) saisit la dotation de son projet ; exercices et coût d'un ETP :
  * administrateur.
  */
 
@@ -14182,7 +13882,7 @@ defineAction('budget.deliverable.exercise', function (p, ctx) {
 // ---------------------------------------------------------------- le tableau d'un exercice
 
 /**
- * Les données d'un exercice pour des projets : budgets d'équipe, livrables de l'exercice et leurs parts par équipe.
+ * Les données d'un exercice pour des projets : dotations d'équipe, livrables de l'exercice et leurs parts par équipe (le plan budgétaire).
  */
 function exerciseData_(ex, projectIds) {
   var inProj = {}; projectIds.forEach(function (id) { inProj[id] = true; });
@@ -14196,12 +13896,13 @@ function exerciseData_(ex, projectIds) {
 }
 
 /**
- * Le tableau par équipe : une ligne par équipe à 3 caractères (avec ses équipes à 4 caractères en détail), attendu · accordé · parts · écarts. Les équipes à 4 caractères sans parente à 3
+ * Le tableau par équipe : une ligne par équipe à 3 caractères (avec ses équipes à 4 caractères en détail), DOTATION · plan (parts des livrables) · écart. Les équipes à 4 caractères sans parente à 3
  * caractères (`orphans`) et les équipes hors règle (`unruled`) sont à part, car elles ne s'additionnent nulle part. `projectId` restreint à un projet (sinon tous ceux de `data`).
+ * Le « clash » : le plan d'une équipe dépasse sa dotation.
  */
 function exerciseTable_(ex, data, projectId) {
   var rows = {}, orphans = {}, unruled = {};
-  var make = function (t) { return { team_id: t.id, name: t.name, country: t.country || 'FR', expected: null, granted: null, parts: 0, own: { expected: null, granted: null, parts: 0 }, children: {} }; };
+  var make = function (t) { return { team_id: t.id, name: t.name, country: t.country || 'FR', dotation: null, parts: 0, own: { dotation: null, parts: 0 }, children: {} }; };
   var locate = function (t) {
     var lvl = teamLevel_(t);
     if (lvl === 3) return { map: rows, root: t, child: null };
@@ -14216,14 +13917,12 @@ function exerciseTable_(ex, data, projectId) {
     if (!t || isTrue(t.deleted)) return;
     var loc = locate(t), row = loc.map[loc.root.id] = loc.map[loc.root.id] || make(loc.root);
     addTo(row, field, v);
-    if (loc.child) { var ch = row.children[loc.child.id] = row.children[loc.child.id] || { team_id: loc.child.id, name: loc.child.name, expected: null, granted: null, parts: 0 }; addTo(ch, field, v); }
+    if (loc.child) { var ch = row.children[loc.child.id] = row.children[loc.child.id] || { team_id: loc.child.id, name: loc.child.name, dotation: null, parts: 0 }; addTo(ch, field, v); }
     else addTo(row.own, field, v);
   };
   data.budgets.forEach(function (b) {
     if (projectId && b.project_id !== projectId) return;
-    var t = data.teamById[b.team_id];
-    if (!isBlank(b.expected)) apply(t, 'expected', Number(b.expected));
-    if (!isBlank(b.granted)) apply(t, 'granted', Number(b.granted));
+    if (!isBlank(b.amount)) apply(data.teamById[b.team_id], 'dotation', Number(b.amount));
   });
   data.lines.forEach(function (l) {
     var it = data.itemById[l.deliverable_id];
@@ -14232,28 +13931,27 @@ function exerciseTable_(ex, data, projectId) {
   });
   var finish = function (r) {
     var days = function (x) { return x === null ? null : daysFromAmount_(x, r.country, Number(ex.year)); };
-    ['expected', 'granted', 'parts'].forEach(function (f) { if (r[f] !== null) r[f] = round2(r[f]); });
+    ['dotation', 'parts'].forEach(function (f) { if (r[f] !== null) r[f] = round2(r[f]); });
     return Object.assign(r, {
-      gap_expected: r.expected === null ? null : round2(r.expected - r.parts),
-      gap_granted: r.granted === null ? null : round2(r.granted - r.parts),
-      clash: r.granted !== null && r.parts > r.granted,
-      expected_days: days(r.expected), granted_days: days(r.granted), parts_days: days(r.parts),
+      gap: r.dotation === null ? null : round2(r.dotation - r.parts),
+      clash: r.dotation !== null && r.parts > r.dotation,
+      dotation_days: days(r.dotation), parts_days: days(r.parts),
       children: Object.keys(r.children).map(function (k) { return r.children[k]; }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); })
     });
   };
   var list = function (m) { return Object.keys(m).map(function (k) { return finish(m[k]); }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); }); };
   var out = { rows: list(rows), orphans: list(orphans), unruled: list(unruled) };
-  var sum = function (f) { var any = false, t = 0; out.rows.concat(out.orphans, out.unruled).forEach(function (r) { if (r[f] !== null) { any = true; t += r[f]; } }); return any ? round2(t) : null; };
-  out.totals = { expected: sum('expected'), granted: sum('granted'), parts: round2(out.rows.concat(out.orphans, out.unruled).reduce(function (a, r) { return a + r.parts; }, 0)) };
-  out.totals.gap_expected = out.totals.expected === null ? null : round2(out.totals.expected - out.totals.parts);
-  out.totals.gap_granted = out.totals.granted === null ? null : round2(out.totals.granted - out.totals.parts);
-  out.totals.clash = out.totals.granted !== null && out.totals.parts > out.totals.granted;
+  var all = out.rows.concat(out.orphans, out.unruled);
+  var dot = null; all.forEach(function (r) { if (r.dotation !== null) dot = (dot === null ? 0 : dot) + r.dotation; });
+  out.totals = { dotation: dot === null ? null : round2(dot), parts: round2(all.reduce(function (a, r) { return a + r.parts; }, 0)) };
+  out.totals.gap = out.totals.dotation === null ? null : round2(out.totals.dotation - out.totals.parts);
+  out.totals.clash = out.totals.dotation !== null && out.totals.parts > out.totals.dotation;
   return out;
 }
 
 function exerciseTeamChoices_(teams) {
   var byId = indexBy_(teams);
-  return teams.filter(function (t) { return teamLevel_(t) > 0; }).map(function (t) {
+  return teams.filter(function (t) { return teamLevel_(t) > 0 && !isTrue(t.deleted); }).map(function (t) {
     var par = isBlank(t.parent_team_id) ? null : byId[t.parent_team_id];
     return { id: t.id, name: t.name, level: teamLevel_(t), country: t.country || 'FR', parent: par ? par.name : '', orphan: teamLevel_(t) === 4 && !(par && teamLevel_(par) === 3) };
   }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
@@ -14270,7 +13968,7 @@ defineAction('exercise.get', function (p, ctx) {
   table.rows.concat(table.orphans, table.unruled).forEach(function (r) { countries[r.country] = true; });
   return Object.assign({
     exercise: exerciseView_(ex), project: { id: project.id, code: project.code, name: project.name },
-    can_edit: canEdit && ex.status !== 'Clos', can_edit_expected: canEdit && ex.status === 'Préparation', can_edit_granted: canEdit && ex.status !== 'Clos',
+    can_edit: canEdit && ex.status !== 'Clos',
     teams: exerciseTeamChoices_(data.teams),
     etp_missing: Object.keys(countries).filter(function (c) { return etpCostOf_(c, Number(ex.year)) === null; }).sort(),
     deliverables: data.items.length
@@ -14288,7 +13986,7 @@ defineAction('exercise.program', function (p, ctx) {
   var data = exerciseData_(ex, projects.map(function (x) { return x.id; }));
   var perProject = projects.map(function (x) {
     var t = exerciseTable_(ex, data, x.id).totals;
-    return { id: x.id, code: x.code, name: x.name, expected: t.expected, granted: t.granted, parts: t.parts, gap_expected: t.gap_expected, gap_granted: t.gap_granted, clash: t.clash };
+    return { id: x.id, code: x.code, name: x.name, dotation: t.dotation, parts: t.parts, gap: t.gap, clash: t.clash };
   }).sort(function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); });
   var table = exerciseTable_(ex, data, '');
   return Object.assign({ exercise: exerciseView_(ex), program: { id: program.id, code: program.code, name: program.name }, projects: perProject }, table);
@@ -14306,8 +14004,8 @@ function exerciseTeamCheck_(team) {
 }
 
 /**
- * Saisir l'attendu et/ou l'accordé d'une équipe sur un projet. Le chef de projet et au-dessus. L'attendu se fige quand l'exercice passe en exécution ; l'accordé reste modifiable
- * (février, avril) jusqu'à la clôture. Une valeur vide efface ; une ligne sans aucune valeur disparaît.
+ * Saisir la DOTATION d'une équipe sur un projet (le montant annuel qui lui est donné). Le chef de projet et au-dessus ; révisable jusqu'à la clôture de l'exercice (chaque révision se garde dans
+ * une baseline). Un montant vide efface la dotation.
  */
 defineAction('exercise.set', function (p, ctx) {
   var project = mustGet('Project', requireParam(p, 'projectId'));
@@ -14317,288 +14015,24 @@ defineAction('exercise.set', function (p, ctx) {
   var team = mustGet('HierarchicalTeam', requireParam(p, 'teamId'));
   var teamErr = exerciseTeamCheck_(team);
   if (teamErr) throw new PpmError('VALIDATION', teamErr);
-  var touched = ['expected', 'granted'].filter(function (f) { return f in p; });
-  if (!touched.length) throw new PpmError('VALIDATION', 'Rien à enregistrer : donnez l’attendu ou l’accordé.');
-  if (touched.indexOf('expected') >= 0 && ex.status !== 'Préparation') throw new PpmError('VALIDATION', 'Le budget attendu est figé : l’exercice ' + ex.year + ' est en ' + ex.status.toLowerCase() + '.');
-  var values = {};
-  touched.forEach(function (f) {
-    if (isBlank(p[f])) { values[f] = ''; return; }
-    var n = Number(String(p[f]).replace(',', '.'));
-    if (isNaN(n) || n < 0 || n > 1e10) throw new PpmError('VALIDATION', (f === 'expected' ? 'Budget attendu' : 'Budget accordé') + ' : un nombre positif ou nul.');
-    values[f] = round2(n);
-  });
+  if (!('amount' in p)) throw new PpmError('VALIDATION', 'Rien à enregistrer : donnez la dotation (vide pour l’effacer).');
+  var amount = '';
+  if (!isBlank(p.amount)) {
+    var n = Number(String(p.amount).replace(',', '.'));
+    if (isNaN(n) || n < 0 || n > 1e10) throw new PpmError('VALIDATION', 'Dotation : un nombre positif ou nul.');
+    amount = round2(n);
+  }
   return withLock(function () {
     var row = repoList('TeamBudget', function (b) { return b.exercise_id === ex.id && b.project_id === project.id && b.team_id === team.id; })[0];
     if (!row) {
-      if (touched.every(function (f) { return values[f] === ''; })) return { saved: false };
-      repoInsert('TeamBudget', Object.assign({ exercise_id: ex.id, project_id: project.id, team_id: team.id, expected: '', granted: '' }, values), ctx.actx);
+      if (amount === '') return { saved: false };
+      repoInsert('TeamBudget', { exercise_id: ex.id, project_id: project.id, team_id: team.id, amount: amount }, ctx.actx);
       return { saved: true };
     }
-    var next = Object.assign({ expected: row.expected, granted: row.granted }, values);
-    if (isBlank(next.expected) && isBlank(next.granted)) { repoSoftDelete('TeamBudget', row.id, null, ctx.actx); return { saved: true, removed: true }; }
-    repoUpdate('TeamBudget', row.id, values, null, ctx.actx);
+    if (amount === '') { repoSoftDelete('TeamBudget', row.id, null, ctx.actx); return { saved: true, removed: true }; }
+    repoUpdate('TeamBudget', row.id, { amount: amount }, null, ctx.actx);
     return { saved: true };
   });
-});
-
-// ======================================================================
-// 61_ExerciseImport.gs
-// ======================================================================
-
-/**
- * PPM Core — 0.17.4 : l'exercice budgétaire dans un classeur Google Sheet (export et import).
- *
- * La préparation de l'exercice se fait d'abord dans un tableur : le budget attendu par équipe et par projet (avant l'été), puis les parts de chaque livrable par équipe (septembre), puis
- * l'accordé (décembre, février, avril). On exporte l'exercice choisi, on le modifie dans le tableur, on le réimporte. Trois actions, pour qui saisit l'exercice (droit `exercise.edit` :
- * chef de projet et au-dessus ; chacun n'agit que sur les projets où il a ce droit) :
- *   exercise.import.template  crée dans Drive un classeur prérempli avec l'exercice (c'est l'export) et le partage avec la personne ;
- *   exercise.import.analyze   lit un classeur et rend un RAPPORT sans rien écrire (chaque erreur avec son onglet et sa ligne) ;
- *   exercise.import.run       applique le plan, par lots reprenables ; copie de sécurité avant le premier lot si des valeurs existantes vont changer.
- *
- * ONGLETS. « Budget par équipe » : Projet (code) · Équipe (nom) · Attendu (€) · Accordé (€). « Parts des livrables » (facultatif) : Projet · Code WBS du workpackage (vide : livrable à la racine du
- * projet) · Livrable · Équipe · Montant (€). Les livrables doivent exister déjà (import du WBS, page WBS) : cet import ne crée aucun livrable.
- *
- * RÈGLES. Les valeurs du classeur sont APPLIQUÉES (c'est l'usage : on modifie un montant dans le tableur et on réimporte) ; une cellule vide ne change rien et n'efface rien ; une ligne absente du
- * classeur est laissée telle quelle : l'import ne supprime jamais rien. Les règles de l'exercice s'appliquent ligne à ligne : l'attendu est figé quand l'exercice est en exécution, rien ne change dans
- * un exercice clos, une équipe qui porte un budget a un nom de 3 ou 4 caractères, un livrable n'a qu'un exercice. Tout est analysé avant d'écrire : une seule erreur et rien n'est écrit.
- */
-
-var EXIMP_TABS = [
-  { name: 'Budget par équipe', cols: ['Projet', 'Équipe', 'Attendu (€)', 'Accordé (€)'], text: [0, 1] },
-  { name: 'Parts des livrables', cols: ['Projet', 'Code WBS du workpackage', 'Livrable', 'Équipe', 'Montant (€)'], text: [0, 1], optional: true }
-];
-var EXIMP_LIMITS = { budgets: 3000, parts: 5000 };
-
-var EXIMP_README = [
-  ['Exercice budgétaire — mode d’emploi'],
-  [''],
-  ['Deux onglets : « Budget par équipe » (l’attendu et l’accordé de chaque équipe sur chaque projet) et « Parts des livrables » (la part de chaque équipe sur chaque livrable). Ne changez ni les noms d’onglets ni les en-têtes de colonnes.'],
-  ['Ce classeur est prérempli avec l’exercice choisi dans l’outil : modifiez les montants, ajoutez des lignes, puis revenez dans la page Budget (Importer l’exercice) pour « Analyser », puis « Importer ».'],
-  [''],
-  ['Projet : le code du projet. Équipe : le nom exact de l’équipe (3 caractères : elle porte le budget ; 4 caractères : un détail rattaché à son équipe parente à 3 caractères), sans tenir compte des accents ni de la casse.'],
-  ['Budget par équipe : une cellule vide ne change rien et n’efface rien. L’attendu se fige quand l’exercice passe en exécution ; l’accordé reste modifiable jusqu’à la clôture ; un exercice clos ne change plus.'],
-  ['Parts des livrables : le code WBS du workpackage qui contient le livrable (vide s’il est à la racine du projet), puis le nom du livrable, qui doit exister déjà (page WBS ou import du WBS). Un livrable n’a qu’un exercice.'],
-  [''],
-  ['Les valeurs du classeur sont appliquées ; ce qui n’est pas dans le classeur est laissé tel quel : l’import ne supprime jamais rien. Une copie de sécurité est enregistrée avant de modifier des valeurs existantes. Importer deux fois le même classeur ne change rien.']
-];
-
-/** Les projets dont la personne saisit l'exercice (chef de projet et au-dessus ; l'administrateur : tous). */
-function eximpProjects_(ctx) {
-  return repoList('Project').filter(function (p) { return ctx.isAdmin || can(ctx, 'exercise.edit', { type: 'project', id: p.id }); })
-    .sort(function (a, b) { return String(a.code).localeCompare(String(b.code), 'fr', { numeric: true }); });
-}
-
-/** Les lignes du classeur pour un exercice : l'export. */
-function eximpRows_(ctx, ex) {
-  var projects = eximpProjects_(ctx), byId = indexBy_(projects), teamById = indexBy_(repoList('HierarchicalTeam')), wpById = indexBy_(repoList('WorkPackage'));
-  var items = repoList('PlanItem', function (i) { return byId[i.project_id] && i.item_type === 'Livrable' && i.exercise_id === ex.id; }), itemById = indexBy_(items);
-  var code = function (id) { return byId[id].code; }, num = function (v) { return isBlank(v) ? '' : Number(v); };
-  var budgets = repoList('TeamBudget', function (b) { return b.exercise_id === ex.id && byId[b.project_id] && teamById[b.team_id]; })
-    .sort(function (a, b) { return String(code(a.project_id)).localeCompare(String(code(b.project_id)), 'fr', { numeric: true }) || String(teamById[a.team_id].name).localeCompare(String(teamById[b.team_id].name), 'fr'); })
-    .map(function (b) { return [code(b.project_id), teamById[b.team_id].name, num(b.expected), num(b.granted)]; });
-  var parts = repoList('BudgetLine', function (l) { return l.cost_type === 'Équipe' && itemById[l.deliverable_id] && teamById[l.team_id]; })
-    .map(function (l) {
-      var it = itemById[l.deliverable_id], wp = it.wp_id ? wpById[it.wp_id] : null;
-      return [code(it.project_id), wp ? String(wp.wbs_code || '') : '', it.name, teamById[l.team_id].name, Number(l.planned_amount) || 0];
-    })
-    .sort(function (a, b) { return String(a[0]).localeCompare(String(b[0]), 'fr', { numeric: true }) || String(a[1]).localeCompare(String(b[1]), 'fr', { numeric: true }) || String(a[2]).localeCompare(String(b[2]), 'fr') || String(a[3]).localeCompare(String(b[3]), 'fr'); });
-  return { 'Budget par équipe': budgets, 'Parts des livrables': parts };
-}
-
-/** Crée le classeur dans Drive, l'écrit et le partage ; un échec de création se propage, un échec de partage n'est qu'un avertissement. */
-function eximpBuildWorkbook_(ctx, ex, title) {
-  var rows = eximpRows_(ctx, ex);
-  var ss = SpreadsheetApp.create(title);
-  var readme = ss.insertSheet('Lisez-moi');
-  readme.getRange(1, 1, EXIMP_README.length, 1).setValues(EXIMP_README);
-  readme.getRange(1, 1).setFontWeight('bold');
-  EXIMP_TABS.forEach(function (tab) {
-    var sh = ss.insertSheet(tab.name), data = rows[tab.name] || [];
-    sh.getRange(1, 1, 1, tab.cols.length).setValues([tab.cols]).setFontWeight('bold');
-    sh.setFrozenRows(1);
-    // les codes en texte brut : sinon « 1.10 » deviendrait le nombre 1,1
-    tab.text.forEach(function (c) { sh.getRange(2, c + 1, Math.max(data.length, 1) + 500, 1).setNumberFormat('@'); });
-    if (data.length) sh.getRange(2, 1, data.length, tab.cols.length).setValues(data.map(function (row) { return row.map(function (v, c) { return tab.text.indexOf(c) >= 0 && v !== '' ? String(v) : v; }); }));
-  });
-  ['Feuille 1', 'Sheet1'].forEach(function (n) { var d = ss.getSheetByName(n); if (d && ss.getSheets().length > 1) { try { ss.deleteSheet(d); } catch (e) { /* laissée */ } } });
-  var warnings = [], email = String(ctx.email || '').toLowerCase();
-  try {
-    if (IMPORT_DRIVE) IMPORT_DRIVE.share(ss.getId(), email);
-    else if (email) DriveApp.getFileById(ss.getId()).addEditor(email);
-  } catch (e) { warnings.push('Le classeur est créé mais n’a pas pu être partagé avec ' + email + ' : ' + String(e && e.message ? e.message : e).slice(0, 160) + ' Demandez le partage à l’administrateur.'); }
-  return { id: ss.getId(), url: ss.getUrl(), name: ss.getName(), warnings: warnings, prefilled: { budgets: rows['Budget par équipe'].length, parts: rows['Parts des livrables'].length } };
-}
-
-function eximpExercise_(p) { return mustGet('Exercise', requireParam(p, 'exerciseId')); }
-function eximpRequireEditor_(ctx) {
-  if (!eximpProjects_(ctx).length) throw new PpmError('FORBIDDEN', 'Saisir l’exercice est réservé au chef de projet et aux niveaux au-dessus.');
-}
-
-/** Le plan d'import, sans rien écrire. */
-function eximpAnalyze_(book, ex, ctx) {
-  var P = book.parsed, errors = book.problems.slice(), warnings = [];
-  var err = function (tab, row, msg) { errors.push({ tab: tab, row: row, message: msg }); };
-  var warn = function (tab, row, msg) { warnings.push({ tab: tab, row: row, message: msg }); };
-  var TB = EXIMP_TABS[0].name, TP = EXIMP_TABS[1].name;
-  var rowsB = P[TB] || [], rowsP = P[TP] || [];
-  if (rowsB.length > EXIMP_LIMITS.budgets) err(TB, rowsB[EXIMP_LIMITS.budgets]._row, 'Au plus ' + EXIMP_LIMITS.budgets + ' lignes par import.');
-  if (rowsP.length > EXIMP_LIMITS.parts) err(TP, rowsP[EXIMP_LIMITS.parts]._row, 'Au plus ' + EXIMP_LIMITS.parts + ' lignes par import.');
-  var closed = ex.status === 'Clos';
-  var projectsByCode = {}; repoList('Project').forEach(function (p) { projectsByCode[String(p.code)] = p; });
-  var editable = {}; eximpProjects_(ctx).forEach(function (p) { editable[p.id] = true; });
-  var teamsByName = {}; repoList('HierarchicalTeam').forEach(function (t) { (teamsByName[teamNorm_(t.name)] = teamsByName[teamNorm_(t.name)] || []).push(t); });
-  var project = function (tab, row, code) {
-    var p = projectsByCode[code];
-    if (!code) { err(tab, row, 'Projet obligatoire (le code du projet).'); return null; }
-    if (!p || isTrue(p.deleted)) { err(tab, row, 'Projet « ' + code + ' » : introuvable.'); return null; }
-    if (!editable[p.id]) { err(tab, row, 'Projet « ' + code + ' » : saisir son exercice est réservé à son chef de projet et aux niveaux au-dessus.'); return null; }
-    return p;
-  };
-  var team = function (tab, row, name) {
-    if (!name) { err(tab, row, 'Équipe obligatoire.'); return null; }
-    var f = teamsByName[teamNorm_(name)] || [];
-    if (f.length !== 1) { err(tab, row, f.length ? 'Plusieurs équipes s’appellent « ' + name + ' » : renommez-en une avant d’importer.' : 'Équipe « ' + name + ' » : introuvable (importez d’abord la structure des équipes, page Ressources).'); return null; }
-    return f[0];
-  };
-  var budgetsNow = {}; repoList('TeamBudget', function (b) { return b.exercise_id === ex.id; }).forEach(function (b) { budgetsNow[b.project_id + '|' + b.team_id] = b; });
-  var plan = { budgets: [], parts: [] };
-
-  // ---- budget par équipe
-  var seenB = {};
-  rowsB.forEach(function (r) {
-    var row = r._row, bad = false;
-    var pr = project(TB, row, r['Projet']); if (!pr) bad = true;
-    var tm = team(TB, row, r['Équipe']); if (!tm) bad = true;
-    var exp = importAmount_(r._raw['Attendu (€)']), grt = importAmount_(r._raw['Accordé (€)']);
-    if (exp !== exp) { err(TB, row, 'Attendu : un montant en euros positif ou nul.'); bad = true; }
-    if (grt !== grt) { err(TB, row, 'Accordé : un montant en euros positif ou nul.'); bad = true; }
-    if (tm) { var msg = exerciseTeamCheck_(tm); if (msg) { err(TB, row, msg); bad = true; } }
-    if (pr && tm) {
-      var key = pr.id + '|' + tm.id;
-      if (seenB[key]) { err(TB, row, 'Cette équipe est déjà à la ligne ' + seenB[key] + ' pour ce projet.'); bad = true; }
-      seenB[key] = row;
-    }
-    if (bad) return;
-    if (exp === '' && grt === '') { warn(TB, row, 'Ni attendu ni accordé : ligne ignorée.'); return; }
-    var cur = budgetsNow[pr.id + '|' + tm.id] || null;
-    var diffE = exp !== '' && (!cur || isBlank(cur.expected) || Number(cur.expected) !== exp), diffG = grt !== '' && (!cur || isBlank(cur.granted) || Number(cur.granted) !== grt);
-    if (diffE && ex.status !== 'Préparation' && !closed) { err(TB, row, 'Attendu : il est figé, l’exercice ' + ex.year + ' est en ' + ex.status.toLowerCase() + ' (laissez la cellule vide ou à sa valeur actuelle).'); return; }
-    if ((diffE || diffG) && closed) { err(TB, row, 'L’exercice ' + ex.year + ' est clos : on n’y change plus rien.'); return; }
-    plan.budgets.push({ row: row, project: pr, team: tm, expected: exp, granted: grt, diffE: diffE, diffG: diffG, current: cur, action: !(diffE || diffG) ? 'same' : (cur ? 'update' : 'create') });
-  });
-
-  // ---- parts des livrables
-  var wpsByCode = {}; repoList('WorkPackage').forEach(function (w) { if (!isTrue(w.deleted)) wpsByCode[w.project_id + '|' + String(w.wbs_code || '')] = w; });
-  var itemsByKey = {}; repoList('PlanItem', function (i) { return i.item_type === 'Livrable' && !isTrue(i.deleted); }).forEach(function (i) { var k = i.project_id + '|' + (i.wp_id || '') + '|' + teamNorm_(i.name); (itemsByKey[k] = itemsByKey[k] || []).push(i); });
-  var exercises = indexBy_(repoList('Exercise'));
-  var linesNow = {}; repoList('BudgetLine', function (l) { return l.cost_type === 'Équipe'; }).forEach(function (l) { linesNow[l.deliverable_id + '|' + l.team_id] = l; });
-  var seenP = {};
-  rowsP.forEach(function (r) {
-    var row = r._row, bad = false;
-    var pr = project(TP, row, r['Projet']); if (!pr) bad = true;
-    var wbs = r['Code WBS du workpackage'], name = r['Livrable'];
-    var wp = null;
-    if (pr && wbs) { wp = wpsByCode[pr.id + '|' + wbs] || null; if (!wp) { err(TP, row, 'Workpackage « ' + wbs + ' » : introuvable dans ' + pr.code + ' (page WBS).'); bad = true; } }
-    if (!name) { err(TP, row, 'Livrable obligatoire.'); bad = true; }
-    var tm = team(TP, row, r['Équipe']); if (!tm) bad = true;
-    var amount = importAmount_(r._raw['Montant (€)']);
-    if (amount !== amount || amount === '' || amount <= 0) { err(TP, row, 'Montant : un montant en euros positif.'); bad = true; }
-    var item = null;
-    if (pr && name && !bad) {
-      var found = itemsByKey[pr.id + '|' + (wp ? wp.id : '') + '|' + teamNorm_(name)] || [];
-      if (found.length !== 1) { err(TP, row, found.length ? 'Plusieurs livrables s’appellent « ' + name + ' » dans ce workpackage : renommez-en un.' : 'Livrable « ' + name + ' » : introuvable' + (wbs ? ' dans le workpackage ' + wbs : ' à la racine de ' + pr.code) + ' (il doit exister : page WBS ou import du WBS).'); bad = true; }
-      else item = found[0];
-    }
-    if (item && !isBlank(item.exercise_id) && item.exercise_id !== ex.id) {
-      var other = exercises[item.exercise_id]; err(TP, row, 'Le livrable « ' + item.name + ' » appartient à l’exercice ' + (other ? other.year : '?') + ' : un livrable n’a qu’un exercice.'); bad = true;
-    }
-    if (item && tm) {
-      var key = item.id + '|' + tm.id;
-      if (seenP[key]) { err(TP, row, 'Cette équipe a déjà une part sur ce livrable (ligne ' + seenP[key] + ').'); bad = true; }
-      seenP[key] = row;
-    }
-    if (bad || !item || !tm) return;
-    if (teamLevel_(tm) === 0) warn(TP, row, 'L’équipe « ' + tm.name + ' » n’a pas un nom de 3 ou 4 caractères : sa part sera comptée à part (hors règle), pas dans une équipe du tableau.');
-    var line = linesNow[item.id + '|' + tm.id] || null, same = line && Number(line.planned_amount) === amount;
-    if (!same && closed) { err(TP, row, 'L’exercice ' + ex.year + ' est clos : on n’y change plus rien.'); return; }
-    plan.parts.push({ row: row, project: pr, item: item, team: tm, amount: amount, line: line, action: same ? 'same' : (line ? 'update' : 'create') });
-  });
-
-  var count = function (list) { var c = { create: 0, update: 0, same: 0 }; list.forEach(function (x) { c[x.action]++; }); return c; };
-  return { errors: errors, warnings: warnings, plan: plan, counts: { budgets: count(plan.budgets), parts: count(plan.parts) } };
-}
-
-function eximpRemaining_(c) { return c.budgets.create + c.budgets.update + c.parts.create + c.parts.update; }
-
-function eximpReport_(book, ex, a) {
-  return {
-    book: { id: book.id, name: book.name }, exercise: { id: ex.id, year: Number(ex.year), status: ex.status }, ok: a.errors.length === 0,
-    errors: a.errors.slice(0, 200), errors_count: a.errors.length, warnings: a.warnings.slice(0, 200), warnings_count: a.warnings.length, counts: a.counts,
-    nothing_to_do: a.errors.length === 0 && eximpRemaining_(a.counts) === 0
-  };
-}
-
-defineAction('exercise.import.template', function (p, ctx) {
-  etpReset_();
-  eximpRequireEditor_(ctx);
-  var ex = eximpExercise_(p);
-  return eximpBuildWorkbook_(ctx, ex, 'PPM — Exercice ' + ex.year + ' — Budget par équipe — ' + todayStr());
-});
-
-defineAction('exercise.import.analyze', function (p, ctx) {
-  eximpRequireEditor_(ctx);
-  var ex = eximpExercise_(p), book = importReadBook_(requireParam(p, 'book'), EXIMP_TABS);
-  return eximpReport_(book, ex, eximpAnalyze_(book, ex, ctx));
-});
-
-/**
- * Applique le plan : budgets d'équipe (exercise.set), puis parts de livrables (budget.line.save, qui rattache le livrable à l'exercice). S'arrête au budget de temps ou à `maxOps` (essais) et dit
- * `done: false` ; relancer reprend, le plan étant recalculé. Au premier lancement (sans `resume`), une copie de sécurité est enregistrée si des valeurs EXISTANTES vont changer ; si elle échoue,
- * rien n'est écrit.
- */
-defineAction('exercise.import.run', function (p, ctx) {
-  etpReset_();
-  eximpRequireEditor_(ctx);
-  var ex = eximpExercise_(p), book = importReadBook_(requireParam(p, 'book'), EXIMP_TABS);
-  var all = eximpAnalyze_(book, ex, ctx);
-  if (all.errors.length) throw new PpmError('VALIDATION', 'Le classeur a ' + all.errors.length + ' erreur(s) : lancez « Analyser » et corrigez-les avant d’importer.', { rule: 'IMPORT_ERRORS', errors: all.errors.slice(0, 20) });
-  var backup = null;
-  if (!p.resume && all.counts.budgets.update + all.counts.parts.update > 0) {
-    try {
-      var wb = eximpBuildWorkbook_(ctx, ex, 'PPM — Copie avant import de l’exercice ' + ex.year + ' — ' + todayStr() + ' ' + String(nowIso()).slice(11, 16));
-      backup = { id: wb.id, url: wb.url, name: wb.name };
-    } catch (e) {
-      throw new PpmError('VALIDATION', 'La copie de sécurité n’a pas pu être créée (' + String(e && e.message ? e.message : e).slice(0, 140) + ') : l’import est annulé, rien n’a été écrit.', { rule: 'IMPORT_BACKUP' });
-    }
-  }
-  var started = nowMs(), ops = 0, maxOps = p.maxOps ? Number(p.maxOps) : 0, stopped = false, applied = { budgets: 0, parts: 0 };
-  var full = function () { return (maxOps && ops >= maxOps) || nowMs() - started > IMPORT_BUDGET_MS; };
-  var run = function (name, params) { ops++; return API_ACTIONS[name](params, ctx); };
-  var step = function (fn) { if (stopped) return; if (full()) { stopped = true; return; } fn(); };
-  all.plan.budgets.filter(function (b) { return b.action !== 'same'; }).forEach(function (b) {
-    step(function () {
-      var params = { projectId: b.project.id, exerciseId: ex.id, teamId: b.team.id };
-      if (b.diffE) params.expected = b.expected;   // seulement ce qui change : l'attendu d'un exercice en exécution est figé, une valeur identique ne doit pas le toucher
-      if (b.diffG) params.granted = b.granted;
-      run('exercise.set', params);
-      applied.budgets++;
-    });
-  });
-  all.plan.parts.filter(function (x) { return x.action !== 'same'; }).forEach(function (x) {
-    step(function () {
-      var line = repoList('BudgetLine', function (l) { return l.cost_type === 'Équipe' && l.deliverable_id === x.item.id && l.team_id === x.team.id; })[0];
-      if (line) {
-        if (Number(line.planned_amount) === x.amount) return;
-        run('budget.line.save', { id: line.id, version: line.version, values: { planned_amount: x.amount }, exerciseId: ex.id });
-      } else {
-        run('budget.line.save', { values: { deliverable_id: x.item.id, team_id: x.team.id, planned_amount: x.amount }, exerciseId: ex.id });
-      }
-      applied.parts++;
-    });
-  });
-  var after = eximpAnalyze_(importReadBook_(book.id, EXIMP_TABS), ex, ctx);
-  var remaining = eximpRemaining_(after.counts);
-  return { done: remaining === 0, stopped: stopped, applied: applied, remaining: remaining, operations: ops, counts: after.counts, backup: backup };
 });
 
 // ======================================================================
@@ -14606,25 +14040,22 @@ defineAction('exercise.import.run', function (p, ctx) {
 // ======================================================================
 
 /**
- * PPM Core — 0.18.1 : les CONSTATS du moteur de règles sur l'exercice budgétaire et les enveloppes.
+ * PPM Core — 0.21.0 : les CONSTATS du moteur de règles sur l'exercice budgétaire (dotation et plan).
  *
  * Le moteur (06_Rules.gs) transforme un écart en un constat que le chef de projet voit dans sa routine (page Suivi, récapitulatif du matin) : il ne bloque rien. Ces règles regardent les
  * mêmes chiffres que la page Budget (exerciseData_ et exerciseTable_) : le constat et le tableau ne peuvent pas se contredire. Un constat disparaît tout seul quand l'écart est résorbé ;
  * « Accepté » ou « Ignoré » n'est pas recréé (clé : règle + objet, l'exercice et le projet étant dans l'objet).
  *
- *   EXERCISE_CLASH           Alerte     l'accordé d'une équipe est inférieur à ses parts de livrables (le clash de décembre, des révisions de février et d'avril) ;
- *   EXERCISE_OVER_EXPECTED   Vigilance  en préparation : les parts d'une équipe dépassent son budget attendu ;
- *   EXERCISE_UNFUNDED        Vigilance  une équipe a des parts mais ni attendu ni accordé ;
- *   EXERCISE_NO_PARTS        Info       en préparation, une fois les livrables commencés : une équipe a un attendu mais aucune part ;
- *   EXERCISE_TEAM_RULE       Vigilance  des parts ou un budget sur une équipe dont le nom n'a pas 3 ou 4 caractères, ou à 4 caractères sans parente à 3 : ils ne comptent nulle part ;
- *   ENVELOPE_WP_EXCEEDED     Vigilance  les lignes de budget des livrables d'un workpackage dépassent son enveloppe ;
- *   ENVELOPE_PROJECT_EXCEEDED Vigilance le coût prévu du projet dépasse son budget autorisé.
+ *   EXERCISE_CLASH           Alerte     le plan d'une équipe (ses parts de livrables) dépasse sa dotation ;
+ *   EXERCISE_UNFUNDED        Vigilance  une équipe a des parts mais pas de dotation ;
+ *   EXERCISE_NO_PARTS        Info       en préparation, une fois les livrables commencés : une équipe a une dotation mais aucune part ;
+ *   EXERCISE_TEAM_RULE       Vigilance  des parts ou une dotation sur une équipe dont le nom n'a pas 3 ou 4 caractères, ou à 4 caractères sans parente à 3 : elles ne comptent nulle part.
  *
  * AUCUN MONTANT dans un constat (comme pour les commandes d'achat) : il part dans le récapitulatif du matin ; les chiffres sont dans la page Budget. Un constat de l'exercice ne se lit que par
- * qui peut lire l'exercice (Workpackage leader et au-dessus), un constat d'enveloppe que par qui lit le budget du projet (`insightReadable_`).
+ * qui peut lire l'exercice (Workpackage leader et au-dessus).
  */
 
-/** Les constats de l'exercice et des enveloppes, au format de `data.poFindings` : { projectId, rule, severity, targetType, targetId, message, suggestion }. */
+/** Les constats de l'exercice, au format de `data.poFindings` : { projectId, rule, severity, targetType, targetId, message, suggestion }. */
 function exerciseFindings_(today) {
   var out = [], live = function (r) { return !isTrue(r.deleted); };
   var projects = repoList('Project', function (p) { return live(p) && p.status !== 'Clos'; });
@@ -14638,49 +14069,27 @@ function exerciseFindings_(today) {
       var push = function (rule, sev, teamId, msg, sug) {
         out.push({ projectId: pr.id, rule: rule, severity: sev, targetType: 'ExerciseTeam', targetId: ex.id + ':' + pr.id + ':' + teamId, message: msg, suggestion: sug });
       };
-      var seeBudget = 'L’écart est dans la page Budget, zone « Exercice budgétaire ».';
+      var seeBudget = 'L’écart est dans la page Budget, zone « Plan budgétaire ».';
       t.rows.forEach(function (r) {
         var team = 'L’équipe « ' + r.name + ' »';
-        if (r.granted !== null && r.parts > r.granted) push('EXERCISE_CLASH', 'Alerte', r.team_id, 'Clash : les livrables de ' + team + ' dépassent son budget accordé' + where + '.', 'Redéfinir les livrables (retirer, reporter ou rechiffrer) ou obtenir une révision de l’accordé. ' + seeBudget);
-        if (prep && r.expected !== null && r.parts > r.expected) push('EXERCISE_OVER_EXPECTED', 'Vigilance', r.team_id, team + ' dépasse son budget attendu avec les parts de ses livrables' + where + '.', 'Rechiffrer ou retirer des livrables, ou demander plus de budget. ' + seeBudget);
-        if (r.expected === null && r.granted === null && r.parts > 0) push('EXERCISE_UNFUNDED', 'Vigilance', r.team_id, team + ' porte des parts de livrables' + where + ' mais n’a ni budget attendu ni budget accordé.', 'Saisir son budget attendu (ou accordé) dans la page Budget, ou déplacer ses parts vers une équipe budgétée.');
-        if (prep && t.totals.parts > 0 && r.expected !== null && r.expected > 0 && r.parts === 0) push('EXERCISE_NO_PARTS', 'Info', r.team_id, team + ' a un budget attendu' + where + ' mais aucun livrable chiffré.', 'Chiffrer ses livrables avant la convergence, ou revoir son budget attendu.');
+        if (r.dotation !== null && r.parts > r.dotation) push('EXERCISE_CLASH', 'Alerte', r.team_id, 'Clash : le plan de ' + team + ' dépasse sa dotation' + where + '.', 'Redéfinir les livrables (retirer, reporter ou rechiffrer) ou obtenir une révision de la dotation. ' + seeBudget);
+        if (r.dotation === null && r.parts > 0) push('EXERCISE_UNFUNDED', 'Vigilance', r.team_id, team + ' porte des parts de livrables' + where + ' mais n’a pas de dotation.', 'Saisir sa dotation dans la page Budget, ou déplacer ses parts vers une équipe dotée.');
+        if (prep && t.totals.parts > 0 && r.dotation !== null && r.dotation > 0 && r.parts === 0) push('EXERCISE_NO_PARTS', 'Info', r.team_id, team + ' a une dotation' + where + ' mais aucun livrable chiffré.', 'Chiffrer ses livrables avant la convergence, ou revoir sa dotation.');
       });
       t.orphans.concat(t.unruled).forEach(function (r) {
         var orphan = String(r.name).trim().length === 4;
-        push('EXERCISE_TEAM_RULE', 'Vigilance', r.team_id, 'L’équipe « ' + r.name + ' » porte des parts ou un budget' + where + (orphan ? ' mais, à 4 caractères, elle n’a pas d’équipe parente à 3 caractères' : ' mais son nom n’a pas 3 ou 4 caractères') + ' : ils ne comptent dans aucune équipe du tableau.',
-          orphan ? 'La rattacher à une équipe de 3 caractères (page Ressources) ou la renommer.' : 'La renommer selon sa place (3 caractères : elle porte le budget ; 4 : détail rattaché à une équipe de 3) ou déplacer ses parts.');
+        push('EXERCISE_TEAM_RULE', 'Vigilance', r.team_id, 'L’équipe « ' + r.name + ' » porte des parts ou une dotation' + where + (orphan ? ' mais, à 4 caractères, elle n’a pas d’équipe parente à 3 caractères' : ' mais son nom n’a pas 3 ou 4 caractères') + ' : elles ne comptent dans aucune équipe du tableau.',
+          orphan ? 'La rattacher à une équipe de 3 caractères (page Ressources) ou la renommer.' : 'La renommer selon sa place (3 caractères : elle porte la dotation ; 4 : détail rattaché à une équipe de 3) ou déplacer ses parts.');
       });
-    });
-  });
-  // enveloppes : workpackages et projet, exercice par exercice (0.19.3)
-  exercises.forEach(function (ex) {
-    projects.forEach(function (pr) {
-      var wps = repoList('WorkPackage', function (w) { return live(w) && w.project_id === pr.id; }), wpById = indexBy_(wps), costs = envelopeCosts_(pr.id, wpById, ex.id);
-      var where = ' (exercice ' + ex.year + ')';
-      wps.forEach(function (w) {
-        var al = envAmount_(w, envKey_(ex));
-        if (al === null || !((costs.byWp[w.id] || 0) > al)) return;
-        out.push({ projectId: pr.id, rule: 'ENVELOPE_WP_EXCEEDED', severity: 'Vigilance', targetType: 'WorkPackage', targetId: ex.id + ':' + w.id,
-          message: 'Les lignes de budget des livrables du workpackage « ' + w.name + ' » (' + pr.code + ') dépassent son enveloppe' + where + '.',
-          suggestion: 'Rechiffrer ou retirer des livrables, ou revoir l’enveloppe du workpackage (page Budget, zone « Décomposition du Budget »).' });
-      });
-      var au = envAmount_(pr, envKey_(ex));
-      if (au !== null) {
-        var total = costs.none; Object.keys(costs.byWp).forEach(function (k) { if (wpById[k] && !wpById[k].parent_wp_id) total = round2(total + costs.byWp[k]); });
-        if (total > au) out.push({ projectId: pr.id, rule: 'ENVELOPE_PROJECT_EXCEEDED', severity: 'Vigilance', targetType: 'Project', targetId: ex.id + ':' + pr.id,
-          message: 'Le coût prévu du projet ' + pr.code + ' dépasse son budget autorisé' + where + '.', suggestion: 'Rechiffrer ou retirer des livrables, ou revoir le budget autorisé du projet (page Budget, zone « Décomposition du Budget »).' });
-      }
     });
   });
   return out;
 }
 
-/** Ce constat est-il lisible par cette personne ? Exercice : qui lit l'exercice du projet ; enveloppe : qui lit le budget du projet ; tout le reste : oui. */
+/** Ce constat est-il lisible par cette personne ? Exercice : qui lit l'exercice du projet ; tout le reste : oui. */
 function insightReadable_(ctx, i) {
   var code = String(i.rule_code || '');
-  if (code.indexOf('EXERCISE_') === 0) return !!ctx.isAdmin || can(ctx, 'exercise.read', { type: 'project', id: i.project_id });
-  if (code.indexOf('ENVELOPE_') === 0) return !!ctx.isAdmin || !!budgetAccess_(ctx, i.project_id).budget;
+  if (code.indexOf('EXERCISE_') === 0 || code.indexOf('ENVELOPE_') === 0) return !!ctx.isAdmin || can(ctx, 'exercise.read', { type: 'project', id: i.project_id });
   return true;
 }
 
@@ -14689,15 +14098,16 @@ function insightReadable_(ctx, i) {
 // ======================================================================
 
 /**
- * PPM Core — 0.19.0 : le SUIVI BUDGÉTAIRE de l'exercice en exécution.
+ * PPM Core — 0.21.0 : le SUIVI BUDGÉTAIRE de l'exercice en exécution, lu dans le plan budgétaire.
  *
- * Pendant l'année, on suit l'avancement des livrables contre le budget : pour un projet et un exercice (par défaut celui en exécution), par équipe et au total :
- *   ACCORDÉ        le budget accordé (ou, à défaut, attendu) ;
- *   PRÉVU          les parts des livrables étalées par mois (BudgetPhasing) : prévu de l'année, prévu à ce jour, prévu au-delà de l'année ;
- *   VALEUR ACQUISE les parts × l'avancement du livrable : ce que l'avancement « vaut » ; son écart au prévu à ce jour dit si l'on est en avance ou en retard sur le budget ;
- *   ENGAGÉ         les commandes d'achat engagées du projet (une PO compte en totalité le mois de son lancement ; pas de répartition par équipe).
- * Les séries mensuelles cumulées alimentent le graphique de la page Budget. Le réalisé importé et la projection de fin d'année viennent ensuite (`projection.available`).
- * Droit : exercise.read (Workpackage leader et au-dessus). Les écarts s'affichent, rien ne bloque.
+ * Pour un projet et un exercice (par défaut celui en exécution), par équipe et au total, tout vient du MÊME tableau livrable × équipe :
+ *   DOTATION       le montant donné à l'équipe (60_Exercise.gs) ;
+ *   PLAN           le total des parts de l'équipe sur les livrables de l'exercice ;
+ *   VALEUR ACQUISE les parts × l'avancement du livrable : ce que l'avancement « vaut » ;
+ *   RÉALISÉ        ce que l'équipe a consommé (saisi à la main, 65_Actuals.gs), cumulé à ce jour et sur l'année ;
+ *   ATTERRISSAGE   réalisé à ce jour + reste à faire (plan − valeur acquise) : où l'équipe finit l'année, contre sa dotation ;
+ *   ENGAGÉ         les commandes d'achat engagées du projet, face au budget externe (colonne Externe du plan) : pas de répartition par équipe.
+ * Le réalisé n'est comparé qu'au niveau de l'équipe (et du projet) : il n'est pas suivi au livrable. Droit : exercise.read. Les écarts s'affichent, rien ne bloque.
  */
 
 /** L'équipe qui porte la ligne dans le tableau : l'équipe à 3 caractères, la parente d'une équipe à 4 caractères, sinon l'équipe elle-même (hors règle ou orpheline). */
@@ -14714,89 +14124,64 @@ defineAction('exercise.tracking', function (p, ctx) {
   requireCan(ctx, 'exercise.read', { type: 'project', id: project.id });
   var ex = !isBlank(p.exerciseId) ? mustGet('Exercise', p.exerciseId) : repoList('Exercise', function (e) { return e.status === 'Exécution'; })[0];
   if (!ex) throw new PpmError('NOT_FOUND', 'Aucun exercice en exécution : le suivi budgétaire porte sur l’année en cours.');
-  var today = todayStr(), year = Number(ex.year), curIdx = Number(today.slice(0, 4)) < year ? 0 : (Number(today.slice(0, 4)) > year ? 12 : Number(today.slice(5, 7)));
-  var months = []; for (var m = 1; m <= 12; m++) months.push(year + '-' + (m < 10 ? '0' : '') + m);
-  var idxOf = {}; months.forEach(function (mm, i) { idxOf[mm] = i + 1; });
-  var data = exerciseData_(ex, [project.id]), table, phasing, lineById;
-  // une version de la décomposition (0.20.0) : le suivi lit la version de référence (les parts d'équipe et leur échéancier figés), pas le brouillon
-  var rvT = isBlank(p.version) ? null : resolveDecompVersion_(project, p.version);
-  if (rvT && rvT.version) {
-    var Dt = decompDataset_(project, ex, rvT.version);
-    var its = Dt.items.filter(function (i) { return i.item_type === 'Livrable' && i.exercise_id === ex.id; }), itIds = indexBy_(its);
-    data.items = its; data.itemById = itIds;
-    data.lines = Dt.lines.filter(function (l) { return itIds[l.deliverable_id] && l.cost_type !== 'Forfait' && !isBlank(l.team_id); });
-    lineById = indexBy_(data.lines); phasing = Dt.phasing.filter(function (x) { return !!lineById[x.budget_line_id]; });
-  } else { lineById = indexBy_(data.lines); phasing = repoList('BudgetPhasing', function (x) { return !!lineById[x.budget_line_id]; }); }
-  table = exerciseTable_(ex, data, project.id);
+  var today = todayStr(), year = Number(ex.year);
+  // une version du plan (une baseline) : le suivi lit la version de référence (cellules et dotations figées), pas le brouillon
+  var rv = isBlank(p.version) ? null : resolveDecompVersion_(project, p.version);
+  var D = decompDataset_(project, ex, rv && rv.version ? rv.version : null), data = planData_(D, ex, project);
+  var table = exerciseTable_(ex, data, project.id);
   var teamRows = {};
   var row = function (team) {
-    var id = team.id;
-    if (!teamRows[id]) teamRows[id] = { team_id: id, name: team.name, country: team.country || 'FR', granted: null, expected: null, monthly: months.map(function () { return 0; }), planned_total: 0, ev: 0 };
-    return teamRows[id];
+    if (!teamRows[team.id]) teamRows[team.id] = { team_id: team.id, name: team.name, country: team.country || 'FR', dotation: null, plan: 0, ev: 0 };
+    return teamRows[team.id];
   };
-  table.rows.concat(table.orphans, table.unruled).forEach(function (r) { var t = row({ id: r.team_id, name: r.name, country: r.country }); t.granted = r.granted; t.expected = r.expected; });
-  var rootOfLine = {};
+  table.rows.concat(table.orphans, table.unruled).forEach(function (r) { row({ id: r.team_id, name: r.name, country: r.country }).dotation = r.dotation; });
   data.lines.forEach(function (l) {
     var root = exerciseRootTeam_(data, data.teamById[l.team_id]);
     if (!root) return;
-    rootOfLine[l.id] = root.id;
     var t = row(root), it = data.itemById[l.deliverable_id], amount = Number(l.planned_amount) || 0;
-    t.planned_total += amount;
+    t.plan += amount;
     t.ev += amount * Math.max(0, Math.min(100, Number(it.progress_pct) || 0)) / 100;
   });
-  var itemPv = {};
-  phasing.forEach(function (x) {
-    var l = lineById[x.budget_line_id], rid = rootOfLine[l.id], i = idxOf[x.month], amount = Number(x.amount) || 0;
-    if (!rid || !i) return;
-    teamRows[rid].monthly[i - 1] += amount;
-    if (i <= curIdx) itemPv[l.deliverable_id] = (itemPv[l.deliverable_id] || 0) + amount;
-  });
-  var teams = Object.keys(teamRows).map(function (id) {
-    var t = teamRows[id], pv = 0, plannedYear = 0;
-    t.monthly = t.monthly.map(round2);
-    t.monthly.forEach(function (v, i) { plannedYear += v; if (i + 1 <= curIdx) pv += v; });
-    var base = t.granted !== null ? t.granted : t.expected;
-    return { team_id: t.team_id, name: t.name, country: t.country, granted: t.granted, expected: t.expected, basis: t.granted !== null ? 'accordé' : (t.expected !== null ? 'attendu' : ''),
-      planned_year: round2(plannedYear), planned_outside: round2(t.planned_total - plannedYear), planned_total: round2(t.planned_total), pv: round2(pv), ev: round2(t.ev), ev_gap: round2(t.ev - pv),
-      remaining: base === null ? null : round2(base - plannedYear), clash: base !== null && plannedYear > base, monthly: t.monthly };
-  }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
-  // le réalisé comptable de l'année, par équipe (0.20.1) : une équipe qui a consommé sans avoir de part de livrable apparaît aussi
+  // le réalisé de l'année, par équipe : une équipe qui a consommé sans avoir de part de livrable apparaît aussi
   var act = actualsView_(project, ex, today), actBy = {};
   act.teams.forEach(function (t) { actBy[t.team_id] = t; });
-  teams.forEach(function (t) { t.actual_to_date = actBy[t.team_id] ? actBy[t.team_id].to_date : (act.available ? 0 : null); });
-  act.teams.forEach(function (t) {
-    if (teams.some(function (x) { return x.team_id === t.team_id; })) return;
-    teams.push({ team_id: t.team_id, name: t.name, country: '', granted: null, expected: null, basis: '', planned_year: 0, planned_outside: 0, planned_total: 0, pv: 0, ev: 0, ev_gap: 0, remaining: null, clash: false, monthly: months.map(function () { return 0; }), actual_to_date: t.to_date });
-  });
-  teams.sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
+  act.teams.forEach(function (t) { if (!teamRows[t.team_id]) row({ id: t.team_id, name: t.name, country: '' }); });
+  var teams = Object.keys(teamRows).map(function (id) {
+    var t = teamRows[id], a = actBy[id] || null, plan = round2(t.plan), ev = round2(t.ev);
+    var actualToDate = act.available ? (a ? a.to_date : 0) : null, actualYear = act.available ? (a ? a.total : 0) : null;
+    var landing = act.available ? round2(actualToDate + Math.max(0, plan - ev)) : null;
+    return { team_id: t.team_id, name: t.name, country: t.country, dotation: t.dotation, plan: plan, ev: ev, progress_pct: plan > 0 ? Math.round(ev / plan * 100) : null,
+      actual_to_date: actualToDate, actual_year: actualYear, consumed_pct: act.available && plan > 0 ? Math.round(actualToDate / plan * 100) : null,
+      landing: landing, remaining: t.dotation === null ? null : round2(t.dotation - (landing === null ? plan : landing)),
+      clash: t.dotation !== null && plan > t.dotation, over: t.dotation !== null && landing !== null && landing > t.dotation };
+  }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
   var sum = function (f) { return round2(teams.reduce(function (s, t) { return s + (t[f] || 0); }, 0)); };
-  var anyGranted = teams.some(function (t) { return t.granted !== null; }), anyExpected = teams.some(function (t) { return t.expected !== null; });
-  var totals = { granted: anyGranted ? sum('granted') : null, expected: anyExpected ? sum('expected') : null, planned_year: sum('planned_year'), planned_outside: sum('planned_outside'), planned_total: sum('planned_total'), pv: sum('pv'), ev: sum('ev') };
-  totals.ev_gap = round2(totals.ev - totals.pv);
-  totals.actual_to_date = act.available ? act.to_date : null; totals.actual_unattached = act.unattached;
-  var base = totals.granted !== null ? totals.granted : totals.expected;
-  totals.remaining = base === null ? null : round2(base - totals.planned_year);
-  totals.clash = base !== null && totals.planned_year > base;
-  // engagé : les commandes d'achat du projet, par mois
+  var anyDot = teams.some(function (t) { return t.dotation !== null; });
+  var totals = { dotation: anyDot ? sum('dotation') : null, plan: sum('plan'), ev: sum('ev'), actual_to_date: act.available ? act.to_date : null, actual_year: act.available ? sum('actual_year') : null, actual_unattached: act.unattached };
+  totals.progress_pct = totals.plan > 0 ? Math.round(totals.ev / totals.plan * 100) : null;
+  totals.consumed_pct = act.available && totals.plan > 0 ? Math.round(totals.actual_to_date / totals.plan * 100) : null;
+  totals.landing = act.available ? round2(sum('landing') + act.unattached) : null;
+  totals.remaining = totals.dotation === null ? null : round2(totals.dotation - (totals.landing === null ? totals.plan : totals.landing));
+  totals.clash = totals.dotation !== null && totals.plan > totals.dotation;
+  totals.over = totals.dotation !== null && totals.landing !== null && totals.landing > totals.dotation;
+  // externe : les forfaits du plan face aux commandes d'achat engagées de l'année
   var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; });
-  var committed = committedByMonth_(projectOrders_(project.id, wps)), cm = months.map(function (mm) { return round2(committed[mm] || 0); });
-  var cum = function (arr, upTo) { var s = 0; return arr.map(function (v, i) { s = round2(s + v); return upTo === null || i + 1 <= upTo ? s : null; }); };
-  var plannedMonthly = months.map(function (_, i) { return round2(teams.reduce(function (s, t) { return s + t.monthly[i]; }, 0)); });
-  totals.committed_to_date = round2(cm.reduce(function (s, v, i) { return i + 1 <= curIdx ? s + v : s; }, 0));
-  totals.committed_year = round2(cm.reduce(function (s, v) { return s + v; }, 0));
-  // livrables : prévu à ce jour, valeur acquise
+  var itemIds = {}; data.items.forEach(function (i) { itemIds[i.id] = true; });
+  var external = round2(D.lines.filter(function (l) { return l.cost_type === 'Forfait' && itemIds[l.deliverable_id]; }).reduce(function (s, l) { return s + (Number(l.planned_amount) || 0); }, 0));
+  var committed = round2(projectOrders_(project.id, wps).filter(function (o) { return PO_COMMITTED.indexOf(o.status) >= 0 && poYear_(o) === year; }).reduce(function (s, o) { return s + (Number(o.amount) || 0); }, 0));
+  totals.external = { plan: external, committed: committed, remaining: round2(external - committed), over: committed > external + 0.005 };
+  // livrables : plan, valeur acquise
   var wpById = indexBy_(wps);
   var deliverables = data.items.map(function (it) {
     var ls = data.lines.filter(function (l) { return l.deliverable_id === it.id; }), total = round2(ls.reduce(function (s, l) { return s + (Number(l.planned_amount) || 0); }, 0));
-    var progress = Math.max(0, Math.min(100, Number(it.progress_pct) || 0)), pv = round2(itemPv[it.id] || 0), ev = round2(total * progress / 100), w = it.wp_id ? wpById[it.wp_id] : null;
-    return { id: it.id, name: it.name, wp: w ? ((w.wbs_code ? w.wbs_code + ' ' : '') + w.name) : '', status: it.status, progress: progress, finish: it.planned_finish || '', parts: round2(total), pv: pv, ev: ev, ev_gap: round2(ev - pv),
+    var progress = Math.max(0, Math.min(100, Number(it.progress_pct) || 0)), w = it.wp_id ? wpById[it.wp_id] : null;
+    return { id: it.id, name: it.name, wp: w ? ((w.wbs_code ? w.wbs_code + ' ' : '') + w.name) : '', status: it.status, progress: progress, finish: it.planned_finish || '', plan: total, ev: round2(total * progress / 100),
       teams: ls.map(function (l) { var t = data.teamById[l.team_id]; return t ? t.name : ''; }).filter(Boolean).sort().join(', ') };
-  }).sort(function (a, b) { return a.ev_gap - b.ev_gap || String(a.name).localeCompare(String(b.name), 'fr'); });
+  }).sort(function (a, b) { return b.plan - a.plan || String(a.name).localeCompare(String(b.name), 'fr'); });
   return {
-    exercise: { id: ex.id, year: year, status: ex.status }, project: { id: project.id, code: project.code, name: project.name }, today: today, current_month: curIdx, months: months,
-    totals: totals, teams: teams, deliverables: deliverables,
-    series: { planned_cum: cum(plannedMonthly, null), committed_cum: cum(cm, curIdx), granted: base, granted_basis: totals.granted !== null ? 'accordé' : (totals.expected !== null ? 'attendu' : '') },
-    projection: { available: false, reason: 'Le réalisé n’est pas encore importé : la projection de fin d’année s’appuie sur lui.' }
+    exercise: { id: ex.id, year: year, status: ex.status }, project: { id: project.id, code: project.code, name: project.name }, today: today, version: D.versionInfo ? { id: D.versionInfo.id, label: D.versionInfo.label } : null,
+    totals: totals, teams: teams, deliverables: deliverables, actuals: { available: act.available, months: act.months, monthly: act.monthly, cumulative: act.cumulative, last_month: act.last_month, by_cpn: act.by_cpn },
+    projection: { available: act.available, reason: act.available ? '' : 'Aucun réalisé saisi pour ' + year + ' : l’atterrissage s’appuie sur lui.' }
   };
 });
 
@@ -14805,181 +14190,92 @@ defineAction('exercise.tracking', function (p, ctx) {
 // ======================================================================
 
 /**
- * PPM Core — 0.20.1 : le RÉALISÉ comptable, importé chaque mois depuis le classeur de la finance.
+ * PPM Core — 0.21.0 : le RÉALISÉ comptable, SAISI À LA MAIN.
  *
- * Chaque mois, un NOUVEAU classeur Google Sheet, onglet « CUC Total Cost » :
- *   colonne J « WBS élément » : la clé de recherche : le ou les CPN (celui d'un projet ou d'un workpackage de l'outil) ;
- *   colonne W « Actuals »     : le montant consommé ;
- *   colonne L « cost center group » : l'ÉQUIPE qui a consommé ;
- *   colonne T : le MOIS, colonne U : l'ANNÉE de cette consommation.
- * On obtient la consommation réelle d'un projet par ÉQUIPE et par MOIS. Le réalisé n'est PAS suivi au livrable.
+ * Le réalisé est la consommation réelle d'un projet par CPN, ÉQUIPE et MOIS (jamais au livrable). Pour cette première version il n'y a PAS de lien avec un fichier extérieur : le chef de projet
+ * (ou au-dessus) saisit, chaque mois, ce que chaque équipe a consommé sur chaque CPN du projet. L'historique mensuel est conservé.
  *
- * RÈGLES. Les lignes du fichier sont additionnées par (CPN, équipe, année-mois) ; chaque cumul est une ligne `ActualLine`. Importer un nouveau fichier REMPLACE le montant d'une ligne qui existe déjà
- * (même CPN, équipe, mois : un fichier qui reprend les mois précédents ne double rien), ajoute les nouvelles, ne supprime jamais rien. Un CPN que l'outil ne connaît pas n'est pas stocké (il est
- * signalé) ; une équipe inconnue est stockée « Équipe inconnue » (le réalisé compte au projet, pas à une équipe). Les lignes sans CPN, sans mois ou sans montant lisible sont ignorées et comptées.
- * L'ANALYSE ne lit que le classeur et ne change rien ; l'IMPORT est réservé à l'administrateur et se reprend (lots) s'il dépasse le temps imparti.
+ * RÈGLES. Une ligne `ActualLine` par (CPN, équipe, année-mois) ; saisir à nouveau la même combinaison REMPLACE le montant (un montant vide retire la ligne). Un montant peut être négatif (un avoir). On ne
+ * saisit pas dans un exercice clos. L'équipe à 4 caractères compte dans sa parente à 3 dans le suivi (exerciseRootTeam_).
+ * Droit : `actuals.manage` (chef de projet et au-dessus) pour saisir ; la lecture suit le budget du projet (`budgetAccess_(...).all`).
  */
 
-var ACTUALS_MAP = { sheet: 'CUC Total Cost', wbs: 'J', team: 'L', month: 'T', year: 'U', amount: 'W' };
-var ACTUALS_MONTHS = ['janv', 'févr', 'mars', 'avr', 'mai', 'juin', 'juil', 'août', 'sept', 'oct', 'nov', 'déc'];
-
-function actualsCol_(letters) { var n = 0; String(letters).toUpperCase().split('').forEach(function (c) { n = n * 26 + (c.charCodeAt(0) - 64); }); return n - 1; }
-function actualsNorm_(s) { return String(s === null || s === undefined ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u00a0/g, ' ').trim().toUpperCase().replace(/\s+/g, ' '); }
-function actualsCpnKey_(s) { return actualsNorm_(s).replace(/\s+/g, ''); }
-
-/** Le mois (1 à 12) d'une cellule : un nombre, un nom de mois (français ou anglais), une date, « 2026-03 ». null si illisible. */
-function actualsMonth_(v) {
-  if (v === null || v === undefined || v === '') return null;
-  if (Object.prototype.toString.call(v) === '[object Date]') return isNaN(v.getTime()) ? null : v.getMonth() + 1;
-  if (typeof v === 'number') return v >= 1 && v <= 12 && Math.floor(v) === v ? v : null;
-  var t = actualsNorm_(v).replace(/\./g, '');
-  var m = /^(\d{4})[-\/](\d{1,2})$/.exec(t); if (m) return Number(m[2]) >= 1 && Number(m[2]) <= 12 ? Number(m[2]) : null;
-  if (/^\d{1,2}$/.test(t)) return Number(t) >= 1 && Number(t) <= 12 ? Number(t) : null;
-  var names = ['JANV', 'FEVR', 'MARS', 'AVR', 'MAI', 'JUIN', 'JUIL', 'AOUT', 'SEPT', 'OCT', 'NOV', 'DEC'], en = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-  for (var i = 0; i < 12; i++) { if (t.indexOf(names[i]) === 0 || t.indexOf(en[i]) === 0) return i + 1; }
-  return null;
-}
-function actualsYear_(v) { var n = typeof v === 'number' ? v : Number(String(v === null || v === undefined ? '' : v).replace(/\s/g, '')); return n >= 2000 && n <= 2100 && Math.floor(n) === n ? n : null; }
-/** Un montant signé (un avoir est négatif) : « 12 345,67 », « -300 », « (300) ». null si illisible. */
-function actualsAmount_(v) {
-  if (typeof v === 'number') return isNaN(v) ? null : v;
-  var t = String(v === null || v === undefined ? '' : v).replace(/\u00a0/g, ' ').trim();
-  if (!t) return null;
-  var neg = /^\(.*\)$/.test(t); t = t.replace(/^\(|\)$/g, '').replace(/\s/g, '').replace(/€/g, '').replace(',', '.');
-  if (!/^-?\d+(\.\d+)?$/.test(t)) return null;
-  var n = Number(t); return neg ? -n : n;
+function actualsMonthsOf_(year) { var out = []; for (var m = 1; m <= 12; m++) out.push(year + '-' + (m < 10 ? '0' : '') + m); return out; }
+function actualsAmountNumber_(v) {
+  var n = Number(String(v === null || v === undefined ? '' : v).replace(/\s/g, '').replace(',', '.'));
+  if (isBlank(v) || isNaN(n) || Math.abs(n) > 1e10) throw new PpmError('VALIDATION', 'Montant : un nombre (négatif pour un avoir).');
+  return round2(n);
 }
 
-/** Lit l'onglet « CUC Total Cost » du classeur. Rend les lignes lisibles, celles qu'on ignore (avec la raison) et les problèmes de structure. */
-function actualsRead_(ref) {
-  var id = importBookId_(ref), ss;
-  try { ss = SpreadsheetApp.openById(id); } catch (e) {
-    var who = ''; try { who = Session.getEffectiveUser().getEmail(); } catch (e2) { who = ''; }
-    throw new PpmError('VALIDATION', 'Classeur illisible. Partagez-le en lecture avec ' + (who || 'le compte qui exécute l’outil') + '.');
-  }
-  var sh = ss.getSheetByName(ACTUALS_MAP.sheet);
-  if (!sh) throw new PpmError('VALIDATION', 'Onglet « ' + ACTUALS_MAP.sheet + ' » introuvable dans ce classeur.');
-  var data = sh.getLastRow() < 1 ? [] : sh.getDataRange().getValues();
-  var cW = actualsCol_(ACTUALS_MAP.wbs), cT = actualsCol_(ACTUALS_MAP.team), cM = actualsCol_(ACTUALS_MAP.month), cY = actualsCol_(ACTUALS_MAP.year), cA = actualsCol_(ACTUALS_MAP.amount);
-  var header = -1;
-  for (var i = 0; i < Math.min(data.length, 30); i++) { if (actualsNorm_(data[i][cW]).indexOf('WBS') >= 0) { header = i; break; } }
-  if (header < 0) throw new PpmError('VALIDATION', 'En-têtes introuvables : la colonne ' + ACTUALS_MAP.wbs + ' devrait s’appeler « WBS élément » (dans les 30 premières lignes de l’onglet « ' + ACTUALS_MAP.sheet + ' »).');
-  var warnings = [];
-  var expect = [[cT, ACTUALS_MAP.team, 'COST CENTER'], [cA, ACTUALS_MAP.amount, 'ACTUAL']];
-  expect.forEach(function (e) { var h = actualsNorm_(data[header][e[0]]); if (h.indexOf(e[2]) < 0) warnings.push('La colonne ' + e[1] + ' s’appelle « ' + String(data[header][e[0]]) + ' » (on attend « ' + (e[2] === 'ACTUAL' ? 'Actuals' : 'cost center group') + ' ») : vérifiez que c’est le bon classeur.'); });
-  var rows = [], ignored = [], blank = 0;
-  for (var r = header + 1; r < data.length; r++) {
-    var row = data[r], wbs = actualsNorm_(row[cW]);
-    if (!wbs) { blank++; continue; }
-    var m = actualsMonth_(row[cM]), y = actualsYear_(row[cY]), amount = actualsAmount_(row[cA]), team = String(row[cT] === null || row[cT] === undefined ? '' : row[cT]).trim();
-    var why = m === null ? 'mois illisible (colonne ' + ACTUALS_MAP.month + ')' : y === null ? 'année illisible (colonne ' + ACTUALS_MAP.year + ')' : amount === null ? 'montant illisible (colonne ' + ACTUALS_MAP.amount + ')' : '';
-    if (why) { ignored.push({ row: r + 1, message: why }); continue; }
-    rows.push({ row: r + 1, wbs: wbs, cpn: actualsCpnKey_(wbs), team: team, month: y + '-' + (m < 10 ? '0' : '') + m, amount: amount });
-  }
-  return { id: id, name: ss.getName(), header_row: header + 1, rows: rows, ignored: ignored, blank: blank, warnings: warnings };
-}
+/** L'exercice d'une année (clos ou non) ou null. */
+function actualsExerciseOf_(year) { return repoList('Exercise', function (e) { return !isTrue(e.deleted) && Number(e.year) === Number(year); })[0] || null; }
 
-/** Le plan : cumul par (CPN, équipe, mois), rattachement au projet et à l'équipe, lignes à créer, à remplacer, inchangées. Ne change rien. */
-function actualsPlan_(read) {
-  var projects = repoList('Project', function (p) { return !isTrue(p.deleted); }), wps = repoList('WorkPackage', function (w) { return !isTrue(w.deleted); });
-  var byCpn = {};
-  var add = function (key, projectId, wpId) { if (!key) return; (byCpn[key] = byCpn[key] || []).push({ project_id: projectId, wp_id: wpId }); };
-  projects.forEach(function (p) { add(actualsCpnKey_(p.cpn), p.id, ''); });
-  wps.forEach(function (w) { add(actualsCpnKey_(w.cpn), w.project_id, w.id); });
-  var teams = repoList('HierarchicalTeam', function (t) { return !isTrue(t.deleted); }), byTeam = {};
-  teams.forEach(function (t) { [t.name, t.cost_center].forEach(function (k) { var n = actualsNorm_(k); if (n) (byTeam[n] = byTeam[n] || {})[t.id] = t; }); });
-  var agg = {}, unknownCpn = {}, unknownTeam = {};
-  read.rows.forEach(function (r) {
-    var hit = byCpn[r.cpn], projectIds = {}; (hit || []).forEach(function (h) { projectIds[h.project_id] = h; });
-    var ids = Object.keys(projectIds);
-    if (ids.length !== 1) { var u = unknownCpn[r.wbs] = unknownCpn[r.wbs] || { cpn: r.wbs, rows: 0, ambiguous: ids.length > 1 }; u.rows++; return; }
-    var h = projectIds[ids[0]], tk = actualsNorm_(r.team), tm = tk ? Object.keys(byTeam[tk] || {}) : [], team = tm.length === 1 ? byTeam[tk][tm[0]] : null;
-    if (!team) { var ut = unknownTeam[r.team || '(vide)'] = unknownTeam[r.team || '(vide)'] || { team: r.team || '(vide)', rows: 0 }; ut.rows++; }
-    var key = [r.month, r.cpn, tk].join('|'), a = agg[key];
-    if (!a) a = agg[key] = { month: r.month, charge_code: r.wbs, cost_center: r.team, amount: 0, project_id: h.project_id, wp_id: h.wp_id, team_id: team ? team.id : '', match_status: team ? 'Rattaché' : 'Équipe inconnue', source_rows: 0 };
-    a.amount = Math.round((a.amount + r.amount) * 100) / 100; a.source_rows++;
+defineAction('actuals.set', function (p, ctx) {
+  var project = mustGet('Project', requireParam(p, 'projectId'));
+  requireCan(ctx, 'actuals.manage', { type: 'project', id: project.id });
+  var month = String(requireParam(p, 'month')).trim();
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new PpmError('VALIDATION', 'Mois invalide : « ' + month + ' » (format AAAA-MM).');
+  var team = mustGet('HierarchicalTeam', requireParam(p, 'teamId'));
+  if (isTrue(team.deleted)) throw new PpmError('VALIDATION', 'Équipe introuvable.');
+  var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; }), cpns = projectCpns_(project, wps).map(function (c) { return c.cpn; });
+  var cpn = normCpn_(p.cpn);
+  if (cpns.length && !cpn) throw new PpmError('VALIDATION', 'Choisissez le CPN : ' + cpns.join(', ') + '.');
+  if (cpn && cpns.indexOf(cpn) < 0) throw new PpmError('VALIDATION', 'Le CPN ' + cpn + ' n’est pas un CPN de ce projet' + (cpns.length ? ' (' + cpns.join(', ') + ')' : ' : définissez-le d’abord') + '.');
+  var ex = actualsExerciseOf_(month.slice(0, 4));
+  if (ex && ex.status === 'Clos') throw new PpmError('VALIDATION', 'L’exercice ' + ex.year + ' est clos : on n’y change plus rien.');
+  var clear = isBlank(p.amount), amount = clear ? 0 : actualsAmountNumber_(p.amount);
+  return withLock(function () {
+    var row = repoList('ActualLine', function (l) { return l.project_id === project.id && l.month === month && l.team_id === team.id && normCpn_(l.charge_code) === cpn; })[0] || null;
+    if (clear) { if (row) repoSoftDelete('ActualLine', row.id, null, ctx.actx); return { removed: !!row }; }
+    if (row) { repoUpdate('ActualLine', row.id, { amount: amount }, null, ctx.actx); return { saved: true, replaced: true }; }
+    repoInsert('ActualLine', { project_id: project.id, charge_code: cpn, team_id: team.id, month: month, amount: amount }, ctx.actx);
+    return { saved: true, replaced: false };
   });
-  var existing = {}; repoList('ActualLine').forEach(function (l) { existing[[l.month, actualsCpnKey_(l.charge_code), actualsNorm_(l.cost_center)].join('|')] = l; });
-  var lines = Object.keys(agg).map(function (k) {
-    var a = agg[k], cur = existing[k] || null;
-    a.action = !cur ? 'create' : (Number(cur.amount) === a.amount && cur.team_id === a.team_id && cur.project_id === a.project_id ? 'same' : 'update'); a.current = cur;
-    return a;
-  });
-  var count = { create: 0, update: 0, same: 0 }; lines.forEach(function (l) { count[l.action]++; });
-  var months = lines.map(function (l) { return l.month; }).sort();
-  return { lines: lines, counts: count, months: months.length ? { from: months[0], to: months[months.length - 1] } : null,
-    unknown_cpn: Object.keys(unknownCpn).map(function (k) { return unknownCpn[k]; }).sort(function (a, b) { return b.rows - a.rows; }),
-    unknown_team: Object.keys(unknownTeam).map(function (k) { return unknownTeam[k]; }).sort(function (a, b) { return b.rows - a.rows; }),
-    total: Math.round(lines.reduce(function (t, l) { return t + l.amount; }, 0) * 100) / 100 };
-}
-
-function actualsReport_(read, plan) {
-  var warnings = read.warnings.slice();
-  if (plan.unknown_cpn.length) warnings.push(plan.unknown_cpn.length + ' CPN du fichier ne correspondent à aucun projet ni workpackage de l’outil (lignes non importées) : ' + plan.unknown_cpn.slice(0, 8).map(function (u) { return u.cpn + (u.ambiguous ? ' (plusieurs projets)' : '') + ' (' + u.rows + ')'; }).join(', ') + (plan.unknown_cpn.length > 8 ? '…' : '') + '.');
-  if (plan.unknown_team.length) warnings.push(plan.unknown_team.length + ' équipe(s) du fichier n’existent pas dans l’outil (le réalisé est gardé au projet, sans équipe) : ' + plan.unknown_team.slice(0, 8).map(function (u) { return u.team + ' (' + u.rows + ')'; }).join(', ') + (plan.unknown_team.length > 8 ? '…' : '') + '.');
-  if (read.ignored.length) warnings.push(read.ignored.length + ' ligne(s) ignorée(s) (mois, année ou montant illisible), par exemple la ligne ' + read.ignored[0].row + ' : ' + read.ignored[0].message + '.');
-  return { book: { id: read.id, name: read.name }, header_row: read.header_row, rows_read: read.rows.length, rows_ignored: read.ignored.length, rows_blank: read.blank, counts: plan.counts, months: plan.months, total: plan.total,
-    unknown_cpn: plan.unknown_cpn.slice(0, 20), unknown_team: plan.unknown_team.slice(0, 20), warnings: warnings, ok: plan.lines.length > 0,
-    nothing_to_do: plan.counts.create + plan.counts.update === 0, errors: plan.lines.length ? [] : [{ message: 'Aucune ligne exploitable : vérifiez le classeur (onglet « ' + ACTUALS_MAP.sheet + ' », colonnes J, L, T, U, W) et que les CPN existent dans l’outil.' }] };
-}
-
-function actualsRequireAdmin_(ctx) {
-  if (!ctx.isAdmin) throw new PpmError('FORBIDDEN', 'L’import du réalisé comptable est réservé à l’administrateur.');
-}
-
-defineAction('actuals.import.analyze', function (p, ctx) {
-  actualsRequireAdmin_(ctx);
-  var read = actualsRead_(requireParam(p, 'book'));
-  return actualsReport_(read, actualsPlan_(read));
 });
 
-/** Applique le plan par lots ; s'arrête au budget de temps (ou à `maxOps`, essais) et dit `done: false` : relancer reprend (le plan est recalculé). */
-defineAction('actuals.import.run', function (p, ctx) {
-  actualsRequireAdmin_(ctx);
-  var read = actualsRead_(requireParam(p, 'book')), plan = actualsPlan_(read);
-  if (!plan.lines.length) throw new PpmError('VALIDATION', 'Aucune ligne exploitable dans ce classeur : lancez « Analyser ».');
-  if (!plan.counts.create && !plan.counts.update) return { done: true, stopped: false, applied: { create: 0, update: 0 }, remaining: 0, operations: 0, report: actualsReport_(read, plan) };   // rien à importer : aucun import n'est créé
-  var imp = repoList('ActualImport', function (i) { return i.source_file_id === read.id && i.status === 'Brouillon'; })[0] || null;
-  if (!imp) imp = repoInsert('ActualImport', { period: plan.months ? plan.months.from + '..' + plan.months.to : '', source_file_id: read.id, mapping_json: JSON.stringify(ACTUALS_MAP), status: 'Brouillon', imported_by: ctx.email }, ctx.actx);
-  var started = nowMs(), ops = 0, maxOps = p.maxOps ? Number(p.maxOps) : 0, stopped = false, applied = { create: 0, update: 0 };
-  plan.lines.filter(function (l) { return l.action !== 'same'; }).forEach(function (l) {
-    if (stopped) return;
-    if ((maxOps && ops >= maxOps) || nowMs() - started > IMPORT_BUDGET_MS) { stopped = true; return; }
-    var rec = { import_id: imp.id, month: l.month, charge_code: l.charge_code, cost_center: l.cost_center, amount: l.amount, project_id: l.project_id, wp_id: l.wp_id, team_id: l.team_id, match_status: l.match_status, source_rows: l.source_rows };
-    if (l.current) repoUpdate('ActualLine', l.current.id, rec, null, ctx.actx); else repoInsert('ActualLine', rec, ctx.actx);
-    ops++; applied[l.action]++;
-  });
-  var after = actualsPlan_(actualsRead_(read.id)), remaining = after.counts.create + after.counts.update;
-  if (!remaining) repoUpdate('ActualImport', imp.id, { status: 'Publié', mapping_json: JSON.stringify({ map: ACTUALS_MAP, rows: read.rows.length, lines: plan.lines.length, total: plan.total, unknown_cpn: plan.unknown_cpn.length, unknown_team: plan.unknown_team.length }) }, null, ctx.actx);
-  return { done: remaining === 0, stopped: stopped, applied: applied, remaining: remaining, operations: ops, report: actualsReport_(read, after) };
-});
-
-defineAction('actuals.imports', function (p, ctx) {
-  actualsRequireAdmin_(ctx);
-  return repoList('ActualImport').sort(function (a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); }).slice(0, 24)
-    .map(function (i) { var m = parseJsonSafe(i.mapping_json, {}); return { id: i.id, period: i.period, status: i.status, imported_by: i.imported_by, created_at: i.created_at || '', rows: m.rows || null, lines: m.lines || null, total: m.total === undefined ? null : m.total }; });
+defineAction('actuals.get', function (p, ctx) {
+  var project = mustGet('Project', requireParam(p, 'projectId'));
+  var access = budgetAccess_(ctx, project.id);
+  if (!access.all) throw new PpmError('FORBIDDEN', 'Le réalisé est réservé aux responsables de budget du projet.');
+  var ex = planExercise_(p), today = todayStr();
+  var wps = repoList('WorkPackage', function (w) { return w.project_id === project.id; });
+  var teamById = indexBy_(repoList('HierarchicalTeam'));
+  var months = actualsMonthsOf_(Number(ex.year)), inYear = {}; months.forEach(function (m) { inYear[m] = true; });
+  var lines = repoList('ActualLine', function (l) { return l.project_id === project.id && inYear[l.month]; }).map(function (l) {
+    var t = teamById[l.team_id];
+    return { id: l.id, version: l.version, month: l.month, cpn: normCpn_(l.charge_code), team_id: l.team_id, team: t ? t.name : '(équipe supprimée)', amount: Number(l.amount) || 0 };
+  }).sort(function (a, b) { return a.month < b.month ? -1 : a.month > b.month ? 1 : (a.team < b.team ? -1 : a.team > b.team ? 1 : 0); });
+  return {
+    exercise: exerciseView_(ex), project: { id: project.id, code: project.code, name: project.name },
+    can_edit: ex.status !== 'Clos' && (ctx.isAdmin || can(ctx, 'actuals.manage', { type: 'project', id: project.id })),
+    months: months, cpns: projectCpns_(project, wps).map(function (c) { return { cpn: c.cpn, label: c.label }; }),
+    teams: exerciseTeamChoices_(repoList('HierarchicalTeam')), lines: lines, view: actualsView_(project, ex, today)
+  };
 });
 
 /**
  * Le réalisé d'un projet pour un exercice (son année) : par mois, par équipe (l'équipe à 4 caractères compte dans sa parente à 3), et le cumul à ce jour. Lecture : qui voit le budget du projet.
+ * `available` : au moins une ligne saisie dans l'année.
  */
 function actualsView_(project, ex, today) {
-  var year = Number(ex.year), months = []; for (var m = 1; m <= 12; m++) months.push(year + '-' + (m < 10 ? '0' : '') + m);
+  var year = Number(ex.year), months = actualsMonthsOf_(year);
   var idx = {}; months.forEach(function (mm, i) { idx[mm] = i; });
   var lines = repoList('ActualLine', function (l) { return l.project_id === project.id && idx[l.month] !== undefined; });
   var teamById = indexBy_(repoList('HierarchicalTeam')), tYear = Number(String(today).slice(0, 4)), curIdx = year < tYear ? 12 : (year > tYear ? 0 : Number(String(today).slice(5, 7)));
-  var byTeam = {}, total = months.map(function () { return 0; }), last = -1, unattached = 0;
+  var byTeam = {}, byCpn = {}, total = months.map(function () { return 0; }), last = -1, unattached = 0;
   lines.forEach(function (l) {
     var i = idx[l.month], amount = Number(l.amount) || 0, root = l.team_id ? exerciseRootTeam_({ teamById: teamById }, teamById[l.team_id]) : null;
-    total[i] = Math.round((total[i] + amount) * 100) / 100; if (i > last) last = i;
-    if (!root) { unattached = Math.round((unattached + amount) * 100) / 100; return; }
+    total[i] = round2(total[i] + amount); if (i > last) last = i;
+    var ck = normCpn_(l.charge_code); byCpn[ck] = round2((byCpn[ck] || 0) + amount);
+    if (!root) { unattached = round2(unattached + amount); return; }
     var t = byTeam[root.id] = byTeam[root.id] || { team_id: root.id, name: root.name, values: months.map(function () { return 0; }) };
-    t.values[i] = Math.round((t.values[i] + amount) * 100) / 100;
+    t.values[i] = round2(t.values[i] + amount);
   });
-  var run = 0, cum = total.map(function (v, i) { run = Math.round((run + v) * 100) / 100; return i <= last ? run : null; });
-  var toDate = 0; total.forEach(function (v, i) { if (i + 1 <= curIdx) toDate = Math.round((toDate + v) * 100) / 100; });
-  var teams = Object.keys(byTeam).map(function (k) { var t = byTeam[k]; t.total = Math.round(t.values.reduce(function (s, v) { return s + v; }, 0) * 100) / 100; t.to_date = Math.round(t.values.reduce(function (s, v, i) { return i + 1 <= curIdx ? s + v : s; }, 0) * 100) / 100; return t; })
-    .sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
-  var lastImport = repoList('ActualImport', function (i) { return i.status === 'Publié'; }).sort(function (a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); })[0] || null;
-  return { available: lines.length > 0, year: year, months: months, monthly: total, cumulative: cum, to_date: toDate, last_month: last + 1, unattached: unattached, teams: teams, last_import: lastImport ? { period: lastImport.period, at: lastImport.created_at || '' } : null };
+  var run = 0, cum = total.map(function (v, i) { run = round2(run + v); return i <= last ? run : null; });
+  var toDate = 0; total.forEach(function (v, i) { if (i + 1 <= curIdx) toDate = round2(toDate + v); });
+  var teams = Object.keys(byTeam).map(function (k) {
+    var t = byTeam[k]; t.total = round2(t.values.reduce(function (s, v) { return s + v; }, 0)); t.to_date = round2(t.values.reduce(function (s, v, i) { return i + 1 <= curIdx ? s + v : s; }, 0)); return t;
+  }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'fr'); });
+  return { available: lines.length > 0, year: year, months: months, monthly: total, cumulative: cum, to_date: toDate, last_month: last + 1, unattached: unattached, teams: teams,
+    by_cpn: Object.keys(byCpn).sort().map(function (k) { return { cpn: k, total: byCpn[k] }; }) };
 }

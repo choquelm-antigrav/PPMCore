@@ -3,7 +3,7 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="ppm-version" content="0.20.1">
+<meta name="ppm-version" content="0.21.0">
 <?!= include('Style') ?>
 <?!= include('Common') ?>
 <?!= include('CommonProgram') ?>
@@ -364,12 +364,12 @@ var BOOT = <?!= boot ?>;
     panel.insertBefore(baselineMap(), panel.firstChild);
   }
   /**
-   * La décomposition du budget figée avec la baseline (0.19.2) : budget autorisé, enveloppe et coût prévu de chaque workpackage, lignes de coût ajoutées, retirées ou modifiées. Lue à la demande
-   * (une action à part) quand on déplie la section, pour ne pas alourdir l'ouverture de la page.
+   * Le plan budgétaire figé avec la baseline (0.21.0) : la dotation de chaque équipe et les cellules du tableau livrable × équipe, avec ce qui a bougé depuis. Lu à la demande (une action à part)
+   * quand on déplie la section, pour ne pas alourdir l'ouverture de la page.
    */
   function decompSection() {
     var open = !!state.decompOpen, body = el('div', { id: 'decomp-body' });
-    var btn = el('button', { type: 'button', class: 'sec-toggle', id: 'decomp-toggle', 'aria-expanded': String(open), 'aria-controls': 'decomp-body' }, [el('span', { class: 'chev', 'aria-hidden': 'true', text: open ? '▾' : '▸' }), el('span', { class: 'sec-title', text: 'Décomposition du budget' }), el('span', { class: 'sec-sum', id: 'decomp-sum', text: state.decomp ? decompSummary(state.decomp.decomposition) : '' })]);
+    var btn = el('button', { type: 'button', class: 'sec-toggle', id: 'decomp-toggle', 'aria-expanded': String(open), 'aria-controls': 'decomp-body' }, [el('span', { class: 'chev', 'aria-hidden': 'true', text: open ? '▾' : '▸' }), el('span', { class: 'sec-title', text: 'Plan budgétaire' }), el('span', { class: 'sec-sum', id: 'decomp-sum', text: state.decomp ? decompSummary(state.decomp.plan) : '' })]);
     body.hidden = !open;
     btn.addEventListener('click', function () {
       state.decompOpen = !state.decompOpen;
@@ -381,40 +381,43 @@ var BOOT = <?!= boot ?>;
   }
   function loadDecomp(body) {
     loading(body);
-    return call('baselines.decomposition', state.diffParams).then(function (r) { state.decomp = r; renderDecomp(body); var sum = $('decomp-sum'); if (sum) sum.textContent = decompSummary(r.decomposition); }).catch(function (e) { failed(body, e); });
+    return call('baselines.plan', state.diffParams).then(function (r) { state.decomp = r; renderDecomp(body); var sum = $('decomp-sum'); if (sum) sum.textContent = decompSummary(r.plan); }).catch(function (e) { failed(body, e); });
   }
-  function decompSummary(dc) {
-    if (!dc) return '';
-    var t = dc.totals;
-    return (t.envelope_changes ? plural(t.envelope_changes, 'enveloppe changée', 'enveloppes changées') : 'enveloppes inchangées') + ' · ' + plural(t.line_changes, 'ligne de coût modifiée', 'lignes de coût modifiées') + (t.cost_delta ? ' · coût ' + (t.cost_delta > 0 ? '+' : '−') + euros(Math.abs(t.cost_delta)) : '') + (t.over ? ' · ' + t.over + ' en dépassement' : '');
+  function decompSummary(pl) {
+    if (!pl) return '';
+    var t = pl.totals;
+    return (t.dotation_changes ? plural(t.dotation_changes, 'dotation changée', 'dotations changées') : 'dotations inchangées') + ' · ' + plural(t.line_changes, 'cellule modifiée', 'cellules modifiées') + (t.cost_delta ? ' · plan ' + (t.cost_delta > 0 ? '+' : '−') + euros(Math.abs(t.cost_delta)) : '');
   }
   function renderDecomp(body) {
-    var r = state.decomp, dc = r.decomposition;
+    var r = state.decomp, pl = r.plan;
     clear(body);
-    if (!dc) { body.appendChild(el('p', { class: 'note', id: 'decomp-none', text: r.no_exercise ? 'Aucun exercice : le budget se répartit par exercice (l’administrateur en crée un, page Administration).' : 'Aucune décomposition à comparer.' })); return; }
-    var money = function (v) { return v === null || v === undefined ? 'non fixée' : euros(v); };
-    var pr = dc.project, cards = el('div', { class: 'cards' });
-    cards.appendChild(card('Budget autorisé', pr.known ? (pr.changed ? money(pr.base_authorized) + ' → ' + money(pr.authorized) : money(pr.authorized)) : money(pr.authorized), pr.known ? (pr.changed ? 'modifié depuis la référence' : 'comme la référence') : 'non figé dans cette baseline (antérieure à la 0.19.2)', pr.changed));
-    cards.appendChild(card('Coût prévu', euros(dc.totals.cost), dc.totals.cost_delta ? (dc.totals.cost_delta > 0 ? '+' : '−') + euros(Math.abs(dc.totals.cost_delta)) + ' par rapport à la référence (' + euros(dc.totals.cost_base) + ')' : 'comme la référence', dc.totals.cost_delta > 0));
+    if (!pl) { body.appendChild(el('p', { class: 'note', id: 'decomp-none', text: r.no_exercise ? 'Aucun exercice : le budget se répartit par exercice (l’administrateur en crée un, page Administration).' : 'Aucun plan à comparer.' })); return; }
+    var t = pl.totals, cards = el('div', { class: 'cards' });
+    cards.appendChild(card('Plan budgétaire', euros(t.cost), t.cost_delta ? (t.cost_delta > 0 ? '+' : '−') + euros(Math.abs(t.cost_delta)) + ' par rapport à la référence (' + euros(t.cost_base) + ')' : 'comme la référence', t.cost_delta > 0));
+    cards.appendChild(card('Dotations', t.dotation_changes ? plural(t.dotation_changes, 'changée', 'changées') : 'inchangées', t.dotation_changes ? 'depuis la référence' : 'comme la référence', t.dotation_changes > 0));
     body.appendChild(cards);
     var stText = { added: ['Ajouté', 'added'], removed: ['Retiré', 'removed'], changed: ['Modifié', 'changed'], same: ['Identique', ''] };
-    var wpRows = dc.wps.filter(function (w) { return w.state !== 'same'; }).map(function (w) {
-      var env = w.known ? (w.allocated_changed ? money(w.base_allocated) + ' → ' + money(w.allocated) : money(w.allocated)) : (money(w.allocated) + ' (enveloppe non figée à l’époque)');
+    var signed = function (v) { return v === null ? '' : (v > 0 ? '+' : v < 0 ? '−' : '') + euros(Math.abs(v)); };
+    if (pl.dotations.length) {
+      body.appendChild(el('h3', { class: 'sub', text: 'Dotations d’équipe modifiées (' + pl.dotations.length + ')' }));
+      body.appendChild(table(['Équipe', 'Référence', 'Comparé', 'État'], pl.dotations.map(function (x) {
+        return el('tr', { 'data-dotation': x.team_id }, [el('td', { text: x.team }), el('td', { class: 'num', text: x.base_amount === null ? '—' : euros(x.base_amount) }), el('td', { class: 'num', text: x.amount === null ? '—' : euros(x.amount) }), el('td', {}, [badge(stText[x.state][0], stText[x.state][1])])]);
+      })));
+    }
+    var wpRows = pl.wps.filter(function (w) { return w.state !== 'same'; }).map(function (w) {
       var cost = w.base_cost === null ? euros(w.cost) : (w.cost === null ? euros(w.base_cost) + ' → retiré' : euros(w.base_cost) + ' → ' + euros(w.cost));
-      return el('tr', { 'data-wp': w.wp_id }, [el('td', { text: (w.code ? w.code + ' ' : '') + w.name }), el('td', { class: 'num', text: env }), el('td', { class: 'num', text: cost }),
-        el('td', { class: 'num' + (w.cost_delta > 0 ? ' late' : ''), text: w.cost_delta === null ? '' : (w.cost_delta > 0 ? '+' : w.cost_delta < 0 ? '−' : '') + euros(Math.abs(w.cost_delta)) }),
-        el('td', {}, [w.over ? badge('En dépassement', 'removed') : badge(stText[w.state][0], stText[w.state][1])])]);
+      return el('tr', { 'data-wp': w.wp_id }, [el('td', { text: (w.code ? w.code + ' ' : '') + w.name }), el('td', { class: 'num', text: cost }), el('td', { class: 'num' + (w.cost_delta > 0 ? ' late' : ''), text: signed(w.cost_delta) }), el('td', {}, [badge(stText[w.state][0], stText[w.state][1])])]);
     });
-    if (wpRows.length) body.appendChild(table(['Workpackage', 'Enveloppe', 'Coût prévu', 'Écart de coût', 'État'], wpRows));
-    else body.appendChild(el('p', { class: 'note', id: 'decomp-same', text: 'Aucun workpackage dont l’enveloppe ou le coût ait changé depuis la référence.' }));
-    if (dc.lines.length) {
-      body.appendChild(el('h3', { class: 'sub', text: 'Lignes de coût modifiées (' + dc.lines.length + ')' }));
-      body.appendChild(table(['Livrable', 'Équipe ou ressource', 'Référence', 'Comparé', 'État'], dc.lines.map(function (l) {
+    if (wpRows.length) body.appendChild(table(['Workpackage', 'Plan', 'Écart', 'État'], wpRows));
+    else body.appendChild(el('p', { class: 'note', id: 'decomp-same', text: 'Aucun workpackage dont le plan ait changé depuis la référence.' }));
+    if (pl.lines.length) {
+      body.appendChild(el('h3', { class: 'sub', text: 'Cellules modifiées (' + pl.lines.length + ')' }));
+      body.appendChild(table(['Livrable', 'Équipe ou ressource', 'Référence', 'Comparé', 'État'], pl.lines.map(function (l) {
         return el('tr', { 'data-line': l.line_id }, [el('td', {}, [l.deliverable, l.wp_name ? el('div', { class: 'muted', text: 'WP ' + l.wp_name }) : null]), el('td', { text: l.target }),
           el('td', { class: 'num', text: l.base_amount === null ? '—' : euros(l.base_amount) }), el('td', { class: 'num', text: l.amount === null ? '—' : euros(l.amount) }), el('td', {}, [badge(stText[l.state][0], stText[l.state][1])])]);
       })));
     }
-    body.appendChild(el('p', { class: 'note', text: 'La décomposition du budget est figée avec la baseline : budget autorisé, enveloppe de chaque workpackage et lignes de coût de chaque livrable. Les changements qui suivent sont aussi à valider par le niveau du dessus (onglet « Changements à valider »).' }));
+    body.appendChild(el('p', { class: 'note', text: 'Le plan budgétaire est figé avec la baseline : la dotation de chaque équipe et les montants du tableau livrable × équipe. Les changements qui suivent sont aussi à valider par le niveau du dessus (onglet « Changements à valider »).' }));
   }
   function renderDiff() {
     var panel = $('panel-ecarts'), d = state.diff, t = d.totals;

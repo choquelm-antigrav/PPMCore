@@ -204,7 +204,7 @@ module.exports = function () {
     const w = chain();
     const team = w.call(CP, 'teams.create', { values: { name: 'T1A' } }), ex = w.call(ADMIN, 'exercise.create', { year: 2027 });
     const exGet = (who) => w.raw(who, 'exercise.get', { projectId: w.p1.id, exerciseId: ex.id });
-    const line = (item, amount) => w.call(CP, 'budget.line.save', { values: { deliverable_id: item.id, resource_id: w.xavier.id, fixed_amount: amount } });
+    const line = (item, amount) => w.call(CP, 'budget.line.save', { values: { deliverable_id: item.id, resource_id: w.xavier.id, fixed_amount: amount }, exerciseId: ex.id });
     line(w.a, 1000); line(w.cc, 2000);       // un livrable dans le WP de Rémi, un dans le WP 2
     w.call(CP, 'news.meeting.add', { projectId: w.p1.id, title: 'Revue', held_on: w.c.todayStr(), text: 'Décision : le plan est validé.' });
     // ouverts à tous : le WBS, le planning, la liste des personnes
@@ -215,19 +215,20 @@ module.exports = function () {
       ok(!JSON.stringify(w.call(login(n), 'ressources.get', { projectId: w.p1.id })).match(/daily_rate|rate_source/), lvl + ' : plus aucun taux nulle part');
       eq(w.raw(login(n), 'news.get', { projectId: w.p1.id }).error.code, 'FORBIDDEN', lvl + ' : ne lit pas les comptes rendus');
       eq(w.call(login(n), 'news.summary', { projectId: w.p1.id }), { visible: false }, lvl + ' : pas de résumé des comptes rendus');
-      eq(w.raw(login(n), 'budget.get', { projectId: w.p1.id }).error.code, 'FORBIDDEN', lvl + ' : pas de budget');
+      eq(w.raw(login(n), 'budget.plan.get', { projectId: w.p1.id, exerciseId: ex.id }).error.code, 'FORBIDDEN', lvl + ' : pas de budget');
     });
     ok(exGet(WPL).ok, 'Workpackage leader : voit l’exercice budgétaire, au global du projet');
     eq(w.call(WPL, 'news.get', { projectId: w.p1.id }).access.view, true, 'et lit les comptes rendus du projet');
     ok(exGet(CP).ok, 'chef de projet : aussi');
     // le budget : un Workpackage leader ne voit que celui de son WP, le chef de projet tout
-    const remiBudget = w.call(WPL, 'budget.get', { projectId: w.p1.id });
-    eq([remiBudget.partial, remiBudget.lines.map((l) => l.deliverable_id)], [true, [w.a.id]], 'Rémi : son workpackage seulement (le livrable du WP 2 n’apparaît pas)');
-    const carlaBudget = w.call(CP, 'budget.get', { projectId: w.p1.id });
-    eq([carlaBudget.partial, carlaBudget.lines.map((l) => l.deliverable_id).sort()], [false, [w.a.id, w.cc.id].sort()], 'le chef de projet voit tout');
+    const rowsOf = (v) => v.rows.filter((r) => r.kind === 'deliverable').map((r) => r.id);
+    const remiBudget = w.call(WPL, 'budget.plan.get', { projectId: w.p1.id, exerciseId: ex.id });
+    eq([remiBudget.partial, rowsOf(remiBudget)], [true, [w.a.id]], 'Rémi : son workpackage seulement (le livrable du WP 2 n’apparaît pas)');
+    const carlaBudget = w.call(CP, 'budget.plan.get', { projectId: w.p1.id, exerciseId: ex.id });
+    eq([carlaBudget.partial, rowsOf(carlaBudget).sort()], [false, [w.a.id, w.cc.id].sort()], 'le chef de projet voit tout');
     // saisir l'exercice reste au chef de projet
-    eq(w.raw(WPL, 'exercise.set', { projectId: w.p1.id, exerciseId: ex.id, teamId: team.id, expected: 1000 }).error.code, 'FORBIDDEN', 'lire n’est pas saisir : le Workpackage leader ne modifie pas le budget d’une équipe');
-    ok(w.raw(CP, 'exercise.set', { projectId: w.p1.id, exerciseId: ex.id, teamId: team.id, expected: 1000 }).ok, 'le chef de projet, si');
+    eq(w.raw(WPL, 'exercise.set', { projectId: w.p1.id, exerciseId: ex.id, teamId: team.id, amount: 1000 }).error.code, 'FORBIDDEN', 'lire n’est pas saisir : le Workpackage leader ne modifie pas la dotation d’une équipe');
+    ok(w.raw(CP, 'exercise.set', { projectId: w.p1.id, exerciseId: ex.id, teamId: team.id, amount: 1000 }).ok, 'le chef de projet, si');
     // la synthèse par mail ne part qu'à ceux qui peuvent lire les comptes rendus
     w.c.SENT_MAILS.length = 0;
     const pub = w.call(CP, 'news.digest.publish', { projectId: w.p1.id, text: 'Décisions : plan validé.\nDates qui bougent : rien.\nRisques : aucun.\nBlocages : aucun.\nActions : voir la liste.' });

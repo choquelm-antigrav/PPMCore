@@ -1,5 +1,19 @@
 # Journal des versions
 
+## 0.21.0 — refonte du budget : un seul tableau, tout le reste en découle
+
+- **Plan budgétaire** : UN tableau par exercice — une ligne par livrable (sous leur workpackage, qui fait la somme), une colonne par équipe et une colonne **Externe** (forfaits). La première ligne est la **dotation** de chaque équipe (un seul montant annuel qui remplace « attendu » et « accordé »). Aucune dimension de temps : ce sont des valeurs annuelles.
+- **Tout est dérivé de ce tableau** : écarts et clash (plan > dotation), suivi par équipe (plan, valeur acquise, réalisé, atterrissage), indicateur de coût de l'Overview, bilan par CPN, outil `get_budget` de l'assistant, constats du moteur de règles, baselines.
+- **Droits** : une cellule se modifie par le responsable du livrable, du sous-workpackage, du workpackage et le chef de projet (`budget.edit` sur son périmètre) ; la dotation, par le chef de projet et au-dessus (`exercise.edit`).
+- **Versions** : une baseline fige la matrice et les dotations (plusieurs versions par exercice) ; le suivi lit la version de référence (dernière baseline validée). Comparaison à la baseline active : colonne « Depuis P1_0 » et dotation à la baseline.
+- **Réalisé saisi à la main** (`actuals.set`, `actuals.get`) par CPN × équipe × mois, historique conservé, avoir en négatif, comparé uniquement au niveau de l'équipe et du CPN. **Aucun lien avec un fichier extérieur** dans cette version.
+- **Externe** : les forfaits du plan se comparent aux PO (engagé) au niveau du projet et du CPN, pas par équipe.
+- **Retiré** : enveloppes par workpackage et budget autorisé (`budget.envelope.*`), échéancier par mois (`budget.phasing.set`), projection mensuelle et graphique, import et export de l'exercice par Google Sheet, import mensuel du réalisé, « attendu » et « accordé ». Les données existantes sont jetables : relancer `A1_INSTALLER_PPM` (la table `TeamBudget` a une colonne `amount`).
+- Nouveaux : `55_Plan.gs` (`budget.plan.get`, `budget.plan.versions`), `budget.cell.set`, `baselines.plan`, `65_Actuals.gs`. La page Budget est entièrement refaite (brouillon + « Valider », colonnes d'équipe ajoutables, fenêtre des forfaits, saisie du réalisé).
+- **Overview** : l'indicateur de coût passe en alerte (« Plan au-delà de la dotation ») quand le plan d'une équipe dépasse sa dotation, pour qui lit l'exercice ; aucun montant dans le fait. La page Overview lit en plus `Exercise`, `HierarchicalTeam` et `TeamBudget`.
+- Page Suivi : la section « Plan budgétaire » remplace les écarts de décomposition ; Administration : plus d'import du réalisé.
+- Tests : `test_plan.js` (5), `test_exercise_tracking.js` (7), `ui_budget.js` refait ; 390 tests serveur, tous les `ui_*.js` verts. **Non testé dans un vrai Apps Script.**
+
 ## 0.20.1 — réalisé comptable et outil budgétaire de l'assistant
 
 - **Import du réalisé** depuis le classeur mensuel de la finance (onglet « CUC Total Cost » : CPN en J, équipe en L, mois en T, année en U, montant en W) : consommation réelle **par projet, équipe et mois**, pas au livrable ; nouveau fichier chaque mois (remplace les montants repris, n'efface rien) ; analyse, lots, historique ; zone « Réalisé comptable » de la page Administration (administrateur).

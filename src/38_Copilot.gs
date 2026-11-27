@@ -239,17 +239,18 @@ function copilotBudgetAllowed_(ctx, projectId) {
 }
 function copilotBudgetTool_(ctx, projectId) {
   return {
-    declaration: { name: 'get_budget', description: 'Budget de l’exercice en exécution du projet : budget autorisé, prévu, valeur acquise, projection de fin d’année (à l’avancement et sur le réalisé comptable), réalisé par équipe et par mois, par workpackage. Montants agrégés. Le réalisé n’est pas suivi au livrable.', parameters: { type: 'object', properties: {} } },
+    declaration: { name: 'get_budget', description: 'Budget de l’exercice en exécution du projet : dotation, plan (total des parts de livrables), valeur acquise, réalisé à ce jour (saisi à la main), atterrissage de fin d’année, par équipe, et le budget externe face aux commandes d’achat engagées. Montants agrégés. Le réalisé n’est pas suivi au livrable.', parameters: { type: 'object', properties: {} } },
     handler: function () {
       var ex = repoList('Exercise', function (x) { return !isTrue(x.deleted) && x.status === 'Exécution'; })[0];
       if (!ex) return { error: 'Aucun exercice en exécution : pas de budget à analyser.' };
-      var project = mustGet('Project', projectId), rv = resolveDecompVersion_(project, 'ref'), v = envelopeView_(ctx, project, ex, rv.version), pj = v.projection, act = v.actuals && v.actuals.available ? v.actuals : null;
-      return { exercice: Number(ex.year), version_lue_par_le_suivi: rv.version ? rv.version.label : 'version en cours (aucune version validée)', budget_autorise: pj.budget, prevu_annee: pj.plan_year, prevu_a_ce_jour: pj.pv, valeur_acquise: pj.ev,
-        projection_a_l_avancement: pj.projected, ecart_au_budget: pj.gap, realise_a_ce_jour: act ? pj.actual_to_date : null, projection_sur_le_realise: act ? pj.projected_actual : null, ecart_projection_realise: act ? pj.gap_actual : null,
-        realise_par_mois: act ? act.months.map(function (m, i) { return { mois: m, realise: act.monthly[i] }; }).filter(function (x) { return x.realise !== 0; }) : [],
-        realise_par_equipe: act ? act.teams.map(function (t) { return { equipe: t.name, realise_a_ce_jour: t.to_date, realise_annee: t.total }; }) : [], realise_non_rattache_a_une_equipe: act ? act.unattached : null,
-        par_workpackage: pj.by_wp.map(function (w) { return { workpackage: (w.code ? w.code + ' ' : '') + w.name, enveloppe: w.allocated, prevu_annee: w.plan, valeur_acquise: w.ev, projection: w.projected, ecart: w.gap }; }),
-        precisions: 'Le réalisé comptable vient de l’import mensuel (CPN, équipe, mois) : il n’est pas suivi au livrable. Sans réalisé importé, les champs réalisé valent null.' };
+      var project = mustGet('Project', projectId), rv = resolveDecompVersion_(project, 'ref');
+      var v = API_ACTIONS['exercise.tracking']({ projectId: projectId, exerciseId: ex.id, version: 'ref' }, ctx), t = v.totals;
+      return { exercice: Number(ex.year), version_lue_par_le_suivi: rv.version ? rv.version.label : 'version en cours (aucune version validée)', dotation: t.dotation, plan: t.plan, valeur_acquise: t.ev, avancement_pct: t.progress_pct,
+        realise_a_ce_jour: t.actual_to_date, consomme_pct_du_plan: t.consumed_pct, atterrissage: t.landing, reste_sur_dotation: t.remaining, clash: t.clash,
+        par_equipe: v.teams.map(function (x) { return { equipe: x.name, dotation: x.dotation, plan: x.plan, valeur_acquise: x.ev, realise_a_ce_jour: x.actual_to_date, atterrissage: x.landing, reste_sur_dotation: x.remaining }; }),
+        budget_externe: t.external,
+        realise_par_mois: v.actuals.available ? v.actuals.months.map(function (m, i) { return { mois: m, realise: v.actuals.monthly[i] }; }).filter(function (x) { return x.realise !== 0; }) : [],
+        precisions: 'Le plan est annuel (tableau livrable × équipe), sans étalement par mois. Le réalisé comptable est saisi à la main (CPN, équipe, mois) : il n’est pas suivi au livrable. Sans réalisé saisi, les champs réalisé et atterrissage valent null.' };
     }
   };
 }
