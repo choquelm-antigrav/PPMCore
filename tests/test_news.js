@@ -171,7 +171,7 @@ module.exports = function () {
   test('Repères : réservés au chef de projet, dix au plus, gardés tels quels', () => {
     const w = lot2World();
     const r = w.call(CP, 'news.settings.set', { projectId: w.p1.id, enabled: true, keywords: 'P1,  Nacelle ; ✈️' });
-    eq(r, { enabled: true, keywords: 'P1, Nacelle, ✈️' });
+    eq(r, { enabled: true, keywords: 'P1, Nacelle, ✈️', calendar_id: '' });
     const g = w.call(CP, 'news.get', { projectId: w.p1.id });
     eq([g.project.news_on, g.project.keywords], [true, 'P1, Nacelle, ✈️']);
     eq(w.raw(CP, 'news.settings.set', { projectId: w.p1.id, enabled: true, keywords: Array.from({ length: 11 }, (_, i) => 'mot' + i).join(',') }).error.code, 'VALIDATION');
@@ -307,93 +307,135 @@ module.exports = function () {
 
   // ---------------------------------------------------------------- collecteur
 
-  /** Fabrique un faux agenda et un faux Docs ; renvoie l'adaptateur et ses journaux d'appels. */
-  function fakeNews(events, docs) {
-    const calls = { list: [], read: [], journal: [] };
+  /** Fabrique un faux agenda (un agenda par adresse) et un faux Docs ; renvoie l'adaptateur et ses journaux d'appels. */
+  function fakeNews(byCal, docs) {
+    const calls = { list: [], read: [], journal: [], created: [] };
     return {
       calls, available: true,
-      listEvents: (from, to) => { calls.list.push([from, to]); return JSON.parse(JSON.stringify(events)); },
+      listEvents: (cal, from, to) => { calls.list.push([cal, from, to]); if (byCal[cal] instanceof Error) throw byCal[cal]; return JSON.parse(JSON.stringify(byCal[cal] || [])); },
       readDoc: (id) => { calls.read.push(id); if (docs[id] === undefined) throw new Error('droits'); return docs[id]; },
-      upsertJournal: (title, lines, docId) => { calls.journal.push(title); return { id: docId || 'jr-' + (calls.journal.length), url: 'https://docs.test/x', created: !docId }; }
+      upsertJournal: (title, lines, docId) => { calls.journal.push(title); return { id: docId || 'jr-' + (calls.journal.length), url: 'https://docs.test/x', created: !docId }; },
+      createCalendar: (name, desc) => { calls.created.push([name, desc]); return { id: 'cal-' + calls.created.length + '@group.calendar.google.com', shared: true }; }
     };
   }
+  const CAL1 = 'p1@group.calendar.google.com', CAL2 = 'p2@group.calendar.google.com';
 
-  test('Collecte : seulement les réunions dont le titre porte un repère ; privées, annulées et sans repère ignorées ; notes et pièces jointes gardées ; jamais deux fois', () => {
+  test('Collecte (0.21.2) : toute réunion de l’agenda du projet est celle du projet, sans repère ni invitation de l’administrateur ; privées et annulées ignorées ; notes et pièces jointes gardées ; jamais deux fois', () => {
     const w = lot2World(), c = w.c, today = c.todayStr();
-    w.call(CP, 'news.settings.set', { projectId: w.p1.id, enabled: true, keywords: 'P1, Nacelle' });
+    w.call(CP, 'news.settings.set', { projectId: w.p1.id, enabled: true });
+    w.call(CP, 'news.calendar.set', { projectId: w.p1.id, calendarId: CAL1 });
     const ev = (id, title, att, extra) => Object.assign({ id, title, date: today, start: today + 'T09:00:00+02:00', attendees: att, cancelled: false, isPrivate: false, attachments: [] }, extra || {});
-    const events = [
-      ev('e1', 'Revue de conception P1', [CP, MEMBER, 'inconnu@ailleurs.com'], { attachments: [{ fileId: 'n1', title: 'Notes de Gemini — Revue', mime: 'application/vnd.google-apps.document', url: 'https://docs.test/n1' }, { fileId: 'p1', title: 'Présentation', mime: 'application/vnd.google-apps.presentation', url: 'https://docs.test/p1' }, { fileId: 'x1', title: 'Piège', mime: '', url: 'javascript:alert(1)' }] }),
+    const byCal = { [CAL1]: [
+      ev('e1', 'Revue de conception', [CP, MEMBER, 'inconnu@ailleurs.com'], { attachments: [{ fileId: 'n1', title: 'Notes de Gemini — Revue', mime: 'application/vnd.google-apps.document', url: 'https://docs.test/n1' }, { fileId: 'p1', title: 'Présentation', mime: 'application/vnd.google-apps.presentation', url: 'https://docs.test/p1' }, { fileId: 'x1', title: 'Piège', mime: '', url: 'javascript:alert(1)' }] }),
       ev('e2', 'Point confidentiel', [CP, MEMBER], { isPrivate: true }),
-      ev('e3', 'Point nacelle', [CP]),
-      ev('e4', 'Café', [CP]),
-      ev('e5', 'Revue annulée', [CP, MEMBER], { cancelled: true }),
-      ev('e6', 'Réunion sans lien', [XAV, 'autre@ailleurs.com']),
-      ev('e7', 'Point d’équipe projet', [CP, MEMBER, DPL])           // tous les membres du projet y sont invités, mais aucun repère dans le titre : non retenue
-    ];
-    const fake = fakeNews(events, { n1: NOTES });
+      ev('e3', 'Café', [XAV]),                                   // aucun repère, personne du projet : l'agenda suffit
+      ev('e5', 'Revue annulée', [CP, MEMBER], { cancelled: true })
+    ] };
+    const fake = fakeNews(byCal, { n1: NOTES });
     c.NEWS_ADAPTER = fake;
     const r = c.newsCollect_({});
-    eq([r.created, r.toTriage, r.skippedPrivate, r.ignored, r.notes, r.errors], [2, 0, 1, 4, 1, 0], JSON.stringify(r));
+    eq([r.created, r.toTriage, r.skippedPrivate, r.ignored, r.notes, r.errors, r.projects], [2, 0, 1, 1, 1, 0, 1], JSON.stringify(r));
+    eq(fake.calls.list.map((l) => l[0]), [CAL1], 'seul l’agenda du projet est lu (jamais l’agenda personnel de l’administrateur)');
     const ms = c.repoList('Meeting').sort((a, b) => a.event_id.localeCompare(b.event_id));
     eq(ms.map((m) => [m.event_id, m.source, m.status, m.project_id === w.p1.id]), [['e1', 'Agenda', 'Publiée', true], ['e3', 'Agenda', 'Publiée', true]]);
     ok(/Carla/.test(ms[0].participants) && /Mia/.test(ms[0].participants) && /inconnu/.test(ms[0].participants), 'participants : noms connus, adresse sinon : ' + ms[0].participants);
     eq([ms[0].doc_url, /Revue de la conception/.test(ms[0].summary)], ['https://docs.test/n1', true], 'les notes jointes sont lues, pas la présentation');
     eq(fake.calls.read, ['n1'], 'une seule pièce jointe ouverte');
-    ok(!c.repoList('Meeting').some((m) => m.event_id === 'e7'), 'une réunion sans repère n’est pas collectée, même avec tous les membres invités : aucune trace');
     const att = c.newsParseAttachments_(ms[0].attachments);
     eq(att.map((a) => a.title), ['Notes de Gemini — Revue', 'Présentation'], 'les pièces jointes de l’invitation sont gardées avec leur titre ; celle dont l’adresse n’est pas en https est écartée');
     eq(att[1], { title: 'Présentation', url: 'https://docs.test/p1', mime: 'application/vnd.google-apps.presentation' });
     ok(!/javascript/.test(ms[0].attachments), 'et elle n’est même pas enregistrée dans le classeur : ' + ms[0].attachments.slice(0, 60));
     eq(c.newsParseAttachments_(JSON.stringify([{ title: 'x', url: 'javascript:alert(1)' }, { title: 'y', url: 'https://ok.test/y' }])).map((a) => a.title), ['y'], 'à la lecture aussi, un enregistrement ancien ou modifié à la main est filtré');
-    eq(w.call(CP, 'news.get', { projectId: w.p1.id }).meetings.find((m) => m.title === 'Revue de conception P1').attachments.length, 2, 'la page les reçoit avec la réunion');
+    eq(w.call(CP, 'news.get', { projectId: w.p1.id }).meetings.find((m) => m.title === 'Revue de conception').attachments.length, 2, 'la page les reçoit avec la réunion');
     eq(c.repoList('Meeting').find((m) => m.event_id === 'e3').attachments || '', '', 'sans pièce jointe : rien d’enregistré');
     eq(c.repoList('NewsAction').filter((a) => a.meeting_id === ms[0].id).length, 4, 'les actions des notes sont proposées');
     ok(!c.repoList('Meeting').some((m) => m.event_id === 'e2'), 'une réunion privée n’est jamais lue : aucune trace');
     // fenêtre : la passe suivante repart de la fin de la précédente, sans rien recréer
-    const t1 = fake.calls.list[0][1];
-    ok(Date.parse(t1) - Date.parse(fake.calls.list[0][0]) === 86400000, 'première passe : les dernières 24 h');
+    const t1 = fake.calls.list[0][2];
+    ok(Date.parse(t1) - Date.parse(fake.calls.list[0][1]) === 86400000, 'première passe : les dernières 24 h');
     eq(c.getProp(c.PROP.NEWS_LAST, ''), t1, 'fin de passe mémorisée');
     const r2 = c.newsCollect_({});
     eq([r2.created, c.repoList('Meeting').length], [0, 2], 'jamais deux fois la même réunion');
-    eq(fake.calls.list[1][0], t1, 'la passe suivante commence où la précédente s’est arrêtée');
+    eq(fake.calls.list[1][1], t1, 'la passe suivante commence où la précédente s’est arrêtée');
   });
 
-  test('Collecte : égalité entre projets, « à trier », rattachement ou abandon par le chef de projet', () => {
+  test('Collecte (0.21.2) : deux projets, deux agendas ; une réunion invitant les deux agendas compte pour les deux ; un agenda illisible n’arrête pas l’autre ; un projet sans agenda n’est pas lu', () => {
     const w = lot2World(), c = w.c, today = c.todayStr();
-    w.call(CP, 'news.settings.set', { projectId: w.p1.id, enabled: true, keywords: 'transverse' });
-    w.call(ADMIN, 'news.settings.set', { projectId: w.p2.id, enabled: true, keywords: 'transverse' });   // les deux projets ont le même repère
-    const mk = (id, title) => ({ id, title, date: today, start: today + 'T14:00:00+02:00', attendees: [CP, DPL], cancelled: false, isPrivate: false, attachments: [{ fileId: 'n' + id, title: 'Notes Gemini', mime: 'application/vnd.google-apps.document', url: 'https://docs.test/' + id }] });
-    c.NEWS_ADAPTER = fakeNews([mk('t1', 'Point transverse'), mk('t2', 'Point transverse bis')], { nt1: 'Étapes suivantes\n- [Mia] Relancer le fournisseur\n- [Carla] Valider le plan', nt2: 'Décision : à revoir' });
+    w.call(CP, 'news.settings.set', { projectId: w.p1.id, enabled: true });
+    w.call(ADMIN, 'news.settings.set', { projectId: w.p2.id, enabled: true });
+    w.call(CP, 'news.calendar.set', { projectId: w.p1.id, calendarId: CAL1 });
+    const ev = (id, title) => ({ id, title, date: today, start: today + 'T14:00:00+02:00', attendees: [CP, DPL], cancelled: false, isPrivate: false, attachments: [] });
+    let fake = fakeNews({ [CAL1]: [ev('same', 'Point transverse'), ev('only1', 'Point P1')] }, {});
+    c.NEWS_ADAPTER = fake;
+    ok(/Aucun projet n’a d’agenda/.test(c.newsCollect_({}).skipped || '') === false, 'P1 a un agenda');
+    // P2 sans agenda : jamais lu
+    eq(fake.calls.list.map((l) => l[0]), [CAL1], 'le projet sans agenda n’est pas lu');
+    w.call(ADMIN, 'news.calendar.set', { projectId: w.p2.id, calendarId: CAL2 });
+    c.setProp(c.PROP.NEWS_LAST, '');
+    fake = fakeNews({ [CAL1]: [ev('same', 'Point transverse'), ev('only1', 'Point P1')], [CAL2]: [ev('same', 'Point transverse')] }, {});
+    c.NEWS_ADAPTER = fake;
     const r = c.newsCollect_({});
-    eq([r.created, r.toTriage], [0, 2], 'le repère de deux projets dans le titre : rien n’est attribué, à trier');
-    const tri = c.repoList('Meeting').filter((m) => m.status === 'À trier');
-    eq(tri.map((m) => [m.project_id, m.candidates.split(',').sort().join()]), [['', [w.p1.id, w.p2.id].sort().join()], ['', [w.p1.id, w.p2.id].sort().join()]]);
-    // le chef de projet voit la réunion dans sa liste, pas dans le fil
+    eq(r.created, 1, 'la réunion de P1 déjà créée n’est pas recréée ; celle de P2 (même identifiant, autre agenda) l’est : ' + JSON.stringify(r));
+    eq(c.repoList('Meeting').filter((m) => m.event_id === 'same').map((m) => m.project_id).sort(), [w.p1.id, w.p2.id].sort(), 'la même réunion existe dans les deux projets');
+    // un agenda illisible
+    c.setProp(c.PROP.NEWS_LAST, '');
+    c.NEWS_ADAPTER = fakeNews({ [CAL1]: new Error('agenda introuvable'), [CAL2]: [ev('n2', 'Nouvelle')] }, {});
+    const r3 = c.newsCollect_({});
+    eq([r3.created, r3.errors, r3.failed], [1, 1, [c.repoList('Project').find((x) => x.id === w.p1.id).code]], 'l’agenda illisible est signalé, l’autre est lu');
+    eq(c.getProp(c.PROP.NEWS_LAST, ''), '', 'et la fin de passe n’est pas mémorisée : la prochaine passe reprend la fenêtre');
+  });
+
+  test('Agenda du projet : création (chef de projet), rattachement, détachement, droits', () => {
+    const w = lot2World(), c = w.c;
+    w.call(CP, 'news.settings.set', { projectId: w.p1.id, enabled: true });
+    const fake = fakeNews({}, {}); c.NEWS_ADAPTER = fake;
+    eq(w.raw(MEMBER, 'news.calendar.create', { projectId: w.p1.id }).error.code, 'FORBIDDEN', 'réservé au chef de projet');
+    const r = w.call(CP, 'news.calendar.create', { projectId: w.p1.id });
+    ok(/@group\.calendar\.google\.com$/.test(r.calendar_id) && r.shared_to_domain === true, JSON.stringify(r));
+    ok(/P1/.test(fake.calls.created[0][0]), 'nommé d’après le projet');
+    eq(w.call(CP, 'news.get', { projectId: w.p1.id }).project.calendar_id, r.calendar_id, 'la page reçoit l’adresse à inviter');
+    eq(w.raw(CP, 'news.calendar.create', { projectId: w.p1.id }).error.code, 'VALIDATION', 'un projet n’a qu’un agenda');
+    eq(w.raw(CP, 'news.calendar.set', { projectId: w.p1.id, calendarId: 'pas une adresse' }).error.code, 'VALIDATION');
+    eq(w.call(CP, 'news.calendar.set', { projectId: w.p1.id, calendarId: '' }).calendar_id, '', 'détaché');
+    w.call(CP, 'news.calendar.set', { projectId: w.p1.id, calendarId: 'Equipe@Entreprise.com' });
+    eq(w.call(CP, 'news.get', { projectId: w.p1.id }).project.calendar_id, 'equipe@entreprise.com', 'adresse normalisée en minuscules');
+    eq(w.raw(ADMIN, 'news.calendar.set', { projectId: w.p2.id, calendarId: 'equipe@entreprise.com' }).error.code, 'VALIDATION', 'un agenda ne sert qu’à un projet');
+    c.NEWS_ADAPTER = { available: true };
+    eq(w.raw(ADMIN, 'news.calendar.create', { projectId: w.p2.id }).error.code, 'VALIDATION', 'sans le service Calendar : message clair, rien n’est enregistré');
+  });
+
+  test('Triage : rattachement ou abandon par le chef de projet (réunions déjà à trier)', () => {
+    const w = lot2World(), c = w.c, today = c.todayStr();
+    const mk = (id, notes) => {
+      const mt = c.repoInsert('Meeting', { project_id: '', source: 'Agenda', event_id: id, held_on: today, title: 'Point ' + id, participants: '', summary: '', decisions: '', status: 'À trier', candidates: [w.p1.id, w.p2.id].join(','), dedupe_key: 'ev:' + id, added_by: 'collecteur' }, c.JOB_ACTX);
+      c.newsInsertActions_(mt, '', c.newsParseNotes_(notes, today, c.newsPeople_(c.newsBase_(), {})).actions, c.JOB_ACTX);
+      return mt;
+    };
+    const t1 = mk('t1', 'Étapes suivantes\n- [Mia] Relancer le fournisseur\n- [Carla] Valider le plan'), t2 = mk('t2', 'Décision : à revoir');
     const g = w.call(CP, 'news.get', { projectId: w.p1.id });
     eq([g.meetings.length, g.triage.length], [0, 2]);
     eq(w.call(RWP, 'news.get', { projectId: w.p1.id }).triage, [], 'un Workpackage leader ne voit pas la liste à trier');
-    // rattachement : les actions suivent, les responsables sont retrouvés parmi les membres du projet
-    const first = tri.find((m) => m.event_id === 't1');
-    const res = w.call(CP, 'news.triage.assign', { id: first.id, projectId: w.p1.id });
+    const res = w.call(CP, 'news.triage.assign', { id: t1.id, projectId: w.p1.id });
     eq(res.actions, 2);
     const g2 = w.call(CP, 'news.get', { projectId: w.p1.id });
-    eq([g2.meetings.map((m) => m.title), g2.triage.length, g2.actions.map((a) => a.owner).sort()], [['Point transverse'], 1, ['Carla', 'Mia']]);
-    eq(w.raw(CP, 'news.triage.assign', { id: first.id, projectId: w.p1.id }).error.code, 'VALIDATION', 'une réunion déjà rattachée n’est plus à trier');
-    eq(w.raw(MEMBER, 'news.triage.drop', { id: tri.find((m) => m.event_id === 't2').id }).error.code, 'FORBIDDEN');
-    w.call(CP, 'news.triage.drop', { id: tri.find((m) => m.event_id === 't2').id });
+    eq([g2.meetings.map((m) => m.title), g2.triage.length, g2.actions.map((a) => a.owner).sort()], [['Point t1'], 1, ['Carla', 'Mia']]);
+    eq(w.raw(CP, 'news.triage.assign', { id: t1.id, projectId: w.p1.id }).error.code, 'VALIDATION', 'une réunion déjà rattachée n’est plus à trier');
+    eq(w.raw(MEMBER, 'news.triage.drop', { id: t2.id }).error.code, 'FORBIDDEN');
+    w.call(CP, 'news.triage.drop', { id: t2.id });
     eq(w.call(CP, 'news.get', { projectId: w.p1.id }).triage.length, 0, 'ignorée');
     eq(c.repoList('Meeting').filter((m) => m.event_id === 't2').length, 0, 'et retirée du classeur (suppression douce)');
   });
 
-  test('Collecte : agenda indisponible, aucun projet actif, passe partielle, déclencheur avec journaux', () => {
+  test('Collecte : agenda indisponible, aucun projet actif, projet sans agenda, passe partielle, déclencheur avec journaux', () => {
     const w = lot2World(), c = w.c, today = c.todayStr();
     ok(/n’est pas accessible/.test(c.newsCollect_({}).skipped), 'sans le service Calendar : ignorée proprement');
-    c.NEWS_ADAPTER = fakeNews([], {});
-    ok(/Aucun projet/.test(c.newsCollect_({}).skipped), 'aucun projet n’a activé le fil');
-    w.call(CP, 'news.settings.set', { projectId: w.p1.id, enabled: true, keywords: 'P1' });
-    const evs = ['a', 'b', 'c'].map((k) => ({ id: k, title: 'Réunion P1 ' + k, date: today, start: today + 'T10:00:00+02:00', attendees: [], cancelled: false, isPrivate: false, attachments: [] }));
-    const fake = fakeNews(evs, {}); c.NEWS_ADAPTER = fake;
+    c.NEWS_ADAPTER = fakeNews({}, {});
+    ok(/Aucun projet n’a activé/.test(c.newsCollect_({}).skipped), 'aucun projet n’a activé le fil');
+    w.call(CP, 'news.settings.set', { projectId: w.p1.id, enabled: true });
+    ok(/Aucun projet n’a d’agenda/.test(c.newsCollect_({}).skipped), 'le fil est activé mais il n’y a pas d’agenda : la collecte le dit');
+    w.call(CP, 'news.calendar.set', { projectId: w.p1.id, calendarId: CAL1 });
+    const evs = ['a', 'b', 'c'].map((k) => ({ id: k, title: 'Réunion ' + k, date: today, start: today + 'T10:00:00+02:00', attendees: [], cancelled: false, isPrivate: false, attachments: [] }));
+    const fake = fakeNews({ [CAL1]: evs }, {}); c.NEWS_ADAPTER = fake;
     const part = c.newsCollect_({ budgetMs: -1 });
     eq([part.partial, c.repoList('Meeting').length, c.getProp(c.PROP.NEWS_LAST, '')], [true, 0, ''], 'budget de temps épuisé : rien n’est perdu, la fin de passe n’est pas mémorisée');
     const msg = c.newsCollectRun();
@@ -403,8 +445,7 @@ module.exports = function () {
     const calm = c.newsCollectRun();
     ok(/0 réunion\(s\) retenue\(s\).*0 journal/.test(calm), 'rien de neuf, journal déjà créé : pas de mise à jour inutile : ' + calm);
     c.NEWS_ADAPTER = { available: true, listEvents: () => { throw new Error('quota agenda'); } };
-    ok(/Collecte en échec : quota agenda/.test(c.newsCollectRun()), 'une panne est dite et mémorisée, sans planter le déclencheur');
-    ok(/quota agenda/.test(c.getProp(c.PROP.LAST_NEWS, '')));
+    ok(/Agenda illisible pour P1/.test(c.newsCollectRun()), 'une panne est dite sans planter le déclencheur');
   });
 
   test('Déclencheurs : collecte à 1 h et à 13 h, posés sans doublon', () => {

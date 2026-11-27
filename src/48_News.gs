@@ -7,10 +7,10 @@
  *     aux membres), carte dans l'Overview, section dans le récapitulatif du matin.
  *  D. Actions : lues sans IA dans les « prochaines étapes » nominatives, proposées à chaque personne qui les accepte,
  *     les conteste ou les déclare faites.
- *  E. Repères : mots du titre qui rattachent une réunion à un projet (réglés par projet).
- *  F. Collecteur pilote : lit l'agenda du compte qui exécute le script (la spécification prévoit de commencer par le chef
- *     de projet), deux fois par jour. Une réunion est retenue si au moins deux membres du projet y sont invités ou si son titre
- *     contient un repère ; en cas d'égalité entre projets elle va dans la liste « à trier ». Les événements privés ne sont jamais lus.
+ *  E. Repères : mots du titre qui rattachent une réunion à un projet (0.12 : réglés par projet ; plus utilisés par la collecte depuis la 0.21.2).
+ *  F. Collecteur (0.21.2) : chaque projet a son AGENDA Google (créé par le compte qui exécute l'outil, lisible par tout le domaine) ; les personnes
+ *     l'invitent à leurs réunions et le collecteur lit ces agendas, deux fois par jour. Toute réunion de l'agenda d'un projet est celle de ce projet :
+ *     ni repère de titre, ni invitation de l'administrateur nécessaires. Les événements privés ne sont jamais lus.
  *
  * Fonctions de calcul pures (testées sans service Google) : newsNorm_, newsFindDate_, newsParseNotes_, newsParseActionLine_,
  * newsMatchProject_, newsValidateDigest_, newsPrompt_, newsJournalLines_.
@@ -143,7 +143,7 @@ defineAction('news.get', function (p, ctx) {
   var digest = repoList('NewsDigest', function (d) { return d.project_id === project.id; }).sort(function (a, b) { return String(b.digest_date).localeCompare(String(a.digest_date)) || String(b.created_at || '').localeCompare(String(a.created_at || '')); })[0] || null;
   var out = {
     access: access, me: ctx.resourceId || '',
-    project: { id: project.id, code: project.code, name: project.name, version: project.version, news_on: isTrue(project.news_on), keywords: String(project.news_keywords || ''),
+    project: { id: project.id, code: project.code, name: project.name, version: project.version, news_on: isTrue(project.news_on), keywords: String(project.news_keywords || ''), calendar_id: String(project.news_calendar_id || ''),
       journal_url: project.news_journal_id ? 'https://docs.google.com/document/d/' + project.news_journal_id + '/edit' : '', last_collect: getProp(PROP.NEWS_LAST, '') },
     meetings: meetings.map(function (m) { var v = newsMeetingView_(m, byMeeting[m.id] || []); v.action_list = (byMeeting[m.id] || []).map(function (a) { return newsActionView_(a, names, itemsById); }); return v; }),
     actions: allActions.filter(function (a) { return NEWS_OPEN.indexOf(a.status) >= 0; })
@@ -266,11 +266,39 @@ defineAction('news.triage.drop', function (p, ctx) {
 defineAction('news.settings.set', function (p, ctx) {
   var project = mustGet('Project', requireParam(p, 'projectId'));
   newsMustManage_(ctx, project);
-  var words = String(p.keywords || '').split(/[,;\n]+/).map(function (k) { return k.trim(); }).filter(Boolean);
-  if (words.length > 10) throw new PpmError('VALIDATION', 'Dix repères au plus par projet.');
-  if (words.some(function (k) { return k.length > 40; })) throw new PpmError('VALIDATION', 'Un repère fait 40 caractères au plus.');
-  var upd = repoUpdate('Project', project.id, { news_on: !!p.enabled, news_keywords: words.join(', ') }, null, ctx.actx);
-  return { enabled: isTrue(upd.news_on), keywords: upd.news_keywords };
+  var vals = { news_on: !!p.enabled };
+  if (p.keywords !== undefined) {   // les repères ne servent plus à la collecte (0.21.2) ; réglage gardé pour les appels existants
+    var words = String(p.keywords || '').split(/[,;\n]+/).map(function (k) { return k.trim(); }).filter(Boolean);
+    if (words.length > 10) throw new PpmError('VALIDATION', 'Dix repères au plus par projet.');
+    if (words.some(function (k) { return k.length > 40; })) throw new PpmError('VALIDATION', 'Un repère fait 40 caractères au plus.');
+    vals.news_keywords = words.join(', ');
+  }
+  var upd = repoUpdate('Project', project.id, vals, null, ctx.actx);
+  return { enabled: isTrue(upd.news_on), keywords: upd.news_keywords, calendar_id: upd.news_calendar_id || '' };
+});
+
+/** L'agenda du projet : créé par l'outil (propriété du compte qui l'exécute, lisible par tout le domaine) ; les personnes en invitent l'adresse à leurs réunions. */
+defineAction('news.calendar.create', function (p, ctx) {
+  var project = mustGet('Project', requireParam(p, 'projectId'));
+  newsMustManage_(ctx, project);
+  if (!isBlank(project.news_calendar_id)) throw new PpmError('VALIDATION', 'Ce projet a déjà un agenda : ' + project.news_calendar_id + '.');
+  var ad = newsAdapter_();
+  if (!ad.available || !ad.createCalendar) throw new PpmError('VALIDATION', 'Le service Calendar n’est pas disponible : activez-le dans le projet Apps Script, ou rattachez un agenda existant.');
+  var made = ad.createCalendar(project.code + ' — ' + project.name, 'Réunions du projet ' + project.code + ' (collectées par PPM). Invitez cette adresse à vos réunions pour qu’elles apparaissent dans le suivi du projet.');
+  var upd = repoUpdate('Project', project.id, { news_calendar_id: made.id }, null, ctx.actx);
+  return { calendar_id: upd.news_calendar_id, shared_to_domain: !!made.shared };
+});
+
+/** Rattache un agenda existant (adresse de l'agenda) au projet, ou le détache avec une adresse vide. */
+defineAction('news.calendar.set', function (p, ctx) {
+  var project = mustGet('Project', requireParam(p, 'projectId'));
+  newsMustManage_(ctx, project);
+  var id = String(p.calendarId || '').trim().toLowerCase();
+  if (id && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(id)) throw new PpmError('VALIDATION', 'L’adresse de l’agenda n’est pas valide (elle ressemble à une adresse e-mail).');
+  var other = id ? repoList('Project', function (x) { return x.id !== project.id && String(x.news_calendar_id || '').toLowerCase() === id; })[0] : null;
+  if (other) throw new PpmError('VALIDATION', 'Cet agenda est déjà celui du projet ' + other.code + '.');
+  var upd = repoUpdate('Project', project.id, { news_calendar_id: id }, null, ctx.actx);
+  return { calendar_id: upd.news_calendar_id || '' };
 });
 
 /** Les lignes du Journal : fiche du projet, puis chaque réunion de la plus récente à la plus ancienne. */
