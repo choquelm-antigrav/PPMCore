@@ -91,24 +91,26 @@ function qualityKpi_(d) {
 
 /** COÛT : data = { balance (bilan par CPN ou null), lateGr, withoutBudget, showAmounts }. Aucun montant si showAmounts est faux. */
 function costKpi_(d) {
-  var b = d.balance;
-  if (!b || (!b.totals.budget.total && !b.totals.po.count)) {
+  var b = d.balance, clashes = Number(d.clashes) || 0;
+  if (!clashes && (!b || (!b.totals.budget.total && !b.totals.po.count))) {
     return { level: 'none', label: KPI_LABELS.none, headline: 'Budget non renseigné', facts: [], metrics: { engaged_pct: null } };
   }
+  b = b || { totals: { budget: { total: 0, external: 0, internal: 0 }, po: { count: 0, committed: 0, planned: 0 }, overrun: false }, cpns: [] };
   var ext = b.totals.budget.external, committed = b.totals.po.committed;
   var pct = ext > 0 ? Math.round(100 * committed / ext) : null;
   var cpnOverrun = b.cpns.some(function (g) { return g.overrun && g.budget && g.budget.external > 0; }); // les analyses se font par CPN : un seul dépassement compte
   var overrun = b.totals.overrun || cpnOverrun || (ext === 0 && committed > 0);
   var level = 'ok';
   if ((pct !== null && pct >= 85) || d.lateGr > 0) level = 'warn';
-  if (overrun) level = 'alert';
+  if (overrun || clashes) level = 'alert';
   var facts = [];
+  if (clashes) facts.push(pl_(clashes, 'équipe dont le plan dépasse la dotation (clash)', 'équipes dont le plan dépasse la dotation (clash)'));
   if (pct !== null) facts.push('Engagé : ' + pct + ' % du budget externe' + (d.showAmounts ? ' (' + eurAmount_(committed) + ' sur ' + eurAmount_(ext) + ')' : ''));
   if (ext === 0 && committed > 0) facts.push('Des PO sont engagées sans budget externe');
   b.cpns.filter(function (g) { return g.overrun && g.cpn; }).forEach(function (g) { facts.push('CPN ' + g.cpn + ' : budget externe dépassé'); });
   if (d.lateGr) facts.push(pl_(d.lateGr, 'GR en retard', 'GR en retard'));
   if (d.withoutBudget) facts.push(pl_(d.withoutBudget, 'livrable sans budget', 'livrables sans budget'));
-  var headline = level === 'ok' ? 'Budget externe maîtrisé' : overrun ? (cpnOverrun && !b.totals.overrun ? 'Budget externe dépassé sur un CPN' : 'Budget externe dépassé') : d.lateGr ? 'GR en retard' : 'Budget externe bientôt consommé';
+  var headline = clashes && !overrun ? 'Plan au-delà de la dotation' : level === 'ok' ? 'Budget externe maîtrisé' : overrun ? (cpnOverrun && !b.totals.overrun ? 'Budget externe dépassé sur un CPN' : 'Budget externe dépassé') : d.lateGr ? 'GR en retard' : 'Budget externe bientôt consommé';
   return { level: level, label: KPI_LABELS[level], headline: headline, facts: facts, metrics: { engaged_pct: pct, late_gr: d.lateGr, without_budget: d.withoutBudget } };
 }
 
@@ -156,8 +158,19 @@ function projectKpis_(data, project, today, ctx) {
   var showAmounts = !!ctx && (ctx.isAdmin || can(ctx, 'budget.edit', { type: 'project', id: project.id })); // les montants du projet : chef de projet et au-dessus ; un Workpackage leader ne voit que le budget de son workpackage (page Budget)
   var time = timeKpi_({ project: project, items: items, deps: deps, baselineEnd: baselineEndOf_(project), today: today, holFor: data.holFor });
   var quality = qualityKpi_({ project: project, risks: data.risks.filter(function (r) { return r.project_id === project.id; }), insights: data.insights.filter(function (x) { return x.project_id === project.id; }), items: items, today: today });
-  var cost = costKpi_({ balance: balance, lateGr: lateGr, withoutBudget: lines.length ? deliverables.filter(function (i) { return !hasLine[i.id]; }).length : 0, showAmounts: showAmounts });
+  var cost = costKpi_({ balance: balance, clashes: clashCount_(project, ctx), lateGr: lateGr, withoutBudget: lines.length ? deliverables.filter(function (i) { return !hasLine[i.id]; }).length : 0, showAmounts: showAmounts });
   return { time: time, quality: quality, cost: cost, overall: overallLevel_([time.level, quality.level, cost.level]) };
+}
+
+/** Le nombre d'équipes en clash (plan > dotation) du projet sur ses exercices non clos, pour qui lit l'exercice ; 0 sinon. Même calcul que la page Budget (exerciseTable_). */
+function clashCount_(project, ctx) {
+  if (!ctx || !(ctx.isAdmin || can(ctx, 'exercise.read', { type: 'project', id: project.id }))) return 0;
+  var n = 0;
+  repoList('Exercise', function (e) { return !isTrue(e.deleted) && e.status !== 'Clos'; }).forEach(function (ex) {
+    var t = exerciseTable_(ex, exerciseData_(ex, [project.id]), project.id);
+    t.rows.concat(t.orphans, t.unruled).forEach(function (r) { if (r.clash) n++; });
+  });
+  return n;
 }
 
 /** PO d'un projet à partir d'une liste déjà chargée (même règle que projectOrders_ : par CPN du projet et de ses sous-projets). */

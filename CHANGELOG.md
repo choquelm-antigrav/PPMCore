@@ -10,6 +10,7 @@
 - **Externe** : les forfaits du plan se comparent aux PO (engagé) au niveau du projet et du CPN, pas par équipe.
 - **Retiré** : enveloppes par workpackage et budget autorisé (`budget.envelope.*`), échéancier par mois (`budget.phasing.set`), projection mensuelle et graphique, import et export de l'exercice par Google Sheet, import mensuel du réalisé, « attendu » et « accordé ». Les données existantes sont jetables : relancer `A1_INSTALLER_PPM` (la table `TeamBudget` a une colonne `amount`).
 - Nouveaux : `55_Plan.gs` (`budget.plan.get`, `budget.plan.versions`), `budget.cell.set`, `baselines.plan`, `65_Actuals.gs`. La page Budget est entièrement refaite (brouillon + « Valider », colonnes d'équipe ajoutables, fenêtre des forfaits, saisie du réalisé).
+- **Overview** : l'indicateur de coût passe en alerte (« Plan au-delà de la dotation ») quand le plan d'une équipe dépasse sa dotation, pour qui lit l'exercice ; aucun montant dans le fait. La page Overview lit en plus `Exercise`, `HierarchicalTeam` et `TeamBudget`.
 - Page Suivi : la section « Plan budgétaire » remplace les écarts de décomposition ; Administration : plus d'import du réalisé.
 - Tests : `test_plan.js` (5), `test_exercise_tracking.js` (7), `ui_budget.js` refait ; 390 tests serveur, tous les `ui_*.js` verts. **Non testé dans un vrai Apps Script.**
 

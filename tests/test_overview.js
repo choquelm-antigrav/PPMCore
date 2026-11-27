@@ -107,6 +107,9 @@ module.exports = function () {
     eq(c(bal(10000, 1000), { lateGr: 1 }).level, 'warn', 'GR en retard');
     eq([c(bal(10000, 12000)).level, c(bal(10000, 12000)).headline], ['alert', 'Budget externe dépassé']);
     eq(c(bal(0, 500)).level, 'alert', 'engagé sans budget externe');
+    eq([c(bal(10000, 1000), { clashes: 2 }).level, c(bal(10000, 1000), { clashes: 2 }).headline], ['alert', 'Plan au-delà de la dotation'], 'un clash sur les dotations : alerte');
+    ok(/2 équipes dont le plan dépasse la dotation/.test(c(bal(10000, 1000), { clashes: 2 }).facts.join()) && !/€/.test(c(bal(10000, 1000), { clashes: 2 }).facts.join()), 'le clash est dit sans montant');
+    eq(c(null, { clashes: 1 }).level, 'alert', 'un clash sans budget externe ni PO : alerte, pas « non renseigné »');
     ok(!/€/.test(c(bal(10000, 5000)).facts.join()), 'sans le droit budget : aucun montant');
     ok(/5 000 € sur 10 000 €/.test(c(bal(10000, 5000), { showAmounts: true }).facts.join().replace(/\s/g, ' ')), 'avec le droit budget : les montants');
     const one = c(bal(10000, 5000, { cpns: [{ cpn: 'CPN-1', overrun: true, budget: { external: 3000 } }] }));

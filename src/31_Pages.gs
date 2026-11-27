@@ -106,7 +106,7 @@ function cleanId_(v) {
  * chaque liste est exactement l'ensemble des tables lues à l'ouverture ; la même liste sert au déclencheur qui garde le cache plein.
  */
 var PAGE_TABLES = {
-  overview: ['Baseline', 'BaselineItem', 'BudgetLine', 'Dependency', 'HolidaySet', 'Insight', 'Meeting', 'NewsAction', 'NewsDigest', 'PlanItem', 'Program', 'Project', 'PurchaseOrder', 'PurchaseOrderLink', 'Resource', 'RiskOpportunity', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
+  overview: ['Baseline', 'BaselineItem', 'BudgetLine', 'Dependency', 'Exercise', 'HierarchicalTeam', 'HolidaySet', 'Insight', 'Meeting', 'NewsAction', 'NewsDigest', 'PlanItem', 'Program', 'Project', 'PurchaseOrder', 'PurchaseOrderLink', 'Resource', 'RiskOpportunity', 'RoleAssignment', 'TeamBudget', 'UserSetting', 'WorkPackage'],
   gantt: ['Baseline', 'BaselineItem', 'BudgetLine', 'Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   structure: ['Dependency', 'HolidaySet', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
   ressources: ['HierarchicalTeam', 'PlanItem', 'Program', 'Project', 'Resource', 'RoleAssignment', 'UserSetting', 'WorkPackage'],
